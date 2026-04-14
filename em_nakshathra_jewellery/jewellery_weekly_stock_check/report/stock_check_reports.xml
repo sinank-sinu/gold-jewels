@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Counter PDF Report -->
+    <record id="action_report_stock_check_counter" model="ir.actions.report">
+        <field name="name">Stock Check Counter Report (PDF)</field>
+        <field name="model">jewellery.weekly.stock.check</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">jewellery_weekly_stock_check.report_stock_check_counter</field>
+        <field name="report_file">jewellery_weekly_stock_check.report_stock_check_counter</field>
+        <field name="print_report_name">'Stock Check Counter - %s' % (object.name)</field>
+        <field name="binding_model_id" ref="model_jewellery_weekly_stock_check"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <!-- Manager PDF Report -->
+    <record id="action_report_stock_check_manager" model="ir.actions.report">
+        <field name="name">Stock Check Manager Report (PDF)</field>
+        <field name="model">jewellery.weekly.stock.check</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">jewellery_weekly_stock_check.report_stock_check_manager</field>
+        <field name="report_file">jewellery_weekly_stock_check.report_stock_check_manager</field>
+        <field name="print_report_name">'Stock Check Manager - %s' % (object.name)</field>
+        <field name="binding_model_id" ref="model_jewellery_weekly_stock_check"/>
+        <field name="binding_type">report</field>
+        <field name="groups_id" eval="[(4, ref('jewellery_weekly_stock_check.group_jewellery_stock_manager'))]"/>
+    </record>
+</odoo>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_issue_voucher_form_inherit" model="ir.ui.view">
+        <field name="name">jewellery.issue.voucher.form.inherit</field>
+        <field name="model">jewellery.issue.voucher</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_issue_voucher_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='job_worker_id']" position="after">
+                <field name="branch_id"/>
+            </xpath>
+            <xpath expr="//group" position="inside">
+                <field name="company_id" invisible="1"/>
+                <field name="pricelist_id" invisible="1"/>
+                <field name="partner_id" invisible="1"/>
+                <field name="date_order" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="order_line" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='line_ids']/tree/field[@name='product_id']" position="attributes">
+                <attribute name="widget">sol_product_many2one</attribute>
+            </xpath>
+            <xpath expr="//field[@name='line_ids']/tree/field[@name='product_id']" position="after">
+                <field name="product_template_id" column_invisible="1"/>
+                <field name="product_template_attribute_value_ids" column_invisible="1"/>
+                <field name="product_no_variant_attribute_value_ids" column_invisible="1"/>
+                <field name="product_custom_attribute_value_ids" column_invisible="1"/>
+                <field name="product_uom" column_invisible="1"/>
+                <field name="product_uom_qty" column_invisible="1"/>
+                <field name="product_type" column_invisible="1"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="pricelist_id" column_invisible="1"/>
+                <field name="partner_id" column_invisible="1"/>
+                <field name="date_order" column_invisible="1"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="order_id" column_invisible="1"/>
+                <field name="is_configurable_product" column_invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

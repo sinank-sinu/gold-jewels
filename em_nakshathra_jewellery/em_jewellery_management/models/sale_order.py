@@ -1,0 +1,420 @@
+from collections import defaultdict
+
+from odoo import models, fields,api,_
+from odoo.exceptions import UserError, ValidationError
+
+
+class SaleOrder(models.Model):
+    _inherit = 'sale.order'
+
+    has_old_gold = fields.Boolean(string='Old Gold Purchase')
+    old_gold_line_ids = fields.One2many('sale.old.gold.line', 'sale_id')
+    branch_location_id = fields.Many2one('stock.location',default=lambda self: self.env.user.branch_id.old_gold_location_id.id)
+    # old_gold_po_ids = fields.One2many(
+    #     'purchase.order',
+    #     'sale_id',
+    #     string='Old Gold Purchase Orders'
+    # )
+    #
+    # old_gold_po_count = fields.Integer(
+    #     compute='_compute_old_gold_po_count'
+    # )
+    apply_scheme = fields.Boolean(string="Apply Scheme")
+    scheme_line_id = fields.Many2one(
+        'sale.order.line',
+        string="Scheme Line",
+        readonly=True,
+        copy=False
+    )
+    purchase_order_id = fields.Many2one(
+        'purchase.order',
+        string='Source Purchase Order',
+        readonly=True
+    )
+    old_gold_bill_id = fields.Many2one(
+        'account.move',
+        string='Old Gold Vendor Bill',
+        readonly=True,
+        copy=False,
+    )
+    old_gold_bill_amount = fields.Monetary(
+        related='old_gold_bill_id.amount_total',
+        currency_field='currency_id',
+        string='Bill Amount',
+        readonly=True,
+    )
+
+    active_scheme_id = fields.Many2one(
+        'jewellery.scheme.enrollment',
+        string="Customer Scheme",
+        readonly=True
+    )
+
+    @api.onchange('partner_id')
+    def _onchange_partner_set_scheme(self):
+        for rec in self:
+            rec.apply_scheme = False
+            rec.active_scheme_id = False
+
+            if not rec.partner_id:
+                continue
+
+            # Search for active scheme with balance
+            scheme = self.env['jewellery.scheme.enrollment'].search([
+                ('partner_id', '=', rec.partner_id.id),
+                ('active', '=', True),
+                # ('state', '=', 'running'),
+                ('balance_amount', '=', 0)
+            ], limit=1)
+
+            if scheme:
+                rec.apply_scheme = True
+                rec.active_scheme_id = scheme
+
+
+    def action_apply_old_gold(self):
+        PurchaseOrder = self.env['purchase.order']
+        PurchaseLine = self.env['purchase.order.line']
+        AccountMove = self.env['account.move']
+
+        product = self.env.ref(
+            'em_jewellery_management.product_old_gold',
+            raise_if_not_found=False
+        )
+        if not product:
+            raise ValidationError(_("Old Gold product not configured."))
+
+        journal = self.env['account.journal'].search(
+            [('type', 'in', ('cash', 'bank')),
+             ('company_id', '=', self.env.company.id)],
+            limit=1
+        )
+        if not journal:
+            raise ValidationError(_("Cash/Bank journal not found."))
+
+        for order in self:
+            if not order.old_gold_line_ids:
+                raise ValidationError(_("No Old Gold lines found."))
+
+            # ------------------------------------------------
+            # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
+            # ------------------------------------------------
+            self.env['old.gold.purchase'].create({
+                'partner_id': order.partner_id.id,
+                'date': fields.Date.today(),
+                'branch_location_id': order.branch_location_id.id,
+                'sale_id': order.id,
+                'branch_id': order.branch_id.id,
+                'old_gold_line_ids': [
+                    (0, 0, {
+                        'purity_id': l.purity_id.id,
+                        'gross_weight': l.gross_weight,
+                        'stone_weight': l.stone_weight,
+                        'rate': l.rate,
+                    }) for l in order.old_gold_line_ids
+                ],
+            })
+
+            # ------------------------------------------------
+            # 2️⃣ GROUP AMOUNT BY PURITY
+            # ------------------------------------------------
+            purity_map = {}
+
+            for line in order.old_gold_line_ids:
+                purity = line.purity_id
+
+                if purity not in purity_map:
+                    purity_map[purity] = {
+                        'weight': 0.0,
+                        'amount': 0.0,
+                    }
+
+                purity_map[purity]['weight'] += line.net_weight
+                purity_map[purity]['amount'] += line.amount
+
+            # ------------------------------------------------
+            # 3️⃣ CREATE PURCHASE ORDER
+            # ------------------------------------------------
+            po = PurchaseOrder.create({
+                'partner_id': order.partner_id.id,
+                'date_order': fields.Date.today(),
+                'origin': order.name,
+                'branch_id': order.branch_id.id,
+            })
+
+            for purity, vals in purity_map.items():
+                total_weight = vals['weight']
+                total_amount = vals['amount']
+
+                if not total_weight:
+                    continue
+
+                rate = total_amount / total_weight  # 👈 derived gold rate
+
+                PurchaseLine.create({
+                    'order_id': po.id,
+                    'product_id': product.id,
+                    'name': f'Old Gold Purchase ({purity.name})',
+                    'product_qty': total_weight,  # ✅ grams
+                    'gold_rate': rate,
+                    'price_unit':rate,# ✅ gold rate
+                    'product_uom': product.uom_po_id.id,
+                    'taxes_id': [(6, 0, [])],
+                })
+            # ------------------------------------------------
+            # 4️⃣ CONFIRM PO
+            # ------------------------------------------------
+            po.button_confirm()
+            self.purchase_order_id =po.id
+
+            for picking in po.picking_ids:
+                picking.action_confirm()
+                picking.action_assign()
+
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+
+                picking.button_validate()
+
+            # ------------------------------------------------
+            # 5️⃣ CREATE & POST VENDOR BILL
+            # ------------------------------------------------
+            bill_action = po.action_create_invoice()
+            bill = AccountMove.browse(bill_action['res_id'])
+            bill.invoice_date = fields.Date.context_today(self)
+            bill.is_old_gold_bill = True
+
+            bill.action_post()
+            self.old_gold_bill_id =bill.id
+
+        return True
+
+
+
+    def _get_customer_scheme_records(self):
+        self.ensure_one()
+        return self.env['jewellery.scheme.enrollment'].search([
+                ('partner_id', '=', self.partner_id.id),
+                ('active', '=', True),
+                # ('state', '=', 'running'),
+                ('balance_amount', '=', 0)
+            ], limit=1)
+
+    def _get_customer_scheme_amount(self):
+        self.ensure_one()
+        schemes = self._get_customer_scheme_records()
+        return sum(schemes.mapped('remaining_amount'))
+
+    def _get_scheme_product(self):
+        product = self.env['product.product'].search(
+            [('is_scheme_product', '=', True)],
+            limit=1
+        )
+        if not product:
+            raise UserError(_("Please configure a Scheme Product first."))
+        return product
+
+    def action_apply_scheme(self):
+        for order in self:
+            if not order.partner_id:
+                raise UserError(_("Select customer first."))
+
+            # Check if customer has active scheme with balance
+            schemes = order._get_customer_scheme_records()
+            if not schemes:
+                raise UserError(_("No active scheme available for this customer."))
+
+            # 1️⃣ Calculate total MC amount from all lines
+            total_mc = sum(order.order_line.mapped('mc_amount'))
+
+            if total_mc <= 0:
+                raise UserError(_("No Making Charge found to apply scheme."))
+
+            # 2️⃣ Get scheme product (for discount line)
+            scheme_product = order._get_scheme_product()
+
+            # 3️⃣ Create a negative sale order line to reduce MC
+            line = self.env['sale.order.line'].create({
+                'order_id': order.id,
+                'product_id': scheme_product.id,
+                'product_uom_qty': 1,
+                'product_uom': scheme_product.uom_id.id,
+                'price_unit': -total_mc,
+                'name': f"{scheme_product.name} (MC Discount)",
+            })
+
+
+            # 4️⃣ Assign line to order for reference
+            order.scheme_line_id = line
+            schemes.write({
+                'active': False
+            })
+
+            # 5️⃣ Optional: Zero out MC in order lines (so invoice reflects correct price)
+            for ol in order.order_line:
+                if hasattr(ol, 'mc_amount') and ol.mc_amount > 0:
+                    ol.mc_amount = 0
+
+    def action_remove_scheme(self):
+        for order in self:
+
+            if not order.scheme_line_id:
+                continue
+
+            consumed_amount = abs(order.scheme_line_id.price_unit)
+
+            # 🔎 Get schemes even if inactive (because we disabled them on apply)
+            schemes = self.env['jewellery.scheme.enrollment'].search([
+                ('partner_id', '=', order.partner_id.id),
+                ('active', '=', False),  # 👈 previously used schemes
+            ], order='id desc')
+
+            remaining = consumed_amount
+
+            for scheme in schemes:
+                if remaining <= 0:
+                    break
+
+                restoreable = scheme.scheme_amount - scheme.remaining_amount
+                restore = min(restoreable, remaining)
+
+                scheme.remaining_amount += restore
+                remaining -= restore
+
+                # ✅ Reactivate scheme
+                scheme.active = True
+                # OR if using state:
+                # scheme.state = 'running'
+
+            # 🧹 Remove discount line
+            order.scheme_line_id.unlink()
+            order.scheme_line_id = False
+
+    def action_confirm(self):
+        for order in self:
+            order.picking_ids.write({'branch_id': order.branch_id.id})
+            need_approval = any(
+                line.mc_percent_actual < line.sale_making_charge_min
+                for line in order.order_line
+                if line.sale_making_charge_min
+            )
+
+            if need_approval and not self.env.user.has_group('em_jewellery_management.group_mc_approval_manager'):
+                raise UserError(_("Manager approval required for low making charge."))
+
+        res = super().action_confirm()
+        for order in self:
+            labels = order.order_line.mapped('label_id')
+            labels.write({'active': False})
+            for og in order.old_gold_line_ids:
+                order._create_old_gold_stock(og)
+        return res
+
+
+
+    # def _create_invoices(self, grouped=False, final=False, date=None):
+    #     moves = super()._create_invoices(grouped=grouped, final=final, date=date)
+    #     for order in moves:
+    #         invoice=self.env['account.move.line'].create({
+    #             'move_id': order.id,
+    #             'name': f"Old Gold Amount from {order.name}",
+    #             'quantity': 1,
+    #             'price_unit': -self.old_gold_bill_amount,  # negative for reduction
+    #             'account_id': moves.invoice_line_ids[0].account_id.id if moves.invoice_line_ids else
+    #             order.order_line[0].product_id.categ_id.property_account_income_categ_id.id,
+    #             'tax_ids': [],  # no tax
+    #         })
+    #         print("invoice")
+    #     return moves
+
+
+    def _create_old_gold_stock(self, og):
+        product = self.env.ref('em_jewellery_management.product_old_gold')
+        picking_type = self.env.ref('stock.picking_type_internal')
+        source_location = self.env.ref('em_jewellery_management.loc_branch_old_gold')
+        uom = self.env.ref('uom.product_uom_gram')
+
+        picking = self.env['stock.picking'].create({
+            'picking_type_id': picking_type.id,
+            'location_id': source_location.id,
+            'location_dest_id': self.branch_location_id.id,
+            'origin': self.name,
+            'is_old_gold': True,   # ✅ NEW
+            'sale_old_id':self.id,
+            'branch_id': self.branch_id.id,
+        })
+
+        move = self.env['stock.move'].create({
+            'product_id': product.id,
+            'name': f'Old Gold ({og.purity_id.name})',
+            'quantity': og.net_weight,
+            'purity_id': og.purity_id.id,
+            'product_uom': uom.id,
+            'location_id': source_location.id,
+            'location_dest_id': self.branch_location_id.id,
+            'picking_id': picking.id,
+        })
+
+        picking.action_confirm()
+
+        # 🔥 VERY IMPORTANT PART
+        move.product_uom_qty = og.net_weight
+
+        picking.button_validate()
+
+        og.stock_move_id = move.id
+
+        # Continue HO transfer
+
+        # Continue to HO transfer
+
+    # @api.model
+    # def create(self, vals):
+    #     sale = super().create(vals)
+    #
+    #     if sale.purchase_order_id and sale.state != 'draft':
+    #         sale.purchase_order_id.sale_id = sale.id
+    #
+    #     return
+
+    def action_open_old_gold_bill(self):
+        self.ensure_one()
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Old Gold Vendor Bill'),
+            'res_model': 'account.move',
+            'view_mode': 'form',
+            'res_id': self.old_gold_bill_id.id,
+            'context': {'create': False, 'hide_payment_button': True},
+        }
+
+    def _prepare_invoice(self):
+        vals = super()._prepare_invoice()
+        vals['old_gold_price'] = self.old_gold_bill_amount
+        return vals
+
+    def action_create_invoice_and_pay(self):
+        for order in self:
+            invoices = order._create_invoices()
+
+            if not invoices:
+                continue
+            invoices.invoice_date = fields.Date.context_today(self)
+            invoices.date = fields.Date.context_today(self)
+            invoices.action_post()
+
+            payment_register = self.env['account.payment.register'].with_context(
+                active_model='account.move',
+                active_ids=invoices.ids
+            ).create({
+                'payment_date': fields.Date.context_today(self),
+                'amount': invoices.amount_total,
+            })
+
+            payment_register.action_create_payments()
+
+        return True
+
+
+

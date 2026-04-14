@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_issue_voucher_form_inherit_metal_ledger" model="ir.ui.view">
+        <field name="name">jewellery.issue.voucher.form.inherit.metal.ledger</field>
+        <field name="model">jewellery.issue.voucher</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_issue_voucher_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='is_refinery']" position="after">
+                <field name="job_type_selection" invisible="is_refinery"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

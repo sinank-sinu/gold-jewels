@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_stock_check_counter">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <h2>Weekly Stock Check (Counter): <span t-field="o.name"/></h2>
+                        <div class="row mt32 mb32">
+                            <div class="col-3">
+                                <strong>Branch:</strong> <span t-field="o.branch_id.name"/>
+                            </div>
+                            <div class="col-3">
+                                <strong>Location:</strong> <span t-field="o.location_id.name"/>
+                            </div>
+                            <div class="col-3">
+                                <strong>Date:</strong> <span t-field="o.date"/>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm o_main_table mt16">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-right">Counted Labels</th>
+                                    <th class="text-right">Counted Weight</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="o.line_ids" t-as="line">
+                                    <tr>
+                                        <td><span t-field="line.product_id.display_name"/></td>
+                                        <td class="text-right"><span t-field="line.manual_qty"/></td>
+                                        <td class="text-right"><span t-field="line.manual_weight"/></td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_stock_check_manager">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <h2>Weekly Stock Check (Manager): <span t-field="o.name"/></h2>
+                        <div class="row mt32 mb32">
+                            <div class="col-3">
+                                <strong>Branch:</strong> <span t-field="o.branch_id.name"/>
+                            </div>
+                            <div class="col-3">
+                                <strong>Location:</strong> <span t-field="o.location_id.name"/>
+                            </div>
+                            <div class="col-3">
+                                <strong>Date:</strong> <span t-field="o.date"/>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm o_main_table mt16">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-right">System Qty</th>
+                                    <th class="text-right">System Weight</th>
+                                    <th class="text-right">Counted Labels</th>
+                                    <th class="text-right">Counted Weight</th>
+                                    <th class="text-right">Diff Label</th>
+                                    <th class="text-right">Diff Weight</th>
+                                    <th class="text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="o.line_ids" t-as="line">
+                                    <tr t-att-class="'table-success' if line.is_matched else 'table-danger' if line.manual_qty != 0 else ''">
+                                        <td><span t-field="line.product_id.display_name"/></td>
+                                        <td class="text-right"><span t-field="line.system_qty"/></td>
+                                        <td class="text-right"><span t-field="line.system_weight"/></td>
+                                        <td class="text-right"><span t-field="line.manual_qty"/></td>
+                                        <td class="text-right"><span t-field="line.manual_weight"/></td>
+                                        <td class="text-right"><span t-field="line.difference_qty"/></td>
+                                        <td class="text-right"><span t-field="line.difference_weight"/></td>
+                                        <td class="text-center">
+                                            <span t-if="line.is_matched">Matched</span>
+                                            <span t-else="">Mismatch</span>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                        
+                        <div class="row mt32">
+                            <div class="col-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Total Products</strong></td>
+                                        <td class="text-right"><span t-field="o.total_lines"/></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Matched</strong></td>
+                                        <td class="text-right"><span t-field="o.matched_lines"/></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Mismatched</strong></td>
+                                        <td class="text-right"><span t-field="o.mismatched_lines"/></td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

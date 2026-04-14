@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_metal_ledger,metal.ledger,model_metal_ledger,base.group_user,1,1,1,1
+access_metal_ledger_wizard,metal.ledger.wizard,model_metal_ledger_wizard,base.group_user,1,1,1,1
+access_refinery_margin_report,refinery.margin.report,model_refinery_margin_report,base.group_user,1,1,1,1
+access_job_work_report,job.work.report,model_job_work_report,base.group_user,1,1,1,1
+access_refinery_lab_report,refinery.lab.report,model_refinery_lab_report,base.group_user,1,1,1,1

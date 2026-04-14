@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <!-- ========================= -->
+    <!-- Tree View -->
+    <!-- ========================= -->
+    <record id="view_old_gold_refinery_issue_tree" model="ir.ui.view">
+        <field name="name">old.gold.refinery.issue.tree</field>
+        <field name="model">old.gold.refinery.issue</field>
+        <field name="arch" type="xml">
+            <tree string="Old Gold Refinery Issues">
+                <field name="name"/>
+                <!--                <field name="verification_id"/>-->
+                <field name="refinery_partner_id"/>
+                <field name="issue_date"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_refinery_issue_search" model="ir.ui.view">
+        <field name="name">old.gold.refinery.issue.search</field>
+        <field name="model">old.gold.refinery.issue</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="refinery_partner_id"/>
+                <field name="lab_purity_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_lab_purity" string="Lab Purity" context="{'group_by': 'lab_purity_id'}"/>
+                    <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ========================= -->
+    <!-- Form View -->
+    <!-- ========================= -->
+    <record id="view_old_gold_refinery_issue_form" model="ir.ui.view">
+        <field name="name">old.gold.refinery.issue.form</field>
+        <field name="model">old.gold.refinery.issue</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold Refinery Issue">
+                <header>
+<!--                    <button name="action_issue"-->
+<!--                            type="object"-->
+<!--                            string="Issue to Refinery"-->
+<!--                            class="btn-primary"-->
+<!--                            invisible="1"/>-->
+                    <!--                            invisible="state != 'melting'"/>-->
+                    <button name="action_melting"
+                            type="object"
+                            string="Melting Done"
+                            class="btn-primary"
+                            invisible="state != 'to_melting'"/>
+                    <button name="action_to_melting"
+                            type="object"
+                            string="To Melting"
+                            class="btn-primary"
+                            invisible="state != 'draft'"/>
+
+                    <field name="state"
+                           widget="statusbar"
+                           statusbar_visible="draft,to_melting,melting,issued,received"/>
+                </header>
+
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <!-- 🔹 Transfers Smart Button -->
+                        <button name="action_view_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-exchange"
+                                string="Transfers"/>
+                        <button
+                                name="action_view_issue"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Issue"/>
+                        <button
+                                name="action_view_receipt"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Receipt"/>
+                    </div>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" nolabel="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="issue_date"/>
+                            <field name="mo_id" readonly="1"/>
+                            <field name="bullion_receipt_id" invisible="1"/>
+                            <field name="refinery_partner_id"
+                                   readonly="state == 'issued'"/>
+                            <field name="branch_id"/>
+                        </group>
+                        <group string="Transfer">
+                            <field name="picking_id" readonly="1"/>
+                            <field name="source_location_id"/>
+                            <field name="received_location_id"/>
+                        </group>
+                        <group>
+                            <field name="total_fine"/>
+                            <field name="output_weight"/>
+                            <field name="expected_purity"/>
+                            <field name="expected_purity_id"/>
+                            <field name="balance_weight"/>
+                            <field name="batch_ids" widget="many2many_tags" readonly="True"/>
+                        </group>
+                        <group string="Purchase Details">
+                            <field name="total_purchase_amount"/>
+                            <field name="purchase_per_rate"/>
+                            <field name="scrap_bar_unit_rate" invisible="1"/>
+                        </group>
+                        <group string="Lab Details">
+                            <field name="lab_sample_weight"/>
+                            <field name="lab_purity_percent"/>
+                            <field name="lab_purity_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Gold Details">
+                            <field name="line_ids"
+                                   readonly="state == 'issued'">
+                                <tree editable="bottom">
+                                    <field name="product_id"/>
+                                    <field name="purity_id"/>
+                                    <field name="issue_weight" sum="Total Weight"/>
+                                    <field name="purchase_amount" sum="Total Amount"/>
+                                    <field name="fine" sum="Total Fine"/>
+
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Melting Details">
+                            <group>
+                                <field name="total_issued_weight"/>
+                                <field name="melting_loss"/>
+                                <field name="output_weight"/>
+
+                            </group>
+
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ========================= -->
+    <!-- Action -->
+    <!-- ========================= -->
+    <record id="action_old_gold_refinery_issue" model="ir.actions.act_window">
+        <field name="name">Old Gold Melting</field>
+        <field name="res_model">old.gold.refinery.issue</field>
+        <field name="view_mode">tree,form</field>
+        <!--        <field name="domain">[('state', '!=', 'received')]</field>-->
+
+    </record>
+
+    <!-- ========================= -->
+    <!-- Menu -->
+    <!-- ========================= -->
+
+    <!-- Parent Menu (if not already existing) -->
+
+
+    <!-- Refinery Issue Menu -->
+
+
+</odoo>

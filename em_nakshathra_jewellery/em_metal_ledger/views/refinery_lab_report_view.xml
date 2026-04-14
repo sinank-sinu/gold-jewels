@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_refinery_lab_report_tree" model="ir.ui.view">
+        <field name="name">refinery.lab.report.tree</field>
+        <field name="model">refinery.lab.report</field>
+        <field name="arch" type="xml">
+            <tree string="Refinery Lab Report" create="false" edit="false" decoration-danger="type == 'issue'"
+                  decoration-success="type == 'receive'">
+                <field name="date"/>
+                <field name="voucher_name"/>
+                <field name="branch_id"/>
+                <field name="type" column_invisible="0"/>
+                <field name="purity_id"/>
+                <field name="issued_weight" sum="Total Issued Weight"/>
+                <field name="net_weight" sum="Total Net Weight"/>
+                <field name="lab_weight" sum="Total Lab Weight"/>
+                <field name="lab_purity"/>
+                <field name="fine_weight" sum="Total Fine Weight"/>
+                <field name="fine_gms_price"/>
+                <field name="fine_amount" sum="Total Fine Amount"/>
+                <field name="balance"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_refinery_lab_report_form" model="ir.ui.view">
+        <field name="name">refinery.lab.report.form</field>
+        <field name="model">refinery.lab.report</field>
+        <field name="arch" type="xml">
+            <form string="Refinery Lab Report" create="false" edit="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="date"/>
+                            <field name="voucher_name"/>
+                            <field name="branch_id"/>
+                        </group>
+                        <group>
+                            <field name="purity_id"/>
+                            <field name="issued_weight"/>
+                            <field name="net_weight"/>
+                        </group>
+                        <group string="Lab Details">
+                            <field name="lab_weight"/>
+                            <field name="lab_purity"/>
+                        </group>
+                        <group string="Financials">
+                            <field name="fine_weight"/>
+                            <field name="fine_gms_price"/>
+                            <field name="fine_amount"/>
+                            <field name="balance"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_refinery_lab_report" model="ir.actions.act_window">
+        <field name="name">Refinery Lab Report</field>
+        <field name="res_model">refinery.lab.report</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No Refinery Lab Report records found.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_refinery_lab_report"
+              name="Refinery Lab Report"
+              parent="menu_metal_ledger_root"
+              action="action_refinery_lab_report"
+              sequence="25"/>
+</odoo>

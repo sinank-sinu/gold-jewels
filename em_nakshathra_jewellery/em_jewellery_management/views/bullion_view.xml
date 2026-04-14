@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_bullion_issue_tree" model="ir.ui.view">
+        <field name="name">old.gold.bullion.issue.tree</field>
+        <field name="model">old.gold.bullion.issue</field>
+        <field name="arch" type="xml">
+            <tree string="Bullion Issue">
+                <field name="name"/>
+                <field name="issue_id"/>
+                <field name="refinery_partner_id"/>
+                <field name="purity_id"/>
+                <field name="issued_weight"/>
+                <field name="source_location_id"/>
+                <field name="received_location_id"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_bullion_issue_form" model="ir.ui.view">
+        <field name="name">old.gold.bullion.issue.form</field>
+        <field name="model">old.gold.bullion.issue</field>
+        <field name="arch" type="xml">
+            <form string="Bullion Issue">
+                <header>
+                    <button name="action_receive"
+                            string="Receive"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'draft'"
+                    />
+
+                    <field name="state"
+                           widget="statusbar"
+                           statusbar_visible="draft,receive"/>
+                </header>
+
+                <sheet>
+                    <!-- Smart Button -->
+                    <div class="oe_button_box" name="button_box">
+                         <button
+                                name="action_view_bullion_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Transfers"/>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="issue_id" readonly="1"/>
+                            <field name="product_id"/>
+                            <field name="refinery_partner_id"/>
+                            <field name="source_location_id"/>
+                        </group>
+                        <group>
+                            <field name="purity_id"/>
+                            <field name="issued_weight"/>
+                            <field name="received_location_id"/>
+                            <field name="purchase_per_rate"/>
+                        </group>
+
+
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_old_gold_bullion_issue" model="ir.actions.act_window">
+        <field name="name">Bullion Issue</field>
+        <field name="res_model">old.gold.bullion.issue</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+    <record id="view_old_gold_bullion_receipt_tree" model="ir.ui.view">
+        <field name="name">old.gold.bullion.receipt.tree</field>
+        <field name="model">old.gold.bullion.receipt</field>
+        <field name="arch" type="xml">
+            <tree string="Bullion Receipt">
+                <field name="name"/>
+                <field name="issue_id"/>
+                <field name="refinery_partner_id"/>
+                <field name="purity_id"/>
+                <field name="receive_weight"/>
+                <field name="source_location_id"/>
+                <field name="received_location_id"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_bullion_receipt_form" model="ir.ui.view">
+        <field name="name">old.gold.bullion.receipt.form</field>
+        <field name="model">old.gold.bullion.receipt</field>
+        <field name="arch" type="xml">
+            <form string="Bullion Receipt">
+                <header>
+                    <button name="action_received"
+                            string="Done"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'draft'"
+                    />
+
+                    <field name="state"
+                           widget="statusbar"
+                           statusbar_visible="draft,received"/>
+                </header>
+
+                <sheet>
+                    <!-- Smart Button -->
+                    <div class="oe_button_box" name="button_box">
+                         <button
+                                name="action_view_bullion_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Transfers"/>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="issue_id" readonly="1"/>
+                            <field name="product_id"/>
+                            <field name="refinery_partner_id"/>
+                            <field name="source_location_id"/>
+                        </group>
+
+                        <group>
+                            <field name="purity_id"/>
+                            <field name="received_location_id"/>
+                            <field name="receive_weight"/>
+                            <field name="purchase_per_rate"/>
+                        </group>
+
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_old_gold_bullion_receipt" model="ir.actions.act_window">
+        <field name="name">Bullion Receipts</field>
+        <field name="res_model">old.gold.bullion.receipt</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+
+
+</odoo>

@@ -1,0 +1,62 @@
+<odoo>
+    <!-- Form view for Daily Stock Check -->
+    <record id="view_jewellery_daily_stock_form" model="ir.ui.view">
+        <field name="name">jewellery.daily.stock.form</field>
+        <field name="model">jewellery.daily.stock</field>
+        <field name="arch" type="xml">
+            <form string="Daily Stock Check">
+                <sheet style="max-width: 2320px;">
+                    <!-- Branch at top -->
+                    <group>
+                        <field name="branch_id"/>
+                    </group>
+                    <group>
+                        <button name="action_load_products_for_branch"
+                                string="Update"
+                                type="object"
+                                class="btn-primary"
+                                />
+                    </group>
+
+                    <!-- Products tree inside form -->
+                    <field name="product_ids">
+                        <tree editable="bottom">
+                            <field name="product_id" width="12.5%"/>
+                            <field name="label_count" readonly="1" width="12.5%"/>
+                            <field name="total_weight" readonly="1" width="12.5%"/>
+                            <field name="manual_qty" width="12.5%"/>
+                            <field name="manual_weight" width="12.5%"/>
+                            <field name="verified" readonly="1" width="12.5%"/>
+                            <field name="label_ids"  readonly="1" width="25%"/>
+                        </tree>
+
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Tree view for Daily Stock Check (for menu list) -->
+    <record id="view_jewellery_daily_stock_tree" model="ir.ui.view">
+        <field name="name">jewellery.daily.stock.tree</field>
+        <field name="model">jewellery.daily.stock</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="branch_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_jewellery_daily_stock" model="ir.actions.act_window">
+        <field name="name">Daily Stock Check</field>
+        <field name="res_model">jewellery.daily.stock</field>
+        <field name="view_mode">tree,form</field>
+        <field name="view_id" ref="view_jewellery_daily_stock_tree"/>
+    </record>
+
+
+    <menuitem id="menu_jewellery_stock_root" name="Daily Stock Check"/>
+    <menuitem id="menu_daily_stock" name="Daily Stock Check" parent="menu_jewellery_stock_root"
+              action="action_jewellery_daily_stock"/>
+</odoo>

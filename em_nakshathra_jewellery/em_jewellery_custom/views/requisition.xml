@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="material_purchase_requisition_form_view_inherit" model="ir.ui.view">
+        <field name="name">material.purchase.requisition.form.view.inherit</field>
+        <field name="model">material.purchase.requisition</field>
+        <field name="inherit_id" ref="cr_material_purchase_requisitions.material_purchase_requisition_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group" position="inside">
+                <field name="pricelist_id" invisible="1"/>
+                <field name="partner_id" invisible="1"/>
+                <field name="date_order" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="order_line" invisible="1"/>
+                <field name="has_work_order" invisible="1"/>
+            </xpath>
+<!--            <xpath expr="//field[@name='requisition_lines']/tree/field[@name='product_id']" position="replace">-->
+<!--                &lt;!&ndash; COLUMN 1: "Product" - Displays standard product for standard req, or template for WO req &ndash;&gt;-->
+<!--                <field name="product_template_id" string="Product"-->
+<!--                        readonly="False"/>-->
+<!--                &lt;!&ndash; COLUMN 2: "Variant" - Displays specific variant for WO req &ndash;&gt;-->
+<!--                <field name="product_id" string="Variant" widget="sol_product_many2one"/>-->
+<!--            </xpath>-->
+            <xpath expr="//field[@name='requisition_lines']/tree/field[@name='vendor_ids']" position="attributes">
+                <attribute name="column_invisible">0</attribute>
+            </xpath>
+            <xpath expr="//field[@name='requisition_lines']/tree" position="inside">
+                <!-- TECHNICAL BRIDGE FIELDS (Moved to end to protect layout and field visibility like vendor_ids) -->
+                <field name="product_template_attribute_value_ids" column_invisible="1"/>
+                <field name="product_no_variant_attribute_value_ids" column_invisible="1"/>
+                <field name="product_custom_attribute_value_ids" column_invisible="1"/>
+                <field name="product_uom" column_invisible="1"/>
+                <field name="product_uom_qty" column_invisible="1"/>
+                <field name="product_type" column_invisible="1"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="pricelist_id" column_invisible="1"/>
+                <field name="partner_id" column_invisible="1"/>
+                <field name="date_order" column_invisible="1"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="order_id" column_invisible="1"/>
+                <field name="is_configurable_product" column_invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

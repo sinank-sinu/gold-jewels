@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================
+         Tree View
+         ============================ -->
+    <record id="view_jewellery_weekly_stock_check_tree" model="ir.ui.view">
+        <field name="name">jewellery.weekly.stock.check.tree</field>
+        <field name="model">jewellery.weekly.stock.check</field>
+        <field name="arch" type="xml">
+            <tree string="Weekly Stock Checks">
+                <field name="name"/>
+                <field name="branch_id"/>
+                <field name="location_id"/>
+                <field name="date"/>
+                <field name="total_lines" string="Total Products"/>
+                <field name="matched_lines" string="Matched"/>
+                <field name="mismatched_lines" string="Mismatched"/>
+                <field name="state" widget="badge"
+                    decoration-info="state == 'draft'"
+                    decoration-warning="state == 'in_progress' or state == 'mismatch'"
+                    decoration-success="state == 'matched'"
+                    decoration-danger="state == 'cancel'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================
+         Form View
+         ============================ -->
+    <record id="view_jewellery_weekly_stock_check_form" model="ir.ui.view">
+        <field name="name">jewellery.weekly.stock.check.form</field>
+        <field name="model">jewellery.weekly.stock.check</field>
+        <field name="arch" type="xml">
+            <form string="Weekly Stock Check">
+                <header>
+                    <!-- Load products button: only visible in draft -->
+                    <button name="action_load_products"
+                            string="Load Products"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state != 'draft'"/>
+
+                    <!-- Check Match: validate counts after entering them -->
+                    <button name="action_check_match"
+                            string="Check Match"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state not in ('in_progress', 'mismatch')"/>
+
+                    <!-- Reset counts to recount -->
+<!--                    <button name="action_reset_counts"-->
+<!--                            string="Reset Counts"-->
+<!--                            type="object"-->
+<!--                            invisible="state not in ('in_progress', 'mismatch', 'matched')"/>-->
+
+                    <button name="action_cancel"
+                            string="Cancel"
+                            type="object"
+                            invisible="state in ('cancel', 'matched')"/>
+                    <button name="action_draft"
+                            string="Set to Draft"
+                            type="object"
+                            invisible="state != 'cancel'"/>
+
+                    <!-- Unified Reports (Role-based logic in Python) -->
+                    <button name="action_print_report_pdf"
+                            string="Report (PDF)"
+                            type="object"
+                            class="btn-secondary"
+                            groups="jewellery_weekly_stock_check.group_jewellery_stock_counter"/>
+                    
+                    <button name="action_print_report_xlsx"
+                            string="Report (XLSX)"
+                            type="object"
+                            class="btn-secondary"
+                            groups="jewellery_weekly_stock_check.group_jewellery_stock_counter"/>
+
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,in_progress,matched"/>
+                </header>
+
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <!-- Summary banner when matched or mismatched -->
+                    <div class="alert alert-success" role="alert"
+                         invisible="state != 'matched'">
+                        <strong>✔ All products matched!</strong> Stock count is correct.
+                    </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="state != 'mismatch'">
+                        <strong>⚠ Mismatch detected!</strong> Some product counts do not match system stock.
+                        Please recount and try again.
+                    </div>
+
+                    <group>
+                        <group string="Check Details">
+                            <field name="branch_id"
+                                   readonly="state != 'draft'"
+                                   options="{'no_create': True, 'no_open': True}"/>
+                            <field name="location_id"
+                                   readonly="state != 'draft'"
+                                   options="{'no_create': True}"/>
+                            <field name="date" readonly="state != 'draft'"/>
+                        </group>
+                        <group string="Summary">
+<!--                            <field name="total_lines" readonly="1"/>-->
+                            <field name="matched_lines" readonly="1"/>
+                            <field name="mismatched_lines" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Products to Count" name="products">
+                            <field name="line_ids"
+                                   readonly="state in ('matched', 'cancel')">
+                                <tree editable="bottom"
+                                      create="false"
+                                      delete="false"
+                                      decoration-success="is_matched == True"
+                                      decoration-danger="is_matched == False and manual_qty != 0">
+                                    <field name="product_id" readonly="1"/>
+
+                                    <!-- System values: only visible to managers -->
+                                    <field name="system_qty"
+                                           groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                           readonly="1"/>
+                                    <field name="system_weight"
+                                           groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                           readonly="1"/>
+
+                                    <!-- Counted values: input fields for counters -->
+                                    <field name="manual_qty"
+                                           string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="is_qty_matched"
+                                           widget="boolean_toggle"
+                                           readonly="1"
+                                           nolabel="1"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="manual_weight"
+                                           string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+                                    <field name="is_weight_matched"
+                                           widget="boolean_toggle"
+                                           readonly="1"
+                                           nolabel="1"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+
+                                    <!-- Differences: only visible to managers -->
+                                    <field name="difference_qty"
+                                           groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                           readonly="1"
+                                           decoration-danger="difference_qty != 0"
+                                           decoration-success="difference_qty == 0"/>
+                                    <field name="difference_weight"
+                                           groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                           readonly="1"
+                                           decoration-danger="difference_weight != 0"
+                                           decoration-success="difference_weight == 0"/>
+
+                                    <!-- Matched indicator (overall) -->
+                                    <field name="is_matched"
+                                           column_invisible="1"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================
+         Window Action
+         ============================ -->
+    <record id="action_jewellery_weekly_stock_check" model="ir.actions.act_window">
+        <field name="name">Weekly Stock Check</field>
+        <field name="res_model">jewellery.weekly.stock.check</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new weekly stock check!
+            </p>
+            <p>
+                Select a location, load products, enter your count and verify.
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================
+         Menu Items
+         ============================ -->
+    <menuitem id="menu_jewellery_weekly_stock_root"
+              name="Stock Checks"
+              groups="group_jewellery_stock_counter"
+              web_icon="jewellery_weekly_stock_check,static/description/icon.png"/>
+              sequence="20"/>
+
+    <menuitem id="menu_jewellery_weekly_stock_check"
+              name="Stock Checks"
+              parent="menu_jewellery_weekly_stock_root"
+              action="action_jewellery_weekly_stock_check"
+              groups="group_jewellery_stock_counter"
+              sequence="10"/>
+
+    <!-- Also add under Inventory menu for easy access -->
+<!--    <menuitem id="menu_jewellery_weekly_stock_check_inventory"-->
+<!--              name="Weekly Stock Check"-->
+<!--              parent="stock.menu_stock_root"-->
+<!--              action="action_jewellery_weekly_stock_check"-->
+<!--              groups="group_jewellery_stock_counter"-->
+<!--              sequence="99"/>-->
+</odoo>

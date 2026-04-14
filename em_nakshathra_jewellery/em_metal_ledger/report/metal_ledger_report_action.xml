@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="action_report_metal_ledger" model="ir.actions.report">
+        <field name="name">Metal Ledger Report</field>
+        <field name="model">metal.ledger</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_metal_ledger.report_metal_ledger_full</field>
+        <field name="report_file">em_metal_ledger.report_metal_ledger_full</field>
+        <field name="binding_model_id" ref="model_metal_ledger"/>
+        <field name="binding_type">report</field>
+    </record>
+
+</odoo>

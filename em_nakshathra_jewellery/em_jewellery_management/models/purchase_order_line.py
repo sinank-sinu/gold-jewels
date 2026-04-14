@@ -1,0 +1,129 @@
+from odoo import models, fields,api
+
+
+class PurchaseOrderLine(models.Model):
+    _inherit = 'purchase.order.line'
+
+    purity_id = fields.Many2one('gold.purity', string="Purity")
+    fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
+    metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount")
+    mc_fine = fields.Float(string="MC Fine Wt", compute="_compute_purchase_mc_fine",digits=(16, 3))
+    gold_rate =fields.Float(string="Rate(g)")
+    mc_percent = fields.Float(string="MC%")
+    net_weight = fields.Float(string="Net Weight (g)",compute="_compute_product_qty",digits=(16, 3))
+    stone_weight = fields.Float(string="Stone Weight (g)",digits=(16, 3))
+    diamond_weight_gm = fields.Float(
+        string="Diamond Weight (g)",
+        digits=(12, 4)
+    )
+    mc_amount = fields.Float(
+        string="MC Amount",
+        compute="_compute_purchase_mc_amount",
+        store=True
+    )
+    stone_rate = fields.Float(string="Stone Amount")
+    diamond_rate = fields.Float(string="Diamond Amount")
+    gross_weight = fields.Float(string="Gross Weight (g)",digits=(16, 3))
+    price_unit = fields.Float(
+        string='Unit Price', required=True, digits='Product Price',
+        compute="_compute_price_unit", readonly=False, store=True)
+    price_subtotal = fields.Monetary(compute='_compute_subtotal', string='Subtotal', store=True)
+
+
+
+    purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram",digits=(16, 3))
+    purchase_making_charge_amount = fields.Float(
+        string="MC Amount",
+    )
+    purchase_making_charge_value = fields.Float(string="Amount(mc)")
+
+    purchase_making_charge_type = fields.Selection([
+        ('percent', 'Percentage'),
+        ('amount', 'Amount'),
+        ('rate_per_gram', 'Rate Per Gram')
+
+    ], string="MC Type", default='percent')
+    total_fine = fields.Float(string="Total Fine", compute="_compute_total_fine")
+    rate_value = fields.Float(string="Rate Value")
+
+
+
+
+    @api.depends(
+        'product_qty',
+        'stone_weight',
+        'diamond_weight_gm',
+    )
+    def _compute_product_qty(self):
+        for rec in self:
+            rec.net_weight = (
+                    rec.product_qty
+                    - rec.stone_weight
+                    - rec.diamond_weight_gm
+            )
+
+    @api.depends('net_weight', 'purity_id')
+    def _compute_fine_weight(self):
+        for rec in self:
+            rec.fine_weight = rec.net_weight * (rec.purity_id.percentage)/100
+
+    @api.depends('gold_rate', 'fine_weight')
+    def _compute_metal_amount(self):
+        for rec in self:
+            rec.metal_amount = rec.gold_rate * rec.fine_weight
+
+    @api.depends('net_weight','mc_percent','purchase_making_charge_type')
+    def _compute_purchase_mc_fine(self):
+        for rec in self:
+            if rec.purchase_making_charge_type == 'percent':
+                rec.mc_fine = rec.net_weight * (rec.mc_percent/ 100)
+            else:
+                rec.mc_fine = 0.0
+
+    @api.depends(
+        'mc_fine','gold_rate','purchase_making_charge_type','rate_value'
+    )
+    def _compute_purchase_mc_amount(self):
+        for rec in self:
+            if rec.purchase_making_charge_type == 'percent':
+                rec.mc_amount = rec.mc_fine * rec.gold_rate
+            elif rec.purchase_making_charge_type == 'amount':
+                rec.mc_amount = rec.purchase_making_charge_value
+            # from jafar side
+            elif rec.purchase_making_charge_type == 'rate_per_gram':
+                rec.mc_amount = rec.net_weight * rec.rate_value
+            else:
+                rec.mc_amount = rec.net_weight * rec.gold_rate
+
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate')
+    def _compute_subtotal(self):
+        for rec in self:
+            rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
+
+
+    @api.depends('price_subtotal', 'product_uom_qty')
+    def _compute_price_unit(self):
+        for rec in self:
+            rec.price_unit = (rec.price_subtotal /rec.product_qty) if rec.product_uom_qty else 0.0
+
+
+    def _prepare_stock_moves(self, picking):
+        moves = super()._prepare_stock_moves(picking)
+
+        for values in moves:
+            values['purity_id'] = self.purity_id.id if self.purity_id else False
+
+        return moves
+
+    @api.depends('mc_fine', 'fine_weight')
+    def _compute_total_fine(self):
+        for rec in self:
+            rec.total_fine = rec.mc_fine + rec.fine_weight
+
+    @api.onchange('product_id')
+    def _onchange_purchase_product_id(self):
+        if self.product_id:
+            self.purity_id = self.product_id.purity_id.id
+            if self.order_id.is_old_gold:
+                self.purchase_making_charge_type = 'rate_per_gram'
+

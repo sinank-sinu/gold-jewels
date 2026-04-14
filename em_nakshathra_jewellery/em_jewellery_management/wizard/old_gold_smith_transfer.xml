@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_smith_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">old.gold.smith.transfer.wizard.form</field>
+        <field name="model">old.gold.smith.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Smith Transfer">
+                <group>
+                    <group>
+                        <field name="purchase_id"/>
+<!--                        <field name="job_worker_id" options="{'no_create': True}"/>-->
+                    </group>
+                    <group>
+                        <field name="location_dest_id" options="{'no_create': True}"/>
+                    </group>
+                </group>
+                <notebook>
+                    <page string="Transfer Lines">
+                        <field name="line_ids">
+                            <tree editable="bottom" create="0">
+                                <field name="purity_id" readonly="1"/>
+                                <field name="available_weight" readonly="1"/>
+                                <field name="transfer_weight"/>
+                                <field name="purchase_line_id" invisible="1"/>
+                            </tree>
+                        </field>
+                    </page>
+                </notebook>
+                <footer>
+                    <button name="action_transfer" string="Transfer" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

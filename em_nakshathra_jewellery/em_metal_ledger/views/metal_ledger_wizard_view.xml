@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_metal_ledger_wizard_form" model="ir.ui.view">
+        <field name="name">metal.ledger.wizard.form</field>
+        <field name="model">metal.ledger.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Metal Ledger Report Wizard">
+                <group>
+                    <group>
+                        <field name="start_date"/>
+                        <field name="end_date"/>
+                    </group>
+                    <group>
+                        <field name="branch_id"/>
+                        <field name="partner_id"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_print_report" string="Print Report" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_metal_ledger_wizard" model="ir.actions.act_window">
+        <field name="name">Metal Ledger Report Wizard</field>
+        <field name="res_model">metal.ledger.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_metal_ledger_report_wizard"
+              name="Report Wizard"
+              parent="menu_metal_ledger_root"
+              action="action_metal_ledger_wizard"
+              sequence="40"/>
+</odoo>

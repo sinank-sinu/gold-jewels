@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_purchase_tree" model="ir.ui.view">
+        <field name="name">old.gold.purchase.tree</field>
+        <field name="model">old.gold.purchase</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="date"/>
+                <field name="total_amount"/>
+                <field name="purchase_per_rate"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_purchase_form" model="ir.ui.view">
+        <field name="name">old.gold.purchase.form</field>
+        <field name="model">old.gold.purchase</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold Purchase">
+                <header>
+                    <button name="action_confirm"
+                            type="object"
+                            string="Verified"
+                            class="btn-primary"
+                            invisible="state != 'ho_transfer'"/>
+                    <button name="action_transfer_to_ho"
+                            type="object"
+                            string="HO Transfer"
+                            class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_transfer_add_less"
+                            type="object"
+                            string="Transfer Add/Less"
+                            class="btn-primary"
+                            invisible="add_less ==0 or add_less_transferred "/>
+                    <button name="action_open_smith_transfer_wizard"
+                            type="object"
+                            string="Transfer to Smith"
+                            class="btn-primary"
+                            invisible="state not in ['done', 'ho_verified'] or not is_smith_transfer or smith_transferred"/>
+
+                    <field name="state" widget="statusbar"/>
+                </header>
+
+                <sheet style="max-width: 2320px;">
+                    <div class="oe_button_box" name="button_box">
+                        <button
+                            name="action_view_old_gold_transfers"
+                            type="object"
+                            class="oe_stat_button"
+                            icon="fa-truck"
+                            string="Transfers"/>
+<!--                        <button-->
+<!--                            name="action_view_ho_verified"-->
+<!--                            type="object"-->
+<!--                            class="oe_stat_button"-->
+<!--                            icon="fa-truck"-->
+<!--                            string="HO Verified"/>-->
+                    </div>
+                    <group>
+                        <group>
+                            <field name="name" readonly="1"/>
+                            <field name="partner_id"/>
+                            <field name="date"/>
+                            <field name="sale_id"/>
+                            <field name="purchase_order_id"/>
+                            <field name="branch_location_id" string="Source Location"/>
+                            <field name="ho_location_id" string="HO Location"/>
+                            <field name="branch_id" />
+                            <field name="is_smith_transfer" widget="boolean_toggle" readonly="smith_transferred"/>
+                            <field name="smith_transferred" invisible="1"/>
+
+
+                        </group>
+                        <group>
+                            <field name="total_net_weight" readonly="1"/>
+                            <field name="total_verified_net_weight" readonly="1"/>
+                            <field name="total_amount" readonly="1"/>
+                            <field name="purchase_per_rate" readonly="1"/>
+                            <field name="add_less" readonly="1"/>
+                            <field name="add_less_location_id"/>
+                            <field name="add_less_transferred" invisible="1"/>
+
+
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Old Gold Details">
+                            <field name="old_gold_line_ids">
+                                <tree editable="bottom">
+                                    <field name="purity_id"/>
+                                    <field name="verified_purity_id"/>
+
+                                    <field name="gross_weight" sum="Total"/>
+                                    <field name="verified_gross_weight" sum="Total"/>
+
+                                    <field name="stone_weight" />
+                                    <field name="verified_stone_weight"/>
+
+                                    <field name="net_weight" readonly="1" sum="Total"/>
+                                    <field name="verified_net_weight" sum="Total"/>
+
+                                    <field name="fine" readonly="1" sum="Total"/>
+                                    <field name="fine_verified" sum="Total"/>
+
+                                    <field name="transferred_weight" sum="Total" readonly="1" column_invisible="parent.state not in ['done', 'ho_verified'] or not parent.is_smith_transfer"/>
+
+                                    <field name="rate"/>
+                                    <field name="amount" readonly="1"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="Stock Traceability">
+                            <field name="old_gold_line_ids">
+                                <tree>
+                                    <field name="stock_move_id"/>
+                                    <field name="ho_transfer_id"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_old_gold_purchase_search" model="ir.ui.view">
+        <field name="name">old.gold.purchase.search</field>
+        <field name="model">old.gold.purchase</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <filter string="Exclude Batched" name="exclude_batched" domain="[('state', '!=', 'batched')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Status" name="group_by_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_old_gold_purchase" model="ir.actions.act_window">
+        <field name="name">Old Gold Purchase</field>
+        <field name="res_model">old.gold.purchase</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_exclude_batched': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create an Old Gold Purchase
+            </p>
+        </field>
+    </record>
+
+    <!-- Main Jewellery Menu -->
+
+    <menuitem id="menu_old_gold_root"
+              name="Old Gold"
+              parent="em_jewellery_management.menu_jewellery_root"
+              sequence="20"/>
+
+    <!-- Old Gold Purchase -->
+    <menuitem id="menu_old_gold_purchase"
+              name="Old Gold Purchase"
+              parent="menu_old_gold_root"
+              action="action_old_gold_purchase"
+              sequence="10"/>
+    <menuitem id="menu_old_gold_batch_root"
+              name="Batch Creation"
+              parent="menu_old_gold_root"
+              action="em_jewellery_management.action_old_gold_batch_wizard"
+              sequence="20"/>
+    <menuitem id="menu_old_gold_refinery_issue"
+              name="Melting"
+              parent="menu_old_gold_root"
+              action="em_jewellery_management.action_old_gold_refinery_issue"
+              sequence="40"/>
+
+    <menuitem id="menu_old_gold_bullion_issue"
+          name="Bullion Issue" parent="menu_old_gold_root"
+          action="em_jewellery_management.action_old_gold_bullion_issue"
+          sequence="50"/>
+    <menuitem id="menu_old_gold_bullion_receipt"
+          name="Bullion Receipts" parent="menu_old_gold_root"
+          action="em_jewellery_management.action_old_gold_bullion_receipt"
+          sequence="60"/>
+    <menuitem id="menu_old_gold_batch"
+          name="Old Gold Batches"
+          parent="menu_old_gold_root"
+          action="em_jewellery_management.action_old_gold_batch"
+          sequence="30"/>
+</odoo>

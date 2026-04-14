@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+   <record id="view_old_gold_ho_verification_tree" model="ir.ui.view">
+        <field name="name">old.gold.ho.verification.tree</field>
+        <field name="model">old.gold.ho.verification</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="purchase_id"/>
+                <field name="date"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_ho_verification_form" model="ir.ui.view">
+        <field name="name">old.gold.ho.verification.form</field>
+        <field name="model">old.gold.ho.verification</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold HO Verification">
+                <header>
+                    <button name="action_verify"
+                            type="object"
+                            string="Verify"
+                            class="btn-primary"
+                            invisible="state != 'draft'"
+                    />
+                    <button name="action_create_refinery_issue"
+                            type="object"
+                            string="Refinery Issuse"
+                            class="btn-primary"
+                            invisible="state != 'verified'"
+                    />
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,verified,issued"/>
+                </header>
+
+                <!-- SMART BUTTON -->
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button type="action"
+                                name="%(action_old_gold_purchase)d"
+                                class="oe_stat_button"
+                                icon="fa-exchange">
+                            <field name="purchase_id" widget="statinfo"
+                                   string="Old Gold Purchase"/>
+                        </button>
+                            <button
+                                name="action_view_og_issuse_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Transfers"/>
+
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="name" readonly="1"/>
+                            <field name="date"/>
+                            <field name="ho_location_id" string="HO Location"/>
+                        </group>
+                        <group>
+                            <field name="purchase_id"/>
+                            <field name="refinery_partner_id"/>
+                            <field name="refinery_issue_id"/>
+
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Verification Lines">
+                            <field name="line_ids">
+                                <tree editable="bottom">
+                                    <field name="purity_id"/>
+                                    <field name="branch_net_weight"/>
+                                    <field name="ho_received_weight"/>
+                                    <field name="difference"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+
+
+
+
+    <record id="action_old_gold_ho_verification" model="ir.actions.act_window">
+        <field name="name">Old Gold HO Verification</field>
+        <field name="res_model">old.gold.ho.verification</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+
+
+    <menuitem id="menu_old_gold_ho_verification"
+              name="HO Verification"
+              parent="em_jewellery_management.menu_old_gold_root"
+              action="action_old_gold_ho_verification"
+              sequence="30"/>
+
+</odoo>

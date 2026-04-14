@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_lab_purity_tree" model="ir.ui.view">
+        <field name="name">lab.purity.tree</field>
+        <field name="model">lab.purity</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="name"/>
+                <field name="percentage"/>
+                <field name="picking_id"/>
+                <field name="refinery_issue_id"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_lab_purity" model="ir.actions.act_window">
+        <field name="name">Lab Purities</field>
+        <field name="res_model">lab.purity</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <menuitem id="menu_lab_purity"
+              name="Lab Purities"
+              parent="em_jewellery_management.menu_jewellery_configuration_root"
+              action="action_lab_purity"
+              sequence="25"/>
+</odoo>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!--  Multi-record (batch / wizard) template                       -->
+    <!--  This is what the "Print Metal Ledger" action renders when    -->
+    <!--  multiple records are selected in the tree view.             -->
+    <!-- ============================================================ -->
+    <template id="report_metal_ledger_full">
+        <t t-call="web.html_container">
+            <t t-call="web.external_layout">
+                <div class="page">
+                    <t t-set="docs" t-value="docs.sorted(key=lambda r: (r.date or '', r.branch_id.name or '', r.id))"/>
+
+                    <div class="row">
+                        <div class="col-12 text-center mb-3">
+                            <h2>Metal Ledger Report</h2>
+                        </div>
+                    </div>
+
+                    <table class="table table-sm table-bordered o_main_table">
+                        <thead>
+                            <tr style="background-color:#f5f5f5;">
+                                <th>#</th>
+                                <th>Date</th>
+                                <th>Branch</th>
+                                <th>Voucher / Ref</th>
+                                <th>Type</th>
+                                <th>Metal</th>
+                                <th class="text-right">Metal Fine</th>
+                                <th class="text-right">MC Fine</th>
+                                <th class="text-right">Fine Weight</th>
+                                <th class="text-right">Stock In</th>
+                                <th class="text-right">Stock Out</th>
+<!--                                <th class="text-right">Balance</th>-->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-set="row_no" t-value="1"/>
+                            <t t-foreach="docs" t-as="doc">
+                                <tr t-att-class="'table-success' if doc.transaction_type == 'purchase' else 'table-danger'">
+                                    <td>
+                                        <t t-esc="row_no"/>
+                                        <t t-set="row_no" t-value="row_no + 1"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="doc.date"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="doc.branch_id"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="doc.voucher_name"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="doc.transaction_type"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="doc.metal_id"/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="doc.metal_fine"
+                                              t-options='{"widget": "float", "precision": 3}'/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="doc.mc_fine"
+                                              t-options='{"widget": "float", "precision": 3}'/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="doc.fine_weight"
+                                              t-options='{"widget": "float", "precision": 3}'/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="doc.stock_in"
+                                              t-options='{"widget": "float", "precision": 3}'/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="doc.stock_out"
+                                              t-options='{"widget": "float", "precision": 3}'/>
+                                    </td>
+<!--                                    <td class="text-right">-->
+<!--                                        <span t-field="doc.balance_weight"-->
+<!--                                              t-options='{"widget": "float", "precision": 3}'/>-->
+<!--                                    </td>-->
+                                </tr>
+                            </t>
+                        </tbody>
+                        <tfoot>
+                            <tr class="font-weight-bold">
+                                <td colspan="6"><strong>Totals</strong></td>
+                                <td class="text-right">
+                                    <span t-esc="'%.3f' % sum(docs.mapped('metal_fine'))"/>
+                                </td>
+                                <td class="text-right">
+                                    <span t-esc="'%.3f' % sum(docs.mapped('mc_fine'))"/>
+                                </td>
+                                <td class="text-right">
+                                    <span t-esc="'%.3f' % sum(docs.mapped('fine_weight'))"/>
+                                </td>
+                                <td class="text-right">
+                                    <span t-esc="'%.3f' % sum(docs.mapped('stock_in'))"/>
+                                </td>
+                                <td class="text-right">
+                                    <span t-esc="'%.3f' % sum(docs.mapped('stock_out'))"/>
+                                </td>
+<!--                                <td class="text-right">-->
+<!--                                    <span t-esc="'%.3f' % docs[-1].balance_weight if docs else '0.000'"/>-->
+<!--                                </td>-->
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

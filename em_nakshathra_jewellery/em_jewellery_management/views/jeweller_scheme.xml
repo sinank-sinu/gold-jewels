@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_scheme_tree" model="ir.ui.view">
+        <field name="name">scheme.tree</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="total_paid"/>
+                <field name="balance_amount"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_scheme_form" model="ir.ui.view">
+        <field name="name">scheme.form</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button
+                        name="action_set_active_rate"
+                        type="object"
+                        string="Set Active"
+                        class="btn-primary"
+                        invisible="active"
+                    />
+                    <field name="active" widget="boolean_toggle"/>
+                </header>
+                <sheet>
+
+                    <group>
+                        <field name="partner_id"/>
+                        <field name="duration"/>
+                        <field name="installment_amount"/>
+                        <field name="total_paid" readonly="1"/>
+                        <field name="balance_amount" readonly="1"/>
+                        <field name="state" invisible="1"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Installments">
+                            <field name="scheme_line_ids">
+                                <tree editable="bottom">
+                                    <field name="date"/>
+                                    <field name="amount"/>
+                                    <field name="journal_id"/>
+                                    <field name="state"/>
+                                    <button name="action_confirm_payment"
+                                            type="object"
+                                            string="Confirm Payment"
+                                            class="btn-primary"/>
+                                    <field name="move_id"/>
+                                    <field name="transaction_id"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_scheme_enrollment" model="ir.actions.act_window">
+        <field name="name">Jewellery Schemes</field>
+        <field name="res_model">jewellery.scheme.enrollment</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+
+</odoo>

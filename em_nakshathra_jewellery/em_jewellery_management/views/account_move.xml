@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Add "Asset Category" to supplier invoices -->
+    <record model="ir.ui.view" id="view_invoice_label_purity">
+        <field name="name">account.invoice.purity.form</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='invoice_line_ids']/tree/field[@name='name']" position="after">
+                <field name="purity_id"/>
+                <field name="label_id"/>
+
+            </xpath>
+             <xpath expr="//field[@name='invoice_line_ids']/tree//field[@name='name']" position="attributes">
+                <attribute name="string">Description</attribute>
+
+            </xpath>
+            <xpath expr="//field[@name='invoice_line_ids']/tree//field[@name='analytic_distribution']" position="replace">
+            </xpath>
+            <xpath expr="//field[@name='tax_totals']" position="before">
+                <field name="is_old_gold_bill" invisible="1"/>
+                <field name="old_gold_price"  invisible="not old_gold_price"/>
+            </xpath>
+            <xpath expr="//button[@name='action_register_payment']" position="attributes">
+                <attribute name="invisible">state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt') or is_old_gold_bill</attribute>
+            </xpath>
+            <xpath expr="//header" position="inside">
+                <button name="action_create_old_gold_vendor_payment"
+                        string="Create Customer Payment"
+                        type="object"
+                        class="btn-danger"
+                        invisible="is_paid or move_type != 'out_invoice'"/>
+            </xpath>
+             <xpath expr="//field[@name='narration']" position="before">
+                <group>
+                    <field name="custom_total" class="oe_inline"/>
+                    <field name="is_paid" class="oe_inline"/>
+                    <field name="payment_to_id" class="oe_inline"/>
+
+                </group>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

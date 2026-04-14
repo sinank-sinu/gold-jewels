@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_batch_tree" model="ir.ui.view">
+        <field name="name">old.gold.batch.tree</field>
+        <field name="model">old.gold.batch</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="batch_date"/>
+                <field name="branch_id"/>
+                <field name="purity_id"/>
+                <field name="total_grams"/>
+                <field name="total_purchase_amount"/>
+                <field name="refinery_issue_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_batch_form" model="ir.ui.view">
+        <field name="name">old.gold.batch.form</field>
+        <field name="model">old.gold.batch</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold Batch">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="batch_date"/>
+                            <field name="branch_id"/>
+                        </group>
+                        <group>
+                            <field name="purity_id"/>
+                            <field name="total_grams"/>
+                            <field name="total_purchase_amount"/>
+                        </group>
+                        <group string="Links">
+                            <field name="mo_id" readonly="1"/>
+                            <field name="refinery_issue_id" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_old_gold_batch" model="ir.actions.act_window">
+        <field name="name">Old Gold Batches</field>
+        <field name="res_model">old.gold.batch</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+
+</odoo>

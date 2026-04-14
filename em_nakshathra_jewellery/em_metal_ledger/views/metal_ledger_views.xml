@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!--  Tree View                                                    -->
+    <!-- ============================================================ -->
+    <record id="view_metal_ledger_tree" model="ir.ui.view">
+        <field name="name">metal.ledger.tree</field>
+        <field name="model">metal.ledger</field>
+        <field name="arch" type="xml">
+            <tree string="Metal Ledger" decoration-success="stock_in &gt; 0"
+                  decoration-danger="stock_out &gt; 0" create="False">
+                <header>
+<!--                    <button name="action_sync_orders" type="object" string="Sync from Orders" class="btn-primary"/>-->
+                </header>
+                <field name="date"/>
+                <field name="voucher_name"/>
+                <field name="partner_id" optional="show"/>
+                <field name="transaction_type"/>
+<!--                <field name="metal_id"/>-->
+                <field name="metal_fine" sum="Total Metal Fine"/>
+                <field name="mc_fine" sum="Total MC Fine"/>
+                <field name="fine_weight" sum="Total Fine Weight"/>
+                <field name="stock_in" sum="Total Stock In"/>
+                <field name="stock_out" sum="Total Stock Out"/>
+                <field name="balance_weight"/>
+                <field name="purchase_order_id" optional="show"/>
+                <field name="sale_order_id" optional="show"/>
+<!--                <field name="picking_id" optional="show"/>-->
+                <field name="branch_id" optional="show"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!--  Form View                                                    -->
+    <!-- ============================================================ -->
+    <record id="view_metal_ledger_form" model="ir.ui.view">
+        <field name="name">metal.ledger.form</field>
+        <field name="model">metal.ledger</field>
+        <field name="arch" type="xml">
+            <form string="Metal Ledger Entry" create="False">
+                <header>
+<!--                    <button name="action_recompute_balances" type="object" string="Recalculate Balances"/>-->
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Transaction Info">
+                            <field name="date"/>
+                            <field name="voucher_name"/>
+                            <field name="partner_id"/>
+                            <field name="transaction_type"/>
+                            <field name="metal_id"/>
+                        </group>
+                        <group string="Source Document">
+                            <field name="purchase_order_id"/>
+                            <field name="sale_order_id"/>
+                            <field name="picking_id"/>
+                            <field name="branch_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Weight Details">
+                            <field name="metal_fine"/>
+                            <field name="mc_fine"/>
+                            <field name="fine_weight"/>
+                        </group>
+                        <group string="Stock Movement">
+                            <field name="stock_in"/>
+                            <field name="stock_out"/>
+                            <field name="balance_weight"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!--  Search View                                                  -->
+    <!-- ============================================================ -->
+    <record id="view_metal_ledger_search" model="ir.ui.view">
+        <field name="name">metal.ledger.search</field>
+        <field name="model">metal.ledger</field>
+        <field name="arch" type="xml">
+            <search string="Metal Ledger">
+                <field name="voucher_name"/>
+                <field name="metal_id"/>
+                <field name="transaction_type"/>
+                <!-- Date range filters -->
+                <filter name="filter_today" string="Today"
+                        domain="[('date', '=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter name="filter_this_month" string="This Month"
+                        domain="[('date', '&gt;=', (context_today() + relativedelta(day=1)).strftime('%Y-%m-%d')),
+                                 ('date', '&lt;=', (context_today() + relativedelta(day=31)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <!-- Transaction type filters -->
+                <filter name="filter_purchase" string="Purchase"
+                        domain="[('transaction_type', '=', 'purchase')]"/>
+                <filter name="filter_sale" string="Sale"
+                        domain="[('transaction_type', '=', 'sale')]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_metal" string="Metal"
+                            context="{'group_by': 'metal_id'}"/>
+                    <filter name="group_by_type" string="Transaction Type"
+                            context="{'group_by': 'transaction_type'}"/>
+                    <filter name="group_by_date" string="Date"
+                            context="{'group_by': 'date'}"/>
+                    <filter name="group_by_branch" string="Branch"
+                            context="{'group_by': 'branch_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!--  Action                                                       -->
+    <!-- ============================================================ -->
+    <record id="action_metal_ledger" model="ir.actions.act_window">
+        <field name="name">Metal Ledger</field>
+        <field name="res_model">metal.ledger</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_filter_purchase': 0}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No Metal Ledger records found.
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!--  Menu                                                         -->
+    <!-- ============================================================ -->
+    <menuitem id="menu_metal_ledger_root"
+              name="Metal Ledger"
+              sequence="25"
+              web_icon="em_metal_ledger,static/description/icon.png"/>
+
+    <menuitem id="menu_metal_ledger_entries"
+              name="Ledger Entries"
+              parent="menu_metal_ledger_root"
+              action="action_metal_ledger"
+              sequence="10"/>
+
+</odoo>

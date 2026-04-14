@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="server_action_branch_transfer_purchase_order" model="ir.actions.server">
+        <field name="name">Transfer Branch</field>
+        <field name="model_id" ref="purchase.model_purchase_order"/>
+        <field name="binding_model_id" ref="purchase.model_purchase_order"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            action = {
+                'type': 'ir.actions.act_window',
+                'res_model': 'branch.transfer.wizard',
+                'view_mode': 'form',
+                'target': 'new',
+                'context': {
+                    'active_model': model._name,
+                    'active_ids': records.ids,
+                }
+            }
+        </field>
+    </record>
+    <record id="sale_order_branch_transfer_server_action" model="ir.actions.server">
+        <field name="name">Transfer Branch</field>
+        <field name="model_id" ref="sale.model_sale_order"/>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            action = {
+                'type': 'ir.actions.act_window',
+                'res_model': 'sale.order.branch.transfer.wizard',
+                'view_mode': 'form',
+                'target': 'new',
+                'context': {
+                    'active_ids': records.ids
+                }
+            }
+        </field>
+    </record>
+    <record id="account_move_branch_transfer_server_action" model="ir.actions.server">
+        <field name="name">Transfer Branch</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="binding_model_id" ref="account.model_account_move"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            action = {
+                'type': 'ir.actions.act_window',
+                'res_model': 'sale.order.branch.transfer.wizard',
+                'view_mode': 'form',
+                'target': 'new',
+                'context': {
+                    'active_ids': records.ids
+                }
+            }
+        </field>
+    </record>
+
+</odoo>

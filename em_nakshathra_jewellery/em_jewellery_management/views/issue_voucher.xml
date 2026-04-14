@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_issue_voucher_tree" model="ir.ui.view">
+        <field name="name">jewellery.issue.voucher.tree</field>
+        <field name="model">jewellery.issue.voucher</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="job_worker_id"/>
+                <field name="is_refinery" widget="boolean_toggle"/>
+<!--                <field name="refinery_id" invisible="not is_refinery"/>-->
+                <field name="total_net_weight" readonly="1"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- FORM -->
+    <record id="view_issue_voucher_form" model="ir.ui.view">
+        <field name="name">jewellery.issue.voucher.form</field>
+        <field name="model">jewellery.issue.voucher</field>
+        <field name="arch" type="xml">
+            <form string="Issue Voucher">
+                <header>
+                    <button name="action_dept_approve" string="Department Approve" type="object"
+                                class="oe_highlight"
+                                groups="cr_material_purchase_requisitions.department_access"
+                                invisible="state not in ('draft', 'waiting_department_approval')"/>
+                    <button name="action_approve" string="Approve" type="object" class="oe_highlight"
+                                groups="cr_material_purchase_requisitions.user_access"
+                                invisible="state not in ('draft','waiting_department_approval','waiting_ir_approval')"/>
+
+                        <button
+                                name="action_done"
+                                type="object"
+                                string="Confirm"
+                                class="btn-primary"
+                                invisible="state not in 'approved'"
+                            />
+                        <button
+                                name="action_create_receive_voucher"
+                                type="object"
+                                string="Create Receive Voucher"
+                                class="btn-primary"
+                                invisible="not is_refinery or state != 'done'"
+                        />
+                    <field name="state" widget="statusbar" statusbar_visible="draft,waiting_department_approval,waiting_ir_approval,approved,done"/>
+                </header>
+                <sheet>
+                     <div class="oe_button_box" name="button_box">
+                         <button
+                                name="action_view_bullion_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Transfers"/>
+                         <button
+                                name="action_view_receive_vouchers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-list-alt"
+                                invisible="not is_refinery or receive_count == 0">
+                             <field name="receive_count" string="Receive Vouchers" widget="statinfo"/>
+                         </button>
+                    </div>
+
+                    <div class="oe_title">
+                            <h1>
+                                <field name="name" readonly="1" />
+                            </h1>
+                        </div>
+                    <group>
+                        <field name="job_work_id" invisible="is_refinery" required="not is_refinery"/>
+                        <field name="job_worker_id" invisible="is_refinery" required="not is_refinery"/>
+                        <field name="refinery_id" invisible="not is_refinery" required="is_refinery"/>
+                        <field name="total_net_weight" readonly="1"/>
+                        <field name="source_location_id"/>
+                        <field name="received_location_id"/>
+                        <field name="total_fine_weight" readonly="1"/>
+                        <field name="used_fine_weight"/>
+                        <field name="remaining_fine_weight"/>
+                        <field name="is_refinery" widget="boolean_toggle"/>
+                    </group>
+<!--                    <group invisible="not is_refinery">-->
+<!--                        <group string="Refinery Details">-->
+<!--                            <field name="refinery_id" required="is_refinery"/>-->
+<!--                        </group>-->
+<!--                        <group string="Lab Details">-->
+<!--                            <field name="lab_weight"/>-->
+<!--                            <field name="lab_purity"/>-->
+<!--                        </group>-->
+<!--                    </group>-->
+                    <notebook>
+                        <page string="Product Information">
+                            <field name="line_ids">
+                                <tree editable="bottom">
+                                    <field name="product_template_id"
+                                    string="Product" readonly="False"/>
+                                    <field
+                                    name="product_id"
+                                    string="Variant"
+                                    widget="sol_product_many2one"/>
+                                    <field name="refinery_issue_id" column_invisible="not parent.is_refinery"/>
+                                    <field name="lab_weight" column_invisible="not parent.is_refinery" readonly="True" force_save="1"/>
+                                    <field name="issued_weight" string="Issued Weight (g)" column_invisible="not parent.is_refinery" readonly="parent.state == 'done'" />
+                                    <field name="qty" string="Net Weight" readonly="1" force_save="1"/>
+                                    <field name="purity_id"/>
+                                    <field name="lab_purity" string="Lab Purity (%)" column_invisible="not parent.is_refinery"/>
+                                    <field name="lab_fine_weight" column_invisible="not parent.is_refinery"/>
+                                    <field name="refinery_fine_weight" column_invisible="not parent.is_refinery"/>
+                                    <field name="uom_id"/>
+                                    <field name="stone_weight" column_invisible="parent.is_refinery" />
+                                    <field name="gross_weight" column_invisible="parent.is_refinery"/>
+                                    <field name="fine_weight"/>
+                                    <field name="received_fine_weight" column_invisible="not parent.is_refinery"/>
+                                    <field name="remaining_fine_weight" column_invisible="not parent.is_refinery"/>
+                                    <field name="received_lab_fine_weight" column_invisible="1"/>
+                                    <field name="remaining_lab_fine_weight" column_invisible="not parent.is_refinery"/>
+                                    <field name="fine_gms_price"/>
+                                    <field name="fine_issue_amount"/>
+                                    <field name="lab_tester_id" column_invisible="not parent.is_refinery"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Other Information">
+                                <group>
+                                    <group>
+                                        <field name="confirmed_by_id"/>
+                                        <field name="department_manager_id"/>
+                                        <field name="approved_id"/>
+                                    </group>
+                                    <group>
+                                        <field name="confirmed_date"/>
+                                        <field name="department_approval_date"/>
+                                        <field name="approved_date"/>
+                                    </group>
+                                </group>
+                            </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_issue_voucher" model="ir.actions.act_window">
+        <field name="name">Issue Vouchers</field>
+        <field name="res_model">jewellery.issue.voucher</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+</odoo>

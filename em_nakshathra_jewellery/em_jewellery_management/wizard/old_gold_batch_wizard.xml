@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_batch_wizard" model="ir.ui.view">
+        <field name="name">old.gold.batch.wizard.form</field>
+        <field name="model">old.gold.batch.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Batch Creation">
+                <group>
+                    <field name="start_date"/>
+                    <field name="end_date"/>
+                </group>
+                <footer>
+                    <button name="action_create_batches"
+                            string="Create Batch"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_old_gold_batch_wizard" model="ir.actions.act_window">
+        <field name="name">Batch Creation</field>
+        <field name="res_model">old.gold.batch.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>

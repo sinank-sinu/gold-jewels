@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_refinery_margin_report_tree" model="ir.ui.view">
+        <field name="name">refinery.margin.report.tree</field>
+        <field name="model">refinery.margin.report</field>
+        <field name="arch" type="xml">
+            <tree string="Refinery Margin Report" create="false" edit="false" 
+                  decoration-danger="type == 'issue'" decoration-success="type == 'receive'">
+                <field name="date"/>
+                <field name="name"/>
+                <field name="type" column_invisible="False"/>
+                <field name="batches"/>
+                <field name="gross_weight" sum="Total Gross"/>
+                <field name="net_weight" sum="Total Net"/>
+                <field name="purity_id"/>
+                <field name="expected_fine" sum="Total Expected Fine"/>
+                <field name="melting_loss" sum="Total Loss"/>
+                <field name="lab_weight" sum="Total Lab Weight"/>
+                <field name="refinery_issue_weight" sum="Total Issue Weight"/>
+                <field name="scrap_bar_fine_weight" sum="Total Scrap Fine"/>
+                <field name="total_fine_weight" sum="Total Fine"/>
+                <field name="balance" sum="Total Balance"/>
+                <field name="amount" sum="Total Amount"/>
+                <field name="fine_rate"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_refinery_margin_report" model="ir.actions.act_window">
+        <field name="name">Refinery Margin Report</field>
+        <field name="res_model">refinery.margin.report</field>
+        <field name="view_mode">tree</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No Refinery Margin Report records found.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_refinery_margin_report"
+              name="Refinery Margin Report"
+              parent="menu_metal_ledger_root"
+              action="action_refinery_margin_report"
+              sequence="15"/>
+</odoo>

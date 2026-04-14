@@ -1,0 +1,22 @@
+{
+    'name': 'Metal Ledger',
+    'version': '17.0.1.0.0',
+    'category': 'Jewellery',
+    'summary': 'Track metal transactions from Purchase and Sales with running balance',
+    'description': 'Metal Ledger & Reporting — Tracks metal (gold, silver, etc.) stock in/out from confirmed Purchase and Sale orders with a running balance.',
+    'depends': ['em_jewellery_management', 'purchase', 'sale'],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/metal_ledger_views.xml',
+        'report/metal_ledger_report.xml',
+        'report/metal_ledger_report_action.xml',
+        'views/metal_ledger_wizard_view.xml',
+        'views/refinery_margin_view.xml',
+        'views/job_work_report_view.xml',
+        'views/issue_voucher_view.xml',
+        'views/refinery_lab_report_view.xml'
+    ],
+    'auto_install': False,
+    'application': True,
+    'installable': True,
+}

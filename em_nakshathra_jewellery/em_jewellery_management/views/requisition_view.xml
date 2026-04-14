@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="material_purchase_requisition_inherit2" model="ir.ui.view">
+        <field name="name">purchase.requisition.inherit2</field>
+        <field name="model">material.purchase.requisition</field>
+        <field name="inherit_id" ref="cr_material_purchase_requisitions.material_purchase_requisition_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='company_id']" position="after">
+                <field name="branch_id"/>
+            </xpath>
+            <xpath expr="//field[@name='requisition_lines']/tree//field[@name='quantity']" position="after">
+                <field name="purity_id"/>
+            </xpath>
+            <xpath expr="//div[@class='oe_button_box']" position="inside">
+                    <button
+                        name="action_open_job_works"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-cogs"
+                        invisible="job_work_count== 0">
+                        <field name="job_work_count" widget="statinfo"
+                               string="Job Works"/>
+                    </button>
+                    <button
+                        name="action_open_label"
+                        type="object"
+                        class="oe_stat_button"
+                        string="LABELS"
+                        invisible="state!= 'purchase_order_created'">
+                    </button>
+            </xpath>
+        </field>
+    </record>
+</odoo>

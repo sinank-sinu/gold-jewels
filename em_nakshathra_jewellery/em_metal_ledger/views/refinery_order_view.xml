@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_old_gold_refinery_issue_form_inherit_ledger" model="ir.ui.view">
+        <field name="name">old.gold.refinery.issue.form.inherit.ledger</field>
+        <field name="model">old.gold.refinery.issue</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_old_gold_refinery_issue_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='scrap_bar_unit_rate']" position="after">
+                <field name="output_product_id"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

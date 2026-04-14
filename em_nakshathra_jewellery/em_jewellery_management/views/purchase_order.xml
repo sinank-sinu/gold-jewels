@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="purchase_order_inherit2" model="ir.ui.view">
+        <field name="name">purchase.order.inherit2</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="attributes">
+                <attribute name="style">max-width: 2320px;</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='price_subtotal']" position="replace">
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom']" position="replace">
+            </xpath>
+             <xpath expr="//field[@name='effective_date']" position="after">
+                <field name="is_old_gold" widget="boolean_toggle"/>
+            </xpath>
+            <xpath expr="//field[@name='fiscal_position_id']" position="after">
+                <field name="sale_id"/>
+                <field name="total_weight" readonly="1"/>
+                <field name="total_labelled" readonly="1"/>
+                <field name="total_unlabelled" readonly="1"/>
+            </xpath>
+
+
+            <xpath expr="//field[@name='order_line']/tree//field[@name='name']" position="attributes">
+                    <attribute name="optional">hide</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="attributes">
+                    <attribute name="string">Gross weight</attribute>
+            </xpath>
+
+            <xpath expr="//header" position="inside">
+                <button
+                    name="action_create_sale_order"
+                    type="object"
+                    string="Create Sale Order"
+                    class="btn-primary"
+                    invisible="sale_id != False"
+                />
+                 <button name="action_create_bill_and_pay"
+                    type="object"
+                    string="Create Bill &amp; Pay"
+                    class="btn-primary"
+                    invisible="state != 'purchase' or invoice_ids"/>
+            </xpath>
+
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="after">
+                <field name="stone_weight" column_invisible="parent.is_old_gold" optional="hide"/>
+                <field name="diamond_weight_gm" column_invisible="parent.is_old_gold" optional="hide"/>
+                <field name="net_weight" optional="hide"/>
+                <field name="fine_weight" optional="hide"/>
+                <field name="gold_rate" column_invisible="parent.is_old_gold"/>
+                <field name="metal_amount" column_invisible="parent.is_old_gold"/>
+                <field name="purchase_making_charge_type"/>
+<!--                jafar side-->
+                <field name="rate_value" optional="show"/>
+                <field name="mc_percent" readonly="purchase_making_charge_type != 'percent'" column_invisible="parent.is_old_gold"/>
+                <field name="purchase_making_charge_value" readonly="purchase_making_charge_type != 'amount'" column_invisible="parent.is_old_gold"/>
+
+                <field name="mc_fine" column_invisible="parent.is_old_gold"/>
+                <field name="mc_amount" column_invisible="parent.is_old_gold"/>
+                <field name="stone_rate" optional="hide"/>
+                <field name="diamond_rate" optional="hide"/>
+                <field name="price_subtotal"/>
+                <field name="total_fine"/>
+
+            </xpath>
+            <xpath expr="//form" position="attributes">
+                <attribute name="chatter">false</attribute>
+            </xpath>
+            <xpath expr="//form/div[contains(@class,'oe_chatter')]" position="replace"/>
+            <xpath expr="//sheet" position="inside">
+                    <!-- Chatter -->
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids" groups="base.group_user"/>
+                        <field name="activity_ids"/>
+                        <field name="message_ids" options="{'post_refresh': 'always'}"/>
+                    </div>
+            </xpath>
+        </field>
+    </record>
+    <record id="purchase_order_form_matrix" model="ir.ui.view">
+        <field name="name">purchase.order.form.inherit.matrix</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase_product_matrix.purchase_order_form_matrix"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="after">
+                <field name="product_id" string="Variety"/>
+                <field name="product_uom" string="UOM"/>
+                <field name="purity_id"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="attributes">
+                <attribute name="string">Product</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>
