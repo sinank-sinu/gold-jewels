@@ -1,0 +1,172 @@
+<odoo>
+    <!--BASIC-->
+    <record id="rule_basic" model="hr.salary.rule">
+        <field name="name">Basic</field>
+        <field name="code">BASIC</field>
+        <field name="sequence">100</field>
+        <field name="category_id" ref="hr_payroll_community.BASIC"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days
+result = round((contract.wage / 30) * worked)
+        ]]></field>
+    </record>
+    <!--DA-->
+    <record id="rule_da" model="hr.salary.rule">
+        <field name="name">Dearness Allowance</field>
+        <field name="code">DA</field>
+        <field name="sequence">110</field>
+        <field name="category_id" ref="hr_payroll_community.DA"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days
+result = round((contract.da / 30) * worked)
+        ]]></field>
+    </record>
+
+    <!--HRA-->
+    <record id="rule_hra" model="hr.salary.rule">
+        <field name="name">House Rent Allowance</field>
+        <field name="code">HRA</field>
+        <field name="sequence">120</field>
+        <field name="category_id" ref="hr_payroll_community.HRA"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days
+result = round((contract.hra / 30) * worked)
+        ]]></field>
+    </record>
+
+    <!--OTHER-->
+    <record id="rule_other" model="hr.salary.rule">
+        <field name="name">Other Allowance</field>
+        <field name="code">Other</field>
+        <field name="sequence">130</field>
+        <field name="category_id" ref="hr_payroll_community.Other"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days
+result = round((contract.other_allowance / 30) * worked)
+        ]]></field>
+    </record>
+
+    <!--GROSS-->
+    <record id="rule_gross" model="hr.salary.rule">
+        <field name="name">Gross</field>
+        <field name="code">GROSS</field>
+        <field name="sequence">200</field>
+        <field name="category_id" ref="hr_payroll_community.GROSS"/>
+        <field name="amount_select">code</field>
+<field name="amount_python_compute"><![CDATA[
+# Ensure all categories are summed. Using .get() prevents errors if a category is missing.
+basic = categories.BASIC
+da = categories.DA
+hra = categories.HRA
+other = categories.Other
+result = basic + da + hra + other
+        ]]></field>
+    </record>
+
+    <!--ESIC-->
+    <record id="rule_esic" model="hr.salary.rule">
+        <field name="name">ESIC</field>
+        <field name="code">ESIC</field>
+        <field name="sequence">300</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+result = round(categories.GROSS * 0.0075)
+        ]]></field>
+    </record>
+
+    <!--PF-->
+    <record id="rule_pf" model="hr.salary.rule">
+        <field name="name">PF</field>
+        <field name="code">PF</field>
+        <field name="sequence">310</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days if worked_days.WORK100 else 0
+# Calculate basic and da values directly from the source
+b_val = (contract.wage / 30) * worked
+d_val = (contract.da / 30) * worked
+result = round((b_val + d_val) * 0.12)
+        ]]></field>
+    </record>
+
+    <!--TOTAL DEDUCTION-->
+    <record id="rule_deduction" model="hr.salary.rule">
+        <field name="name">Total Deduction</field>
+        <field name="code">DED</field>
+        <field name="sequence">400</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+result = categories.DED
+        ]]></field>
+    </record>
+
+    <!--NET SALARY-->
+    <record id="rule_net" model="hr.salary.rule">
+        <field name="name">Net Salary</field>
+        <field name="code">NET</field>
+        <field name="sequence">500</field>
+        <field name="category_id" ref="hr_payroll_community.NET"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+basic = categories.BASIC
+da = categories.DA
+hra = categories.HRA
+other = categories.Other
+gross = basic + da + hra + other
+deduction = categories.DED
+result = gross - deduction
+]]></field>
+    </record>
+
+    <!--ESIC Employer-->
+    <record id="rule_esic_employer" model="hr.salary.rule">
+    <field name="name">ESIC Employer</field>
+        <field name="code">ESIC_EMP</field>
+        <field name="sequence">600</field>
+        <field name="category_id" ref="hr_payroll_community.ALW"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+result = round(categories.GROSS * 0.0375)
+        ]]></field>
+    </record>
+
+    <!--PF Employer-->
+    <record id="rule_pf_employer" model="hr.salary.rule">
+        <field name="name">PF Employer</field>
+        <field name="code">PF_EMP</field>
+        <field name="sequence">610</field>
+        <field name="category_id" ref="hr_payroll_community.ALW"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+worked = worked_days.WORK100.number_of_days if worked_days.WORK100 else 0
+basic_amt = (contract.wage / 30) * worked
+da_amt = (contract.da / 30) * worked
+result = round((basic_amt + da_amt) * 0.1248)
+        ]]></field>
+    </record>
+
+    <!--CTC-->
+    <record id="rule_ctc" model="hr.salary.rule">
+        <field name="name">CTC</field>
+        <field name="code">CTC</field>
+        <field name="sequence">700</field>
+        <field name="category_id" ref="hr_payroll_community.NET"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+esic_amt = round(categories.GROSS * 0.0375)
+worked = worked_days.WORK100.number_of_days if worked_days.WORK100 else 0
+basic_amt = (contract.wage / 30) * worked
+da_amt = (contract.da / 30) * worked
+pf_amt = round((basic_amt + da_amt) * 0.1248)
+result = categories.GROSS + esic_amt + pf_amt
+        ]]></field>
+    </record>
+</odoo>
+

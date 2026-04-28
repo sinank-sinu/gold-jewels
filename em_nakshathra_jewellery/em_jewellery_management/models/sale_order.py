@@ -140,6 +140,7 @@ class SaleOrder(models.Model):
                 'date_order': fields.Date.today(),
                 'origin': order.name,
                 'branch_id': order.branch_id.id,
+                'sale_id': order.id
             })
 
             for purity, vals in purity_map.items():
@@ -226,6 +227,7 @@ class SaleOrder(models.Model):
 
             # 1️⃣ Calculate total MC amount from all lines
             total_mc = sum(order.order_line.mapped('mc_amount'))
+            print(total_mc,'total_mc')
 
             if total_mc <= 0:
                 raise UserError(_("No Making Charge found to apply scheme."))

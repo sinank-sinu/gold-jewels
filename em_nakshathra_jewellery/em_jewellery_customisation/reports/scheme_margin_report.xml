@@ -1,0 +1,9 @@
+<odoo>
+    <record id="scheme_margin_xlsx_action" model="ir.actions.report">
+        <field name="name">Scheme Report</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">em_jewellery_customisation.scheme_redeem_margin_xlsx</field>
+        <field name="report_file">scheme_report</field>
+    </record>
+</odoo>

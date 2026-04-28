@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_replacement_costing_wizard_form" model="ir.ui.view">
+        <field name="name">replacement.costing.wizard.form</field>
+        <field name="model">replacement.costing.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Replacement Costing Excel Report">
+                <group invisible="excel_file != False">
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                        <field name="branch_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                    </group>
+                </group>
+                
+                <group invisible="excel_file == False">
+                    <field name="excel_file" filename="file_name" readonly="1" widget="binary"/>
+                    <field name="file_name" invisible="1"/>
+                </group>
+                
+                <footer>
+                    <button name="action_print_excel" string="Generate Excel" type="object" class="btn-primary" invisible="excel_file != False"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" />
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_replacement_costing_wizard" model="ir.actions.act_window">
+        <field name="name">Replacement Costing Excel Report</field>
+        <field name="res_model">replacement.costing.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_replacement_costing_wizard" 
+              name="Replacement Costing Report" 
+              action="action_replacement_costing_wizard" 
+              parent="menu_replacement_costing_item_head"
+              sequence="55"/>
+</odoo>

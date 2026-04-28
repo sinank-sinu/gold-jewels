@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         SALESMAN TARGET - FORM VIEW
+    ============================================================ -->
+    <record id="view_salesman_target_form" model="ir.ui.view">
+        <field name="name">salesman.target.form</field>
+        <field name="model">salesman.target</field>
+        <field name="arch" type="xml">
+            <form string="Salesman Target">
+                <header>
+                    <button name="action_confirm" string="Confirm" type="object"
+                            invisible="state != 'draft'"
+                            class="oe_highlight"/>
+                    <button name="action_mark_paid" string="Mark as Paid" type="object"
+                            invisible="state != 'confirmed'"
+                            class="oe_highlight"/>
+                    <button name="action_reset_draft" string="Reset to Draft" type="object"
+                            invisible="state == 'draft'"/>
+                    <button name="action_refresh_achievements" string="↻ Refresh Achievements"
+                            type="object" icon="fa-refresh"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,confirmed,paid"/>
+                </header>
+
+                <sheet>
+                    <!-- Smart buttons -->
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_refresh_achievements" type="object"
+                                class="oe_stat_button" icon="fa-check-circle"
+                                invisible="not is_achieved">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text text-success">✓ Achieved!</span>
+                            </div>
+                        </button>
+                        <button name="action_refresh_achievements" type="object"
+                                class="oe_stat_button" icon="fa-money"
+                                invisible="earned_incentive == 0">
+                            <field name="earned_incentive" widget="monetary"
+                                   class="oe_stat_value"/>
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Earned Incentive</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Salesperson">
+                            <field name="salesman_id"/>
+                            <field name="employee_id" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Period">
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                        </group>
+                    </group>
+
+                    <group string="Targets &amp; Incentive">
+                        <group>
+                            <field name="target_amount"/>
+                            <field name="target_gms"/>
+                            <field name="incentive_amount"/>
+                        </group>
+                        <group>
+                            <field name="achieved_amount"/>
+                            <field name="achieved_gms"/>
+                            <field name="earned_incentive" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Progress">
+                        <group>
+                            <field name="amount_progress" widget="percentpie" string="Amount Progress"/>
+                        </group>
+                        <group>
+                            <field name="gms_progress" widget="percentpie" string="GMS Progress"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <field name="is_achieved" widget="boolean_toggle" readonly="1"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Notes">
+                            <field name="notes" placeholder="Internal notes..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         SALESMAN TARGET - LIST VIEW
+    ============================================================ -->
+    <record id="view_salesman_target_list" model="ir.ui.view">
+        <field name="name">salesman.target.list</field>
+        <field name="model">salesman.target</field>
+        <field name="arch" type="xml">
+            <tree string="Salesman Targets" decoration-success="is_achieved == True"
+                  decoration-muted="state == 'draft'">
+                <field name="name"/>
+                <field name="salesman_id"/>
+                <field name="employee_id"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="target_amount" sum="Total Target Amount"/>
+                <field name="target_gms" sum="Total Target GMS"/>
+                <field name="achieved_amount" sum="Total Achieved Amount"/>
+                <field name="achieved_gms" sum="Total Achieved GMS"/>
+                <field name="amount_progress" widget="progressbar"/>
+                <field name="gms_progress" widget="progressbar"/>
+                <field name="incentive_amount"/>
+                <field name="earned_incentive" sum="Total Earned Incentive"/>
+                <field name="is_achieved" widget="boolean_toggle"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'paid'"
+                       decoration-info="state == 'confirmed'"
+                       decoration-muted="state == 'draft'"/>
+                <field name="currency_id" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         SALESMAN TARGET - SEARCH VIEW
+    ============================================================ -->
+    <record id="view_salesman_target_search" model="ir.ui.view">
+        <field name="name">salesman.target.search</field>
+        <field name="model">salesman.target</field>
+        <field name="arch" type="xml">
+            <search string="Search Targets">
+                <field name="name"/>
+                <field name="salesman_id"/>
+                <field name="employee_id"/>
+                <separator/>
+                <filter string="Achieved" name="achieved" domain="[('is_achieved', '=', True)]"/>
+                <filter string="Not Achieved" name="not_achieved" domain="[('is_achieved', '=', False)]"/>
+                <separator/>
+                <filter string="Draft" name="draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Confirmed" name="confirmed" domain="[('state', '=', 'confirmed')]"/>
+                <filter string="Paid" name="paid" domain="[('state', '=', 'paid')]"/>
+                <separator/>
+                <filter string="This Month" name="this_month"
+                        domain="[('date_from','&gt;=', (context_today()).strftime('%Y-%m-01'))]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Salesman" name="group_salesman" context="{'group_by': 'salesman_id'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Period Start" name="group_period" context="{'group_by': 'date_from:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         ACTION
+    ============================================================ -->
+    <record id="action_salesman_target" model="ir.actions.act_window">
+        <field name="name">Salesman Targets</field>
+        <field name="res_model">salesman.target</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_salesman_target_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No targets found. Create a new salesman target!
+            </p>
+            <p>
+                Set a period, target amount, target GMS and a fixed incentive.
+                The system automatically computes achievements from confirmed sale orders.
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         MENU
+    ============================================================ -->
+    <menuitem id="menu_salesman_target_root"
+              name="Sales Targets"
+              parent="sale.sale_menu_root"
+              groups="sales_team.group_sale_manager"
+              sequence="50"/>
+
+    <menuitem id="menu_salesman_target_list"
+              name="Salesman Targets"
+              parent="menu_salesman_target_root"
+              action="action_salesman_target"
+              groups="sales_team.group_sale_manager"
+              sequence="10"/>
+
+</odoo>

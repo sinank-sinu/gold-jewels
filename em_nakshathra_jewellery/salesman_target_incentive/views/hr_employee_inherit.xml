@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Inherit hr.employee form to add Sales Targets tab -->
+    <record id="view_hr_employee_inherit_sales_targets" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.sales.targets</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Smart button showing target count -->
+            <div name="button_box" position="inside">
+                <button name="%(salesman_target_incentive.action_salesman_target)d"
+                        type="action"
+                        class="oe_stat_button"
+                        icon="fa-trophy"
+                        string="Sales Targets"
+                        domain="[('employee_id', '=', active_id)]"
+                        context="{'default_employee_id': active_id}"
+                        invisible="target_count == 0">
+                    <field name="target_count" widget="statinfo"
+                           string="Targets"/>
+                </button>
+            </div>
+
+            <!-- New "Sales Targets" tab inside the employee notebook -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Sales Targets" name="sales_targets">
+                    <field name="salesman_target_ids"
+                           context="{'default_employee_id': active_id}"
+                           readonly="1">
+                        <tree string="Sales Targets"
+                              decoration-success="is_achieved == True"
+                              decoration-muted="state == 'draft'">
+                            <field name="name"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="target_amount"/>
+                            <field name="target_gms"/>
+                            <field name="achieved_amount"/>
+                            <field name="achieved_gms"/>
+                            <field name="incentive_amount"/>
+                            <field name="earned_incentive"/>
+                            <field name="is_achieved" widget="boolean_toggle"/>
+                            <field name="state" widget="badge"
+                                   decoration-success="state == 'paid'"
+                                   decoration-info="state == 'confirmed'"
+                                   decoration-muted="state == 'draft'"/>
+                            <field name="currency_id" invisible="1"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

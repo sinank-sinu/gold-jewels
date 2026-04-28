@@ -88,7 +88,6 @@ class SaleOrderLine(models.Model):
 
             gold_rate = 0.0
             today = fields.Date.today()
-
             gold_rate_rec = self.env['gold.rate.master'].search([
                 ('purity_id', '=', self.label_id.purity_id.id),
                 ('date', '<=', today),
@@ -97,7 +96,7 @@ class SaleOrderLine(models.Model):
 
             ], order='date desc', limit=1)
 
-            gold_rate = gold_rate_rec.board_rate
+            gold_rate = gold_rate_rec.rate_per_gram
             self.gold_rate = gold_rate
             self.metal_amount = self.gold_rate * self.product_uom_qty
 

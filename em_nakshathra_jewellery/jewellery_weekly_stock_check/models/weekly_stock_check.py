@@ -44,7 +44,15 @@ class JewelleryWeeklyStockCheck(models.Model):
         string='Stock Check Lines'
     )
 
+    template_summary_ids = fields.One2many(
+        'jewellery.weekly.stock.check.template.summary',
+        'stock_check_id',
+        string='Template Summary'
+    )
+
     total_lines = fields.Integer(string='Total Products', compute='_compute_summary')
+    total_labels = fields.Float(string='Total Labels', compute='_compute_summary', digits=(16, 0))
+    total_weight = fields.Float(string='Total Weight', compute='_compute_summary', digits=(16, 3))
     matched_lines = fields.Integer(string='Matched', compute='_compute_summary')
     mismatched_lines = fields.Integer(string='Mismatched', compute='_compute_summary')
 
@@ -53,10 +61,12 @@ class JewelleryWeeklyStockCheck(models.Model):
         if self.branch_id:
             self.location_id = False
 
-    @api.depends('line_ids', 'line_ids.is_matched')
+    @api.depends('line_ids', 'line_ids.is_matched', 'line_ids.system_qty', 'line_ids.system_weight')
     def _compute_summary(self):
         for rec in self:
             rec.total_lines = len(rec.line_ids)
+            rec.total_labels = sum(rec.line_ids.mapped('system_qty'))
+            rec.total_weight = sum(rec.line_ids.mapped('system_weight'))
             rec.matched_lines = len(rec.line_ids.filtered('is_matched'))
             rec.mismatched_lines = rec.total_lines - rec.matched_lines
 
@@ -78,8 +88,9 @@ class JewelleryWeeklyStockCheck(models.Model):
         if not branch:
             raise UserError(_("The selected location is not associated with any branch."))
 
-        # Remove existing lines
+        # Remove existing lines and summary
         self.line_ids.unlink()
+        self.template_summary_ids.unlink()
 
         # 1. Get active labels for this branch
         labels = self.env['product.label'].search([
@@ -96,35 +107,47 @@ class JewelleryWeeklyStockCheck(models.Model):
         if not labels and not quants:
             raise UserError(_("No active labels or stock found for this location/branch."))
 
-        # Group by product
-        product_data = {}
-        
-        # Add label counts
-        for label in labels:
-            pid = label.product_id.id
-            if pid not in product_data:
-                product_data[pid] = {'count': 0, 'weight': 0.0}
-            product_data[pid]['count'] += 1
-            
-        # Add stock weights
-        for quant in quants:
-            pid = quant.product_id.id
-            if pid not in product_data:
-                product_data[pid] = {'count': 0, 'weight': 0.0}
-            product_data[pid]['weight'] += quant.quantity
-
+        # Create lines per label
         lines = []
-        for pid, data in product_data.items():
+        for label in labels:
             lines.append({
                 'stock_check_id': self.id,
-                'product_id': pid,
-                'system_qty': float(data['count']),
-                'system_weight': data['weight'],
+                'product_tmpl_id': label.product_id.product_tmpl_id.id,
+                'product_id': label.product_id.id,
+                'label_id': label.id,
+                'system_qty': 1.0,
+                'system_weight': label.sale_gross_weight,
                 'manual_qty': 0.0,
                 'manual_weight': 0.0,
             })
+            
+        # Add stock for products without labels (if any)
+        labeled_product_ids = labels.mapped('product_id').ids
+        for quant in quants:
+            if quant.product_id.id not in labeled_product_ids:
+                lines.append({
+                    'stock_check_id': self.id,
+                    'product_tmpl_id': quant.product_id.product_tmpl_id.id,
+                    'product_id': quant.product_id.id,
+                    'system_qty': 0.0,
+                    'system_weight': quant.quantity,
+                    'manual_qty': 0.0,
+                    'manual_weight': 0.0,
+                })
 
         self.env['jewellery.weekly.stock.check.line'].create(lines)
+
+        # Create template summary lines
+        templates = self.line_ids.mapped('product_tmpl_id')
+        summary_vals = []
+        for tmpl in templates:
+            summary_vals.append({
+                'stock_check_id': self.id,
+                'product_tmpl_id': tmpl.id,
+            })
+        if summary_vals:
+            self.env['jewellery.weekly.stock.check.template.summary'].create(summary_vals)
+
         self.state = 'in_progress'
         return True
 
@@ -188,6 +211,7 @@ class JewelleryWeeklyStockCheck(models.Model):
 class JewelleryWeeklyStockCheckLine(models.Model):
     _name = 'jewellery.weekly.stock.check.line'
     _description = 'Weekly Stock Check Line'
+    _order = 'product_tmpl_id, product_id, label_id'
 
     stock_check_id = fields.Many2one(
         'jewellery.weekly.stock.check',
@@ -195,10 +219,22 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         ondelete='cascade'
     )
 
+    product_tmpl_id = fields.Many2one(
+        'product.template',
+        string='Product Template',
+        readonly=True
+    )
+
     product_id = fields.Many2one(
         'product.product',
-        string='Product',
+        string='Product Variant',
         required=True,
+        readonly=True
+    )
+
+    label_id = fields.Many2one(
+        'product.label',
+        string='Label',
         readonly=True
     )
 
@@ -267,7 +303,77 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         for rec in self:
             # Match if manual count equals system quantity and weight
             qty_match = abs(rec.manual_qty - rec.system_qty) < 0.001
-            weight_match = abs(rec.manual_weight - rec.system_weight) < 0.001
+            # Allow 100mg (0.100g) tolerance for weight
+            weight_match = abs(rec.manual_weight - rec.system_weight) <= 0.100
             rec.is_qty_matched = qty_match
             rec.is_weight_matched = weight_match
             rec.is_matched = qty_match and weight_match
+
+
+class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
+    _name = 'jewellery.weekly.stock.check.template.summary'
+    _description = 'Weekly Stock Check Template Summary'
+    _order = 'product_tmpl_id'
+
+    stock_check_id = fields.Many2one(
+        'jewellery.weekly.stock.check',
+        string='Stock Check',
+        ondelete='cascade'
+    )
+
+    product_tmpl_id = fields.Many2one(
+        'product.template',
+        string='Product Template',
+        readonly=True
+    )
+
+    system_qty = fields.Float(
+        string='System Labels',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 0)
+    )
+    system_weight = fields.Float(
+        string='System Weight',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 3)
+    )
+
+    manual_qty = fields.Float(
+        string='Counted Labels',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 0)
+    )
+    manual_weight = fields.Float(
+        string='Counted Weight',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 3)
+    )
+
+    difference_qty = fields.Float(
+        string='Diff Labels',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 0)
+    )
+    difference_weight = fields.Float(
+        string='Diff Weight',
+        compute='_compute_template_totals',
+        store=True,
+        digits=(16, 3)
+    )
+
+    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight',
+                 'stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight')
+    def _compute_template_totals(self):
+        for summary in self:
+            lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
+            summary.system_qty = sum(lines.mapped('system_qty'))
+            summary.system_weight = sum(lines.mapped('system_weight'))
+            summary.manual_qty = sum(lines.mapped('manual_qty'))
+            summary.manual_weight = sum(lines.mapped('manual_weight'))
+            summary.difference_qty = summary.manual_qty - summary.system_qty
+            summary.difference_weight = summary.manual_weight - summary.system_weight

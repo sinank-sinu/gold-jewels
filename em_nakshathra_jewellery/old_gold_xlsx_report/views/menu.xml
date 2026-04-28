@@ -1,0 +1,44 @@
+<odoo>
+
+    <!-- Reporting Menu -->
+    <menuitem
+        id="menu_jewellery_reporting_root"
+        name="Reporting"
+        parent="em_jewellery_management.menu_jewellery_root"
+        sequence="21"
+    />
+
+    <!-- Old Gold Margin Wizard Action -->
+    <record id="action_old_gold_margin_wizard" model="ir.actions.act_window">
+        <field name="name">Old Gold Margin Report</field>
+        <field name="res_model">old.gold.margin.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Old Gold Refine Margin Wizard Action -->
+    <record id="action_old_gold_refine_margin_wizard" model="ir.actions.act_window">
+        <field name="name">Old Gold Refine Margin Report</field>
+        <field name="res_model">old.gold.refine.margin.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Submenu -->
+    <menuitem
+        id="menu_old_gold_refine_margin_report"
+        name="Old Gold Refine Margin Report"
+        parent="menu_jewellery_reporting_root"
+        action="action_old_gold_refine_margin_wizard"
+        sequence="24"
+    />
+    <!-- Submenu -->
+    <menuitem
+        id="menu_old_gold_margin_report"
+        name="Old Gold Margin Report"
+        parent="purchase.purchase_report_main"
+        action="action_old_gold_margin_wizard"
+        sequence="40"
+    />
+
+</odoo>

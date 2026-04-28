@@ -1,0 +1,19 @@
+<odoo>
+    <record id="scheme_form_inherit" model="ir.ui.view">
+        <field name="name">scheme.form.inherit.print</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_scheme_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="before">
+                <field name="name"/>
+            </xpath>
+            <xpath expr="//header" position="inside">
+                <button name="action_print_scheme_report"
+                        type="object"
+                        string="Print Scheme"
+                        class="btn-primary"/>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

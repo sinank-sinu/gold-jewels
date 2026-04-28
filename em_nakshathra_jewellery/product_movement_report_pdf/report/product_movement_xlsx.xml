@@ -1,0 +1,9 @@
+<odoo>
+    <record id="product_movement_xlsx_action" model="ir.actions.report">
+        <field name="name">Product Movement XLSX</field>
+        <field name="model">product.movement.wizard</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">product_movement_report_pdf.product_movement_xlsx</field>
+        <field name="report_file">product_movement_report</field>
+    </record>
+</odoo>

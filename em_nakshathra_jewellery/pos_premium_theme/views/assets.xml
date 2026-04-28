@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Assets are declared in __manifest__.py via the 'assets' key (Odoo 17 style) -->
+</odoo>

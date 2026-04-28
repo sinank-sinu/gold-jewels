@@ -1,0 +1,23 @@
+<odoo>
+
+    <record id="paperformat_product_movement_report" model="report.paperformat">
+        <field name="name">Product Movement Paperformat</field>
+        <field name="format">A4</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">80</field>
+        <field name="margin_bottom">25</field>
+        <field name="margin_left">5</field>
+        <field name="margin_right">5</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <!-- Report Action -->
+    <record id="product_movement_report_action" model="ir.actions.report">
+        <field name="name">Product Movement Report</field>
+        <field name="model">product.movement.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">product_movement_report_pdf.product_movement_template</field>
+        <field name="report_file">product_movement_report_pdf.product_movement_template</field>
+        <field name="paperformat_id" ref="product_movement_report_pdf.paperformat_product_movement_report"/>
+    </record>
+</odoo>

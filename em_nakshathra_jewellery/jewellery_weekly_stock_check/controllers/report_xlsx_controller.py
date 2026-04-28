@@ -51,9 +51,9 @@ class StockCheckReportController(http.Controller):
         row = 7
         col = 0
         if report_type == 'manager':
-            headers = ['Product', 'System Qty', 'System Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight', 'Status']
+            headers = ['Product', 'Label', 'System Qty', 'System Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight', 'Status']
         else:
-            headers = ['Product', 'Counted Labels', 'Counted Weight']
+            headers = ['Product', 'Label', 'Counted Labels', 'Counted Weight']
             
         for header in headers:
             worksheet.write(row, col, header, header_format)
@@ -66,17 +66,56 @@ class StockCheckReportController(http.Controller):
             if report_type == 'manager':
                 current_format = match_format if line.is_matched else mismatch_format if line.manual_qty != 0 else border_format
                 worksheet.write(row, col, line.product_id.display_name, current_format)
-                worksheet.write(row, col+1, line.system_qty, current_format)
-                worksheet.write(row, col+2, line.system_weight, current_format)
-                worksheet.write(row, col+3, line.manual_qty, current_format)
-                worksheet.write(row, col+4, line.manual_weight, current_format)
-                worksheet.write(row, col+5, line.difference_qty, current_format)
-                worksheet.write(row, col+6, line.difference_weight, current_format)
-                worksheet.write(row, col+7, 'Matched' if line.is_matched else 'Mismatch', current_format)
+                worksheet.write(row, col+1, line.label_id.name or '', current_format)
+                worksheet.write(row, col+2, line.system_qty, current_format)
+                worksheet.write(row, col+3, line.system_weight, current_format)
+                worksheet.write(row, col+4, line.manual_qty, current_format)
+                worksheet.write(row, col+5, line.manual_weight, current_format)
+                worksheet.write(row, col+6, line.difference_qty, current_format)
+                worksheet.write(row, col+7, line.difference_weight, current_format)
+                worksheet.write(row, col+8, 'Matched' if line.is_matched else 'Mismatch', current_format)
             else:
                 worksheet.write(row, col, line.product_id.display_name, border_format)
-                worksheet.write(row, col+1, line.manual_qty, border_format)
-                worksheet.write(row, col+2, line.manual_weight, border_format)
+                worksheet.write(row, col+1, line.label_id.name or '', border_format)
+                worksheet.write(row, col+2, line.manual_qty, border_format)
+                worksheet.write(row, col+3, line.manual_weight, border_format)
+            row += 1
+
+        # Second Worksheet: Template Summary
+        summary_sheet = workbook.add_worksheet('Template Summary')
+        summary_sheet.set_column('A:A', 40)
+        summary_sheet.set_column('B:G', 15)
+
+        summary_sheet.write('A1', 'Product Template Summary', title_format)
+        summary_sheet.write('A2', f'Reference: {report.name}')
+        summary_sheet.write('A3', f'Date: {report.date}')
+
+        row = 5
+        col = 0
+        if report_type == 'manager':
+            summary_headers = ['Product Template', 'Total Labels', 'Total Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight']
+        else:
+            summary_headers = ['Product Template', 'Counted Labels', 'Counted Weight']
+
+        for header in summary_headers:
+            summary_sheet.write(row, col, header, header_format)
+            col += 1
+
+        row += 1
+        for summary in report.template_summary_ids:
+            col = 0
+            if report_type == 'manager':
+                summary_sheet.write(row, col, summary.product_tmpl_id.name, border_format)
+                summary_sheet.write(row, col+1, summary.system_qty, border_format)
+                summary_sheet.write(row, col+2, summary.system_weight, border_format)
+                summary_sheet.write(row, col+3, summary.manual_qty, border_format)
+                summary_sheet.write(row, col+4, summary.manual_weight, border_format)
+                summary_sheet.write(row, col+5, summary.difference_qty, border_format)
+                summary_sheet.write(row, col+6, summary.difference_weight, border_format)
+            else:
+                summary_sheet.write(row, col, summary.product_tmpl_id.name, border_format)
+                summary_sheet.write(row, col+1, summary.manual_qty, border_format)
+                summary_sheet.write(row, col+2, summary.manual_weight, border_format)
             row += 1
 
         workbook.close()

@@ -1,0 +1,422 @@
+// =============================================================================
+// POS Premium Theme — Nakshathra Jewellery  v3
+// Palette: Deep Indigo #1e1b4b → #4338ca | Gold #f59e0b | Emerald #10b981
+// SCSS only — no JS — visual-only overrides, never touch OWL layout
+// =============================================================================
+
+// ── CSS Variables ─────────────────────────────────────────────────────────────
+:root {
+  // Core gradient (header / active states)
+  --pp-h1:   #1e1b4b;
+  --pp-h2:   #312e81;
+  --pp-h3:   #4338ca;
+
+  // Indigo for UI accents
+  --pp-ind:  #4f46e5;
+  --pp-ind2: #6366f1;
+
+  // Payment button — vivid amber-gold
+  --pp-pay1: #f59e0b;
+  --pp-pay2: #d97706;
+
+  // Validate / confirm — emerald
+  --pp-em1:  #10b981;
+  --pp-em2:  #059669;
+
+  // Danger / delete
+  --pp-red:  #ef4444;
+
+  // Backgrounds
+  --pp-bg:   #f4f4fb;
+  --pp-card: #ffffff;
+  --pp-card2:#f7f7fd;
+
+  // Borders / lines
+  --pp-line: rgba(67,56,202,0.13);
+  --pp-line2:rgba(67,56,202,0.22);
+
+  // Text
+  --pp-t1:   #1e1b4b;
+  --pp-t2:   #4338ca;
+  --pp-t3:   #a5b4fc;
+
+  // Shadows
+  --pp-sh1:  0 1px 5px  rgba(67,56,202,0.10);
+  --pp-sh2:  0 4px 16px rgba(67,56,202,0.18);
+  --pp-sh3:  0 8px 36px rgba(67,56,202,0.26);
+
+  // Radii
+  --pp-r1:   8px;
+  --pp-r2:   13px;
+  --pp-r3:   20px;
+
+  // Easing
+  --pp-t:    0.22s cubic-bezier(0.4,0,0.2,1);
+}
+
+// ── Base ──────────────────────────────────────────────────────────────────────
+.point-of-sale {
+  font-family: 'Inter','Segoe UI',Roboto,sans-serif !important;
+  background-color: var(--pp-bg) !important;
+}
+
+// ── Top Header ────────────────────────────────────────────────────────────────
+.pos-topheader,
+.o_pos_topbar {
+  background: linear-gradient(135deg, var(--pp-h1) 0%, var(--pp-h2) 55%, var(--pp-h3) 100%) !important;
+  box-shadow: 0 3px 18px rgba(30,27,75,0.35) !important;
+  border-bottom: none !important;
+  color: #fff !important;
+
+  .pos-branding { color: #fff !important; font-weight: 600 !important; }
+  .pos-branding-text { font-size: 1.3rem !important; letter-spacing: 0.02em !important; }
+
+  button, .btn {
+    color: rgba(255,255,255,0.88) !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: var(--pp-r1) !important;
+    transition: background var(--pp-t);
+    &:hover { background: rgba(255,255,255,0.14) !important; }
+  }
+}
+
+// ── Search bar ────────────────────────────────────────────────────────────────
+.search-bar-input,
+.pos-searchbar {
+  border: 1.5px solid var(--pp-line2) !important;
+  border-radius: 50px !important;
+  box-shadow: var(--pp-sh1) !important;
+  background: var(--pp-card) !important;
+  color: var(--pp-t1) !important;
+  transition: border-color var(--pp-t), box-shadow var(--pp-t) !important;
+
+  &::placeholder { color: var(--pp-t3) !important; }
+  &:focus {
+    outline: none !important;
+    border-color: var(--pp-ind) !important;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.18) !important;
+  }
+}
+
+// ── Category sidebar ──────────────────────────────────────────────────────────
+.pos-category-list,
+.product-categories-widget {
+  background: var(--pp-card) !important;
+  border-right: 1px solid var(--pp-line) !important;
+  box-shadow: 2px 0 10px rgba(67,56,202,0.07) !important;
+  padding: 6px !important;
+
+  .category-simple-button,
+  .category-button {
+    border-radius: var(--pp-r1) !important;
+    font-size: 0.86rem !important;
+    font-weight: 500 !important;
+    color: var(--pp-h2) !important;
+    background: transparent !important;
+    border: none !important;
+    transition: all var(--pp-t);
+    margin-bottom: 3px;
+
+    &:hover {
+      background: rgba(99,102,241,0.08) !important;
+      color: var(--pp-ind) !important;
+    }
+    &.selected, &.active {
+      background: linear-gradient(135deg, var(--pp-h1) 0%, var(--pp-h3) 100%) !important;
+      color: #fff !important;
+      font-weight: 600 !important;
+      box-shadow: var(--pp-sh1) !important;
+    }
+  }
+}
+
+// ── Product card (visual only — no layout overrides) ──────────────────────────
+article.product {
+  background: var(--pp-card) !important;
+  border: 1.5px solid var(--pp-line) !important;
+  border-radius: var(--pp-r2) !important;
+  box-shadow: var(--pp-sh1) !important;
+  cursor: pointer;
+  position: relative;
+  transition:
+    transform var(--pp-t),
+    box-shadow var(--pp-t),
+    border-color var(--pp-t) !important;
+
+  &:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: var(--pp-sh3) !important;
+    border-color: var(--pp-ind2) !important;
+  }
+  &:active {
+    transform: scale(0.97) !important;
+    transition-duration: 0.07s !important;
+  }
+
+  // Indigo top bar slides in on hover
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--pp-ind) 0%, var(--pp-pay1) 100%);
+    border-radius: var(--pp-r2) var(--pp-r2) 0 0;
+    opacity: 0;
+    transition: opacity var(--pp-t);
+  }
+  &:hover::after { opacity: 1; }
+
+  .product-name {
+    font-size: 0.83rem !important;
+    font-weight: 600 !important;
+    color: var(--pp-t1) !important;
+    line-height: 1.35 !important;
+  }
+
+  .price-tag, .product-price {
+    font-weight: 800 !important;
+    color: var(--pp-ind) !important;
+    font-size: 0.95rem !important;
+  }
+}
+
+// product image — let OWL manage size, just add smooth zoom
+article.product .product-img,
+article.product img.product-img,
+article.product .o_product_image {
+  border-radius: var(--pp-r2) var(--pp-r2) 0 0;
+  object-fit: cover;
+  background-color: var(--pp-card2);
+  transition: transform var(--pp-t);
+}
+article.product:hover .product-img,
+article.product:hover img.product-img,
+article.product:hover .o_product_image {
+  transform: scale(1.05);
+}
+
+// ── Order line / Cart ─────────────────────────────────────────────────────────
+.orderline {
+  border-radius: var(--pp-r1) !important;
+  border: 1px solid transparent !important;
+  margin: 3px 6px !important;
+  padding: 9px 11px !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover {
+    background: var(--pp-card2) !important;
+    border-color: var(--pp-line) !important;
+  }
+  &.selected {
+    background: rgba(99,102,241,0.07) !important;
+    border-color: var(--pp-ind) !important;
+  }
+
+  .product-name { font-weight: 600 !important; color: var(--pp-t1) !important; }
+  .price        { font-weight: 700 !important; color: var(--pp-ind) !important; }
+  .info-list .info { font-size: 0.77rem !important; color: var(--pp-t3) !important; }
+}
+
+// ── Order summary ─────────────────────────────────────────────────────────────
+.summary {
+  background: var(--pp-card) !important;
+  border-top: 2px solid var(--pp-line) !important;
+
+  .total {
+    font-size: 1.4rem !important;
+    font-weight: 800 !important;
+    color: var(--pp-h1) !important;
+    letter-spacing: -0.02em;
+  }
+  .subentry { color: var(--pp-t3) !important; font-size: 0.8rem !important; }
+}
+
+// ── NUMPAD (Reverted Layout, Visuals Only) ───────────────────────────────────
+.subpads .numpad {
+  background: var(--pp-card2) !important;
+}
+
+// Number keys (1–9, 0, +/-, .)
+.subpads .numpad .btn {
+  background: var(--pp-card) !important;
+  border: 1px solid var(--pp-line) !important;
+  color: var(--pp-h1) !important;
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover {
+    background: rgba(99,102,241,0.07) !important;
+    border-color: var(--pp-ind2) !important;
+    color: var(--pp-ind) !important;
+  }
+
+  // User requested to remove color for Qty/Active buttons
+  // &.active, &.o_color_active {
+  //   background: var(--pp-ind) !important;
+  //   color: #fff !important;
+  //   border-color: var(--pp-ind) !important;
+  // }
+}
+
+// Delete (backspace) key
+.subpads .numpad .btn:has(.fa-backspace),
+.subpads .numpad .btn .fa-backspace {
+  color: var(--pp-red) !important;
+}
+
+// ── Action / control buttons ──────────────────────────────────────────────────
+.control-buttons .btn,
+.action-buttons .btn,
+.subpads .actionpad .button {
+  font-weight: 600 !important;
+  background: var(--pp-card) !important;
+  border: 1px solid var(--pp-line2) !important;
+  color: var(--pp-h2) !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover {
+    background: rgba(99,102,241,0.08) !important;
+    color: var(--pp-ind) !important;
+  }
+}
+
+// ── PAYMENT button — Solid Amber Gold ─────────────────────────────────────────
+.actionpad .pay-order-button,
+.o_pos_pay_button,
+button.payment-button {
+  background: var(--pp-pay1) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-size: 1.1rem !important;
+  box-shadow: 0 4px 14px rgba(245,158,11,0.4) !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.1) !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover {
+    background: var(--pp-pay2) !important;
+    box-shadow: 0 6px 20px rgba(245,158,11,0.5) !important;
+    transform: translateY(-2px) !important;
+  }
+}
+
+// ── Validate / Confirm button — Solid Emerald ─────────────────────────────────
+.validate-button,
+.validation-button,
+.validation,
+.o_pos_validate_button,
+.btn-switchpane.btn-primary {
+  background: var(--pp-h2) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(16,185,129,0.3) !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover {
+    background: var(--pp-h1) !important;
+    box-shadow: 0 6px 18px rgba(16,185,129,0.4) !important;
+    transform: translateY(-2px) !important;
+  }
+}
+
+// ── Customer button — Deep Indigo when selected ───────────────────────────────
+.payment-buttons .button.partner-button.highlight {
+  background: var(--pp-h2) !important;
+  color: #fff !important;
+  border-color: var(--pp-h2) !important;
+}
+
+// ── Email submit button — Deep Indigo when highlighted ────────────────────────
+.receipt-screen .send-email .send.highlight {
+  background: var(--pp-h2) !important;
+  color: #fff !important;
+  border: none !important;
+  transition: background var(--pp-t) !important;
+
+  &:hover {
+    background: var(--pp-h1) !important;
+  }
+}
+
+// ── Customer Create button — Deep Indigo when highlighted ─────────────────────
+.partnerlist-screen .button.new-customer.highlight,
+.partnerlist-screen .button.highlight {
+  background: var(--pp-h2) !important;
+  color: #fff !important;
+  border-color: var(--pp-h2) !important;
+}
+
+// ── Payment screen method buttons ─────────────────────────────────────────────
+.paymentmethod,
+.payment-method-button {
+  background: var(--pp-card) !important;
+  border: 1.5px solid var(--pp-line2) !important;
+  border-radius: var(--pp-r2) !important;
+  box-shadow: var(--pp-sh1) !important;
+  font-weight: 600 !important;
+  color: var(--pp-h2) !important;
+  transition: all var(--pp-t) !important;
+
+  &:hover, &.selected {
+    border-color: var(--pp-pay1) !important;
+    box-shadow: 0 0 0 2px rgba(245,158,11,0.22) !important;
+    background: rgba(245,158,11,0.05) !important;
+  }
+}
+
+// ── Popups / Modals ───────────────────────────────────────────────────────────
+.popup, .modal-content {
+  background: var(--pp-card) !important;
+  border-radius: var(--pp-r3) !important;
+  box-shadow: var(--pp-sh3) !important;
+
+  .popup-header, .modal-header {
+    background: linear-gradient(135deg, var(--pp-h1) 0%, var(--pp-h3) 100%) !important;
+    color: #fff !important;
+    border-radius: var(--pp-r3) var(--pp-r3) 0 0 !important;
+    padding: 16px 22px !important;
+    font-weight: 700 !important;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--pp-ind) 0%, var(--pp-h2) 100%) !important;
+    border: none !important;
+    border-radius: var(--pp-r1) !important;
+    font-weight: 700 !important;
+  }
+}
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+.pos input[type="text"],
+.pos input[type="number"],
+.pos .form-control {
+  border: 1.5px solid var(--pp-line2) !important;
+  border-radius: var(--pp-r1) !important;
+  background: var(--pp-card) !important;
+  color: var(--pp-t1) !important;
+  transition: border-color var(--pp-t), box-shadow var(--pp-t) !important;
+
+  &:focus {
+    outline: none !important;
+    border-color: var(--pp-ind) !important;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.18) !important;
+  }
+}
+
+// ── Scrollbars ────────────────────────────────────────────────────────────────
+.pos ::-webkit-scrollbar       { width: 4px; }
+.pos ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.28); border-radius: 4px; }
+.pos ::-webkit-scrollbar-track { background: transparent; }
+
+// ── Responsive ────────────────────────────────────────────────────────────────
+@media (max-width: 1024px) {
+  article.product .product-name { font-size: 0.80rem !important; }
+}
+@media (max-width: 768px) {
+  article.product .product-name { font-size: 0.76rem !important; }
+  article.product .price-tag    { font-size: 0.84rem !important; }
+  .numpad-button { font-size: 1.25rem !important; min-height: 52px !important; }
+}

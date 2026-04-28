@@ -4,3 +4,7 @@ access_metal_ledger_wizard,metal.ledger.wizard,model_metal_ledger_wizard,base.gr
 access_refinery_margin_report,refinery.margin.report,model_refinery_margin_report,base.group_user,1,1,1,1
 access_job_work_report,job.work.report,model_job_work_report,base.group_user,1,1,1,1
 access_refinery_lab_report,refinery.lab.report,model_refinery_lab_report,base.group_user,1,1,1,1
+access_replacement_costing_item,replacement.costing.item,model_replacement_costing_item,base.group_user,1,1,1,1
+access_replacement_costing_wizard,replacement.costing.wizard,model_replacement_costing_wizard,base.group_user,1,1,1,1
+access_stock_summary_report_wizard,stock.summary.report.wizard,model_stock_summary_report_wizard,base.group_user,1,1,1,1
+access_stock_summary_report_line,stock.summary.report.line,model_stock_summary_report_line,base.group_user,1,1,1,1

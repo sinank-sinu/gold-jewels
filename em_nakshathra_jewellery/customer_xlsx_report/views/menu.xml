@@ -1,0 +1,27 @@
+<odoo>
+
+    <!-- Reporting Root -->
+    <menuitem 
+        id="menu_contact_reporting_root"
+        name="Reporting"
+        parent="contacts.menu_contacts"
+        groups="base.group_system"
+        sequence="30"
+    />
+    <!-- Wizard Action -->
+    <!-- <record id="action_contact_xlsx" model="ir.actions.act_window">
+        <field name="name">Contact XLSX Report</field>
+        <field name="res_model">old.gold.refine.margin.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record> -->
+    <!-- XLSX Report -->
+    <menuitem 
+        id="menu_contact_xlsx_report"
+        name="Contact XLSX Report"
+        parent="menu_contact_reporting_root"
+        action="action_contact_xlsx"
+        sequence="1"
+    />
+
+</odoo>

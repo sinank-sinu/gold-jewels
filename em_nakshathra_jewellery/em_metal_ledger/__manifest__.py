@@ -14,7 +14,10 @@
         'views/refinery_margin_view.xml',
         'views/job_work_report_view.xml',
         'views/issue_voucher_view.xml',
-        'views/refinery_lab_report_view.xml'
+        'views/refinery_lab_report_view.xml',
+        'views/replacement_costing_item_views.xml',
+        'views/replacement_costing_wizard_view.xml',
+        'views/stock_summary_report_view.xml',
     ],
     'auto_install': False,
     'application': True,

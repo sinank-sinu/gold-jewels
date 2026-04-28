@@ -32,7 +32,7 @@
 
     <menuitem id="menu_metal_ledger_report_wizard"
               name="Report Wizard"
-              parent="menu_metal_ledger_root"
+              parent="menu_metal_ledger_entries"
               action="action_metal_ledger_wizard"
-              sequence="40"/>
+              sequence="50"/>
 </odoo>

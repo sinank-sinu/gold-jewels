@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <!-- Inherit the existing Job Work form to add the Revert button -->
+    <record id="view_jewellery_job_work_form_revert" model="ir.ui.view">
+        <field name="name">jewellery.job.work.form.revert</field>
+        <field name="model">jewellery.job.work</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_jewellery_job_work_form"/>
+        <field name="arch" type="xml">
+            <!-- Insert Revert button just before the statusbar field -->
+            <field name="state" position="before">
+                <button
+                        name="action_revert"
+                        type="object"
+                        string="Revert"
+                        class="btn-danger"
+                        invisible="state in ('draft', 'cancel')"
+                        groups="base.group_system"
+                        confirm="This will delete all related Issue Vouchers, Receive Vouchers, stock moves and reset the Job Work to Draft. This action cannot be undone. Proceed?"
+                />
+            </field>
+        </field>
+    </record>
+</odoo>

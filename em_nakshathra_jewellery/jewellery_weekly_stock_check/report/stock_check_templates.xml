@@ -22,6 +22,7 @@
                             <thead>
                                 <tr>
                                     <th>Product</th>
+                                    <th>Label</th>
                                     <th class="text-right">Counted Labels</th>
                                     <th class="text-right">Counted Weight</th>
                                 </tr>
@@ -30,12 +31,35 @@
                                 <t t-foreach="o.line_ids" t-as="line">
                                     <tr>
                                         <td><span t-field="line.product_id.display_name"/></td>
+                                        <td><span t-field="line.label_id.name"/></td>
                                         <td class="text-right"><span t-field="line.manual_qty"/></td>
                                         <td class="text-right"><span t-field="line.manual_weight"/></td>
                                     </tr>
                                 </t>
                             </tbody>
                         </table>
+
+                        <div class="mt32">
+                            <h3>Product Template Summary (Counter)</h3>
+                            <table class="table table-sm o_main_table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Template</th>
+                                        <th class="text-right">Counted Labels</th>
+                                        <th class="text-right">Counted Weight</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="o.template_summary_ids" t-as="summary">
+                                        <tr>
+                                            <td><span t-field="summary.product_tmpl_id.name"/></td>
+                                            <td class="text-right"><span t-field="summary.manual_qty"/></td>
+                                            <td class="text-right"><span t-field="summary.manual_weight"/></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </t>
             </t>
@@ -64,6 +88,7 @@
                             <thead>
                                 <tr>
                                     <th>Product</th>
+                                    <th>Label</th>
                                     <th class="text-right">System Qty</th>
                                     <th class="text-right">System Weight</th>
                                     <th class="text-right">Counted Labels</th>
@@ -77,6 +102,7 @@
                                 <t t-foreach="o.line_ids" t-as="line">
                                     <tr t-att-class="'table-success' if line.is_matched else 'table-danger' if line.manual_qty != 0 else ''">
                                         <td><span t-field="line.product_id.display_name"/></td>
+                                        <td><span t-field="line.label_id.name"/></td>
                                         <td class="text-right"><span t-field="line.system_qty"/></td>
                                         <td class="text-right"><span t-field="line.system_weight"/></td>
                                         <td class="text-right"><span t-field="line.manual_qty"/></td>
@@ -109,6 +135,36 @@
                                     </tr>
                                 </table>
                             </div>
+                        </div>
+
+                        <div class="mt32">
+                            <h3>Product Template Summary (Manager)</h3>
+                            <table class="table table-sm o_main_table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Template</th>
+                                        <th class="text-right">System Labels</th>
+                                        <th class="text-right">System Weight</th>
+                                        <th class="text-right">Counted Labels</th>
+                                        <th class="text-right">Counted Weight</th>
+                                        <th class="text-right">Diff Labels</th>
+                                        <th class="text-right">Diff Weight</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="o.template_summary_ids" t-as="summary">
+                                        <tr>
+                                            <td><span t-field="summary.product_tmpl_id.name"/></td>
+                                            <td class="text-right"><span t-field="summary.system_qty"/></td>
+                                            <td class="text-right"><span t-field="summary.system_weight"/></td>
+                                            <td class="text-right"><span t-field="summary.manual_qty"/></td>
+                                            <td class="text-right"><span t-field="summary.manual_weight"/></td>
+                                            <td class="text-right"><span t-field="summary.difference_qty"/></td>
+                                            <td class="text-right"><span t-field="summary.difference_weight"/></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </t>

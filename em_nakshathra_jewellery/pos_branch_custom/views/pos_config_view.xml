@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_inherit_branch" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.branch</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='pos_interface_section']" position="after">
+                <block title="Branch Configuration" id="branch_config">
+                    <setting string="POS Branch">
+                        <div class="text-muted">
+                            Limit products to this branch
+                        </div>
+                        <field name="pos_branch_id"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

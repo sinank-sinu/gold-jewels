@@ -112,9 +112,10 @@ class OldGoldRefineryIssue(models.Model):
         for record in self:
             record.scrap_bar_unit_rate = scrap_variant.standard_price
 
-    @api.depends('total_purchase_amount', 'total_issued_weight')
+    @api.depends('total_purchase_amount')
     def _compute_per_gram(self):
         for record in self:
+            print(record,'record')
             record.purchase_per_rate = (
                 record.total_purchase_amount / record.total_issued_weight
                 if record.total_issued_weight
@@ -318,6 +319,8 @@ class OldGoldRefineryIssue(models.Model):
         purity = self.expected_purity_id
         if not purity and self.line_ids:
             purity = self.line_ids[0].purity_id
+            
+        total_purchase_amount = sum(self.line_ids.mapped('purchase_amount'))
 
         # Remove existing old gold lines (all lines except any existing scrap bar)
         old_lines = self.line_ids.filtered(
@@ -339,8 +342,10 @@ class OldGoldRefineryIssue(models.Model):
                 'product_id': scrap_variant.id,
                 'purity_id': purity.id if purity else False,
                 'issue_weight': scrap_weight,
-                'purchase_amount': 0.0,
+                'purchase_amount': total_purchase_amount,
             })
+        else:
+            already_exists.purchase_amount = total_purchase_amount
 
 
 

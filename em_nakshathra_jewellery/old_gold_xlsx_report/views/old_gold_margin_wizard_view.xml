@@ -1,0 +1,24 @@
+<odoo>
+
+    <record id="view_old_gold_margin_wizard" model="ir.ui.view">
+        <field name="name">old.gold.margin.wizard.form</field>
+        <field name="model">old.gold.margin.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold Margin Report">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                    <field name="branch_ids" widget="many2many_tags"/>
+                </group>
+                <footer>
+                    <button name="action_print_report"
+                            string="Print Report"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

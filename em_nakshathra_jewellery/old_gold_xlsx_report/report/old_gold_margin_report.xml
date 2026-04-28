@@ -1,0 +1,11 @@
+<odoo>
+
+    <record id="old_gold_margin_xlsx_report" model="ir.actions.report">
+        <field name="name">Old Gold Margin XLSX</field>
+        <field name="model">old.gold.margin.wizard</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">old_gold_xlsx_report.old_gold_margin_xlsx</field>
+        <field name="report_file">old_gold_margin</field>
+    </record>
+
+</odoo>

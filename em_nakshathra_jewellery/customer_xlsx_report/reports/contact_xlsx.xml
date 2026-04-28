@@ -1,0 +1,10 @@
+
+<odoo>
+    <record id="action_contact_xlsx" model="ir.actions.report">
+        <field name="name">Contact XLSX</field>
+        <field name="model">res.partner</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">customer_xlsx_report.contact_xlsx</field>
+        <field name="report_file">contact_xlsx</field>
+    </record>
+</odoo>
