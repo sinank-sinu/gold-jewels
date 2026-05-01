@@ -2,7 +2,6 @@ from odoo import models, fields, api
 from odoo.exceptions import ValidationError
 
 
-
 class ProductLabel(models.Model):
     _inherit = 'product.label'
 
@@ -18,8 +17,5 @@ class ProductLabel(models.Model):
                 raise ValidationError("Sequence not working!")
             vals['name'] = f"{branch.branch_code}/{seq}"
         res = super().create(vals)
-        # barcode logic
-        # ean = generate_ean(str(res.id))
-        # res.barcode = '21' + ean[2:]
         return res
 

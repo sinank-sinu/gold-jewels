@@ -2,7 +2,6 @@ from odoo import models, fields, api,_
 from odoo.exceptions import ValidationError
 
 
-
 class JewelleryReceiveVoucher(models.Model):
     _inherit = 'jewellery.receive.voucher'
 

@@ -10,26 +10,99 @@ class ProductLabel(models.Model):
         'product.product',
         ondelete='cascade', string="Product Variant", 
     )
-    product_tmpl_id = fields.Many2one(
+    product_template_id = fields.Many2one(
         'product.template',
-        string="Product", store=True
+        string="Product"
+    )
+    fine_rate_id = fields.Many2one('fine.rate.master')
+    product_template_attribute_value_ids = fields.Many2many(
+        'product.template.attribute.value',
+        'product_label_ptav_rel',
+        string="Product Attribute Values"
     )
 
+    product_no_variant_attribute_value_ids = fields.Many2many(
+        'product.template.attribute.value',
+        'product_label_no_variant_ptav_rel',
+        string="Extra Attribute Values"
+    )
 
-    # @api.onchange('product_id')
-    # def _onchange_product_id_set_template(self):
-    #     for rec in self:
-    #         if rec.product_id:
-    #             rec.product_tmpl_id = rec.product_id.product_tmpl_id
-    #         else:
-    #             rec.product_tmpl_id = False
+    product_custom_attribute_value_ids = fields.One2many(
+        'product.attribute.custom.value',
+        'product_label_id',   # 👈 we will add this
+        string="Custom Values"
+    )
 
-    # @api.onchange('product_tmpl_id')
-    # def _onchange_product_tmpl_id_set_template(self):
-    #     for rec in self:
-    #         if rec.product_tmpl_id:
-    #             rec.product_id = rec.product_tmpl_id
-    #         else:
-    #             rec.product_id = False
+    is_configurable_product = fields.Boolean(
+        related='product_template_id.has_configurable_attributes'
+    )
+
+    # REQUIRED by widget
+    product_uom_qty = fields.Float(
+        string="Quantity",
+        default=1
+    )
+    product_uom = fields.Many2one(
+        'uom.uom',
+        related='product_id.uom_id',
+        string="Unit of Measure",
+        readonly=True
+    )
+    company_id = fields.Many2one(
+        'res.company',
+        default=lambda self: self.env.company
+    )
+
+    pricelist_id = fields.Many2one('product.pricelist')
+    partner_id = fields.Many2one('res.partner')
+    currency_id = fields.Many2one(
+        'res.currency',
+        related='company_id.currency_id'
+    )
+
+    date_order = fields.Datetime(default=fields.Datetime.now)
+
+    order_id = fields.Many2one(
+        'product.label',
+        string="Order"
+    )
+    order_line = fields.One2many(
+        'product.label',
+        'id',
+        string="Dummy Order Line"
+    )
+    product_custom_attribute_value_ids = fields.One2many(
+        'product.attribute.custom.value',
+        'product_label_id',   
+        string="Custom Values"
+    )
+    @api.onchange('product_template_id')
+    def _onchange_product_template(self):
+        if self.product_template_id:
+            self.product_id = False
+          
+
+    @api.model
+    def create(self, vals):
+        label_date = fields.Date.context_today(self)
+
+        fine_rate = self.env['fine.rate.master'].search([
+            ('date', '=', label_date)
+        ], limit=1)
+
+        if fine_rate:
+            vals['fine_rate_id'] = fine_rate.id
+            vals['purchase_price_per_gram'] = fine_rate.fine_rate  
+
+        return super().create(vals)
 
 
+
+class ProductAttributeCustomValue(models.Model):
+    _inherit = 'product.attribute.custom.value'
+
+    product_label_id = fields.Many2one(
+        'product.label',
+        string="Product Label",
+        ondelete='cascade'
+    )

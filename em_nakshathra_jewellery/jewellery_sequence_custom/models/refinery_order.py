@@ -12,7 +12,7 @@ class OldGoldRefineryIssue(models.Model):
             branch = self.env['res.branch'].browse(vals.get('branch_id')) if vals.get('branch_id') else self.env.user.branch_id
             if not branch or not branch.branch_code:
                 raise ValidationError("Branch code is missing!")
-            seq = self.env['ir.sequence'].next_by_code('old.gold.refinery.issue')
+            seq = self.env['ir.sequence'].next_by_code('jewellery.refinery')
             if not seq:
                 raise ValidationError("Sequence not working!")
             vals['name'] = f"{branch.branch_code}/{seq}"

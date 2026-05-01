@@ -1,3 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_scheme_redemption,access_scheme_redemption,model_scheme_redemption,base.group_user,1,1,1,1
-access_product_variant_wizard,product.variant.wizard,model_product_variant_wizard,base.group_user,1,1,1,1
+access_fine_rate_master,fine.rate.master,model_fine_rate_master,base.group_user,1,1,1,1
+

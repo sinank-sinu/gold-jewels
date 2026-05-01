@@ -1,0 +1,16 @@
+<odoo>
+    <!--Action-->
+    <record id="action_fine_rate_master" model="ir.actions.act_window">
+        <field name="name">Fine Rates</field>
+        <field name="res_model">fine.rate.master</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+    <!--Menu item-->
+    <menuitem
+        id="menu_gold_rate_master"
+        name="Fine Rate"
+        parent="em_jewellery_management.menu_gold_main"
+        action="action_fine_rate_master"
+    />
+</odoo>

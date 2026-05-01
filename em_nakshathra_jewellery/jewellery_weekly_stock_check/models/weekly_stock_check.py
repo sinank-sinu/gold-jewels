@@ -61,13 +61,13 @@ class JewelleryWeeklyStockCheck(models.Model):
         if self.branch_id:
             self.location_id = False
 
-    @api.depends('line_ids', 'line_ids.is_matched', 'line_ids.system_qty', 'line_ids.system_weight')
+    @api.depends('template_summary_ids', 'template_summary_ids.is_matched', 'line_ids', 'line_ids.system_qty', 'line_ids.system_weight')
     def _compute_summary(self):
         for rec in self:
-            rec.total_lines = len(rec.line_ids)
+            rec.total_lines = len(rec.template_summary_ids)
             rec.total_labels = sum(rec.line_ids.mapped('system_qty'))
             rec.total_weight = sum(rec.line_ids.mapped('system_weight'))
-            rec.matched_lines = len(rec.line_ids.filtered('is_matched'))
+            rec.matched_lines = len(rec.template_summary_ids.filtered('is_matched'))
             rec.mismatched_lines = rec.total_lines - rec.matched_lines
 
     @api.model
@@ -154,10 +154,10 @@ class JewelleryWeeklyStockCheck(models.Model):
     def action_check_match(self):
         """Validate manual counts against system quantities and weights."""
         self.ensure_one()
-        if not self.line_ids:
+        if not self.template_summary_ids:
             raise UserError(_("No products loaded. Please load products first."))
 
-        all_matched = all(line.is_matched for line in self.line_ids)
+        all_matched = all(summary.is_matched for summary in self.template_summary_ids)
         if all_matched:
             self.state = 'matched'
         else:
@@ -329,51 +329,83 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
 
     system_qty = fields.Float(
         string='System Labels',
-        compute='_compute_template_totals',
+        compute='_compute_system_totals',
         store=True,
         digits=(16, 0)
     )
     system_weight = fields.Float(
         string='System Weight',
-        compute='_compute_template_totals',
+        compute='_compute_system_totals',
         store=True,
         digits=(16, 3)
     )
 
     manual_qty = fields.Float(
         string='Counted Labels',
-        compute='_compute_template_totals',
+        compute='_compute_manual_totals',
+        readonly=False,
         store=True,
         digits=(16, 0)
     )
     manual_weight = fields.Float(
         string='Counted Weight',
-        compute='_compute_template_totals',
+        compute='_compute_manual_totals',
+        readonly=False,
         store=True,
         digits=(16, 3)
     )
 
     difference_qty = fields.Float(
         string='Diff Labels',
-        compute='_compute_template_totals',
+        compute='_compute_differences',
         store=True,
         digits=(16, 0)
     )
     difference_weight = fields.Float(
         string='Diff Weight',
-        compute='_compute_template_totals',
+        compute='_compute_differences',
         store=True,
         digits=(16, 3)
     )
 
-    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight',
-                 'stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight')
-    def _compute_template_totals(self):
+    is_qty_matched = fields.Boolean(
+        string='Qty Matched',
+        compute='_compute_differences',
+        store=True
+    )
+    is_weight_matched = fields.Boolean(
+        string='Weight Matched',
+        compute='_compute_differences',
+        store=True
+    )
+    is_matched = fields.Boolean(
+        string='Matched',
+        compute='_compute_differences',
+        store=True
+    )
+
+    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight')
+    def _compute_system_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
             summary.system_qty = sum(lines.mapped('system_qty'))
             summary.system_weight = sum(lines.mapped('system_weight'))
+
+    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight')
+    def _compute_manual_totals(self):
+        for summary in self:
+            lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
             summary.manual_qty = sum(lines.mapped('manual_qty'))
             summary.manual_weight = sum(lines.mapped('manual_weight'))
+
+    @api.depends('manual_qty', 'manual_weight', 'system_qty', 'system_weight')
+    def _compute_differences(self):
+        for summary in self:
             summary.difference_qty = summary.manual_qty - summary.system_qty
             summary.difference_weight = summary.manual_weight - summary.system_weight
+            
+            qty_match = abs(summary.manual_qty - summary.system_qty) < 0.001
+            weight_match = abs(summary.manual_weight - summary.system_weight) <= 0.100
+            summary.is_qty_matched = qty_match
+            summary.is_weight_matched = weight_match
+            summary.is_matched = qty_match and weight_match

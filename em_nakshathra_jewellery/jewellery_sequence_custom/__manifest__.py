@@ -7,6 +7,7 @@
         'em_jewellery_management',
     ],
     'data': [
+        'data/jewellery_sequence.xml'
     ],
     'installable': True,
     'application': False

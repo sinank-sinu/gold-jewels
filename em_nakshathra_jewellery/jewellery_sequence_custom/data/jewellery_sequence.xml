@@ -1,0 +1,10 @@
+<odoo>
+    <record id="seq_old_gold_batch" model="ir.sequence">
+        <field name="name">Old Gold Batch</field>
+        <field name="code">old.gold.batch</field>
+        <field name="prefix">OGB/</field>
+        <field name="padding">5</field>
+        <field name="number_increment">1</field>
+        <field name="number_next">1</field>
+    </record>
+</odoo>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_fine_rate_master_form" model="ir.ui.view">
+        <field name="name">fine.rate.master.form</field>
+        <field name="model">fine.rate.master</field>
+        <field name="arch" type="xml">
+            <form string="Fine Rate">
+                <sheet>
+                    <group>
+                        <field name="date"/>
+                        <field name="fine_rate"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_fine_rate_master_tree" model="ir.ui.view">
+        <field name="name">fine.rate.master.tree</field>
+        <field name="model">fine.rate.master</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="date"/>
+                <field name="fine_rate"/>
+            </tree>
+        </field>
+    </record>
+
+</odoo>

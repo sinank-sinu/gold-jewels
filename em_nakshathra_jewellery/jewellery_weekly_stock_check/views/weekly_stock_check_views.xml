@@ -175,15 +175,32 @@
                             </field>
                         </page>
                         <page string="Product Template Summary" name="template_summary">
-                            <field name="template_summary_ids" readonly="1">
-                                <tree create="false" delete="false">
-                                    <field name="product_tmpl_id"/>
-                                    <field name="system_qty" string="Total Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"/>
-                                    <field name="system_weight" string="Total Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"/>
-                                    <field name="manual_qty" string="Counted Labels" />
-                                    <field name="manual_weight" string="Counted Weight"/>
-                                    <field name="difference_qty" string="Diff Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"/>
-                                    <field name="difference_weight" string="Diff Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"/>
+                            <field name="template_summary_ids" readonly="state in ('matched', 'cancel')">
+                                <tree editable="bottom" create="false" delete="false"
+                                      decoration-success="is_matched == True"
+                                      decoration-danger="is_matched == False and (manual_qty != 0 or manual_weight != 0.0)">
+                                    <field name="product_tmpl_id" readonly="1"/>
+                                    <field name="system_qty" string="Total Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
+                                    <field name="system_weight" string="Total Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
+                                    
+                                    <field name="manual_qty" string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="is_qty_matched" column_invisible="1"/>
+                                    
+                                    <field name="manual_weight" string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0.0"/>
+                                    <field name="is_weight_matched" column_invisible="1"/>
+                                    
+                                    <field name="difference_qty" string="Diff Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"
+                                           decoration-danger="is_qty_matched == False"
+                                           decoration-success="is_qty_matched == True"/>
+                                    <field name="difference_weight" string="Diff Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"
+                                           decoration-danger="is_weight_matched == False"
+                                           decoration-success="is_weight_matched == True"/>
+                                    
+                                    <field name="is_matched" column_invisible="1"/>
                                 </tree>
                             </field>
                         </page>

@@ -35,7 +35,7 @@ class ReplacementCostingWizard(models.TransientModel):
             'PO MC %', 'PO Metal Rate', 'PO Dia Amt', 'PO Stone Amt', 'PO MC Fine',
             'Next Day 1PM Rate', 'Metal Qty On Fine', 'PO Metal Amt',
             'PO MC On Fine Qty', 'PO MC Value', 'PO Taxable Amt',
-            'PO Metal Amt On Fine', 'Po MC Amt On Fine',
+            'RPC Metal Amt', 'RPC MC Amt',
             'Sale Metal Rate', 'Sale Metal Amt', 'Sale MC %', 'Sale MC Amt',
             'Sale Dia Amt', 'Sale Stone Amt', 'Sale Taxable Amt',
             'Metal Profit', 'MC Profit', 'Diamond Profit', 'Stone Profit', 'Total GP'

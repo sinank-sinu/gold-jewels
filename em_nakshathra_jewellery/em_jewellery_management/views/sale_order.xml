@@ -37,7 +37,7 @@
                 <field name="sale_diamond_weight_gm" optional="hide"/>
                 <field name="net_weight" optional="hide"/>
                 <field name="gold_rate"/>
-                <field name="mc_percent"/>
+                <field name="mc_percent" optional="hide"/>
                 <field name="sale_making_charge_min" column_invisible="1"/>
                 <field name="mc_amount" optional="hide"/>
                 <field name="metal_amount" />
@@ -47,7 +47,7 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='price_unit']" position="before">
                     <field name="fine_weight" column_invisible="1"/>
-                    <field name="price_subtotal_actual" optional="show"/>
+                    <field name="price_subtotal_actual" optional="hide"/>
                     <field name="price_subtotal"/>
                     <field name="mc_discount" optional="hide"/>
                     <field name="mc_amount_actual"/>

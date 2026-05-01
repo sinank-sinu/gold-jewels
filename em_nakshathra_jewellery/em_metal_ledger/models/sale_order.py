@@ -12,7 +12,66 @@ class SaleOrderMetalLedger(models.Model):
         res = super().action_confirm()
         for order in self:
             order._create_metal_ledger_on_confirm()
+            order._create_replacement_costing_items()
         return res
+
+    def _create_replacement_costing_items(self):
+        ReplacementCostingItem = self.env['replacement.costing.item']
+        GoldRateUpdateLog = self.env['gold.rate.update.log']
+        import datetime
+
+        for order in self:
+            for line in order.order_line:
+                if line.label_id:
+                    label = line.label_id
+                    po = label.purchase_id
+                    rate_fine_next_day_1pm = 0.0
+
+                    if po and po.date_order:
+                        # ensure po_date is a date object
+                        po_date = po.date_order.date() if isinstance(po.date_order,
+                                                                     datetime.datetime) else po.date_order
+                        if po_date:
+                            next_day_date = po_date + datetime.timedelta(days=1)
+                            target_dt = datetime.datetime.combine(next_day_date, datetime.time(13, 0))
+                            end_of_next_day = datetime.datetime.combine(next_day_date, datetime.time(23, 59, 59))
+
+                            log = GoldRateUpdateLog.search([
+                                ('rate_datetime', '>=', target_dt),
+                                ('rate_datetime', '<=', end_of_next_day),
+                                ('purity_id', '=', label.purity_id.id),
+                            ], order='rate_datetime asc', limit=1)
+
+                            if log:
+                                rate_fine_next_day_1pm = log.rate_per_gram
+
+                    ReplacementCostingItem.create({
+                        'date': order.date_order.date() if order.date_order else fields.Date.today(),
+                        'branch_id': order.branch_id.id if hasattr(order, 'branch_id') else False,
+                        'salesman_id': order.user_id.id,
+                        'sales_voucher_name': order.name,
+                        'label_id': label.id,
+                        'purity_id': label.purity_id.id,
+                        'pcs_from_sale': 1,
+                        # line.product_uom_qty,
+                        'gross_weight_purchase': label.purchase_gross_weight,
+                        'net_weight_purchase': label.purchase_net_weight,
+                        'diamond_weight_purchase': label.purchase_diamond_weight_gm,
+                        'stone_weight_purchase': label.purchase_stone_weight,
+
+                        'purchase_mc_percent_fine': label.purchase_making_charge_value,
+                        'purchase_metal_rate': label.purchase_price_per_gram,
+                        'diamond_amount_purchase': label.purchase_diamond_rate,
+                        'stone_amount_purchase': label.purchase_stone_rate,
+                        'purchase_mc_fine': label.mc_fine,
+                        'rate_fine_next_day_1pm': rate_fine_next_day_1pm,
+                        'sale_metal_rate_manual': line.gold_rate,
+                        'sale_mc_percent':line.mc_percent_actual,
+                        'metal_amount_sale': line.metal_amount,
+                        'mc_amount_sale': line.mc_amount_actual,
+                        'diamond_amount_sale': label.sale_diamond_rate,
+                        'stone_amount_sale': label.sale_stone_rate,
+                    })
 
     def _create_metal_ledger_on_confirm(self):
         """
@@ -49,7 +108,6 @@ class SaleOrderMetalLedger(models.Model):
                 gross = line.gross_weight or line.qty_received or 0.0
                 purity_data_po[purity]['metal_fine'] += fine
                 purity_data_po[purity]['mc_fine'] += mc
-                purity_data_po[purity]['gross_weight'] += gross
 
             for purity, vals in purity_data_po.items():
                 total_fine = vals['metal_fine'] + vals['mc_fine']
@@ -61,7 +119,7 @@ class SaleOrderMetalLedger(models.Model):
                     'metal_fine': vals['metal_fine'],
                     'mc_fine': vals['mc_fine'],
                     'fine_weight': total_fine,
-                    'stock_in': vals['gross_weight'],
+                    'stock_in': vals['metal_fine'],
                     'stock_out': 0.0,
                     'purchase_order_id': po.id,
                     'sale_order_id': self.id,
@@ -94,7 +152,6 @@ class SaleOrderMetalLedger(models.Model):
                 
                 gross = line.sale_gross_weight or line.product_uom_qty or 0.0
                 purity_data_so[purity]['metal_fine'] += (metal_fine or 0.0)
-                purity_data_so[purity]['gross_weight'] += gross
 
             for purity, vals in purity_data_so.items():
                 MetalLedger.create({
@@ -106,7 +163,7 @@ class SaleOrderMetalLedger(models.Model):
                     'mc_fine': 0.0,
                     'fine_weight': vals['metal_fine'],
                     'stock_in': 0.0,
-                    'stock_out': vals['gross_weight'],
+                    'stock_out': vals['metal_fine'],
                     'purchase_order_id': po.id,
                     'sale_order_id': self.id,
                     'partner_id': self.partner_id.id,

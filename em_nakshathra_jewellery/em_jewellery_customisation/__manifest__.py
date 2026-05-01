@@ -9,17 +9,19 @@
     'depends': ['em_jewellery_management'],
     'data': [
         'security/ir.model.access.csv',
+        'views/jewellery_menu.xml',
         'views/jewellery_scheme_enrollment_views.xml',
-        'views/product_label_wizard_views.xml',
+        # 'views/product_label_wizard_views.xml',
         'reports/scheme_margin_report.xml',
-        'views/product_label.xml'
+        'views/product_label.xml',
+        'views/fine_rate_master_view.xml',
 
     ],
-    'assets': {
-    'web.assets_backend': [
-        'em_jewellery_customisation/static/src/js/product_template_field.js',
-    ],
-},
+#     'assets': {
+#     'web.assets_backend': [
+#         'em_jewellery_customisation/static/src/js/product_template_field.js',
+#     ],
+# },
 
     'auto_install': False,
     'application': False,

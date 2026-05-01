@@ -35,7 +35,7 @@ class SaleOrderLine(models.Model):
     price_unit = fields.Float(
         string='Unit Price', required=True, digits='Product Price',
         compute="_compute_price_unit", readonly=False, store=True)
-    price_subtotal = fields.Monetary(string='Subtotal',readonly=False)
+    price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True)
     price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True)
     mc_percent_actual = fields.Float(string="MC%",readonly=False)
     mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual" )
@@ -89,7 +89,7 @@ class SaleOrderLine(models.Model):
             gold_rate = 0.0
             today = fields.Date.today()
             gold_rate_rec = self.env['gold.rate.master'].search([
-                ('purity_id', '=', self.label_id.purity_id.id),
+                ('purity_id', '=', self.purity_id.id),
                 ('date', '<=', today),
                 ('active', '=', True),
                 ('rate_type', '=', 'sale')

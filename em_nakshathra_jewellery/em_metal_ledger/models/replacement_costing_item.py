@@ -46,7 +46,7 @@ class ReplacementCostingItem(models.Model):
     taxable_amount_purchase = fields.Float(string="PO Taxable Amt", compute="_compute_all_fields", store=True)
     purchase_metal_amount_on_fine = fields.Float(string="PO Metal Amt On Fine", compute="_compute_all_fields", store=True)
     purchase_mc_amount_on_fine = fields.Float(string="PO MC Amt On Fine", compute="_compute_all_fields", store=True)
-    sale_mc_percent = fields.Float(string="Sale MC %", compute="_compute_all_fields", store=True)
+    sale_mc_percent = fields.Float(string="Sale MC %", store=True)
     sale_taxable_amount = fields.Float(string="Sale Taxable Amt", compute="_compute_all_fields", store=True)
     metal_profit = fields.Float(string="Metal Profit", compute="_compute_all_fields", store=True)
     mc_profit = fields.Float(string="MC Profit", compute="_compute_all_fields", store=True)
@@ -73,7 +73,7 @@ class ReplacementCostingItem(models.Model):
             rec.purchase_metal_amount_on_fine = rec.rate_fine_next_day_1pm * rec.metal_qty_on_fine
             rec.purchase_mc_amount_on_fine = rec.purchase_mc_on_fine_qty * rec.rate_fine_next_day_1pm
             
-            rec.sale_mc_percent = (rec.mc_amount_sale / rec.metal_amount_sale * 100.0) if rec.metal_amount_sale else 0.0
+            # rec.sale_mc_percent = (rec.mc_amount_sale / rec.metal_amount_sale * 100.0) if rec.metal_amount_sale else 0.0
             rec.sale_taxable_amount = rec.metal_amount_sale + rec.mc_amount_sale + rec.diamond_amount_sale + rec.stone_amount_sale
             
             rec.metal_profit = rec.metal_amount_sale - rec.purchase_metal_amount_on_fine
