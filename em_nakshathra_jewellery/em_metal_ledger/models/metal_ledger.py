@@ -31,34 +31,7 @@ class MetalLedger(models.Model):
     branch_id = fields.Many2one('res.branch', string='Branch', readonly=True)
     partner_id = fields.Many2one('res.partner', string='Partner', readonly=True)
 
-    # ------------------------------------------------------------------
-    # Sync Existing Orders logic
-    # ------------------------------------------------------------------
-    # def action_sync_orders(self):
-    #     """Find validated pickings and create missing ledger entries."""
-    #     _logger.info("Syncing Metal Ledger with validated pickings...")
-    #
-    #     pickings = self.env['stock.picking'].search([
-    #         ('state', '=', 'done'),
-    #         ('picking_type_code', 'in', ('incoming', 'outgoing'))
-    #     ])
-    #
-    #     for picking in pickings:
-    #         # Check if this picking is linked to SO or PO
-    #         if not (picking.purchase_id or picking.sale_id):
-    #             continue
-    #
-    #         # Check if ledger entries already exist for this picking
-    #         if not self.search_count([('picking_id', '=', picking.id)]):
-    #             _logger.info("Syncing Picking %s", picking.name)
-    #             picking._create_metal_ledger_entries()
-    #
-    #     self.action_recompute_balances()
-    #     return True
 
-    # ------------------------------------------------------------------
-    # Running-balance helper
-    # ------------------------------------------------------------------
     def action_recompute_balances(self):
         """Recompute the running balance for ALL metal.ledger records ordered
         by date asc, id asc.  Uses a single bulk write to minimise DB IO."""

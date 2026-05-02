@@ -17,7 +17,7 @@
                 <field name="voucher_name"/>
                 <field name="partner_id" optional="show"/>
                 <field name="transaction_type"/>
-<!--                <field name="metal_id"/>-->
+                <field name="metal_id" string="Purity" optional="show"/>
                 <field name="metal_fine" sum="Total Metal Fine"/>
                 <field name="mc_fine" sum="Total MC Fine"/>
                 <field name="fine_weight" sum="Total Fine Weight"/>
