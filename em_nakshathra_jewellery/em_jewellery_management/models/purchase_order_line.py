@@ -4,6 +4,41 @@ from odoo import models, fields,api
 class PurchaseOrderLine(models.Model):
     _inherit = 'purchase.order.line'
 
+    product_template_attribute_value_ids = fields.Many2many(
+        comodel_name='product.template.attribute.value',
+        relation='po_line_ptav_rel',
+        string="Product Attribute Values",
+        ondelete='restrict'
+    )
+    product_no_variant_attribute_value_ids = fields.Many2many(
+        comodel_name='product.template.attribute.value',
+        relation='po_line_no_variant_ptav_rel',
+        string="Extra Product Attribute Values",
+        ondelete='restrict'
+    )
+    product_custom_attribute_value_ids = fields.Many2many(
+        comodel_name='product.attribute.custom.value',
+        relation='po_line_custom_ptav_rel',
+        string="Custom Product Attribute Values"
+    )
+    is_configurable_product = fields.Boolean(
+        string="Is the product configurable?",
+        related='product_template_id.has_configurable_attributes'
+    )
+    product_type = fields.Selection(
+        related='product_id.detailed_type'
+    )
+    pricelist_id = fields.Many2one(
+        related='order_id.pricelist_id',
+        string='Pricelist',
+        readonly=True
+    )
+    product_uom_qty = fields.Float(
+        related='product_qty',
+        string="Product Quantity",
+        readonly=False
+    )
+
     purity_id = fields.Many2one('gold.purity', string="Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
     metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount")

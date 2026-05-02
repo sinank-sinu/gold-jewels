@@ -9,6 +9,7 @@ class PurchaseOrder(models.Model):
         'sale.order',
         string='Related Sale Order'
     )
+    pricelist_id = fields.Many2one('product.pricelist', string='Pricelist', help="Pricelist for current order.")
 
     is_old_gold = fields.Boolean(
         string='Old Gold Purchase',
