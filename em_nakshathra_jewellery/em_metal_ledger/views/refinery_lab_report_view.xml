@@ -9,12 +9,14 @@
                 <field name="date"/>
                 <field name="voucher_name"/>
                 <field name="branch_id"/>
+                <field name="refinery_id"/>
                 <field name="type" column_invisible="0"/>
-                <field name="purity_id"/>
                 <field name="issued_weight" sum="Total Issued Weight"/>
                 <field name="net_weight" sum="Total Net Weight"/>
+                <field name="purity_id"/>
                 <field name="lab_weight" sum="Total Lab Weight"/>
                 <field name="lab_purity"/>
+                <field name="lab_fine_weight" sum="UPD Fine Weight"/>
                 <field name="fine_weight" sum="Total Fine Weight"/>
                 <field name="fine_gms_price"/>
                 <field name="fine_amount" sum="Total Fine Amount"/>
@@ -34,6 +36,7 @@
                             <field name="date"/>
                             <field name="voucher_name"/>
                             <field name="branch_id"/>
+                            <field name="refinery_id"/>
                         </group>
                         <group>
                             <field name="purity_id"/>
@@ -43,6 +46,7 @@
                         <group string="Lab Details">
                             <field name="lab_weight"/>
                             <field name="lab_purity"/>
+                            <field name="lab_fine_weight"/>
                         </group>
                         <group string="Financials">
                             <field name="fine_weight"/>

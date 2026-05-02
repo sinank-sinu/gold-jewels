@@ -30,6 +30,7 @@ class JewelleryIssueVoucher(models.Model):
                     'voucher_name': self.name,
                     'type': 'issue',
                     'branch_id': self.branch_id.id,
+                    'refinery_id': self.refinery_id.id,
                     'purity_id': line.purity_id.id,
                     'issued_weight': line.issued_weight,
                     'net_weight': line.qty, # 'qty' is labeled as Net Weight in base model

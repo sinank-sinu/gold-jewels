@@ -12,15 +12,27 @@ class RefineryLabReport(models.Model):
         ('receive', 'Receive')
     ], string='Type')
     branch_id = fields.Many2one('res.branch', string='Branch')
+    refinery_id = fields.Many2one('res.partner', string='Refinery')
     purity_id = fields.Many2one('gold.purity', string='Purity')
     issued_weight = fields.Float(string='Issued Weight', digits=(16, 3))
     net_weight = fields.Float(string='Net Weight', digits=(16, 3))
     lab_weight = fields.Float(string='Lab Weight', digits=(16, 3))
     lab_purity = fields.Float(string='Lab Purity (%)')
+    lab_fine_weight = fields.Float(
+        string='UPD Fine Weight',
+        digits=(16, 3),
+        compute='_compute_lab_fine_weight',
+        store=True,
+    )
     fine_weight = fields.Float(string='Fine Weight', digits=(16, 3))
     fine_amount = fields.Float(string='Fine Amount', digits=(16, 3))
     fine_gms_price = fields.Float(string='Fine GMS Price', digits=(16, 3))
     balance = fields.Float(string='Balance', digits=(16, 3), store=True)
+
+    @api.depends('lab_weight', 'lab_purity','net_weight')
+    def _compute_lab_fine_weight(self):
+        for rec in self:
+            rec.lab_fine_weight = rec.net_weight * (rec.lab_purity / 100.0) if rec.lab_purity else 0.0
 
     def action_recompute_balances(self):
         """Recompute the running balance for Refinery Lab Report GLOBALLY."""
@@ -43,7 +55,7 @@ class RefineryLabReport(models.Model):
 
     def write(self, vals):
         res = super().write(vals)
-        trigger_fields = {'date', 'fine_weight', 'type'}
+        trigger_fields = {'date', 'fine_weight', 'type', 'lab_purity', 'lab_fine_weight'}
         if trigger_fields.intersection(vals.keys()):
             self.action_recompute_balances()
         return res
