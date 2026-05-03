@@ -33,7 +33,7 @@
     <!-- Menu -->
     <menuitem id="menu_sale_below_max_report"
               name="Sale Below Maximum Report"
-              parent="sale.sale_menu_root"
+              parent="sale.menu_sale_report"
               action="action_sale_below_max_wizard"
               sequence="50"/>
 
