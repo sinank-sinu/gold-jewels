@@ -17,6 +17,7 @@
                 </group>
                 <footer>
                     <button name="action_print_report" string="Print Report" type="object" class="btn-primary"/>
+                    <button name="action_print_xlsx" string="Print XLSX" type="object" class="btn-success"/>
                     <button string="Cancel" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>

@@ -10,5 +10,14 @@
         <field name="binding_model_id" ref="model_metal_ledger"/>
         <field name="binding_type">report</field>
     </record>
+    <record id="action_report_metal_ledger_xlsx" model="ir.actions.report">
+        <field name="name">Metal Ledger XLSX</field>
+        <field name="model">metal.ledger</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">em_metal_ledger.metal_ledger_xlsx</field>
+        <field name="report_file">em_metal_ledger.metal_ledger_xlsx</field>
+        <field name="binding_model_id" ref="model_metal_ledger"/>
+        <field name="binding_type">report</field>
+    </record>
 
 </odoo>

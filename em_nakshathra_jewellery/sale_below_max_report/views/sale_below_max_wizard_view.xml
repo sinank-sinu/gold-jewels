@@ -1,0 +1,49 @@
+<odoo>
+
+    <!-- Wizard Form -->
+    <record id="view_sale_below_max_wizard" model="ir.ui.view">
+        <field name="name">sale.below.max.wizard.form</field>
+        <field name="model">sale.below.max.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Sale Below Maximum Report">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                    <field name="branch_ids" widget="many2many_tags"/>
+                </group>
+                <footer>
+                    <button name="action_print_xlsx"
+                            string="Print XLSX"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_sale_below_max_wizard" model="ir.actions.act_window">
+        <field name="name">Sale Below Maximum Report</field>
+        <field name="res_model">sale.below.max.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="menu_sale_below_max_report"
+              name="Sale Below Maximum Report"
+              parent="sale.sale_menu_root"
+              action="action_sale_below_max_wizard"
+              sequence="50"/>
+
+    <!-- Report Action -->
+    <record id="sale_below_max_xlsx_report" model="ir.actions.report">
+        <field name="name">Sale Below Maximum XLSX</field>
+        <field name="model">sale.below.max.wizard</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">sale_below_max_report.sale_below_max_xlsx</field>
+        <field name="report_file">sale_below_max_xlsx</field>
+    </record>
+
+</odoo>
