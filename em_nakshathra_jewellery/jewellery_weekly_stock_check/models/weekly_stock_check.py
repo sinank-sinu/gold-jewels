@@ -17,12 +17,10 @@ class JewelleryWeeklyStockCheck(models.Model):
         required=True,
         tracking=True
     )
-    location_ids = fields.Many2many(
+    location_id = fields.Many2one(
         'stock.location',
-        'stock_check_location_rel',   # relation table
-        'stock_check_id',
-        'location_id',
-        string='Locations',
+        string='Location',
+        required=True,
         domain="[('usage', '=', 'internal'), ('branch_id', '=', branch_id)]",
         tracking=True
     )
@@ -61,8 +59,7 @@ class JewelleryWeeklyStockCheck(models.Model):
     @api.onchange('branch_id')
     def _onchange_branch_id(self):
         if self.branch_id:
-            self.location_ids = [(5, 0, 0)]
-
+            self.location_id = False
 
     @api.depends('template_summary_ids', 'template_summary_ids.is_matched', 'line_ids', 'line_ids.system_qty', 'line_ids.system_weight')
     def _compute_summary(self):
@@ -84,9 +81,9 @@ class JewelleryWeeklyStockCheck(models.Model):
     def action_load_products(self):
         """Load products with label counts (branch) and stock weights (location)."""
         self.ensure_one()
-        if not self.location_ids:
-            raise UserError(_("Please select at least one location."))
-
+        if not self.location_id:
+            raise UserError(_("Please select a location first."))
+        
         branch = self.branch_id
         if not branch:
             raise UserError(_("The selected location is not associated with any branch."))
@@ -103,7 +100,7 @@ class JewelleryWeeklyStockCheck(models.Model):
 
         # 2. Get on-hand stock quants for this location
         quants = self.env['stock.quant'].search([
-            ('location_id', 'in', self.location_ids.ids),
+            ('location_id', '=', self.location_id.id),
             ('quantity', '>', 0),
         ])
 
@@ -120,10 +117,8 @@ class JewelleryWeeklyStockCheck(models.Model):
                 'label_id': label.id,
                 'system_qty': 1.0,
                 'system_weight': label.sale_gross_weight,
-                'system_tag_weight': label.tag_weight,
                 'manual_qty': 0.0,
                 'manual_weight': 0.0,
-                'manual_tag_weight': 0.0,
             })
             
         # Add stock for products without labels (if any)
@@ -136,10 +131,8 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'product_id': quant.product_id.id,
                     'system_qty': 0.0,
                     'system_weight': quant.quantity,
-                    'system_tag_weight': 0.0,
                     'manual_qty': 0.0,
                     'manual_weight': 0.0,
-                    'manual_tag_weight': 0.0,
                 })
 
         self.env['jewellery.weekly.stock.check.line'].create(lines)
@@ -177,7 +170,6 @@ class JewelleryWeeklyStockCheck(models.Model):
         self.line_ids.write({
             'manual_qty': 0.0,
             'manual_weight': 0.0,
-            'manual_tag_weight': 0.0,
         })
         self.state = 'in_progress'
 
@@ -299,57 +291,23 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         compute='_compute_is_matched',
         store=True
     )
-    # System tag weight (from label)
-    system_tag_weight = fields.Float(
-        string='System Tag Weight',
-        digits=(16, 3),
-        readonly=True
-    )
 
-    # Manual entered tag weight
-    manual_tag_weight = fields.Float(
-        string='Counted Tag Weight',
-        digits=(16, 3),
-        default=0.0
-    )
-
-    # Difference
-    difference_tag_weight = fields.Float(
-        string='Diff Tag Weight',
-        digits=(16, 3),
-        compute='_compute_difference',
-        store=True
-    )
-
-    # Match flags
-    is_tag_weight_matched = fields.Boolean(
-        string='Tag Weight Matched',
-        compute='_compute_is_matched',
-        store=True
-    )
-
-    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
+    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight')
     def _compute_difference(self):
         for rec in self:
             rec.difference_qty = rec.manual_qty - rec.system_qty
             rec.difference_weight = rec.manual_weight - rec.system_weight
-            rec.difference_tag_weight = rec.manual_tag_weight - rec.system_tag_weight
 
-    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
+    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight')
     def _compute_is_matched(self):
         for rec in self:
             # Match if manual count equals system quantity and weight
             qty_match = abs(rec.manual_qty - rec.system_qty) < 0.001
             # Allow 100mg (0.100g) tolerance for weight
             weight_match = abs(rec.manual_weight - rec.system_weight) <= 0.100
-            # Tag weight tolerance, 50 mg tolerance (0.050g)
-            tag_weight_match = abs(rec.manual_tag_weight - rec.system_tag_weight) <= 0.050
-
             rec.is_qty_matched = qty_match
             rec.is_weight_matched = weight_match
-            rec.is_tag_weight_matched = tag_weight_match
-
-            rec.is_matched = qty_match and weight_match and tag_weight_match
+            rec.is_matched = qty_match and weight_match
 
 
 class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
@@ -425,61 +383,29 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
         compute='_compute_differences',
         store=True
     )
-    system_tag_weight = fields.Float(
-        string='System Tag Weight',
-        compute='_compute_system_totals',
-        store=True,
-        digits=(16, 3)
-    )
 
-    manual_tag_weight = fields.Float(
-        string='Counted Tag Weight',
-        compute='_compute_manual_totals',
-        store=True,
-        digits=(16, 3)
-    )
-
-    difference_tag_weight = fields.Float(
-        string='Diff Tag Weight',
-        compute='_compute_differences',
-        store=True,
-        digits=(16, 3)
-    )
-
-    is_tag_weight_matched = fields.Boolean(
-        string='Tag Weight Matched',
-        compute='_compute_differences',
-        store=True
-    )
-
-    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight')
+    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight')
     def _compute_system_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
             summary.system_qty = sum(lines.mapped('system_qty'))
             summary.system_weight = sum(lines.mapped('system_weight'))
-            summary.system_tag_weight = sum(lines.mapped('system_tag_weight'))
 
-    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight', 'stock_check_id.line_ids.manual_tag_weight')
+    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight')
     def _compute_manual_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
             summary.manual_qty = sum(lines.mapped('manual_qty'))
             summary.manual_weight = sum(lines.mapped('manual_weight'))
-            summary.manual_tag_weight = sum(lines.mapped('manual_tag_weight'))
 
-    @api.depends('manual_qty', 'manual_weight', 'manual_tag_weight', 'system_qty', 'system_weight', 'system_tag_weight')
+    @api.depends('manual_qty', 'manual_weight', 'system_qty', 'system_weight')
     def _compute_differences(self):
         for summary in self:
             summary.difference_qty = summary.manual_qty - summary.system_qty
             summary.difference_weight = summary.manual_weight - summary.system_weight
-            summary.difference_tag_weight = summary.manual_tag_weight - summary.system_tag_weight
-
+            
             qty_match = abs(summary.manual_qty - summary.system_qty) < 0.001
             weight_match = abs(summary.manual_weight - summary.system_weight) <= 0.100
-            tag_match = abs(summary.manual_tag_weight - summary.system_tag_weight) <= 0.050 
-
             summary.is_qty_matched = qty_match
             summary.is_weight_matched = weight_match
-            summary.is_tag_weight_matched = tag_match
-            summary.is_matched = qty_match and weight_match and tag_match
+            summary.is_matched = qty_match and weight_match
