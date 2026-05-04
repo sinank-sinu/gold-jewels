@@ -7,7 +7,6 @@ class RefineryLabReport(models.Model):
 
     date = fields.Date(string='Date', default=fields.Date.today)
     voucher_name = fields.Char(string='Voucher Name')
-    partner_id = fields.Many2one('res.partner', string='Partner')
     type = fields.Selection([
         ('issue', 'Issue'),
         ('receive', 'Receive')

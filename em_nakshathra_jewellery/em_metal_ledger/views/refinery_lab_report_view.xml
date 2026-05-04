@@ -8,7 +8,6 @@
                   decoration-success="type == 'receive'">
                 <field name="date"/>
                 <field name="voucher_name"/>
-                <field name="partner_id"/>
                 <field name="branch_id"/>
                 <field name="refinery_id"/>
                 <field name="type" column_invisible="0"/>
