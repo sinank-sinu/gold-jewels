@@ -1,0 +1,21 @@
+<odoo>
+
+    <record id="action_product_movement_tree" model="ir.actions.act_window">
+        <field name="name">Product Movement</field>
+        <field name="res_model">product.movement.line</field>
+        <field name="view_mode">tree</field>
+
+        <!-- DEFAULT GROUPING -->
+        <field name="context">
+            {'group_by': ['product_tmpl_id']}
+        </field>
+    </record>
+
+    <menuitem
+        id="menu_product_movement"
+        name="Product Movement Report"
+        parent="sale.menu_sale_report"
+        action="action_product_movement_tree"
+        sequence="25"/>
+
+</odoo>

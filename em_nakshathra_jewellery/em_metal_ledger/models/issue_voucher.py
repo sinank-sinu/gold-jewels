@@ -28,6 +28,7 @@ class JewelleryIssueVoucher(models.Model):
                 self.env['refinery.lab.report'].create({
                     'date': self.confirmed_date or fields.Date.today(),
                     'voucher_name': self.name,
+                    'partner_id':self.job_worker_id.id,
                     'type': 'issue',
                     'branch_id': self.branch_id.id,
                     'refinery_id': self.refinery_id.id,
