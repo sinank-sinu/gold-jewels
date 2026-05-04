@@ -76,6 +76,21 @@ class ProductLabel(models.Model):
         'product_label_id',   
         string="Custom Values"
     )
+
+    @api.onchange('job_work_id')
+    def _onchange_job_work_id(self):
+        if self.job_work_id:
+            first_line = self.job_work_id.job_work_line_ids[:1]  # safely take first line
+            if first_line and first_line.purity_id:
+                self.purity_id = first_line.purity_id.id
+    
+    @api.onchange('purchase_id')
+    def _onchange_purchase_id(self):
+        if self.purchase_id:
+            first_line = self.purchase_id.order_line[:1]  # safely take first line
+            if first_line and first_line.purity_id:
+                self.purity_id = first_line.purity_id.id
+                
     @api.onchange('product_template_id')
     def _onchange_product_template(self):
         if self.product_template_id:

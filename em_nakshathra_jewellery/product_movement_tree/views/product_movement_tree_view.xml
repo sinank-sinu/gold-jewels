@@ -1,0 +1,68 @@
+<odoo>
+
+    <record id="view_product_movement_tree" model="ir.ui.view">
+        <field name="name">product.movement.line.tree</field>
+        <field name="model">product.movement.line</field>
+        <field name="arch" type="xml">
+
+            <tree string="Product Movement Report"
+                  create="0"
+                  delete="0"
+                  default_order="qty desc"
+                  js_class="inventory_report_list">
+
+                <field name="product_id"/>
+                <field name="category_id"/>
+                <field name="qty" sum="Total Quantity"/>
+                <field name="weight"/>
+                <groupby name="product_tmpl_id"/>
+
+            </tree>
+
+        </field>
+    </record>
+
+    <record id="view_product_movement_search" model="ir.ui.view">
+        <field name="name">product.movement.line.search</field>
+        <field name="model">product.movement.line</field>
+        <field name="arch" type="xml">
+
+            <search>
+
+                <field name="product_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="category_id"/>
+                <!--WEIGHT FILTERS -->
+                <separator string="Weight Range"/>
+                <filter string="0-2 g"
+                        name="w_0_2"
+                        domain="[('weight','>=',0),('weight','&lt;',2)]"/>
+
+                <filter string="2-3 g"
+                        name="w_2_3"
+                        domain="[('weight','>=',2),('weight','&lt;',3)]"/>
+
+                <filter string="3-5 g"
+                        name="w_3_5"
+                        domain="[('weight','>=',3),('weight','&lt;',5)]"/>
+
+                <filter string="5+ g"
+                        name="w_5_plus"
+                        domain="[('weight','>=',5)]"/>
+
+                <!-- FILTERS -->
+                <filter string="Group by Product"
+                        name="group_product"
+                        context="{'group_by': 'product_tmpl_id'}"/>
+
+                <filter string="Group by Category"
+                        name="group_category"
+                        context="{'group_by': 'category_id'}"/>
+
+               
+            </search>
+
+        </field>
+    </record>
+
+</odoo>
