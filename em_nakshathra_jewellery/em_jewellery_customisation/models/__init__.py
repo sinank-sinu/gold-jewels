@@ -7,3 +7,4 @@ from . import scheme_redemption
 from . import product_label
 from . import old_gold_batch
 from . import fine_rate_master
+from . import stock_rule
