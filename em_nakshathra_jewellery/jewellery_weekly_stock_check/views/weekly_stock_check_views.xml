@@ -297,7 +297,7 @@
     <menuitem id="menu_jewellery_weekly_stock_root"
               name="Stock Checks"
               groups="group_jewellery_stock_counter"
-              web_icon="jewellery_weekly_stock_check,static/description/icon.png"/>
+              web_icon="jewellery_weekly_stock_check,static/description/icon.png"
               sequence="20"/>
 
     <menuitem id="menu_jewellery_weekly_stock_check"
