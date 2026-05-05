@@ -11,7 +11,8 @@
                         <field name="end_date"/>
                     </group>
                     <group>
-                        <field name="branch_id"/>
+                        <field name="branch_ids" widget="many2many_tags"/>
+                        <!-- <field name="branch_id"/> -->
                         <field name="partner_id"/>
                     </group>
                 </group>
