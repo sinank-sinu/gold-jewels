@@ -7,7 +7,8 @@ class MetalLedgerWizard(models.TransientModel):
 
     start_date = fields.Date(string='Start Date')
     end_date = fields.Date(string='End Date')
-    branch_id = fields.Many2one('res.branch', string='Branch')
+    branch_ids = fields.Many2many('res.branch', string='Branches')
+    # branch_id = fields.Many2one('res.branch', string='Branch')
     partner_id = fields.Many2one('res.partner', string='Partner')
 
     def action_print_report(self):
@@ -16,8 +17,10 @@ class MetalLedgerWizard(models.TransientModel):
             domain.append(('date', '>=', self.start_date))
         if self.end_date:
             domain.append(('date', '<=', self.end_date))
-        if self.branch_id:
-            domain.append(('branch_id', '=', self.branch_id.id))
+        if self.branch_ids:
+            domain.append(('branch_id', 'in', self.branch_ids.ids))
+        # if self.branch_id:
+        #     domain.append(('branch_id', '=', self.branch_id.id))
         if self.partner_id:
             domain.append(('partner_id', '=', self.partner_id.id))
         
@@ -34,8 +37,10 @@ class MetalLedgerWizard(models.TransientModel):
             domain.append(('date', '>=', self.start_date))
         if self.end_date:
             domain.append(('date', '<=', self.end_date))
-        if self.branch_id:
-            domain.append(('branch_id', '=', self.branch_id.id))
+        if self.branch_ids:
+            domain.append(('branch_id', 'in', self.branch_ids.ids))
+        # if self.branch_id:
+        #     domain.append(('branch_id', '=', self.branch_id.id))
         if self.partner_id:
             domain.append(('partner_id', '=', self.partner_id.id))
 

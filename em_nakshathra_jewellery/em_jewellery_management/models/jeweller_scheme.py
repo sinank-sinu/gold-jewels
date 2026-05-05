@@ -7,6 +7,25 @@ class JewellerySchemeEnrollment(models.Model):
 
     name = fields.Char(default="New")
     partner_id = fields.Many2one('res.partner', required=True)
+    phone = fields.Char(string="Phone",)
+
+    address = fields.Text(string="Address")
+
+    @api.onchange('partner_id')
+    def _onchange_partner(self):
+        for rec in self:
+            if rec.partner_id:
+                partner = rec.partner_id
+
+                rec.phone = partner.phone
+
+                rec.address = "\n".join(filter(None, [
+                    partner.street,
+                    partner.street2,
+                    f"{partner.city or ''} - {partner.zip or ''}" if partner.city or partner.zip else '',
+                    partner.state_id.name if partner.state_id else '',
+                    partner.country_id.name if partner.country_id else '',
+                ]))
     start_date = fields.Date(default=fields.Date.today)
     duration = fields.Integer(required=True)
     installment_amount = fields.Float(required=True)

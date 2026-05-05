@@ -33,6 +33,8 @@
 
                     <group>
                         <field name="partner_id"/>
+                        <field name="phone"/>
+                        <field name="address"/>
                         <field name="duration"/>
                         <field name="installment_amount"/>
                         <field name="total_paid" readonly="1"/>
