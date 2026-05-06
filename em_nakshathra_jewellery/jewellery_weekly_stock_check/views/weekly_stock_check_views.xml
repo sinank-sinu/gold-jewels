@@ -195,10 +195,7 @@
                                     <field name="product_tmpl_id" readonly="1"/>
                                     <field name="system_qty" string="Total Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
                                     <field name="system_weight" string="Total Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
-                                    <!-- <field name="system_tag_weight"
-                                        string="Total Tag Weight"
-                                        groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
-                                        readonly="1"/> -->
+                                    <!-- addy="1"/> -->
                                     <field name="manual_qty" string="Counted Labels"
                                            decoration-success="is_qty_matched == True"
                                            decoration-danger="is_qty_matched == False and manual_qty != 0"/>
