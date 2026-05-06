@@ -10,7 +10,7 @@ class RefineryMarginReport(models.Model):
     name = fields.Char(string='Refinery Report Name', related='issue_id.name', store=True)
     type = fields.Selection([('issue', 'Issue'), ('receive', 'Receive')], string='Type', default='issue')
     batches = fields.Char(string='Batches')
-    
+    partner_id = fields.Many2one('res.partner', string="Partner")
     amount = fields.Float(string='Amount', digits=(16, 2))
     gross_weight = fields.Float(string='Gross Weight', digits=(16, 3))
     net_weight = fields.Float(string='Net Weight', digits=(16, 3))

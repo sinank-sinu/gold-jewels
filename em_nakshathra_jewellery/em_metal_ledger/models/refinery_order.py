@@ -20,6 +20,7 @@ class OldGoldRefineryIssue(models.Model):
             'issue_id': self.id,
             'type': 'issue', # Red
             'batches': batches,
+            'partner_id': self.refinery_partner_id.id, 
             'gross_weight': self.total_issued_weight,
             'net_weight': self.total_issued_weight,
             'purity_id': purity.id if purity else False,
@@ -56,6 +57,7 @@ class OldGoldRefineryIssue(models.Model):
             'gross_weight': self.total_issued_weight,
             'type': 'receive',  # Red
             'batches':batches,
+            'partner_id': self.refinery_partner_id.id, 
             'net_weight': self.output_weight,
             'purity_id': self.expected_purity_id.id,
             'expected_fine': self.total_fine,
