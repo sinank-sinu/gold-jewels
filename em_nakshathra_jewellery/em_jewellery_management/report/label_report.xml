@@ -1,0 +1,27 @@
+<odoo>
+
+    <!-- Paper Format -->
+    <record id="paperformat_label_strip" model="report.paperformat">
+        <field name="name">Jewellery Strip Label</field>
+        <field name="format">A4</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">5</field>
+        <field name="margin_bottom">5</field>
+        <field name="margin_left">5</field>
+        <field name="margin_right">5</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <!-- Report Action -->
+    <record id="action_product_label_report" model="ir.actions.report">
+        <field name="name">Print Labels</field>
+        <field name="model">product.label</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_jewellery_management.report_product_label</field>
+        <field name="report_file">em_jewellery_management.report_product_label</field>
+        <field name="paperformat_id" ref="em_jewellery_management.paperformat_label_strip"/>
+        <field name="binding_model_id" ref="em_jewellery_management.model_product_label"/>
+        <field name="binding_type">report</field>
+    </record>
+
+</odoo>
