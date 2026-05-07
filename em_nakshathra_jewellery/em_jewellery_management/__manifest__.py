@@ -36,6 +36,8 @@
         'views/old_gold_purchase.xml',
         'views/lab_purity_view.xml',
         'views/mrp_production_view.xml',
+        'report/label_template.xml',
+        'report/label_report.xml',
 
     ],
 

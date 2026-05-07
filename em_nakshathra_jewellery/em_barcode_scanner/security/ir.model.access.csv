@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_jewellery_receive_voucher_barcode,access.jewellery.receive.voucher.barcode,em_jewellery_management.model_jewellery_receive_voucher,base.group_user,1,1,1,0
+access_jewellery_issue_voucher_barcode,access.jewellery.issue.voucher.barcode,em_jewellery_management.model_jewellery_issue_voucher,base.group_user,1,1,1,0
