@@ -53,6 +53,6 @@
     <menuitem id="menu_refinery_margin_xlsx"
           name="Refinery Margin XLSX Report"
           parent="menu_refinery_margin_root"
-          action="em_metal_ledger.action_refinery_margin_wizard"
+          action="action_refinery_margin_wizard"
           sequence="20"/>
 </odoo>
