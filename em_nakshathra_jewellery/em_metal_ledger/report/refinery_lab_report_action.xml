@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="action_report_refinery_lab_xlsx" model="ir.actions.report">
+        <field name="name">Refinery Lab XLSX</field>
+        <field name="model">refinery.lab.report</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">em_metal_ledger.refinery_lab_xlsx</field>
+        <field name="report_file">em_metal_ledger.refinery_lab_xlsx</field>
+        <field name="binding_model_id" ref="model_refinery_lab_report"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

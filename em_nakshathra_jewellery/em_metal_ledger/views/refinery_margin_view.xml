@@ -10,6 +10,7 @@
                 <field name="name"/>
                 <field name="type" column_invisible="False"/>
                 <field name="batches"/>
+                <field name="partner_id"/>
                 <field name="gross_weight" sum="Total Gross"/>
                 <field name="net_weight" sum="Total Net"/>
                 <field name="purity_id"/>
@@ -26,6 +27,7 @@
         </field>
     </record>
 
+    <!--Action for Refinery Margin Report-->
     <record id="action_refinery_margin_report" model="ir.actions.act_window">
         <field name="name">Refinery Margin Report</field>
         <field name="res_model">refinery.margin.report</field>
@@ -36,10 +38,21 @@
             </p>
         </field>
     </record>
+    <menuitem id="menu_refinery_margin_root"
+          name="Refinery Margin"
+          parent="menu_metal_ledger_root"
+          sequence="15"/>
 
     <menuitem id="menu_refinery_margin_report"
-              name="Refinery Margin Report"
-              parent="menu_metal_ledger_root"
-              action="action_refinery_margin_report"
-              sequence="15"/>
+          name="Refinery Margin Report"
+          parent="menu_refinery_margin_root"
+          action="action_refinery_margin_report"
+          sequence="10"/>
+
+    <!-- XLSX MENU → CALL WIZARD -->
+    <menuitem id="menu_refinery_margin_xlsx"
+          name="Refinery Margin XLSX Report"
+          parent="menu_refinery_margin_root"
+          action="action_refinery_margin_wizard"
+          sequence="20"/>
 </odoo>

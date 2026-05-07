@@ -70,10 +70,23 @@
             </p>
         </field>
     </record>
+    <!-- Parent Menu -->
+    <menuitem id="menu_refinery_lab_root"
+            name="Refinery Lab Report"
+            parent="menu_metal_ledger_root"
+            sequence="25"/>
 
+    <!-- Master -->
     <menuitem id="menu_refinery_lab_report"
-              name="Refinery Lab Report"
-              parent="menu_metal_ledger_root"
-              action="action_refinery_lab_report"
-              sequence="25"/>
+            name="Refinery Lab Report Master"
+            parent="menu_refinery_lab_root"
+            action="action_refinery_lab_report"
+            sequence="10"/>
+
+    <!-- XLSX -->
+    <menuitem id="menu_refinery_lab_xlsx"
+            name="Refinery Lab XLSX Report"
+            parent="menu_refinery_lab_root"
+            action="action_refinery_lab_wizard"
+            sequence="20"/>
 </odoo>
