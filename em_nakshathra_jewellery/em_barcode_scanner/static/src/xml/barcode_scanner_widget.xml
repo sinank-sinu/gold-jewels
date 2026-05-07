@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="em_barcode_scanner.BarcodeScannerWidget">
+        <div class="em_barcode_scanner_container">
+            <div class="em_barcode_scanner_header">
+                <span class="em_barcode_scanner_icon">
+                    <i class="fa fa-barcode" aria-hidden="true"/>
+                </span>
+                <span class="em_barcode_scanner_label">Scan Barcode</span>
+                <t t-if="state.isScanning">
+                    <span class="em_barcode_scanner_spinner">
+                        <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                    </span>
+                </t>
+            </div>
+            <div class="em_barcode_scanner_input_row">
+                <input
+                    t-ref="barcodeInput"
+                    type="text"
+                    class="em_barcode_scanner_input o_input"
+                    placeholder="Scan or type barcode, then press Enter…"
+                    t-att-value="state.barcode"
+                    t-on-input="onInput"
+                    t-on-keydown="onKeyDown"
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <button
+                    class="btn btn-primary em_barcode_scanner_btn"
+                    t-on-click="_processBarcode"
+                    t-att-disabled="state.isScanning or !state.barcode"
+                    title="Process Barcode"
+                >
+                    <i class="fa fa-search" aria-hidden="true"/>
+                </button>
+            </div>
+            <t t-if="state.lastResult">
+                <div class="em_barcode_scanner_result">
+                    <t t-esc="state.lastResult"/>
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>
