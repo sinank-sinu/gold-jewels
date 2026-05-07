@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Inherit the Issue Voucher form to inject the barcode scanner widget -->
+    <record id="view_issue_voucher_barcode_scanner_inherit" model="ir.ui.view">
+        <field name="name">jewellery.issue.voucher.form.barcode.scanner</field>
+        <field name="model">jewellery.issue.voucher</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_issue_voucher_form"/>
+        <field name="arch" type="xml">
+            <!--
+                Inject the barcode scanner widget just before the Product lines field.
+                Hidden when the voucher is already done (read-only state).
+            -->
+            <xpath expr="//notebook/page[1]/field[@name='line_ids']" position="before">
+<!--                <widget-->
+<!--                    name="barcode_scanner"-->
+<!--                    model="jewellery.issue.voucher"-->
+<!--                    invisible="state == 'done'"-->
+<!--                />-->
+            </xpath>
+        </field>
+    </record>
+</odoo>
