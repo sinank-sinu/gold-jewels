@@ -9,11 +9,9 @@
             <xpath expr="//field[@name='invoice_line_ids']/tree/field[@name='name']" position="after">
                 <field name="purity_id"/>
                 <field name="label_id"/>
-
             </xpath>
              <xpath expr="//field[@name='invoice_line_ids']/tree//field[@name='name']" position="attributes">
                 <attribute name="string">Description</attribute>
-
             </xpath>
             <xpath expr="//field[@name='invoice_line_ids']/tree//field[@name='analytic_distribution']" position="replace">
             </xpath>
@@ -36,7 +34,6 @@
                     <field name="custom_total" class="oe_inline"/>
                     <field name="is_paid" class="oe_inline"/>
                     <field name="payment_to_id" class="oe_inline"/>
-
                 </group>
             </xpath>
 
