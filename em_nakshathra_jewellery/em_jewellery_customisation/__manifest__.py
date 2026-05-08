@@ -15,6 +15,7 @@
         'reports/scheme_margin_report.xml',
         'views/product_label.xml',
         'views/fine_rate_master_view.xml',
+        'views/stock_picking_views.xml',
 
     ],
 #     'assets': {
