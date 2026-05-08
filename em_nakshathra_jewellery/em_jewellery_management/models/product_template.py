@@ -68,10 +68,12 @@ class Product(models.Model):
         string="Sale Purity"
     )
     purity_id = fields.Many2one(
-        'gold.purity',
-        string="Purity"
+        related='product_tmpl_id.purity_id',
+        string='Purity',
+        store=True,
+        readonly=False,
     )
-
+    
     sale_price_per_gram = fields.Float(
         string="Sale Rate / gram"
     )
