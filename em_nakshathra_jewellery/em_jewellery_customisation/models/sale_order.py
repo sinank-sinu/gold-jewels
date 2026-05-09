@@ -1,5 +1,5 @@
 from collections import defaultdict
-
+from math import ceil
 from odoo import models, fields,api,_
 from odoo.exceptions import UserError, ValidationError
 
@@ -7,6 +7,7 @@ from odoo.exceptions import UserError, ValidationError
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
+    round_off_amount = fields.Monetary(string="Round Off", compute="_compute_round_off")
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
@@ -269,3 +270,45 @@ class SaleOrder(models.Model):
             ).reconcile()
 
         return True
+
+    
+    @api.depends('amount_total')
+    def _compute_round_off(self):
+        for order in self:
+            rounded_total = ceil(order.amount_total / 100.0) * 100
+            order.round_off_amount = rounded_total - order.amount_total
+
+    @api.depends_context('lang')
+    @api.depends('order_line.tax_id', 'order_line.price_unit', 'amount_total', 'amount_untaxed')
+    def _compute_tax_totals(self):
+        super()._compute_tax_totals()
+
+        for order in self:
+            if not order.tax_totals:
+                continue
+            
+            has_gold_bullion = order.order_line.filtered(
+                lambda l: l.product_template_id.name == 'Gold Bullion'
+            )
+
+            if has_gold_bullion:
+                continue
+
+            tax_totals = order.tax_totals
+
+            original_total = tax_totals.get('amount_total', 0.0)
+
+            rounded_total = ceil(original_total / 100.0) * 100
+            round_off = rounded_total - original_total
+
+            tax_totals['amount_total'] = rounded_total
+            tax_totals['formatted_amount_total'] = order.currency_id.symbol + " %.2f" % rounded_total
+
+            # optional: show rounding line
+            tax_totals['display_rounding'] = True
+            tax_totals['rounding_amount'] = round_off
+            tax_totals['formatted_rounding_amount'] = (
+                order.currency_id.symbol + " %.2f" % round_off
+            )
+
+            order.tax_totals = tax_totals
