@@ -124,4 +124,8 @@ class JewelryImportController(http.Controller):
 
         except Exception as e:
             _logger.error(f"Import Failed: {str(e)}")
+<<<<<<< HEAD
             return f"<h1>Error</h1><p>{str(e)}</p>"
+=======
+            return f"<h1>Error</h1><p>{str(e)}</p>"
+>>>>>>> jafardev

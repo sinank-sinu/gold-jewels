@@ -9,7 +9,7 @@
                 <widget
                     name="barcode_scanner"
                     model="stock.picking"
-                    invisible="state in ('done', 'cancel')"
+                    invisible="picking_type_code != 'internal' or state in ('done', 'cancel')"
                 />
             </xpath>
         </field>
