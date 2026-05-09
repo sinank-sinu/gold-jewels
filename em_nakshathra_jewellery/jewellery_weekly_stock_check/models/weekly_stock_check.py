@@ -340,8 +340,8 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         for rec in self:
             # Match if manual count equals system quantity and weight
             qty_match = abs(rec.manual_qty - rec.system_qty) < 0.001
-            # Allow 100mg (0.100g) tolerance for weight
-            weight_match = abs(rec.manual_weight - rec.system_weight) <= 0.100
+            # Allow 250mg (0.250g) tolerance for weight
+            weight_match = abs(rec.manual_weight - rec.system_weight) <= 0.250
             # Tag weight tolerance, 50 mg tolerance (0.050g)
             tag_weight_match = abs(rec.manual_tag_weight - rec.system_tag_weight) <= 0.050
 
@@ -476,7 +476,7 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.difference_tag_weight = summary.manual_tag_weight - summary.system_tag_weight
 
             qty_match = abs(summary.manual_qty - summary.system_qty) < 0.001
-            weight_match = abs(summary.manual_weight - summary.system_weight) <= 0.100
+            weight_match = abs(summary.manual_weight - summary.system_weight) <= 0.250
             tag_match = abs(summary.manual_tag_weight - summary.system_tag_weight) <= 0.050 
 
             summary.is_qty_matched = qty_match
