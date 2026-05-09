@@ -121,11 +121,6 @@ class JewelryImportController(http.Controller):
 
             request.env.cr.commit()
             return f"<h1>Import Finished</h1><p>Processed {count} unique products from Excel.</p>"
-
         except Exception as e:
             _logger.error(f"Import Failed: {str(e)}")
-<<<<<<< HEAD
             return f"<h1>Error</h1><p>{str(e)}</p>"
-=======
-            return f"<h1>Error</h1><p>{str(e)}</p>"
->>>>>>> jafardev
