@@ -36,9 +36,7 @@
                             <field name="date_from"/>
                             <field name="date_to"/>
                             <field name="target_amount"/>
-                            <field name="target_gms"/>
                             <field name="achieved_amount"/>
-                            <field name="achieved_gms"/>
                             <field name="incentive_amount"/>
                             <field name="earned_incentive"/>
                             <field name="is_achieved" widget="boolean_toggle"/>

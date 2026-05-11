@@ -36,8 +36,23 @@ class SalesmanTarget(models.Model):
         currency_field='currency_id',
         required=True,
     )
-    target_gms = fields.Float(
-        string='Target GMS (grams)',
+    # target_gms = fields.Float(
+    #     string='Target GMS (grams)',
+    #     digits=(16, 3),
+    #     required=True,
+    # )
+    target_gms_22k = fields.Float(
+        string='Target GMS (grams) 22K',
+        digits=(16, 3),
+        required=True,
+    )
+    target_gms_18ct = fields.Float(
+        string='Target GMS (grams) 18CT',
+        digits=(16, 3),
+        required=True,
+    )
+    target_gms_22kt = fields.Float(
+        string='Target GMS (grams) 22KT',
         digits=(16, 3),
         required=True,
     )
@@ -61,6 +76,27 @@ class SalesmanTarget(models.Model):
         compute='_compute_achievements',
         store=True,
     )
+    achieved_gms_22k = fields.Float(
+        string='Achieved 22K GMS',
+        compute='_compute_achievements',
+        store=True,
+        digits=(16, 3),
+    )
+
+    achieved_gms_18ct = fields.Float(
+        string='Achieved 18CT GMS',
+        compute='_compute_achievements',
+        store=True,
+        digits=(16, 3),
+    )
+
+    achieved_gms_22kt = fields.Float(
+        string='Achieved 22KT GMS',
+        compute='_compute_achievements',
+        store=True,
+        digits=(16, 3),
+    )
+
     is_achieved = fields.Boolean(
         string='Both Targets Hit',
         compute='_compute_achievements',
@@ -101,6 +137,16 @@ class SalesmanTarget(models.Model):
 
     notes = fields.Text(string='Notes')
 
+    payslip_id = fields.Many2one(
+        'hr.payslip',
+        string='Payslip',
+        readonly=True,
+    )
+
+    payment_date = fields.Date(
+        string='Payment Date',
+        readonly=True,
+    )
     # -------------------------------------------------------------------------
     # Compute: link to employee record
     # -------------------------------------------------------------------------
@@ -119,62 +165,127 @@ class SalesmanTarget(models.Model):
     # -------------------------------------------------------------------------
     # Compute: achievements from confirmed sale orders
     # -------------------------------------------------------------------------
-    @api.depends('salesman_id', 'date_from', 'date_to', 'target_amount', 'target_gms', 'incentive_amount')
+
+    @api.depends('salesman_id', 'date_from', 'date_to', 'target_amount', 'target_gms_22k', 'target_gms_18ct', 'target_gms_22kt', 'incentive_amount')
     def _compute_achievements(self):
-        SaleOrder = self.env['sale.order']
-        # GMS UoM reference
-        gram_uom = self.env.ref('uom.product_uom_gram', raise_if_not_found=False)
+
+        SaleOrderLine = self.env['sale.order.line']
 
         for rec in self:
-            if not rec.salesman_id or not rec.date_from or not rec.date_to:
-                rec.achieved_amount = 0.0
-                rec.achieved_gms = 0.0
-                rec.is_achieved = False
-                rec.earned_incentive = 0.0
-                rec.amount_progress = 0.0
-                rec.gms_progress = 0.0
-                continue
 
-            # Fetch all confirmed / done sale orders for this salesman in the period
+            achieved_amount = 0.0
+
+            achieved_22k = 0.0
+            achieved_18ct = 0.0
+            achieved_22kt = 0.0
+
+            rec.achieved_amount = 0.0
+
+            rec.achieved_gms_22k = 0.0
+            rec.achieved_gms_18ct = 0.0
+            rec.achieved_gms_22kt = 0.0
+
+            rec.amount_progress = 0.0
+            rec.gms_progress = 0.0
+
+            rec.is_achieved = False
+            rec.earned_incentive = 0.0
+
+            if not rec.salesman_id or not rec.date_from or not rec.date_to:
+                continue
+            
             domain = [
-                ('user_id', '=', rec.salesman_id.id),
-                ('state', 'in', ['sale', 'done']),
-                ('date_order', '>=', fields.Datetime.to_datetime(rec.date_from)),
-                ('date_order', '<=', fields.Datetime.to_datetime(rec.date_to).replace(
-                    hour=23, minute=59, second=59
+                ('order_id.user_id', '=', rec.salesman_id.id),
+                ('order_id.state', 'in', ['sale', 'done']),
+                ('order_id.date_order', '>=', fields.Datetime.to_datetime(rec.date_from)),
+                ('order_id.date_order', '<=', fields.Datetime.to_datetime(rec.date_to).replace(
+                    hour=23,
+                    minute=59,
+                    second=59
                 )),
             ]
-            orders = SaleOrder.search(domain)
 
-            # Achieved Amount: sum of order totals
-            achieved_amount = sum(orders.mapped('amount_total'))
+            lines = SaleOrderLine.search(domain)
 
-            # Achieved GMS: sum of quantities on lines where UoM is grams
-            achieved_gms = 0.0
-            for line in orders.mapped('order_line'):
-                uom = line.product_uom
-                if gram_uom and uom:
-                    if uom.id == gram_uom.id or uom.category_id == gram_uom.category_id:
-                        # Convert to grams if it's in the weight/mass category
-                        try:
-                            gms = uom._compute_quantity(line.product_uom_qty, gram_uom)
-                        except Exception:
-                            gms = 0.0
-                        achieved_gms += gms
+            for line in lines:
 
-            # Progress %
-            amount_progress = (achieved_amount / rec.target_amount * 100.0) if rec.target_amount else 0.0
-            gms_progress = (achieved_gms / rec.target_gms * 100.0) if rec.target_gms else 0.0
+                # Skip section/note
+                if line.display_type:
+                    continue
 
-            # Achievement check: BOTH targets must be hit
-            is_achieved = (achieved_amount >= rec.target_amount and achieved_gms >= rec.target_gms)
+                # Skip if no purity
+                if not line.purity_id:
+                    continue
+
+                purity_name = line.purity_id.name.strip().upper()
+
+                grams = line.product_uom_qty or 0.0
+
+                if purity_name == '22K':
+                    achieved_22k += grams
+                    achieved_amount += line.price_subtotal
+
+                elif purity_name == '18CT':
+                    achieved_18ct += grams
+                    achieved_amount += line.price_subtotal
+
+                elif purity_name == '22KT':
+                    achieved_22kt += grams
+                    achieved_amount += line.price_subtotal
+
+
+            amount_progress = 0.0
+
+            if rec.target_amount:
+                amount_progress = (
+                    achieved_amount / rec.target_amount
+                ) * 100
+
+
+            total_target_gms = (
+                rec.target_gms_22k
+                + rec.target_gms_18ct
+                + rec.target_gms_22kt
+            )
+
+            total_achieved_gms = (
+                achieved_22k
+                + achieved_18ct
+                + achieved_22kt
+            )
+
+            gms_progress = 0.0
+
+            if total_target_gms:
+                gms_progress = (
+                    total_achieved_gms / total_target_gms
+                ) * 100
+
+
+            is_achieved = (
+                achieved_amount >= rec.target_amount
+                and achieved_22k >= rec.target_gms_22k
+                and achieved_18ct >= rec.target_gms_18ct
+                and achieved_22kt >= rec.target_gms_22kt
+            )
+
 
             rec.achieved_amount = achieved_amount
-            rec.achieved_gms = achieved_gms
+
+            rec.achieved_gms_22k = achieved_22k
+            rec.achieved_gms_18ct = achieved_18ct
+            rec.achieved_gms_22kt = achieved_22kt
+
             rec.amount_progress = min(amount_progress, 100.0)
             rec.gms_progress = min(gms_progress, 100.0)
+
             rec.is_achieved = is_achieved
-            rec.earned_incentive = rec.incentive_amount if is_achieved else 0.0
+
+            rec.earned_incentive = (
+                rec.incentive_amount
+                if is_achieved
+                else 0.0
+            )
 
     # -------------------------------------------------------------------------
     # Constraints
@@ -185,13 +296,22 @@ class SalesmanTarget(models.Model):
             if rec.date_from and rec.date_to and rec.date_from > rec.date_to:
                 raise ValidationError(_('Period From must be before Period To.'))
 
-    @api.constrains('target_amount', 'target_gms', 'incentive_amount')
+
+    @api.constrains('target_amount', 'target_gms_22k', 'target_gms_18ct', 'target_gms_22kt', 'incentive_amount')
     def _check_positive_targets(self):
         for rec in self:
             if rec.target_amount <= 0:
                 raise ValidationError(_('Target Amount must be greater than zero.'))
-            if rec.target_gms <= 0:
-                raise ValidationError(_('Target GMS must be greater than zero.'))
+
+            if rec.target_gms_22k < 0:
+                raise ValidationError(_('22K Target GMS must be positive.'))
+
+            if rec.target_gms_18ct < 0:
+                raise ValidationError(_('18CT Target GMS must be positive.'))
+
+            if rec.target_gms_22kt < 0:
+                raise ValidationError(_('22KT Target GMS must be positive.'))
+
             if rec.incentive_amount <= 0:
                 raise ValidationError(_('Incentive Amount must be greater than zero.'))
 

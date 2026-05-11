@@ -66,12 +66,18 @@
                     <group string="Targets &amp; Incentive">
                         <group>
                             <field name="target_amount"/>
-                            <field name="target_gms"/>
+                            <field name="target_gms_22k"/>
+                            <field name="target_gms_18ct"/>
+                            <field name="target_gms_22kt"/>
                             <field name="incentive_amount"/>
+                            <field name="payslip_id"/>
+
                         </group>
                         <group>
                             <field name="achieved_amount"/>
-                            <field name="achieved_gms"/>
+                            <field name="achieved_gms_22k"/>
+                            <field name="achieved_gms_18ct"/>
+                            <field name="achieved_gms_22kt"/>
                             <field name="earned_incentive" readonly="1"/>
                         </group>
                     </group>
@@ -120,9 +126,13 @@
                 <field name="date_from"/>
                 <field name="date_to"/>
                 <field name="target_amount" sum="Total Target Amount"/>
-                <field name="target_gms" sum="Total Target GMS"/>
+                <field name="target_gms_22k" sum="Total Target 22K GMS"/>
+                <field name="target_gms_18ct" sum="Total Target 18CT GMS"/>
+                <field name="target_gms_22kt" sum="Total Target 22KT GMS"/>
                 <field name="achieved_amount" sum="Total Achieved Amount"/>
-                <field name="achieved_gms" sum="Total Achieved GMS"/>
+                <field name="achieved_gms_22k" sum="Total Achieved 22K GMS"/>
+                <field name="achieved_gms_18ct" sum="Achieved 18CT GMS"/>
+                <field name="achieved_gms_22kt" sum="Achieved 22KT GMS"/>
                 <field name="amount_progress" widget="progressbar"/>
                 <field name="gms_progress" widget="progressbar"/>
                 <field name="incentive_amount"/>
