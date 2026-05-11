@@ -184,7 +184,7 @@ class StockSummaryReportLine(models.TransientModel):
     product_id = fields.Many2one('product.product', string='Product Variant')
     product_template_id = fields.Many2one('product.template', string='Product')
     purity_id = fields.Many2one('gold.purity', string='Purity')
-    
+    ageing = fields.Integer(string="Ageing")
     opening_pcs = fields.Float(string='Opening PCs', digits=(16, 0))
     opening_gross_weight = fields.Float(string='Opening Gross', digits=(16, 3))
     opening_net_weight = fields.Float(string='Opening Net', digits=(16, 3))

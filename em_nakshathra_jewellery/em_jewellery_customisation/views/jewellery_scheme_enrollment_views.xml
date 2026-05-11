@@ -7,6 +7,10 @@
             <xpath expr="//field[@name='partner_id']" position="before">
                 <field name="name"/>
             </xpath>
+            <xpath expr="//field[@name='balance_amount']" position="after">
+                <field name="is_redeemed"/>
+            </xpath>
+
             <xpath expr="//header" position="inside">
                 <button name="action_print_scheme_report"
                         type="object"

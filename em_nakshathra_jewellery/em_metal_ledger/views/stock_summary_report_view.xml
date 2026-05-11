@@ -40,6 +40,7 @@
                 <field name="product_template_id" invisible="1"/>
                 <field name="product_id"/>
                 <field name ="purity_id"/>
+                <field name="ageing" string="Ageing"/>
                 <field name="opening_pcs" sum="Total Opening PCs"/>
                 <field name="opening_gross_weight" sum="Total Opening Gross"/>
                 <field name="opening_net_weight" sum="Total Opening Net"/>
