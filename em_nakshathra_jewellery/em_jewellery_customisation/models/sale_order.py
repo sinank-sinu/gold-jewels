@@ -28,14 +28,14 @@ class SaleOrder(models.Model):
                 raise UserError(_("Scheme already applied."))
 
             completed_schemes = order._get_customer_scheme_records().filtered(
-                lambda s: s.state == 'completed'
+                lambda s: s.state == 'completed' and not s.is_redeemed
             )
 
             if order.apply_scheme and completed_schemes:
 
                 # pick lowest priority
                 completed_schemes = order._get_customer_scheme_records().filtered(
-                    lambda s: s.state == 'completed'
+                    lambda s: s.state == 'completed' and not s.is_redeemed
                 ).sorted(key=lambda s: (s.priority, s.create_date))
             
                 if not completed_schemes:
@@ -56,7 +56,6 @@ class SaleOrder(models.Model):
 
                 redeem_amount = min(quotation_total, scheme_amount)
 
-                # scheme_product = order._get_scheme_product()
                 product_code = f"SCHEME-{scheme.id}"
 
                 product = self.env['product.product'].search([
@@ -66,6 +65,7 @@ class SaleOrder(models.Model):
                 if not product:
                     product = self.env['product.product'].create({
                         'name': f"{scheme.name} - {order.partner_id.name}",
+                        'default_code': product_code,
                         'type': 'service',
                         'list_price': 0.0,
                     })
@@ -83,7 +83,8 @@ class SaleOrder(models.Model):
                 })
                 order.scheme_line_id = line
                 scheme.write({
-                    'state': 'redeemed'   
+                    'state': 'redeemed',
+                    'is_redeemed': True, 
                 })
                 self.env['scheme.redemption'].create({
                     'scheme_id': scheme.id,
@@ -91,39 +92,39 @@ class SaleOrder(models.Model):
                     'amount': redeem_amount,
                 })
 
-            else:
-                schemes = order._get_customer_scheme_records()
+            # else:
+            #     schemes = order._get_customer_scheme_records()
 
-                if not schemes:
-                    raise UserError(_("No active scheme available for this customer."))
+            #     if not schemes:
+            #         raise UserError(_("No active scheme available for this customer."))
 
-                total_mc = sum(order.order_line.mapped('mc_amount'))
+            #     total_mc = sum(order.order_line.mapped('mc_amount'))
 
-                if total_mc <= 0:
-                    raise UserError(_("No Making Charge found to apply scheme."))
+            #     if total_mc <= 0:
+            #         raise UserError(_("No Making Charge found to apply scheme."))
 
-                scheme_product = order._get_scheme_product()
+            #     scheme_product = order._get_scheme_product()
                
-                line = self.env['sale.order.line'].create({
-                    'order_id': order.id,
-                    'product_id': scheme_product.id,
-                    'product_uom_qty': 1,
-                    'product_uom': scheme_product.uom_id.id,
-                    'name': f"{scheme_product.name} (MC Discount)",
-                    'is_scheme_line': True,
-                    'price_unit': -total_mc,
-                    'price_subtotal': -total_mc,
-                })
+            #     line = self.env['sale.order.line'].create({
+            #         'order_id': order.id,
+            #         'product_id': scheme_product.id,
+            #         'product_uom_qty': 1,
+            #         'product_uom': scheme_product.uom_id.id,
+            #         'name': f"{scheme_product.name} (MC Discount)",
+            #         'is_scheme_line': True,
+            #         'price_unit': -total_mc,
+            #         'price_subtotal': -total_mc,
+            #     })
 
-                order.scheme_line_id = line
+            #     order.scheme_line_id = line
 
-                # deactivate schemes
-                schemes.write({'active': False})
+            #     # deactivate schemes
+            #     schemes.write({'active': False})
 
-                # zero out MC
-                for ol in order.order_line:
-                    if hasattr(ol, 'mc_amount') and ol.mc_amount > 0:
-                        ol.mc_amount = 0
+            #     # zero out MC
+            #     for ol in order.order_line:
+            #         if hasattr(ol, 'mc_amount') and ol.mc_amount > 0:
+            #             ol.mc_amount = 0
 
 
     def action_apply_old_gold(self):

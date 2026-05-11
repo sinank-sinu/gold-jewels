@@ -9,6 +9,7 @@ class SaleOrderLine(models.Model):
     state = fields.Selection(
         selection_add=[('redeemed', 'Redeemed')]
     )
+    is_redeemed = fields.Boolean(default=False)
 
     def action_print_scheme_report(self):
         self.ensure_one()
