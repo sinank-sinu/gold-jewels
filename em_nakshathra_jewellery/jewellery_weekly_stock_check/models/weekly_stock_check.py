@@ -24,6 +24,7 @@ class JewelleryWeeklyStockCheck(models.Model):
         'location_id',
         string='Locations',
         domain="[('usage', '=', 'internal'), ('branch_id', '=', branch_id)]",
+        required=True,
         tracking=True
     )
     date = fields.Date(
@@ -124,6 +125,8 @@ class JewelleryWeeklyStockCheck(models.Model):
                 'manual_qty': 0.0,
                 'manual_weight': 0.0,
                 'manual_tag_weight': 0.0,
+                'branch_id': label.branch_id.id,
+                'location_id': label.branch_location_id.id,
             })
             
         # Add stock for products without labels (if any)
@@ -140,6 +143,8 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'manual_qty': 0.0,
                     'manual_weight': 0.0,
                     'manual_tag_weight': 0.0,
+                    'branch_id': quant.location_id.branch_id.id,
+                    'location_id': quant.location_id.id,
                 })
 
         self.env['jewellery.weekly.stock.check.line'].create(lines)
@@ -215,6 +220,51 @@ class JewelleryWeeklyStockCheck(models.Model):
             return self.action_export_manager_xlsx()
         return self.action_export_counter_xlsx()
 
+    @api.model
+    def action_scan_barcode(self, check_id, barcode):
+        """
+        Called via RPC when a barcode is scanned on the Weekly Stock Check form.
+        Looks up the product.label by barcode, then updates the corresponding line.
+        Returns a dict with either 'success' or 'error' key.
+        """
+        barcode = (barcode or '').strip()
+        if not barcode:
+            return {'error': _('Empty barcode received.')}
+        check = self.browse(check_id)
+        if not check.exists():
+            return {'error': _('Stock Check record not found.')}
+        if not check.branch_id:
+            return {'error': _('Branch is required before scanning.')}
+        if not check.location_ids:
+            return {'error': _('At least one location is required before scanning.')}
+
+        # 1. Try product.label barcode first
+        label = self.env['product.label'].search([
+            ('barcode', '=', barcode),
+            ('branch_id', '=', check.branch_id.id),
+            ('branch_location_id', 'in', check.location_ids.ids)
+        ], limit=1)
+        if label:    # Create new line for label (Surplus)
+            line = self.env['jewellery.weekly.stock.check.line'].create({
+                'stock_check_id': check.id,
+                'product_tmpl_id': label.product_id.product_tmpl_id.id,
+                'product_id': label.product_id.id,
+                'label_id': label.id,
+                'system_qty': 1.0,
+                'system_weight': label.sale_gross_weight,
+                'system_tag_weight':label.tag_weight,
+                'manual_qty': 1.0,
+                'manual_weight': label.sale_gross_weight,
+                'manual_tag_weight': label.tag_weight,
+                'branch_id': label.branch_id.id,
+                'location_id': label.branch_location_id.id,
+            })
+            return {
+                'success': True,
+                'product': f"{label.display_name} (Matched)" if line.system_qty > 0 else f"{label.display_name} (Surplus)",
+            }
+        return {'error': _('No product or label found for barcode: %s') % barcode}
+
 
 class JewelleryWeeklyStockCheckLine(models.Model):
     _name = 'jewellery.weekly.stock.check.line'
@@ -243,6 +293,18 @@ class JewelleryWeeklyStockCheckLine(models.Model):
     label_id = fields.Many2one(
         'product.label',
         string='Label',
+        readonly=True
+    )
+
+    branch_id = fields.Many2one(
+        'res.branch',
+        string='Branch',
+        readonly=True
+    )
+
+    location_id = fields.Many2one(
+        'stock.location',
+        string='Location',
         readonly=True
     )
 
