@@ -6,7 +6,7 @@
     'summary': """module manage jewellery""",
     'description': 'module manage jewellerymodule manage jewellery',
 
-    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix'],
+    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix', 'sale_product_configurator'],
     'data': [
         'security/ir.model.access.csv',
         "security/res_group.xml",
@@ -40,6 +40,11 @@
         'report/label_report.xml',
 
     ],
+    'assets': {
+        'web.assets_backend': [
+            'em_jewellery_management/static/src/js/sale_product_field_patch.js',
+        ],
+    },
 
     'auto_install': False,
     'application': True,
