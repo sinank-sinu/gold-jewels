@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        
+        <!-- Demo Gold Purity Records -->
+        <record id="demo_purity_22k" model="gold.purity">
+            <field name="name">22K</field>
+            <field name="purity_percentage">91.6</field>
+        </record>
+        
+        <record id="demo_purity_18k" model="gold.purity">
+            <field name="name">18K</field>
+            <field name="purity_percentage">75.0</field>
+        </record>
+        
+        <record id="demo_purity_24k" model="gold.purity">
+            <field name="name">24K</field>
+            <field name="purity_percentage">99.9</field>
+        </record>
+
+    </data>
+</odoo>

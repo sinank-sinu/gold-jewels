@@ -15,6 +15,7 @@
         'views/metal_ledger_wizard_view.xml',
         'views/refinery_margin_view.xml',
         'views/job_work_report_view.xml',
+        'views/job_work_report_wizard_view.xml',
         'views/issue_voucher_view.xml',
         'views/receive_voucher_view.xml',
         'views/replacement_costing_item_views.xml',

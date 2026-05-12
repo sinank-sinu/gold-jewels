@@ -5,6 +5,7 @@ from . import refinery_margin_wizard
 from . import refinery_lab_report
 from . import refinery_lab_wizard
 from . import job_work_report
+from . import job_work_report_wizard
 from . import issue_voucher
 from . import receive_voucher
 from . import refinery_order

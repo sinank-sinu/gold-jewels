@@ -46,7 +46,7 @@ class StockSummaryReportController(http.Controller):
 
         # Headers
         headers = [
-            'Product', 'Caret', 'Ageing', 'Opening PCs', 'Opening Gross', 'Opening Net',
+            'Product', 'Caret', 'Opening PCs', 'Opening Gross', 'Opening Net',
             'In PCs', 'In Gross', 'In Net',
             'Out PCs', 'Out Gross', 'Out Net',
             'Closing PCs', 'Closing Gross', 'Closing Net',
@@ -61,31 +61,24 @@ class StockSummaryReportController(http.Controller):
         for line in report_lines:
             worksheet.write(row, 0, line.product_id.display_name or line.product_template_id.display_name, border_format)
             worksheet.write(row, 1, line.purity_id.name if line.purity_id else '', border_format)
-
-            # Column 2: Ageing (New Field)
-            # Logic: Accessing the 'age' from product.label related to the product
-            # Note: Ensure your model logic populates line.ageing or fetch it here
-            ageing_val = getattr(line, 'ageing', '') 
-            worksheet.write(row, 2, ageing_val, border_format)
-
-            worksheet.write(row, 3, line.opening_pcs, pcs_format)
-            worksheet.write(row, 4, line.opening_gross_weight, num_format)
-            worksheet.write(row, 5, line.opening_net_weight, num_format)
-            worksheet.write(row, 6, line.in_pcs, pcs_format)
-            worksheet.write(row, 7, line.in_gross_weight, num_format)
-            worksheet.write(row, 8, line.in_net_weight, num_format)
-            worksheet.write(row, 9, line.out_pcs, pcs_format)
-            worksheet.write(row, 10, line.out_gross_weight, num_format)
-            worksheet.write(row, 11, line.out_net_weight, num_format)
-            worksheet.write(row, 12, line.closing_pcs, pcs_format)
-            worksheet.write(row, 13, line.closing_gross_weight, num_format)
-            worksheet.write(row, 14, line.closing_net_weight, num_format)
-            worksheet.write(row, 15, line.average_inventory, num_format)
-            worksheet.write(row, 16, line.turnover_ratio, num_format)
-            worksheet.write(row, 17, line.no_of_days, border_format)
-            worksheet.write(row, 18, line.dio, border_format)
-            worksheet.write(row, 19, line.min_stock_level, num_format)
-            worksheet.write(row, 20, line.stock_gap, num_format)
+            worksheet.write(row, 2, line.opening_pcs, pcs_format)
+            worksheet.write(row, 3, line.opening_gross_weight, num_format)
+            worksheet.write(row, 4, line.opening_net_weight, num_format)
+            worksheet.write(row, 5, line.in_pcs, pcs_format)
+            worksheet.write(row, 6, line.in_gross_weight, num_format)
+            worksheet.write(row, 7, line.in_net_weight, num_format)
+            worksheet.write(row, 8, line.out_pcs, pcs_format)
+            worksheet.write(row, 9, line.out_gross_weight, num_format)
+            worksheet.write(row, 10, line.out_net_weight, num_format)
+            worksheet.write(row, 11, line.closing_pcs, pcs_format)
+            worksheet.write(row, 12, line.closing_gross_weight, num_format)
+            worksheet.write(row, 13, line.closing_net_weight, num_format)
+            worksheet.write(row, 14, line.average_inventory, num_format)
+            worksheet.write(row, 15, line.turnover_ratio, num_format)
+            worksheet.write(row, 16, line.no_of_days, border_format)
+            worksheet.write(row, 17, line.dio, border_format)
+            worksheet.write(row, 18, line.min_stock_level, num_format)
+            worksheet.write(row, 19, line.stock_gap, num_format)
             row += 1
 
         workbook.close()
