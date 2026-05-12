@@ -8,7 +8,7 @@
         Managers can then verify and match these counts against the system records.
     """,
     'author': 'Antigravity',
-    'depends': ['base', 'stock', 'product', 'multi_branch_base', 'em_jewellery_management'],
+    'depends': ['base', 'stock', 'product', 'multi_branch_base', 'em_jewellery_management', 'em_barcode_scanner'],
     'data': [
         'security/security.xml',
         'security/ir.model.access.csv',

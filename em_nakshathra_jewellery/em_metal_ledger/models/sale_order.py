@@ -58,7 +58,6 @@ class SaleOrderMetalLedger(models.Model):
                         'net_weight_purchase': label.purchase_net_weight,
                         'diamond_weight_purchase': label.purchase_diamond_weight_gm,
                         'stone_weight_purchase': label.purchase_stone_weight,
-
                         'purchase_mc_percent_fine': label.purchase_making_charge_value,
                         'purchase_metal_rate': label.purchase_price_per_gram,
                         'diamond_amount_purchase': label.purchase_diamond_rate,
@@ -119,7 +118,7 @@ class SaleOrderMetalLedger(models.Model):
                     'metal_fine': vals['metal_fine'],
                     'mc_fine': vals['mc_fine'],
                     'fine_weight': total_fine,
-                    'stock_in': vals['metal_fine'],
+                    'stock_in': total_fine,
                     'stock_out': 0.0,
                     'purchase_order_id': po.id,
                     'sale_order_id': self.id,
