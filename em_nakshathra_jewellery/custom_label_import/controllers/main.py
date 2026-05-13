@@ -12,7 +12,7 @@ class LabelPurchaseImportController(http.Controller):
     @http.route('/import/labels_purchase/now', type='http', auth='user')
     def trigger_import(self, **kwargs):
         # Path to the specific Excel file
-        file_name = 'Product_Labels.xlsx'
+        file_name = 'PRODUCT LABEL FINAL OP STOCK.xlsx'
         file_path = get_module_resource('custom_label_import', 'data', file_name)
         
         if not file_path or not os.path.exists(file_path):

@@ -7,9 +7,10 @@ class JewellerySchemeEnrollment(models.Model):
 
     name = fields.Char(default="New")
     partner_id = fields.Many2one('res.partner', required=True)
-    phone = fields.Char(string="Phone",)
-
+    phone = fields.Char(string="Phone Number",)
+    whatsapp_number = fields.Char(string="WhatsApp Number")
     address = fields.Text(string="Address")
+    nominee = fields.Char(string="Nominee")
 
     @api.onchange('partner_id')
     def _onchange_partner(self):
@@ -18,6 +19,7 @@ class JewellerySchemeEnrollment(models.Model):
                 partner = rec.partner_id
 
                 rec.phone = partner.phone
+                rec.whatsapp_number = partner.mobile
 
                 rec.address = "\n".join(filter(None, [
                     partner.street,
@@ -46,6 +48,9 @@ class JewellerySchemeEnrollment(models.Model):
         ('running', 'Running'),
         ('completed', 'Completed')
     ], default='running')
+
+    ticket_number = fields.Char(string="Ticket Number")
+    
 
     def action_set_active_rate(self):
         self.ensure_one()
