@@ -29,6 +29,7 @@
         name="Configuration"
         parent="menu_jewellery_root"
         sequence="90"
+        groups="em_jewellery_management.group_jewellery_manager"
     />
     <menuitem id="menu_scheme_enrollment"
               name="Schemes"
@@ -41,6 +42,7 @@
         name="Job Works"
         parent="menu_jewellery_root"
         sequence="1"
+        groups="em_jewellery_management.group_jewellery_manager"
     />
     <menuitem
         id="menu_jewellery_job_work"
@@ -54,6 +56,7 @@
         name="Ornaments"
         parent="menu_jewellery_root"
         sequence="1"
+        groups="em_jewellery_management.group_jewellery_manager"
     />
 
     <!-- MENU: PRODUCTS -->
@@ -92,6 +95,7 @@
         name="Purchases"
         parent="menu_jewellery_root"
         sequence="3"
+        groups="em_jewellery_management.group_jewellery_manager"
     />
 
     <menuitem
@@ -157,6 +161,7 @@
         parent="menu_jewellery_root"
         action="cr_material_purchase_requisitions.material_purchase_requisitions"
         sequence="2"
+        groups="em_jewellery_management.group_jewellery_manager"
     />
      <!-- ========================= -->
     <!-- CONFIGURATION ROOT -->
@@ -204,7 +209,8 @@
             name="GOLD"
             parent="em_jewellery_management.menu_jewellery_root"
             action="em_jewellery_management.action_gold_purity"
-            sequence="10"/>
+            sequence="10"
+            groups="em_jewellery_management.group_jewellery_manager"/>
     <menuitem
             id="menu_gold_purity"
             name="Purity"
