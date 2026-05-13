@@ -46,7 +46,7 @@ class StockSummaryReportController(http.Controller):
 
         # Headers
         headers = [
-            'Product', 'Caret', 'Ageing', 'Opening PCs', 'Opening Gross', 'Opening Net',
+            'Product', 'Caret', 'Opening PCs', 'Opening Gross', 'Opening Net',
             'In PCs', 'In Gross', 'In Net',
             'Out PCs', 'Out Gross', 'Out Net',
             'Closing PCs', 'Closing Gross', 'Closing Net',

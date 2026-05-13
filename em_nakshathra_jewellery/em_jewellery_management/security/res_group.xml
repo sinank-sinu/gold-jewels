@@ -1,8 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <record id="module_category_jewellery_management" model="ir.module.category">
+        <field name="name">Jewellery Management</field>
+        <field name="sequence">10</field>
+    </record>
+
+    <record id="group_jewellery_salesman" model="res.groups">
+        <field name="name">Salesman</field>
+        <field name="category_id" ref="module_category_jewellery_management"/>
+        <!-- We keep base.group_user as it is required for login, but we will hide menus manually -->
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <record id="group_jewellery_manager" model="res.groups">
+        <field name="name">Manager</field>
+        <field name="category_id" ref="module_category_jewellery_management"/>
+        <field name="implied_ids" eval="[(4, ref('group_jewellery_salesman')), 
+                                        (4, ref('sales_team.group_sale_manager')), 
+                                        (4, ref('purchase.group_purchase_manager')), 
+                                        (4, ref('stock.group_stock_manager')), 
+                                        (4, ref('mrp.group_mrp_manager')),
+                                        (4, ref('group_mc_approval_manager'))]"/>
+    </record>
+
     <record id="group_mc_approval_manager" model="res.groups">
         <field name="name">MC Approval Manager</field>
-        <field name='category_id'></field>
+        <field name="category_id" ref="module_category_jewellery_management"/>
     </record>
 
 

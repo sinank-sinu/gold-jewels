@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Restrict Apps -->
+    <record id="base.menu_management" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Accounting -->
+    <record id="account.menu_finance" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Calendar -->
+    <record id="calendar.mail_menu_calendar" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Contacts -->
+    <record id="contacts.menu_contacts" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict CRM -->
+<!--    <record id="crm.crm_menu_root" model="ir.ui.menu">-->
+<!--        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>-->
+<!--    </record>-->
+
+    <!-- Restrict Dashboards -->
+    <record id="spreadsheet_dashboard.spreadsheet_dashboard_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Discuss -->
+    <record id="mail.menu_root_discuss" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Employees -->
+    <record id="hr.menu_hr_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Website -->
+    <record id="website.menu_website_configuration" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+
+    <!-- Restrict Requisitions -->
+    <record id="cr_material_purchase_requisitions.material_purchase_requisitions_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Link Tracker -->
+    <record id="utm.menu_link_tracker_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Inventory -->
+    <record id="stock.menu_stock_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Purchase -->
+    <record id="purchase.menu_purchase_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Restrict Manufacturing -->
+    <record id="mrp.menu_mrp_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+
+</odoo>
