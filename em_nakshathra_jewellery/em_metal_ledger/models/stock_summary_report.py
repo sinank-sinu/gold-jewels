@@ -129,7 +129,13 @@ class StockSummaryReportWizard(models.TransientModel):
             ], limit=1)
             min_stock = reordering_rule.product_min_qty if reordering_rule else 0.0
             stock_gap = c_gross - min_stock
+            # Fetch ageing from product.label
+            label = self.env['product.label'].search([
+                ('product_id', '=', product.id)
+            ], limit=1)
 
+            ageing = label.age if label else 0
+            
             # Only add to report if there is any activity or stock
             if any([o_pcs, o_gross, o_net, in_pcs, in_gross, in_net, out_pcs, out_gross, out_net, c_pcs, c_gross, c_net, min_stock]):
                 report_lines.append({
@@ -154,6 +160,7 @@ class StockSummaryReportWizard(models.TransientModel):
                     'dio': dio,
                     'stock_gap': stock_gap,
                     'purity_id': product.purity_id.id,
+                    'ageing': ageing,
                 })
 
         if report_lines:
@@ -184,7 +191,7 @@ class StockSummaryReportLine(models.TransientModel):
     product_id = fields.Many2one('product.product', string='Product Variant')
     product_template_id = fields.Many2one('product.template', string='Product')
     purity_id = fields.Many2one('gold.purity', string='Purity')
-    ageing = fields.Integer(string="Ageing")
+    ageing = fields.Integer(string='Ageing')
     opening_pcs = fields.Float(string='Opening PCs', digits=(16, 0))
     opening_gross_weight = fields.Float(string='Opening Gross', digits=(16, 3))
     opening_net_weight = fields.Float(string='Opening Net', digits=(16, 3))

@@ -10,9 +10,9 @@ class PurchaseFineRateXlsx(models.AbstractModel):
 
         sheet = workbook.add_worksheet('Fine Rate Variance')
 
-        # =========================
-        # Formats
-        # =========================
+        # =====================================================
+        # FORMATS
+        # =====================================================
 
         title_format = workbook.add_format({
             'bold': True,
@@ -25,7 +25,7 @@ class PurchaseFineRateXlsx(models.AbstractModel):
             'bold': True,
             'border': 1,
             'align': 'center',
-            'bg_color': '#D3D3D3',
+            'bg_color': '#D9D9D9',
         })
 
         text_format = workbook.add_format({
@@ -37,25 +37,82 @@ class PurchaseFineRateXlsx(models.AbstractModel):
             'num_format': '0.000',
         })
 
-        difference_format = workbook.add_format({
+        positive_diff_format = workbook.add_format({
             'border': 1,
             'num_format': '0.000',
             'bold': True,
+            'font_color': 'green',
         })
 
-        # =========================
-        # Column Width
-        # =========================
+        negative_diff_format = workbook.add_format({
+            'border': 1,
+            'num_format': '0.000',
+            'bold': True,
+            'font_color': 'red',
+        })
 
-        sheet.set_column('A:A', 35)
-        sheet.set_column('B:B', 12)
-        sheet.set_column('C:E', 18)
+        total_header_format = workbook.add_format({
+            'bold': True,
+            'border': 1,
+            'align': 'right',
+            'bg_color': '#D9D9D9',
+        })
+
+        # =====================================================
+        # COLUMN WIDTHS
+        # =====================================================
+
+        sheet.set_column('A:A', 20)
+        sheet.set_column('B:B', 30)
+        sheet.set_column('C:C', 35)
+        sheet.set_column('D:D', 12)
+        sheet.set_column('E:G', 18)
 
         row = 0
 
-        # =========================
-        # Latest Fine Rate
-        # =========================
+        # =====================================================
+        # TITLE
+        # =====================================================
+
+        sheet.merge_range(
+            row, 0, row, 6,
+            'Purchase Fine Rate Variance Report',
+            title_format
+        )
+
+        row += 2
+
+        # =====================================================
+        # FILTER DETAILS
+        # =====================================================
+
+        sheet.write(row, 0, 'From Date', header_format)
+        sheet.write(row, 1, str(data.get('date_from', '')), text_format)
+
+        row += 1
+
+        sheet.write(row, 0, 'To Date', header_format)
+        sheet.write(row, 1, str(data.get('date_to', '')), text_format)
+
+        row += 2
+
+        # =====================================================
+        # TABLE HEADERS
+        # =====================================================
+
+        sheet.write(row, 0, 'Purchase Ref', header_format)
+        sheet.write(row, 1, 'Vendor', header_format)
+        sheet.write(row, 2, 'Product', header_format)
+        sheet.write(row, 3, 'Qty', header_format)
+        sheet.write(row, 4, 'PO Fine Rate', header_format)
+        sheet.write(row, 5, 'Current Fine Rate', header_format)
+        sheet.write(row, 6, 'Difference', header_format)
+
+        row += 1
+
+        # =====================================================
+        # LATEST FINE RATE
+        # =====================================================
 
         latest_rate_rec = self.env['fine.rate.master'].search(
             [],
@@ -65,78 +122,70 @@ class PurchaseFineRateXlsx(models.AbstractModel):
 
         latest_fine_rate = latest_rate_rec.fine_rate or 0.0
 
-        # =========================
-        # Report Loop
-        # =========================
+        total_difference = 0.0
+
+        # =====================================================
+        # DATA LINES
+        # =====================================================
 
         for po in purchase_orders:
 
-            # Title
-            sheet.merge_range(row, 0, row, 4,
-                              f'Purchase Fine Rate Variance Report - {po.name}',
-                              title_format)
-
-            row += 2
-
-            # PO Details
-            sheet.write(row, 0, 'Vendor', header_format)
-            sheet.write(row, 1, po.partner_id.name or '', text_format)
-
-            row += 1
-
-            sheet.write(row, 0, 'Purchase Order', header_format)
-            sheet.write(row, 1, po.name or '', text_format)
-
-            row += 1
-
-            sheet.write(row, 0, 'Report Date', header_format)
-            sheet.write(row, 1,
-                        datetime.today().strftime('%d-%m-%Y %H:%M:%S'),
-                        text_format)
-
-            row += 2
-
-            # Table Headers
-            sheet.write(row, 0, 'Product', header_format)
-            sheet.write(row, 1, 'Qty', header_format)
-            sheet.write(row, 2, 'PO Fine Rate', header_format)
-            sheet.write(row, 3, 'Current Fine Rate', header_format)
-            sheet.write(row, 4, 'Difference', header_format)
-
-            row += 1
-
-            total_diff = 0.0
-
             for line in po.order_line:
 
-                difference = latest_fine_rate - line.metal_amount
+                po_rate = line.metal_amount or 0.0
 
-                total_diff += difference
+                difference = latest_fine_rate - po_rate
 
-                sheet.write(row, 0,
+                total_difference += difference
+
+                diff_format = (
+                    positive_diff_format
+                    if difference >= 0
+                    else negative_diff_format
+                )
+
+                sheet.write(row, 0, po.name or '', text_format)
+
+                sheet.write(row, 1,
+                            po.partner_id.name or '',
+                            text_format)
+
+                sheet.write(row, 2,
                             line.product_id.display_name or '',
                             text_format)
 
-                sheet.write(row, 1,
+                sheet.write(row, 3,
                             line.product_qty,
                             number_format)
 
-                sheet.write(row, 2,
-                            line.metal_amount,
+                sheet.write(row, 4,
+                            po_rate,
                             number_format)
 
-                sheet.write(row, 3,
+                sheet.write(row, 5,
                             latest_fine_rate,
                             number_format)
 
-                sheet.write(row, 4,
+                sheet.write(row, 6,
                             difference,
-                            difference_format)
+                            diff_format)
 
                 row += 1
 
-            # Total
-            sheet.write(row, 3, 'Total Difference', header_format)
-            sheet.write(row, 4, total_diff, difference_format)
+        # =====================================================
+        # TOTAL
+        # =====================================================
 
-            row += 3
+        total_format = (
+            positive_diff_format
+            if total_difference >= 0
+            else negative_diff_format
+        )
+
+        sheet.merge_range(
+            row, 0, row, 5,
+            'Total Difference',
+            total_header_format
+        )
+
+        sheet.write(row, 6, total_difference, total_format)
