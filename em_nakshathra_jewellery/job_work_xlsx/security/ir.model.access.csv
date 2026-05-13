@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_job_work_report_user,job.work.report.user,model_job_work_report,base.group_user,1,0,0,0
-access_job_work_report_manager,job.work.report.manager,model_job_work_report,base.group_user,1,1,1,1
-access_job_work_report_wizard_user,job.work.report.wizard.user,model_job_work_report_wizard,base.group_user,1,0,0,0
-access_job_work_report_wizard_manager,job.work.report.wizard.manager,model_job_work_report_wizard,base.group_user,1,1,1,1
