@@ -6,6 +6,7 @@
         <field name="arch" type="xml">
             <tree>
                 <field name="name"/>
+                <field name="ticket_number"/>
                 <field name="partner_id"/>
                 <field name="total_paid"/>
                 <field name="balance_amount"/>
@@ -32,9 +33,12 @@
                 <sheet>
 
                     <group>
+                        <field name="ticket_number"/>
                         <field name="partner_id"/>
                         <field name="phone"/>
+                        <field name="whatsapp_number"/>
                         <field name="address"/>
+                        <field name="nominee"/>
                         <field name="duration"/>
                         <field name="installment_amount"/>
                         <field name="total_paid" readonly="1"/>
