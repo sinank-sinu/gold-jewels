@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Job Work Report Wizard Form View -->
+    <record id="view_job_work_report_wizard_form" model="ir.ui.view">
+        <field name="name">job.work.report.wizard.form</field>
+        <field name="model">job.work.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Job Work Report">
+                <sheet>
+                    <group>
+                        <group string="Date Range">
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                        </group>
+                        <group string="Filters">
+                            <field name="branch_ids" widget="many2many_tags" placeholder="Select Branches..."/>
+                            <field name="partner_id" placeholder="Select Job Worker..."/>
+                            <field name="job_type"/>
+                            <field name="type"/>
+                        </group>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_generate_report" type="object" string="Generate XLSX Report" 
+                            class="btn-primary" icon="fa-file-excel-o"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Job Work Report Wizard Action -->
+    <record id="action_job_work_report_wizard" model="ir.actions.act_window">
+        <field name="name">Job Work Report Wizard</field>
+        <field name="res_model">job.work.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Item for Job Work Report Wizard -->
+    <menuitem id="menu_job_work_report_wizard"
+              name="Generate Report"
+              parent="menu_job_work_report_parent"
+              action="action_job_work_report_wizard"
+              sequence="20"/>
+</odoo>

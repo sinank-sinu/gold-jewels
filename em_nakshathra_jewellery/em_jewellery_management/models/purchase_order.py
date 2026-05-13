@@ -65,10 +65,15 @@ class PurchaseOrder(models.Model):
         total_weight = sum(
             self.order_line.mapped('qty_received')
         )
+        total_fine = sum(
+            self.order_line.mapped('total_fine')
+        )
+        
 
         order_lines = [(0, 0, {
             'product_id': product.id,
-            'product_uom_qty': total_weight,
+            'product_uom_qty': total_fine,
+            'fine_weight': total_fine,
             'name': product.display_name,
         })]
 
