@@ -62,8 +62,12 @@ class StockSummaryReportController(http.Controller):
             worksheet.write(row, 0, line.product_id.display_name or line.product_template_id.display_name, border_format)
             worksheet.write(row, 1, line.purity_id.name if line.purity_id else '', border_format)
 
+            # Column 2: Ageing (New Field)
+            # Logic: Accessing the 'age' from product.label related to the product
+            # Note: Ensure your model logic populates line.ageing or fetch it here
             ageing_val = getattr(line, 'ageing', '')
-            worksheet.write(row, 2, line.ageing_val, border_format)
+            worksheet.write(row, 2, ageing_val, border_format)
+
             worksheet.write(row, 3, line.opening_pcs, pcs_format)
             worksheet.write(row, 4, line.opening_gross_weight, num_format)
             worksheet.write(row, 5, line.opening_net_weight, num_format)
