@@ -72,7 +72,7 @@ class PurchaseOrder(models.Model):
 
         order_lines = [(0, 0, {
             'product_id': product.id,
-            'product_uom_qty': total_fine,
+            # 'product_uom_qty': total_fine,
             'fine_weight': total_fine,
             'name': product.display_name,
         })]

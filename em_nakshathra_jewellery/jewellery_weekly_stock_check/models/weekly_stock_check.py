@@ -390,6 +390,47 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         store=True
     )
 
+    system_total_weight = fields.Float(
+        string='System Total Wt',
+        compute='_compute_total_weights',
+        digits=(16, 3)
+    )
+
+    manual_total_weight = fields.Float(
+        string='Counted Total Wt',
+        digits=(16, 3),
+        default=0.0
+    )
+    difference_total_weight = fields.Float(
+        string='Diff Total Wt',
+        compute='_compute_total_weights',
+        digits=(16, 3)
+    )
+    is_total_weight_matched = fields.Boolean(
+        string='Total Weight Matched',
+        compute='_compute_is_matched'
+    )
+
+    @api.onchange('manual_total_weight')
+    def _onchange_manual_total_weight(self):
+        """Automatically match individual weights if total weight matches."""
+        for rec in self:
+            if rec.manual_total_weight > 0:
+                # Use same tolerance as matching logic (300mg)
+                if abs(rec.manual_total_weight - rec.system_total_weight) <= 0.300:
+                    rec.manual_weight = rec.system_weight
+                    rec.manual_tag_weight = rec.system_tag_weight
+                    # Also match qty if it's 0
+                    if rec.manual_qty == 0 and rec.system_qty > 0:
+                        rec.manual_qty = rec.system_qty
+
+    @api.depends('system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
+    def _compute_total_weights(self):
+        for rec in self:
+            rec.system_total_weight = rec.system_weight + rec.system_tag_weight
+            # rec.manual_total_weight = rec.manual_weight + rec.manual_tag_weight
+            rec.difference_total_weight = rec.manual_total_weight - rec.system_total_weight
+
     @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
     def _compute_difference(self):
         for rec in self:
@@ -397,21 +438,26 @@ class JewelleryWeeklyStockCheckLine(models.Model):
             rec.difference_weight = rec.manual_weight - rec.system_weight
             rec.difference_tag_weight = rec.manual_tag_weight - rec.system_tag_weight
 
-    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
+    @api.depends('system_qty', 'manual_qty', 'system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight', 'manual_total_weight', 'system_total_weight')
     def _compute_is_matched(self):
         for rec in self:
-            # Match if manual count equals system quantity and weight
+            # Match if manual count equals system quantity
             qty_match = abs(rec.manual_qty - rec.system_qty) < 0.001
             # Allow 250mg (0.250g) tolerance for weight
             weight_match = abs(rec.manual_weight - rec.system_weight) <= 0.250
             # Tag weight tolerance, 50 mg tolerance (0.050g)
             tag_weight_match = abs(rec.manual_tag_weight - rec.system_tag_weight) <= 0.050
+            
+            # Total weight match (sum of weights)
+            total_weight_match = abs(rec.manual_total_weight - rec.system_total_weight) <= 0.300
 
             rec.is_qty_matched = qty_match
             rec.is_weight_matched = weight_match
             rec.is_tag_weight_matched = tag_weight_match
+            rec.is_total_weight_matched = total_weight_match
 
-            rec.is_matched = qty_match and weight_match and tag_weight_match
+            # Overall match - based on qty and total weight
+            rec.is_matched = qty_match and total_weight_match
 
 
 class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
@@ -514,13 +560,40 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
         store=True
     )
 
+    system_total_weight = fields.Float(
+        string='System Total Wt',
+        compute='_compute_system_totals',
+        digits=(16, 3)
+    )
+
+    manual_total_weight = fields.Float(
+        string='Counted Total Wt',
+        compute='_compute_manual_totals',
+        readonly=False,
+        digits=(16, 3)
+    )
+    difference_total_weight = fields.Float(
+        string='Diff Total Wt',
+        compute='_compute_differences',
+        digits=(16, 3)
+    )
+    is_total_weight_matched = fields.Boolean(
+        string='Total Weight Matched',
+        compute='_compute_differences'
+    )
+
+
     @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight')
+
+
     def _compute_system_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
             summary.system_qty = sum(lines.mapped('system_qty'))
             summary.system_weight = sum(lines.mapped('system_weight'))
             summary.system_tag_weight = sum(lines.mapped('system_tag_weight'))
+            summary.system_total_weight = sum(lines.mapped('system_total_weight'))
+
 
     @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight', 'stock_check_id.line_ids.manual_tag_weight')
     def _compute_manual_totals(self):
@@ -529,13 +602,17 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.manual_qty = sum(lines.mapped('manual_qty'))
             summary.manual_weight = sum(lines.mapped('manual_weight'))
             summary.manual_tag_weight = sum(lines.mapped('manual_tag_weight'))
+            summary.manual_total_weight = sum(lines.mapped('manual_total_weight'))
 
-    @api.depends('manual_qty', 'manual_weight', 'manual_tag_weight', 'system_qty', 'system_weight', 'system_tag_weight')
+
+    @api.depends('manual_qty', 'manual_weight', 'manual_tag_weight', 'system_qty', 'system_weight', 'system_tag_weight', 'manual_total_weight', 'system_total_weight')
     def _compute_differences(self):
         for summary in self:
             summary.difference_qty = summary.manual_qty - summary.system_qty
             summary.difference_weight = summary.manual_weight - summary.system_weight
             summary.difference_tag_weight = summary.manual_tag_weight - summary.system_tag_weight
+            summary.difference_total_weight = summary.manual_total_weight - summary.system_total_weight
+
 
             qty_match = abs(summary.manual_qty - summary.system_qty) < 0.001
             weight_match = abs(summary.manual_weight - summary.system_weight) <= 0.250
@@ -544,4 +621,7 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.is_qty_matched = qty_match
             summary.is_weight_matched = weight_match
             summary.is_tag_weight_matched = tag_match
-            summary.is_matched = qty_match and weight_match and tag_match
+            summary.is_total_weight_matched = abs(summary.manual_total_weight - summary.system_total_weight) <= 0.300
+            
+            summary.is_matched = qty_match and summary.is_total_weight_matched
+

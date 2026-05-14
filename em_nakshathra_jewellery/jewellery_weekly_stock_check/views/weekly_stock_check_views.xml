@@ -123,7 +123,7 @@
                                       create="false"
                                       delete="false"
                                       decoration-success="is_matched == True"
-                                      decoration-danger="is_matched == False and (manual_qty != 0 or manual_weight != 0 or manual_tag_weight != 0)">
+                                      decoration-danger="is_matched == False and (manual_qty != 0 or manual_total_weight != 0)">
                                     <field name="product_id" readonly="1"/>
                                     <field name="label_id" readonly="1"/>
                                     <field name="branch_id" optional="show" readonly="1"/>
@@ -139,6 +139,10 @@
                                     <field name="system_tag_weight"
                                         groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
                                         readonly="1"/>
+                                     <field name="system_total_weight"
+                                         groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                         readonly="1" optional="show"/>
+
                                     <!-- Counted values: input fields for counters -->
                                     <field name="manual_qty"
                                            string="Counted Labels"
@@ -152,24 +156,41 @@
                                            decoration-danger="is_qty_matched == False and manual_qty != 0"/>
                                     <field name="manual_weight"
                                            string="Counted Weight"
+                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0"/>
                                     <field name="is_weight_matched"
                                            widget="boolean_toggle"
                                            readonly="1"
                                            nolabel="1"
+                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0"/>
                                     <field name="manual_tag_weight"
                                         string="Counted Tag Weight"
+                                        column_invisible="1"
                                         decoration-success="is_tag_weight_matched == True"
                                         decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
                                     <field name="is_tag_weight_matched"
                                         widget="boolean_toggle"
                                         readonly="1"
                                         nolabel="1"
+                                        column_invisible="1"
                                         decoration-success="is_tag_weight_matched == True"
                                         decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
+                                     <field name="manual_total_weight"
+                                         string="Counted Total Wt"
+                                         decoration-success="is_total_weight_matched == True"
+                                         decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"
+                                         optional="show"/>
+                                     <field name="is_total_weight_matched"
+                                         widget="boolean_toggle"
+                                         readonly="1"
+                                         nolabel="1"
+                                         decoration-success="is_total_weight_matched == True"
+                                         decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"/>
+
+
                                     <!-- Differences: only visible to managers -->
                                     <field name="difference_qty"
                                            groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
@@ -186,6 +207,9 @@
                                         readonly="1"
                                         decoration-danger="is_tag_weight_matched == False"
                                         decoration-success="is_tag_weight_matched == True"/>
+                                     <field name="difference_total_weight"
+                                         groups="jewellery_weekly_stock_check.group_jewellery_stock_manager"
+                                         readonly="1" optional="hide"/>
                                     <!-- Matched indicator (overall) -->
                                     <field name="is_matched"
                                            column_invisible="1"/>
@@ -196,10 +220,13 @@
                             <field name="template_summary_ids" readonly="state in ('matched', 'cancel')">
                                 <tree editable="bottom" create="false" delete="false"
                                       decoration-success="is_matched == True"
-                                      decoration-danger="is_matched == False and (manual_qty != 0 or manual_weight != 0.0)">
+                                      decoration-danger="is_matched == False and (manual_qty != 0 or manual_total_weight != 0.0)">
                                     <field name="product_tmpl_id" readonly="1"/>
                                     <field name="system_qty" string="Total Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
                                     <field name="system_weight" string="Total Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
+                                    <field name="system_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide"/>
+                                    <field name="system_total_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="show"/>
+
                                     <!-- addy="1"/> -->
                                     <field name="manual_qty" string="Counted Labels"
                                            decoration-success="is_qty_matched == True"
@@ -207,8 +234,16 @@
                                     <field name="is_qty_matched" column_invisible="1"/>
                                     
                                     <field name="manual_weight" string="Counted Weight"
+                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0.0"/>
+                                    <field name="manual_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide" column_invisible="1"/>
+                                    <field name="manual_total_weight" string="Counted Total Wt"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and manual_total_weight != 0.0"
+                                           optional="show"/>
+                                    <field name="is_total_weight_matched" column_invisible="1"/>
+
                                     <field name="is_weight_matched" column_invisible="1"/>
 
                                     <!-- <field name="manual_tag_weight"
@@ -223,6 +258,9 @@
                                     <field name="difference_weight" string="Diff Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"
                                            decoration-danger="is_weight_matched == False"
                                            decoration-success="is_weight_matched == True"/>
+                                    <field name="difference_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide"/>
+                                    <field name="difference_total_weight" string="Diff Total Wt" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="show"/>
+
 
                                     <!-- <field name="difference_tag_weight"
                                         string="Diff Tag Weight"

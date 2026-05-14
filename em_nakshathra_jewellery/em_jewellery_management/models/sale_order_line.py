@@ -24,14 +24,17 @@ class SaleOrderLine(models.Model):
     mc_amount = fields.Float(string="MC Amt",compute="_compute_mc_amount",)
     metal_amount = fields.Float(string="Metal Amt", compute="_compute_metal_amounts",store=True)
 
-
-
     fine_weight = fields.Float(string="Fine Weight  (g)",digits=(16, 3))
     tag_weight = fields.Float(string="Tag Weight (g)")
 
     sale_stone_rate = fields.Float(string="Stone Amt")
     sale_diamond_rate = fields.Float(string="Diamond Amt")
-    sale_gross_weight = fields.Float(string="Gross Weight (g)",digits=(16, 3))
+    product_uom_qty = fields.Float(
+        compute='_compute_product_uom_qty',
+        digits='Product Unit of Measure',
+        readonly=False, store=True,
+    )
+    sale_gross_weight = fields.Float(string="Gross Weight (g)", digits=(16, 3))
     price_unit = fields.Float(
         string='Unit Price', required=True, digits='Product Price',
         compute="_compute_price_unit", readonly=False, store=True)
@@ -140,6 +143,13 @@ class SaleOrderLine(models.Model):
         for rec in self:
             rec.metal_amount = rec.gold_rate * rec.fine_weight
 
+    @api.depends('fine_weight', 'purity_id', 'order_id.purchase_order_id')
+    def _compute_product_uom_qty(self):
+        for rec in self:
+            if rec.order_id.purchase_order_id and rec.purity_id and rec.purity_id.percentage:
+                rec.product_uom_qty = rec.fine_weight / (rec.purity_id.percentage / 100.0)
+            elif not rec.product_uom_qty:
+                rec.product_uom_qty = 0.0
 
     def _prepare_invoice_line(self, **optional_values):
         res = super()._prepare_invoice_line(**optional_values)
