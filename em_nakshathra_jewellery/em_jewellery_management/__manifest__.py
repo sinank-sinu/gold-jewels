@@ -6,11 +6,11 @@
     'summary': """module manage jewellery""",
     'description': 'module manage jewellerymodule manage jewellery',
 
-    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix', 'sale_product_configurator', 'account', 'calendar', 'contacts', 'crm', 'hr', 'website', 'utm', 'purchase', 'sales_team', 'spreadsheet_dashboard', 'mail'],
+    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix', 'sale_product_configurator', 'account', 'calendar', 'contacts', 'crm', 'hr', 'website', 'utm', 'purchase', 'sales_team', 'spreadsheet_dashboard', 'mail', 'hr_expense', 'hr_holidays'],
     'data': [
         "security/res_group.xml",
         'security/ir.model.access.csv',
-        'security/menu_restriction.xml',
+        'security/sale_order_rule.xml',
         'data/jewellery_sequence.xml',
         'wizard/wizard_old_ho.xml',
         'wizard/old_gold_batch_wizard.xml',
@@ -39,7 +39,7 @@
         'views/mrp_production_view.xml',
         'report/label_template.xml',
         'report/label_report.xml',
-
+        'security/menu_restriction.xml',
     ],
     'assets': {
         'web.assets_backend': [
