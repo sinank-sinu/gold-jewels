@@ -138,3 +138,10 @@ class HrEmployeeFamily(models.Model):
                                  help='Contact No of the family member')
     birth_date = fields.Date(string="DOB", tracking=True,
                              help='Birth date of the family member')
+
+class HrEmployeePublic(models.Model):
+    _inherit = 'hr.employee.public'
+
+    joining_date = fields.Date(string='Joining Date')
+    id_expiry_date = fields.Date(string='Expiry Date')
+    passport_expiry_date = fields.Date(string='Expiry Date')

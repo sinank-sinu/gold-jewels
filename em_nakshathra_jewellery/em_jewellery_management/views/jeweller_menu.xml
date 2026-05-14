@@ -34,7 +34,9 @@
     <menuitem id="menu_scheme_enrollment"
               name="Schemes"
               parent="menu_jewellery_root"
-              action="em_jewellery_management.action_scheme_enrollment"/>
+              action="em_jewellery_management.action_scheme_enrollment"
+              groups="em_jewellery_management.group_jewellery_manager"/>
+    />
 
 
      <menuitem
@@ -95,14 +97,15 @@
         name="Purchases"
         parent="menu_jewellery_root"
         sequence="3"
-        groups="em_jewellery_management.group_jewellery_manager"
-    />
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_billing_staff"
+     />
 
     <menuitem
         id="menu_jewellery_purchase_orders"
         name="Purchase Orders"
         parent="menu_jewellery_purchase_root"
         action="purchase.purchase_rfq"
+        groups="em_jewellery_management.group_jewellery_manager"
         sequence="10"
     />
 
@@ -111,6 +114,7 @@
         name="Receipts"
         parent="menu_jewellery_purchase_root"
         action="stock.action_picking_tree_ready"
+        groups="em_jewellery_management.group_jewellery_manager"
         sequence="20"
     />
 
@@ -137,6 +141,7 @@
         name="Sales Orders"
         parent="menu_jewellery_sales_root"
         action="sale.action_orders"
+        groups="em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_manager"
         sequence="10"
     />
 
@@ -152,6 +157,7 @@
         name="Deliveries"
         parent="menu_jewellery_sales_root"
         action="stock.action_picking_tree_all"
+        groups="em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_manager"
         sequence="15"
     />
 

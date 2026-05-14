@@ -30,3 +30,9 @@ access_scheme_installment,jewellery.scheme.installment,model_jewellery_scheme_in
 access_lab_purity,lab.purity,model_lab_purity,base.group_user,1,1,1,1
 access_old_gold_smith_transfer_wizard,old.gold.smith.transfer.wizard,model_old_gold_smith_transfer_wizard,em_jewellery_management.group_jewellery_manager,1,1,1,1
 access_old_gold_smith_transfer_wizard_line,old.gold.smith.transfer.wizard.line,model_old_gold_smith_transfer_wizard_line,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_old_gold_purchase_salesman,old.gold.purchase,model_old_gold_purchase,em_jewellery_management.group_jewellery_salesman,1,1,1,0
+access_sale_old_gold_line_salesman,sale.old.gold.line,model_sale_old_gold_line,em_jewellery_management.group_jewellery_salesman,1,1,1,1
+access_sale_order_salesman,sale.order,sale.model_sale_order,em_jewellery_management.group_jewellery_salesman,1,1,1,0
+access_sale_order_manager,sale.order,sale.model_sale_order,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_sale_order_line_salesman,sale.order.line,sale.model_sale_order_line,em_jewellery_management.group_jewellery_salesman,1,1,1,0
+access_sale_order_line_manager,sale.order.line,sale.model_sale_order_line,em_jewellery_management.group_jewellery_manager,1,1,1,1

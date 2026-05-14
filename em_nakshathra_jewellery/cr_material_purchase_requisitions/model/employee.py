@@ -10,3 +10,10 @@ class hr_employee(models.Model):
     destination_loc_id = fields.Many2one(
         "stock.location", string="Destination Location"
     )
+
+class HrEmployeePublic(models.Model):
+    _inherit = "hr.employee.public"
+
+    destination_loc_id = fields.Many2one(
+        "stock.location", string="Destination Location"
+    )

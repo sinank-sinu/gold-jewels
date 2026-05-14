@@ -56,6 +56,10 @@
         <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
     </record>
 
+    <record id="sale.sale_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('em_jewellery_management.group_jewellery_salesman'), ref('base.group_system')])]"/>
+    </record>
+
     <!-- Restrict Inventory -->
     <record id="stock.menu_stock_root" model="ir.ui.menu">
         <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
@@ -70,6 +74,77 @@
     <record id="mrp.menu_mrp_root" model="ir.ui.menu">
         <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
     </record>
+
+
+    <record id="crm.crm_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('em_jewellery_management.group_jewellery_salesman'),
+            ref('base.group_system')
+        ])]"/>
+    </record>
+
+
+      <!-- Restrict Leaves -->
+    <record id="hr_holidays.menu_hr_holidays_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- ============================================================
+         ACCOUNTING MODULE RESTRICTION
+         Completely hide "Accounting" app from Billing Staff
+    ============================================================ -->
+    <record id="account.menu_finance" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- ============================================================
+         EXPENSES MODULE RESTRICTION
+         Completely hide "Expenses" app from Billing Staff
+    ============================================================ -->
+    <record id="hr_expense.menu_hr_expense_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <!-- ============================================================
+         CUSTOM BILLING MENU FOR BILLING STAFF
+         This is the ONLY app they will see
+    ============================================================ -->
+    <menuitem id="menu_billing_staff_root"
+              name="Billing"
+              web_icon="account,static/description/icon.png"
+              groups="em_jewellery_management.group_jewellery_billing_staff"
+              sequence="1"/>
+
+    <menuitem id="menu_billing_staff_customer_invoices"
+              name="Customer Invoices"
+              parent="menu_billing_staff_root"
+              action="account.action_move_out_invoice_type"
+              sequence="1"/>
+
+    <menuitem id="menu_billing_staff_vendor_bills"
+              name="Vendor Bills"
+              parent="menu_billing_staff_root"
+              action="account.action_move_in_invoice_type"
+              sequence="2"/>
+
+    <menuitem id="menu_billing_staff_expenses"
+              name="Expenses"
+              parent="menu_billing_staff_root"
+              action="hr_expense.hr_expense_actions_my_all"
+              sequence="3"/>
+
+    <!-- ============================================================
+         JEWELLERY MODULE RESTRICTION
+    ============================================================ -->
+    <record id="em_jewellery_management.menu_jewellery_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('em_jewellery_management.group_jewellery_salesman'),
+            ref('base.group_system')
+        ])]"/>
+    </record>
+    
 
 
 </odoo>
