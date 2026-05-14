@@ -11,7 +11,7 @@ class SchemeImportController(http.Controller):
 
     @http.route('/import/schemes/now', type='http', auth='user')
     def trigger_scheme_import(self, **kwargs):
-        file_name = 'Scheme_Import.xlsx'
+        file_name = 'Jewellery Scheme Enrollment (jewellery.scheme.enrollment)(2).xlsx'
         file_path = get_module_resource('custom_scheme_import', 'data', file_name)
         
         if not file_path or not os.path.exists(file_path):
