@@ -135,7 +135,6 @@
     <menuitem id="menu_metal_ledger_root"
               name="Metal Ledger"
               sequence="25"
-              groups="em_jewellery_management.group_jewellery_manager,base.group_system"
               web_icon="em_metal_ledger,static/description/icon.png"/>
 
     <menuitem id="menu_metal_ledger_entries"
