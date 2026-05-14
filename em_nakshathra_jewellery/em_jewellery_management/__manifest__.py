@@ -6,7 +6,7 @@
     'summary': """module manage jewellery""",
     'description': 'module manage jewellerymodule manage jewellery',
 
-    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix', 'sale_product_configurator', 'account', 'calendar', 'contacts', 'crm', 'hr', 'website', 'utm', 'purchase'],
+    'depends': ['web','base','product','stock','sale','mrp','cr_material_purchase_requisitions','multi_branch_base','purchase_product_matrix', 'sale_product_configurator', 'account', 'calendar', 'contacts', 'crm', 'hr', 'website', 'utm', 'purchase', 'sales_team', 'spreadsheet_dashboard', 'mail'],
     'data': [
         "security/res_group.xml",
         'security/ir.model.access.csv',
