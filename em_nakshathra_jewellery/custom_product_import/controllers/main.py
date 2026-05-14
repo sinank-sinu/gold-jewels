@@ -143,7 +143,6 @@ class JewelryImportController(http.Controller):
             return f"<h1>Error</h1><p>{str(e)}</p>"
 
 
-
 # import openpyxl  
 # import logging
 # import os
