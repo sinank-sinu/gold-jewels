@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from odoo import models, fields,api,_
+from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
 
 
@@ -8,6 +8,7 @@ class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
     has_old_gold = fields.Boolean(string='Old Gold Purchase')
+    unfix = fields.Boolean(string='Unfix', default=False)
     old_gold_line_ids = fields.One2many('sale.old.gold.line', 'sale_id')
     branch_location_id = fields.Many2one('stock.location',default=lambda self: self.env.user.branch_id.old_gold_location_id.id)
     # old_gold_po_ids = fields.One2many(
@@ -75,7 +76,6 @@ class SaleOrder(models.Model):
             if scheme:
                 rec.apply_scheme = True
                 rec.active_scheme_id = scheme
-
 
     def action_apply_old_gold(self):
         PurchaseOrder = self.env['purchase.order']
@@ -145,7 +145,8 @@ class SaleOrder(models.Model):
                 'date_order': fields.Date.today(),
                 'origin': order.name,
                 'branch_id': order.branch_id.id,
-                'sale_id': order.id
+                'sale_id': order.id,
+                'unfix': order.unfix,
             })
 
             for purity, vals in purity_map.items():
@@ -163,7 +164,7 @@ class SaleOrder(models.Model):
                     'name': f'Old Gold Purchase ({purity.name})',
                     'product_qty': total_weight,  # ✅ grams
                     'gold_rate': rate,
-                    'price_unit':rate,# ✅ gold rate
+                    'price_unit': rate,  # ✅ gold rate
                     'product_uom': product.uom_po_id.id,
                     'taxes_id': [(6, 0, [])],
                 })
@@ -171,7 +172,7 @@ class SaleOrder(models.Model):
             # 4️⃣ CONFIRM PO
             # ------------------------------------------------
             po.button_confirm()
-            self.purchase_order_id =po.id
+            self.purchase_order_id = po.id
 
             for picking in po.picking_ids:
                 picking.action_confirm()
@@ -191,20 +192,18 @@ class SaleOrder(models.Model):
             bill.is_old_gold_bill = True
 
             bill.action_post()
-            self.old_gold_bill_id =bill.id
+            self.old_gold_bill_id = bill.id
 
         return True
-
-
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
         return self.env['jewellery.scheme.enrollment'].search([
-                ('partner_id', '=', self.partner_id.id),
-                ('active', '=', True),
-                # ('state', '=', 'running'),
-                ('balance_amount', '=', 0)
-            ], limit=1)
+            ('partner_id', '=', self.partner_id.id),
+            ('active', '=', True),
+            # ('state', '=', 'running'),
+            ('balance_amount', '=', 0)
+        ], limit=1)
 
     def _get_customer_scheme_amount(self):
         self.ensure_one()
@@ -239,13 +238,13 @@ class SaleOrder(models.Model):
                 completed_schemes = order._get_customer_scheme_records().filtered(
                     lambda s: s.state == 'completed' and not s.is_redeemed
                 ).sorted(key=lambda s: (s.priority, s.create_date))
-            
+
                 if not completed_schemes:
                     raise UserError(_("No completed scheme available for this customer."))
-                
+
                 # Take latest / first scheme
                 scheme = completed_schemes[0]
-               
+
                 scheme_amount = scheme.total_paid
 
                 if scheme_amount <= 0:
@@ -272,7 +271,6 @@ class SaleOrder(models.Model):
                         'list_price': 0.0,
                     })
 
-
                 line = self.env['sale.order.line'].create({
                     'order_id': order.id,
                     'product_id': product.id,
@@ -286,7 +284,7 @@ class SaleOrder(models.Model):
                 order.scheme_line_id = line
                 scheme.write({
                     'state': 'redeemed',
-                    'is_redeemed': True, 
+                    'is_redeemed': True,
                 })
                 self.env['scheme.redemption'].create({
                     'scheme_id': scheme.id,
@@ -322,7 +320,6 @@ class SaleOrder(models.Model):
     #             'price_unit': -total_mc,
     #             'name': f"{scheme_product.name} (MC Discount)",
     #         })
-
 
     #         # 4️⃣ Assign line to order for reference
     #         order.scheme_line_id = line
@@ -390,23 +387,43 @@ class SaleOrder(models.Model):
                 order._create_old_gold_stock(og)
         return res
 
+    def _create_invoices(self, grouped=False, final=False, date=None):
+        moves = super()._create_invoices(grouped=grouped, final=final, date=date)
+        for move in moves:
+            # Find the sale order for this move
+            sale_orders = move.line_ids.mapped('sale_line_ids.order_id')
+            if not sale_orders:
+                continue
+            order = sale_orders[0]
 
+            # if not order.unfix:
+            #     continue
 
-    # def _create_invoices(self, grouped=False, final=False, date=None):
-    #     moves = super()._create_invoices(grouped=grouped, final=final, date=date)
-    #     for order in moves:
-    #         invoice=self.env['account.move.line'].create({
-    #             'move_id': order.id,
-    #             'name': f"Old Gold Amount from {order.name}",
-    #             'quantity': 1,
-    #             'price_unit': -self.old_gold_bill_amount,  # negative for reduction
-    #             'account_id': moves.invoice_line_ids[0].account_id.id if moves.invoice_line_ids else
-    #             order.order_line[0].product_id.categ_id.property_account_income_categ_id.id,
-    #             'tax_ids': [],  # no tax
-    #         })
-    #         print("invoice")
-    #     return moves
+            po = order.purchase_order_id
+            reduction_amount = 0.0
+            ref_name = ""
 
+            if po and order.unfix:
+                bills = po.invoice_ids.filtered(lambda m: m.move_type == 'in_invoice' and m.state == 'posted')
+                if bills:
+                    reduction_amount = sum(bills.mapped('amount_total'))
+                    ref_name = po.name
+            # elif order.old_gold_bill_amount and not order.unfix:
+            #     reduction_amount = order.old_gold_bill_amount
+            #     ref_name = "Old Gold Purchase"
+
+            if reduction_amount > 0:
+                account_id = move.invoice_line_ids[0].account_id.id if move.invoice_line_ids else False
+                if account_id:
+                    self.env['account.move.line'].with_context(check_move_validity=False).create({
+                        'move_id': move.id,
+                        'name': f"Vendor Bill Reduction from {ref_name}",
+                        'quantity': 1,
+                        'price_unit': -reduction_amount,
+                        'account_id': account_id,
+                        'tax_ids': [],
+                    })
+        return moves
 
     def _create_old_gold_stock(self, og):
         product = self.env.ref('em_jewellery_management.product_old_gold')
@@ -419,8 +436,8 @@ class SaleOrder(models.Model):
             'location_id': source_location.id,
             'location_dest_id': self.branch_location_id.id,
             'origin': self.name,
-            'is_old_gold': True,   # ✅ NEW
-            'sale_old_id':self.id,
+            'is_old_gold': True,  # ✅ NEW
+            'sale_old_id': self.id,
             'branch_id': self.branch_id.id,
         })
 
@@ -472,6 +489,7 @@ class SaleOrder(models.Model):
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
         vals['old_gold_price'] = self.old_gold_bill_amount
+        vals['unfix'] = self.unfix
         return vals
 
     def action_create_invoice_and_pay(self):
@@ -483,16 +501,6 @@ class SaleOrder(models.Model):
             invoices.invoice_date = fields.Date.context_today(self)
             invoices.date = fields.Date.context_today(self)
             invoices.action_post()
-
-            payment_register = self.env['account.payment.register'].with_context(
-                active_model='account.move',
-                active_ids=invoices.ids
-            ).create({
-                'payment_date': fields.Date.context_today(self),
-                'amount': invoices.amount_total,
-            })
-
-            payment_register.action_create_payments()
 
         return True
 

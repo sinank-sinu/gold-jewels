@@ -1,4 +1,4 @@
-from odoo import models, fields,_,api
+from odoo import models, fields, _, api
 from odoo.exceptions import ValidationError
 
 
@@ -13,6 +13,10 @@ class PurchaseOrder(models.Model):
 
     is_old_gold = fields.Boolean(
         string='Old Gold Purchase',
+        default=False
+    )
+    unfix = fields.Boolean(
+        string='Unfix',
         default=False
     )
     total_weight = fields.Float(
@@ -83,6 +87,7 @@ class PurchaseOrder(models.Model):
             'origin': self.name,
             'partner_id': self.partner_id.id,
             'order_line': order_lines,
+            'unfix': self.unfix,
         })
         self.sale_id = sale_order.id
 
@@ -152,6 +157,11 @@ class PurchaseOrder(models.Model):
         vals['branch_id'] = self.branch_id.id
         return vals
 
+    def _prepare_invoice(self):
+        vals = super()._prepare_invoice()
+        vals['unfix'] = self.unfix
+        return vals
+
     def action_create_bill_and_pay(self):
         for order in self:
 
@@ -168,16 +178,5 @@ class PurchaseOrder(models.Model):
             bill.date = fields.Date.context_today(self)
             # 2️⃣ Post Bill
             bill.action_post()
-
-            # 3️⃣ Register Payment
-            payment_register = self.env['account.payment.register'].with_context(
-                active_model='account.move',
-                active_ids=bill.ids
-            ).create({
-                'payment_date': fields.Date.today(),
-                'amount': bill.amount_total,
-            })
-
-            payment_register.action_create_payments()
 
         return True

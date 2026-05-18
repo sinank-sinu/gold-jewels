@@ -109,7 +109,7 @@
                 <field name="purchase_order_id"/>
                 <field name="old_gold_bill_id"/>
                 <field name="old_gold_bill_amount"/>
-
+                <field name="unfix" widget="boolean_toggle"/>
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                <button name="action_open_old_gold_bill"

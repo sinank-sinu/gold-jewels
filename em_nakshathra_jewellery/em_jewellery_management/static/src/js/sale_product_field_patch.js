@@ -18,7 +18,7 @@ patch(SaleOrderLineProductField.prototype, {
             data.pricelist_id = [false];
             try {
                 const props = await super.getProductConfiguratorDialogProps(...arguments);
-                props.pricelistId = false;
+                delete props.pricelistId;
                 return props;
             } finally {
                 // Remove the mock immediately after the call

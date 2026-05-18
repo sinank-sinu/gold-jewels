@@ -15,6 +15,7 @@ class AccountMove(models.Model):
     is_paid = fields.Boolean(string="Is Paid")
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
+    unfix = fields.Boolean(string="Unfix", copy=False)
 
     @api.model
     def default_get(self, fields_list):
@@ -82,16 +83,24 @@ class AccountMove(models.Model):
         for record in self:
             if record.old_gold_price:
                 record._compute_amount_one()
+            if self.env.context.get('bypass_negative_total_check') and record.amount_total < 0:
+                record.amount_total = 0.0
         return res
+
+    def _post(self, soft=True):
+        posted = super(AccountMove, self.with_context(bypass_negative_total_check=True))._post(soft)
+        for move in posted:
+            move.with_context(bypass_negative_total_check=False)._compute_amount()
+        return posted
 
     def action_create_old_gold_vendor_payment(self):
         Payment = self.env['account.payment']
 
         for move in self:
-            if move.custom_total >= 0:
+            if move.custom_total >= 0 and move.amount_total >= 0:
                 raise ValidationError(_("Invoice is not negative."))
 
-            amount = abs(move.custom_total)
+            amount = abs(move.custom_total) if move.custom_total < 0 else abs(move.amount_total)
 
             journal = self.env['account.journal'].search([
                 ('type', 'in', ('bank', 'cash')),
