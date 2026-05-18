@@ -392,20 +392,40 @@ class SaleOrder(models.Model):
 
 
 
-    # def _create_invoices(self, grouped=False, final=False, date=None):
-    #     moves = super()._create_invoices(grouped=grouped, final=final, date=date)
-    #     for order in moves:
-    #         invoice=self.env['account.move.line'].create({
-    #             'move_id': order.id,
-    #             'name': f"Old Gold Amount from {order.name}",
-    #             'quantity': 1,
-    #             'price_unit': -self.old_gold_bill_amount,  # negative for reduction
-    #             'account_id': moves.invoice_line_ids[0].account_id.id if moves.invoice_line_ids else
-    #             order.order_line[0].product_id.categ_id.property_account_income_categ_id.id,
-    #             'tax_ids': [],  # no tax
-    #         })
-    #         print("invoice")
-    #     return moves
+    def _create_invoices(self, grouped=False, final=False, date=None):
+        moves = super()._create_invoices(grouped=grouped, final=final, date=date)
+        for move in moves:
+            # Find the sale order for this move
+            sale_orders = move.line_ids.mapped('sale_line_ids.order_id')
+            if not sale_orders:
+                continue
+            order = sale_orders[0]
+            
+            po = order.purchase_order_id
+            reduction_amount = 0.0
+            ref_name = ""
+            
+            if po:
+                bills = po.invoice_ids.filtered(lambda m: m.move_type == 'in_invoice' and m.state == 'posted')
+                if bills:
+                    reduction_amount = sum(bills.mapped('amount_total'))
+                    ref_name = po.name
+            elif order.old_gold_bill_amount:
+                reduction_amount = order.old_gold_bill_amount
+                ref_name = "Old Gold Purchase"
+                
+            if reduction_amount > 0:
+                account_id = move.invoice_line_ids[0].account_id.id if move.invoice_line_ids else False
+                if account_id:
+                    self.env['account.move.line'].with_context(check_move_validity=False).create({
+                        'move_id': move.id,
+                        'name': f"Vendor Bill Reduction from {ref_name}",
+                        'quantity': 1,
+                        'price_unit': -reduction_amount,
+                        'account_id': account_id,
+                        'tax_ids': [],
+                    })
+        return moves
 
 
     def _create_old_gold_stock(self, og):
@@ -483,16 +503,6 @@ class SaleOrder(models.Model):
             invoices.invoice_date = fields.Date.context_today(self)
             invoices.date = fields.Date.context_today(self)
             invoices.action_post()
-
-            payment_register = self.env['account.payment.register'].with_context(
-                active_model='account.move',
-                active_ids=invoices.ids
-            ).create({
-                'payment_date': fields.Date.context_today(self),
-                'amount': invoices.amount_total,
-            })
-
-            payment_register.action_create_payments()
 
         return True
 

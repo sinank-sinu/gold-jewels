@@ -169,15 +169,4 @@ class PurchaseOrder(models.Model):
             # 2️⃣ Post Bill
             bill.action_post()
 
-            # 3️⃣ Register Payment
-            payment_register = self.env['account.payment.register'].with_context(
-                active_model='account.move',
-                active_ids=bill.ids
-            ).create({
-                'payment_date': fields.Date.today(),
-                'amount': bill.amount_total,
-            })
-
-            payment_register.action_create_payments()
-
         return True
