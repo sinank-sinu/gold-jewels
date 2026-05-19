@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_product_label_custom" inherit_id="em_jewellery_management.report_product_label">
+        <!-- 1. Add Diamond Weight under Gross/Stone/Net Weights -->
+        <xpath expr="//table/tr/td[1]/div[1]" position="replace">
+            <div style="font-size: 8px; text-align: left; margin-top: 1mm; line-height: 1.1; font-weight: bold; padding-left: 2px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="width: 50%;">G.Wt: <t t-esc="o.sale_gross_weight or '0.000'"/></td>
+                        <td style="width: 50%;">S.Wt: <t t-esc="o.sale_stone_weight or '0.000'"/></td>
+                    </tr>
+                    <tr>
+                        <td style="width: 50%;">N.Wt: <t t-esc="o.sale_net_weight or '0.000'"/></td>
+                        <td style="width: 50%;">D.Wt: <t t-esc="o.sale_diamond_weight_gm or '0.000'"/></td>
+                    </tr>
+                </table>
+            </div>
+        </xpath>
+
+        <!-- 2. Change Max MC to MC -->
+        <xpath expr="//table/tr/td[3]/div[1]" position="replace">
+            <div style="font-size: 8px; font-weight: bold; height: 3.5mm; overflow: hidden; white-space: nowrap; text-align: center;">
+                <t t-esc="o.name"/> / MC:<t t-esc="o.sale_making_charge_value"/>
+            </div>
+        </xpath>
+    </template>
+</odoo>
