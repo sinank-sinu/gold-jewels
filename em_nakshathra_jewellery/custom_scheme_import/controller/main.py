@@ -218,7 +218,24 @@ class SchemeImportController(http.Controller):
                 except Exception as row_err:
                     _logger.error("Row %s skipped - %s", row_idx, str(row_err))
                     errors.append(f"Row {row_idx}: {row_err}")
+                    if getattr(request.env.cr, 'closed', False):
+                        errors.append("Database cursor closed unexpectedly. Stopping import.")
+                        break
                     continue   # transaction is still alive; move to next row
+
+                # Batch commit to avoid transaction timeout and memory bloat on large files
+                if row_idx % 200 == 0:
+                    try:
+                        request.env.cr.commit()
+                        if hasattr(request.env, 'invalidate_all'):
+                            request.env.invalidate_all()
+                        else:
+                            request.env.clear()
+                        _logger.info("Batch commit successful at row %s", row_idx)
+                    except Exception as commit_err:
+                        _logger.error("Batch commit failed at row %s: %s", row_idx, str(commit_err))
+                        errors.append(f"Batch commit failed at row {row_idx}: {commit_err}")
+                        break
 
             request.env.cr.commit()
 
