@@ -142,16 +142,18 @@ class SchemeImportController(http.Controller):
                                 with request.env.cr.savepoint():
                                     # Find Opening Balance Account
                                     opening_balance_account = request.env['account.account'].search([
+                                        ('company_id', '=', journal.company_id.id),
                                         '|',
                                         ('name', 'ilike', 'opening balance'),
                                         ('account_type', '=', 'current_assets')
                                     ], limit=1)
 
                                     if not opening_balance_account:
-                                        raise ValueError("Opening Balance account not found.")
+                                        raise ValueError(f"Opening Balance account not found for company {journal.company_id.name}.")
 
                                     # Find Debtors Account
                                     debtors_account = request.env['account.account'].search([
+                                        ('company_id', '=', journal.company_id.id),
                                         '|',
                                         ('name', 'ilike', 'debtor'),
                                         ('account_type', '=', 'asset_receivable')
@@ -160,10 +162,13 @@ class SchemeImportController(http.Controller):
                                     if not debtors_account:
                                         # Fallback to partner's receivable account if available
                                         partner = request.env['res.partner'].browse(scheme_tracker.get(last_valid_ticket, request.env['jewellery.scheme.enrollment']).partner_id.id) if scheme_tracker.get(last_valid_ticket) else False
-                                        if partner and hasattr(partner, 'property_account_receivable_id') and partner.property_account_receivable_id:
-                                            debtors_account = partner.property_account_receivable_id
-                                        else:
-                                            raise ValueError("Debtors account not found.")
+                                        if partner and hasattr(partner, 'property_account_receivable_id'):
+                                            partner_account = partner.with_company(journal.company_id).property_account_receivable_id
+                                            if partner_account:
+                                                debtors_account = partner_account
+                                        
+                                        if not debtors_account:
+                                            raise ValueError(f"Debtors account not found for company {journal.company_id.name}.")
 
                                     scheme_record = request.env['jewellery.scheme.enrollment'].browse(scheme_id)
                                     line_partner_id = scheme_record.partner_id.id if scheme_record else False
