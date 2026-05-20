@@ -38,7 +38,7 @@ class SchemeImportController(http.Controller):
 
     @http.route('/import/schemes/now', type='http', auth='user')
     def trigger_scheme_import(self, **kwargs):
-        file_name = 'Jewellery_Scheme_Enrollment_Processed.xlsx'
+        file_name = 'Jewellery_Scheme_Enrollment_Processed_v2.xlsx'
         file_path = get_module_resource('custom_scheme_import', 'data', file_name)
 
         if not file_path or not os.path.exists(file_path):
@@ -140,22 +140,33 @@ class SchemeImportController(http.Controller):
                             # kill the installment line creation either.
                             try:
                                 with request.env.cr.savepoint():
-                                    debit_account_id = journal.default_account_id.id
+                                    # Find Opening Balance Account
+                                    opening_balance_account = request.env['account.account'].search([
+                                        '|',
+                                        ('name', 'ilike', 'opening balance'),
+                                        ('account_type', '=', 'current_assets')
+                                    ], limit=1)
 
-                                    if not debit_account_id:
-                                        raise ValueError(
-                                            f"Journal '{journal_name}' has no default account configured."
-                                        )
+                                    if not opening_balance_account:
+                                        raise ValueError("Opening Balance account not found.")
 
-                                    liability_account = request.env['account.account'].search(
-                                        [('code', '=', '210100')], limit=1
-                                    )
-                                    if not liability_account:
-                                        liability_account = journal.payment_credit_account_id
+                                    # Find Debtors Account
+                                    debtors_account = request.env['account.account'].search([
+                                        '|',
+                                        ('name', 'ilike', 'debtor'),
+                                        ('account_type', '=', 'asset_receivable')
+                                    ], limit=1)
+                                    
+                                    if not debtors_account:
+                                        # Fallback to partner's receivable account if available
+                                        partner = request.env['res.partner'].browse(scheme_tracker.get(last_valid_ticket, request.env['jewellery.scheme.enrollment']).partner_id.id) if scheme_tracker.get(last_valid_ticket) else False
+                                        if partner and hasattr(partner, 'property_account_receivable_id') and partner.property_account_receivable_id:
+                                            debtors_account = partner.property_account_receivable_id
+                                        else:
+                                            raise ValueError("Debtors account not found.")
 
-                                    credit_account_id = (
-                                        liability_account.id if liability_account else debit_account_id
-                                    )
+                                    scheme_record = request.env['jewellery.scheme.enrollment'].browse(scheme_id)
+                                    line_partner_id = scheme_record.partner_id.id if scheme_record else False
 
                                     move_vals = {
                                         'journal_id': journal.id,
@@ -164,16 +175,18 @@ class SchemeImportController(http.Controller):
                                         'move_type': 'entry',
                                         'line_ids': [
                                             (0, 0, {
-                                                'name': f'Scheme Payment - {last_valid_ticket}',
-                                                'account_id': debit_account_id,
+                                                'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
+                                                'account_id': opening_balance_account.id,
                                                 'debit': line_amount_f,
                                                 'credit': 0.0,
+                                                'partner_id': line_partner_id,
                                             }),
                                             (0, 0, {
-                                                'name': f'Scheme Liability - {last_valid_ticket}',
-                                                'account_id': credit_account_id,
+                                                'name': f'Scheme Payment - {last_valid_ticket}',
+                                                'account_id': debtors_account.id,
                                                 'debit': 0.0,
                                                 'credit': line_amount_f,
+                                                'partner_id': line_partner_id,
                                             }),
                                         ],
                                     }
