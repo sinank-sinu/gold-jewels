@@ -10,21 +10,12 @@ _logger = logging.getLogger(__name__)
 
 
 def parse_date(value):
-    """
-    Robustly parse a date value from Excel.
-    Handles:
-      - Python date / datetime objects (openpyxl returns these for real date cells)
-      - Strings in DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, YYYY/MM/DD formats
-    Returns a datetime.date object, or False on failure.
-    """
     if not value:
         return False
-    # Already a date/datetime from openpyxl
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
-    # String fallback – try common formats
     value = str(value).strip()
     for fmt in ('%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d', '%Y/%m/%d', '%m-%d-%Y', '%m/%d/%Y'):
         try:
@@ -33,6 +24,14 @@ def parse_date(value):
             continue
     _logger.warning("parse_date: Could not parse date value '%s'", value)
     return False
+
+
+def safe_float(value):
+    """Safely convert a value to float, return 0.0 on failure."""
+    try:
+        return float(value) if value not in (None, False, '') else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class SchemeImportController(http.Controller):
@@ -44,6 +43,8 @@ class SchemeImportController(http.Controller):
 
         if not file_path or not os.path.exists(file_path):
             return f"<h1>Error</h1><p>File not found at {file_path}</p>"
+
+        errors = []
 
         try:
             workbook = openpyxl.load_workbook(file_path, data_only=True)
@@ -59,141 +60,164 @@ class SchemeImportController(http.Controller):
             count_lines = 0
 
             for row_idx in range(2, sheet.max_row + 1):
-                def get_v(col_name, _row=row_idx):          # capture row index in closure
+
+                def get_v(col_name, _row=row_idx):
                     idx = h_map.get(col_name)
                     return sheet.cell(row=_row, column=idx).value if idx else False
 
-                current_ticket_raw = get_v('Ticket Number')
-                if current_ticket_raw:
-                    last_valid_ticket = str(current_ticket_raw).strip()
+                # ── PER-ROW SAVEPOINT ──────────────────────────────────────────
+                # If anything fails inside, we roll back only this row and
+                # continue – the transaction itself stays healthy.
+                try:
+                    with request.env.cr.savepoint():
 
-                if not last_valid_ticket:
-                    continue
+                        current_ticket_raw = get_v('Ticket Number')
+                        if current_ticket_raw:
+                            last_valid_ticket = str(current_ticket_raw).strip()
 
-                # ----------------------------------------------------------------
-                # 1.  Enrollment Logic
-                # ----------------------------------------------------------------
-                scheme_id = scheme_tracker.get(last_valid_ticket)
-                if not scheme_id:
-                    existing_scheme = request.env['jewellery.scheme.enrollment'].search([
-                        ('ticket_number', '=', last_valid_ticket)
-                    ], limit=1)
+                        if not last_valid_ticket:
+                            continue
 
-                    if existing_scheme:
-                        scheme_id = existing_scheme.id
-                    else:
-                        partner_name = str(get_v('Partner')).strip() if get_v('Partner') else False
-                        if partner_name:
-                            partner = self._find_or_create_partner(partner_name, get_v('Phone'))
-                            scheme_id = request.env['jewellery.scheme.enrollment'].create({
-                                'name': get_v('Name'),
-                                'ticket_number': last_valid_ticket,
-                                'partner_id': partner.id,
-                                'phone': get_v('Phone'),
-                                'whatsapp_number': get_v('Whatsapp Number'),
-                                'address': get_v('Address'),
-                                'duration': get_v('Duration'),
-                                'installment_amount': get_v('Installment Amount'),
-                                'total_paid': get_v('Total Paid'),
-                                'balance_amount': get_v('Balance Amount'),
-                                'state': str(get_v('State')).lower() if get_v('State') else 'draft',
-                                'active': True if str(get_v('Active')).lower() in ['true', '1', 'yes'] else False,
-                                'nominee': get_v('Nominee'),
-                            }).id
-                            count_scheme += 1
+                        # --------------------------------------------------------
+                        # 1.  Enrollment Logic
+                        # --------------------------------------------------------
+                        scheme_id = scheme_tracker.get(last_valid_ticket)
+                        if not scheme_id:
+                            existing_scheme = request.env['jewellery.scheme.enrollment'].search([
+                                ('ticket_number', '=', last_valid_ticket)
+                            ], limit=1)
 
-                    if scheme_id:
-                        scheme_tracker[last_valid_ticket] = scheme_id
+                            if existing_scheme:
+                                scheme_id = existing_scheme.id
+                            else:
+                                partner_name = str(get_v('Partner')).strip() if get_v('Partner') else False
+                                if partner_name:
+                                    partner = self._find_or_create_partner(partner_name, get_v('Phone'))
+                                    if not partner:
+                                        raise ValueError(f"Could not find/create partner '{partner_name}'")
 
-                # ----------------------------------------------------------------
-                # 2.  Installment + Journal Entry Logic
-                # ----------------------------------------------------------------
-                line_date_raw = get_v('Scheme Line/Date')
-                line_amount   = get_v('Scheme Line/Amount')
+                                    active_raw = get_v('Active')
+                                    is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
 
-                # FIX 1: Always parse the date – handles 'DD-MM-YYYY' strings and
-                #         native date/datetime objects returned by openpyxl.
-                line_date = parse_date(line_date_raw)
+                                    scheme_id = request.env['jewellery.scheme.enrollment'].create({
+                                        'name': get_v('Name'),
+                                        'ticket_number': last_valid_ticket,
+                                        'partner_id': partner.id,
+                                        'phone': get_v('Phone'),
+                                        'whatsapp_number': get_v('Whatsapp Number'),
+                                        'address': get_v('Address'),
+                                        'duration': get_v('Duration'),
+                                        'installment_amount': safe_float(get_v('Installment Amount')),
+                                        'total_paid': safe_float(get_v('Total Paid')),
+                                        'balance_amount': safe_float(get_v('Balance Amount')),
+                                        'state': str(get_v('State')).lower() if get_v('State') else 'draft',
+                                        'active': is_active,
+                                        'nominee': get_v('Nominee'),
+                                    }).id
+                                    count_scheme += 1
 
-                if scheme_id and (line_date or line_amount):
-                    journal_name = get_v('Scheme Line/Journal')
-                    journal      = self._find_m2o('account.journal', journal_name)
+                            if scheme_id:
+                                scheme_tracker[last_valid_ticket] = scheme_id
 
-                    excel_move_id   = self._find_m2o('account.move', get_v('Scheme Line/Move'))
-                    generated_move_id = False
+                        # --------------------------------------------------------
+                        # 2.  Installment + Journal Entry Logic
+                        # --------------------------------------------------------
+                        line_date_raw = get_v('Scheme Line/Date')
+                        line_amount   = get_v('Scheme Line/Amount')
+                        line_date     = parse_date(line_date_raw)
+                        line_amount_f = safe_float(line_amount)
 
-                    # FIX 2: Proper double-entry journal entry
-                    #   DEBIT  → Bank / Cash account  (money received)
-                    #   CREDIT → Scheme Liability / Receivable account
-                    if not excel_move_id and journal and line_amount:
-                        try:
-                            # Debit side: bank / cash account linked to the journal
-                            debit_account_id = journal.default_account_id.id
+                        if not scheme_id or not (line_date or line_amount_f):
+                            continue
 
-                            # Credit side: scheme liability account.
-                            # Priority: account code 210100 (customise as needed)
-                            # Fallback: outstanding receipts account of the journal
-                            liability_account = request.env['account.account'].search(
-                                [('code', '=', '210100')], limit=1
-                            )
-                            if not liability_account:
-                                liability_account = journal.payment_credit_account_id  # Odoo 16/17
+                        journal_name      = get_v('Scheme Line/Journal')
+                        journal           = self._find_m2o('account.journal', journal_name)
+                        excel_move_id     = self._find_m2o('account.move', get_v('Scheme Line/Move'))
+                        generated_move_id = False
 
-                            credit_account_id = (
-                                liability_account.id
-                                if liability_account
-                                else debit_account_id        # last resort (keeps balanced)
-                            )
+                        if not excel_move_id and journal and line_amount_f:
+                            # Inner savepoint so a bad journal entry does not
+                            # kill the installment line creation either.
+                            try:
+                                with request.env.cr.savepoint():
+                                    debit_account_id = journal.default_account_id.id
 
-                            if debit_account_id:
-                                move_vals = {
-                                    'journal_id': journal.id,
-                                    'date': line_date or fields.Date.today(),
-                                    'ref': f"Scheme Payment: {last_valid_ticket}",
-                                    'move_type': 'entry',
-                                    'line_ids': [
-                                        # Debit: Bank/Cash – money comes IN
-                                        (0, 0, {
-                                            'name': f'Scheme Payment – {last_valid_ticket}',
-                                            'account_id': debit_account_id,
-                                            'debit': float(line_amount),
-                                            'credit': 0.0,
-                                        }),
-                                        # Credit: Scheme Liability – obligation recorded
-                                        (0, 0, {
-                                            'name': f'Scheme Liability – {last_valid_ticket}',
-                                            'account_id': credit_account_id,
-                                            'debit': 0.0,
-                                            'credit': float(line_amount),
-                                        }),
-                                    ],
-                                }
-                                new_move = request.env['account.move'].create(move_vals)
-                                new_move.action_post()
-                                generated_move_id = new_move.id
-                                _logger.info(
-                                    "Row %s: Journal entry created (id=%s) for ticket %s – amount %.2f",
-                                    row_idx, generated_move_id, last_valid_ticket, float(line_amount)
+                                    if not debit_account_id:
+                                        raise ValueError(
+                                            f"Journal '{journal_name}' has no default account configured."
+                                        )
+
+                                    liability_account = request.env['account.account'].search(
+                                        [('code', '=', '210100')], limit=1
+                                    )
+                                    if not liability_account:
+                                        liability_account = journal.payment_credit_account_id
+
+                                    credit_account_id = (
+                                        liability_account.id if liability_account else debit_account_id
+                                    )
+
+                                    move_vals = {
+                                        'journal_id': journal.id,
+                                        'date': line_date or fields.Date.today(),
+                                        'ref': f"Scheme Payment: {last_valid_ticket}",
+                                        'move_type': 'entry',
+                                        'line_ids': [
+                                            (0, 0, {
+                                                'name': f'Scheme Payment - {last_valid_ticket}',
+                                                'account_id': debit_account_id,
+                                                'debit': line_amount_f,
+                                                'credit': 0.0,
+                                            }),
+                                            (0, 0, {
+                                                'name': f'Scheme Liability - {last_valid_ticket}',
+                                                'account_id': credit_account_id,
+                                                'debit': 0.0,
+                                                'credit': line_amount_f,
+                                            }),
+                                        ],
+                                    }
+                                    new_move = request.env['account.move'].create(move_vals)
+                                    new_move.action_post()
+                                    generated_move_id = new_move.id
+                                    _logger.info(
+                                        "Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f",
+                                        row_idx, generated_move_id, last_valid_ticket, line_amount_f
+                                    )
+                            except Exception as move_err:
+                                _logger.warning(
+                                    "Row %s: Journal entry skipped - %s", row_idx, str(move_err)
                                 )
-                        except Exception as move_err:
-                            _logger.error("Row %s: Move creation failed – %s", row_idx, str(move_err))
+                                errors.append(f"Row {row_idx} move: {move_err}")
+                                # installment line is still created below without a move
 
-                    # Create the installment line
-                    request.env['jewellery.scheme.installment'].create({
-                        'enrollment_id':  scheme_id,
-                        'date':           line_date,          # parsed date object
-                        'amount':         line_amount,
-                        'journal_id':     journal.id if journal else False,
-                        'state':          str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'draft',
-                        'move_id':        excel_move_id.id if excel_move_id else generated_move_id,
-                        'transaction_id': get_v('Scheme Line/Transaction ID'),
-                    })
-                    count_lines += 1
+                        request.env['jewellery.scheme.installment'].create({
+                            'enrollment_id':  scheme_id,
+                            'date':           line_date or fields.Date.today(),
+                            'amount':         line_amount_f,
+                            'journal_id':     journal.id if journal else False,
+                            'state':          str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'draft',
+                            'move_id':        excel_move_id.id if excel_move_id else generated_move_id,
+                            'transaction_id': get_v('Scheme Line/Transaction ID'),
+                        })
+                        count_lines += 1
+
+                except Exception as row_err:
+                    _logger.error("Row %s skipped - %s", row_idx, str(row_err))
+                    errors.append(f"Row {row_idx}: {row_err}")
+                    continue   # transaction is still alive; move to next row
 
             request.env.cr.commit()
+
+            error_html = ""
+            if errors:
+                error_items = "".join(f"<li>{e}</li>" for e in errors)
+                error_html = f"<h3>Skipped rows ({len(errors)}):</h3><ul>{error_items}</ul>"
+
             return (
-                f"<h1>Import Success</h1>"
-                f"<p>Enrollments: {count_scheme} | Installments: {count_lines}</p>"
+                f"<h1>Import Complete</h1>"
+                f"<p>Enrollments created: {count_scheme} | Installments created: {count_lines}</p>"
+                f"{error_html}"
             )
 
         except Exception as e:
