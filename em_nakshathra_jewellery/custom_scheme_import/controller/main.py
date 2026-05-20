@@ -59,15 +59,23 @@ class SchemeImportController(http.Controller):
             count_scheme = 0
             count_lines = 0
 
+            # ── Account cache: keyed by journal.id so we look up once per journal ──
+            # Structure: { journal_id: (opening_balance_account, debtors_account) }
+            _account_cache = {}
+
             for row_idx in range(2, sheet.max_row + 1):
+
+                # ── Guard: if the DB cursor was killed by a PG-level error, stop now ──
+                if request.env.cr.closed:
+                    _logger.error("Cursor closed unexpectedly – stopping import at row %s", row_idx)
+                    errors.append(f"Row {row_idx}: cursor closed – import stopped early")
+                    break
 
                 def get_v(col_name, _row=row_idx):
                     idx = h_map.get(col_name)
                     return sheet.cell(row=_row, column=idx).value if idx else False
 
                 # ── PER-ROW SAVEPOINT ──────────────────────────────────────────
-                # If anything fails inside, we roll back only this row and
-                # continue – the transaction itself stays healthy.
                 try:
                     with request.env.cr.savepoint():
 
@@ -136,78 +144,75 @@ class SchemeImportController(http.Controller):
                         generated_move_id = False
 
                         if not excel_move_id and journal and line_amount_f:
-                            # Inner savepoint so a bad journal entry does not
-                            # kill the installment line creation either.
-                            try:
-                                with request.env.cr.savepoint():
-                                    # Find Opening Balance Account
-                                    opening_balance_account = request.env['account.account'].search([
-                                        ('company_id', '=', journal.company_id.id),
-                                        '|',
-                                        ('name', 'ilike', 'opening balance'),
-                                        ('account_type', '=', 'current_assets')
-                                    ], limit=1)
-
-                                    if not opening_balance_account:
-                                        raise ValueError(f"Opening Balance account not found for company {journal.company_id.name}.")
-
-                                    # Find Debtors Account
-                                    debtors_account = request.env['account.account'].search([
-                                        ('company_id', '=', journal.company_id.id),
-                                        '|',
-                                        ('name', 'ilike', 'debtor'),
-                                        ('account_type', '=', 'asset_receivable')
-                                    ], limit=1)
-                                    
-                                    if not debtors_account:
-                                        # Fallback to partner's receivable account if available
-                                        partner = request.env['res.partner'].browse(scheme_tracker.get(last_valid_ticket, request.env['jewellery.scheme.enrollment']).partner_id.id) if scheme_tracker.get(last_valid_ticket) else False
-                                        if partner and hasattr(partner, 'property_account_receivable_id'):
-                                            partner_account = partner.with_company(journal.company_id).property_account_receivable_id
-                                            if partner_account:
-                                                debtors_account = partner_account
-                                        
-                                        if not debtors_account:
-                                            raise ValueError(f"Debtors account not found for company {journal.company_id.name}.")
-
-                                    scheme_record = request.env['jewellery.scheme.enrollment'].browse(scheme_id)
-                                    line_partner_id = scheme_record.partner_id.id if scheme_record else False
-
-                                    move_vals = {
-                                        'journal_id': journal.id,
-                                        'date': line_date or fields.Date.today(),
-                                        'ref': f"Scheme Payment: {last_valid_ticket}",
-                                        'move_type': 'entry',
-                                        'line_ids': [
-                                            (0, 0, {
-                                                'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
-                                                'account_id': opening_balance_account.id,
-                                                'debit': line_amount_f,
-                                                'credit': 0.0,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                            (0, 0, {
-                                                'name': f'Scheme Payment - {last_valid_ticket}',
-                                                'account_id': debtors_account.id,
-                                                'debit': 0.0,
-                                                'credit': line_amount_f,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                        ],
-                                    }
-                                    new_move = request.env['account.move'].create(move_vals)
-                                    new_move.action_post()
-                                    generated_move_id = new_move.id
-                                    _logger.info(
-                                        "Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f",
-                                        row_idx, generated_move_id, last_valid_ticket, line_amount_f
-                                    )
-                            except Exception as move_err:
-                                _logger.warning(
-                                    "Row %s: Journal entry skipped - %s", row_idx, str(move_err)
+                            # ── Resolve accounts once per journal (cached) ──────
+                            if journal.id not in _account_cache:
+                                ob_acc = request.env['account.account'].search([
+                                    ('company_id', '=', journal.company_id.id),
+                                    '|',
+                                    ('name', 'ilike', 'opening balance'),
+                                    ('account_type', '=', 'current_assets'),
+                                ], limit=1)
+                                dr_acc = request.env['account.account'].search([
+                                    ('company_id', '=', journal.company_id.id),
+                                    '|',
+                                    ('name', 'ilike', 'debtor'),
+                                    ('account_type', '=', 'asset_receivable'),
+                                ], limit=1)
+                                _account_cache[journal.id] = (ob_acc, dr_acc)
+                                _logger.info(
+                                    "Account cache populated for journal '%s' (id=%s): OB=%s, DR=%s",
+                                    journal.name, journal.id,
+                                    ob_acc.name if ob_acc else 'NOT FOUND',
+                                    dr_acc.name if dr_acc else 'NOT FOUND',
                                 )
-                                errors.append(f"Row {row_idx} move: {move_err}")
-                                # installment line is still created below without a move
+
+                            opening_balance_account, debtors_account = _account_cache[journal.id]
+
+                            if not opening_balance_account:
+                                _logger.warning(
+                                    "Row %s: Opening Balance account not found for company '%s' – skipping journal entry",
+                                    row_idx, journal.company_id.name,
+                                )
+                                errors.append(f"Row {row_idx} move: Opening Balance account not found for company '{journal.company_id.name}'")
+                            elif not debtors_account:
+                                _logger.warning(
+                                    "Row %s: Debtors account not found for company '%s' – skipping journal entry",
+                                    row_idx, journal.company_id.name,
+                                )
+                                errors.append(f"Row {row_idx} move: Debtors account not found for company '{journal.company_id.name}'")
+                            else:
+                                scheme_record = request.env['jewellery.scheme.enrollment'].browse(scheme_id)
+                                line_partner_id = scheme_record.partner_id.id if scheme_record else False
+
+                                move_vals = {
+                                    'journal_id': journal.id,
+                                    'date': line_date or fields.Date.today(),
+                                    'ref': f"Scheme Payment: {last_valid_ticket}",
+                                    'move_type': 'entry',
+                                    'line_ids': [
+                                        (0, 0, {
+                                            'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
+                                            'account_id': opening_balance_account.id,
+                                            'debit': line_amount_f,
+                                            'credit': 0.0,
+                                            'partner_id': line_partner_id,
+                                        }),
+                                        (0, 0, {
+                                            'name': f'Scheme Payment - {last_valid_ticket}',
+                                            'account_id': debtors_account.id,
+                                            'debit': 0.0,
+                                            'credit': line_amount_f,
+                                            'partner_id': line_partner_id,
+                                        }),
+                                    ],
+                                }
+                                new_move = request.env['account.move'].create(move_vals)
+                                new_move.action_post()
+                                generated_move_id = new_move.id
+                                _logger.info(
+                                    "Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f",
+                                    row_idx, generated_move_id, last_valid_ticket, line_amount_f
+                                )
 
                         request.env['jewellery.scheme.installment'].create({
                             'enrollment_id':  scheme_id,
