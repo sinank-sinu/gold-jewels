@@ -1,0 +1,16 @@
+<odoo>
+    <menuitem id="menu_product_label_root"
+          name="Location Wise Products"
+          parent="em_jewellery_management.menu_jewellery_products_root" sequence="60"
+          action="custom_label_user.action_location_wise_stock"/>
+
+    <menuitem
+        id="menu_ornament_internal_transfer"
+        name="Internal Transfers"
+        parent="em_jewellery_management.menu_jewellery_products_root"
+        action="stock.action_picking_tree_internal"
+        sequence="61"
+        groups="custom_label_user.group_product_label_user"
+    />
+</odoo>
+   

@@ -1,0 +1,12 @@
+<odoo>
+    <record id="view_employee_form_inherit_product_label" model="ir.ui.view">
+        <field name="name">employee.form.inherit.product.label</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group/field[@name='destination_loc_id']" position="after">
+                <field name="label_location_id"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

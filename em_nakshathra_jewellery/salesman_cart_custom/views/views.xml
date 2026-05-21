@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Sequence Definition for Cart References -->
+    <record id="seq_salesman_cart" model="ir.sequence">
+        <field name="name">Salesman Cart Reference</field>
+        <field name="code">salesman.cart</field>
+        <field name="prefix">CART/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <!-- Client Action for Frontend OWL Dashboard Tray View -->
+    <record id="action_salesman_cart_dashboard" model="ir.actions.client">
+        <field name="name">Salesman Tablet Cart</field>
+        <field name="tag">salesman_cart_dashboard_tags</field>
+        <field name="target">current</field>
+    </record>
+
+    <!--  -->
+    <menuitem id="menu_salesman_cart_dashboard" 
+              name="Salesman Tablet Cart" 
+              parent="em_jewellery_management.menu_jewellery_root" 
+              action="action_salesman_cart_dashboard" 
+              sequence="5"/>
+    <!-- User Form Inherit View to Add Location Field -->
+    <record id="view_users_form_inherit_tray" model="ir.ui.view">
+        <field name="name">res.users.form.inherit.tray</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='preferences']" position="after">
+                <page string="Jewellery Showroom Setup" name="jewellery_setup">
+                    <group>
+                        <field name="salesman_location_id" required="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
+
+
+<!-- <?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    Sequence Definition for Cart References
+    <record id="seq_salesman_cart" model="ir.sequence">
+        <field name="name">Salesman Cart Reference</field>
+        <field name="code">salesman.cart</field>
+        <field name="prefix">CART/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    Client Action for Frontend OWL Dashboard Tray View
+    <record id="action_salesman_cart_dashboard" model="ir.actions.client">
+        <field name="name">Salesman Tablet Cart</field>
+        <field name="tag">salesman_cart_dashboard_tags</field>
+        <field name="target">current</field>
+    </record>
+
+    Base Root Menu Structure (Jewellery Module integration)
+    <menuitem id="menu_jewellery_root" name="Jewellery Management" sequence="10" web_icon="stock,static/description/icon.png"/>
+    
+    <menuitem id="menu_jewellery_showroom" name="Showroom Operations" parent="menu_jewellery_root" sequence="1"/>
+    
+    Dedicated Tablet Interactive Dashboard Menu
+    <menuitem id="menu_salesman_cart_dashboard" 
+              name="Salesman Tablet Cart" 
+              parent="menu_jewellery_showroom" 
+              action="action_salesman_cart_dashboard" 
+              sequence="1"/>
+
+    User Form Inherit View to Add Location Field
+    <record id="view_users_form_inherit_tray" model="ir.ui.view">
+        <field name="name">res.users.form.inherit.tray</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='preferences']" position="after">
+                <page string="Jewellery Showroom Setup" name="jewellery_setup">
+                    <group>
+                        <field name="salesman_location_id" required="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo> -->

@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_salesman_cart,access_salesman_cart,model_salesman_cart,base.group_user,1,1,1,1
+access_salesman_cart_line,access_salesman_cart_line,model_salesman_cart_line,base.group_user,1,1,1,1
+
+
