@@ -15,6 +15,7 @@ class SalesmanCartLine(models.Model):
     price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal')
     currency_id = fields.Many2one('res.currency', related='cart_id.currency_id')
     picking_id = fields.Many2one('stock.picking', string='Linked Internal Transfer', readonly=True)
+    active_label_name = fields.Char(string='Active Label Reference', related='product_id.active_label_name')
 
     @api.depends('qty', 'price_unit')
     def _compute_subtotal(self):

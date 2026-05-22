@@ -6,7 +6,7 @@
                 
                 <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center border-bottom pb-2 mb-3 gap-2">
                     <h4 class="mb-0 font-weight-bold text-dark">Jewellery Catalog Showcase</h4>
-                    
+                    <!--ORIGINAL-->
                     <div class="input-group" style="max-width: 320px;">
                         <span class="input-group-text bg-light border-end-0 text-muted">
                             <i class="fa fa-search"/>
