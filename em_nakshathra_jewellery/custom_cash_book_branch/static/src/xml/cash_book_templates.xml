@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="dynamic_accounts_report.csh_b_template_new" t-inherit-mode="extension" owl="1">
+        
+        <xpath expr="//div[hasclass('sub_container_right')]/div[hasclass('journal')]" position="before">
+            <div class="journal" style="margin-right: 10px;">
+                <a type="button" class="dropdown-toggle" data-bs-toggle="dropdown">
+                    <span class="fa fa-building" title="Branches" role="img"/>
+                    Branches
+                    <t t-if="state.selected_branch_list and state.selected_branch_list.length > 0">:
+                        <t t-foreach="state.selected_branch_list" t-as="branch_key" t-key="branch_key_index">
+                            <t t-foreach="state.branches" t-as="branch" t-key="branch_index">
+                                <t t-if="branch['id'] == branch_key">
+                                    <t t-esc="branch['name']"/>
+                                </t>
+                            </t>
+                            <t t-if="branch_key_index != Object.keys(state.selected_branch_list).length - 1">, </t>
+                        </t>
+                    </t>
+                </a>
+                <div class="dropdown-menu" role="menu">
+                    <div class="list-group">
+                        <t t-if="state.branches and state.branches.length > 0">
+                            <t t-foreach="state.branches" t-as="branch" t-key="branch.id">
+                                <button class="report-filter-button"
+                                        t-att-data-value="'branch'"
+                                        t-att-data-id="branch.id"
+                                        type="button"
+                                        t-on-click="applyFilter">
+                                    <t t-esc="branch.name"/>
+                                </button>
+                            </t>
+                        </t>
+                    </div>
+                </div>
+            </div>
+        </xpath>
+
+        <xpath expr="//table/thead/tr/th[text()='Journal']" position="after">
+            <th>Branch</th>
+        </xpath>
+
+        <xpath expr="//tr[hasclass('collapse')]/th[span/t[contains(@t-esc, 'journal_id')]]" position="after">
+            <th>
+                <span>
+                    <t t-if="valuelist['branch_id']" t-esc="valuelist['branch_id'][1]"/>
+                    <t t-else="">-</t>
+                </span>
+            </th>
+        </xpath>
+
+    </t>
+</templates>

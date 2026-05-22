@@ -9,3 +9,4 @@ from . import old_gold_batch
 from . import fine_rate_master
 from . import stock_rule
 from . import purchase_order
+from . import account_move
