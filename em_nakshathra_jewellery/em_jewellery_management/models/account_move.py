@@ -9,6 +9,7 @@ class AccountMove(models.Model):
     _name = 'account.move'
     _inherit = 'account.move'
 
+    unfix = fields.Boolean(string="Unfix", default=False)
     job_work_id = fields.Many2one('jewellery.job.work')
     old_gold_price = fields.Monetary(string="Old Gold Price")
     custom_total = fields.Monetary(string="Paid to")

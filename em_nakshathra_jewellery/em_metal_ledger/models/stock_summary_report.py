@@ -133,7 +133,7 @@ class StockSummaryReportWizard(models.TransientModel):
             label = self.env['product.label'].search([
                 ('product_id', '=', product.id)
             ], limit=1)
-
+            purity_id = label.purity_id.id if label and label.purity_id else False
             ageing = label.age if label else 0
             
             # Only add to report if there is any activity or stock
@@ -159,7 +159,7 @@ class StockSummaryReportWizard(models.TransientModel):
                     'turnover_ratio': turnover_ratio,
                     'dio': dio,
                     'stock_gap': stock_gap,
-                    'purity_id': product.purity_id.id,
+                    'purity_id': purity_id,
                     'ageing': ageing,
                 })
 
