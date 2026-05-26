@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<odoo>
+
+    <record id="view_document_form_inherit_renewal" model="ir.ui.view">
+        <field name="name">document.document.form.renewal</field>
+        <field name="model">document.document</field>
+        <field name="inherit_id" ref="document_management_system.view_document_form"/>
+        <field name="arch" type="xml">
+            <!-- ===================================================== -->
+            <!-- ADD RENEW BUTTON -->
+            <!-- ===================================================== -->
+            <xpath expr="//sheet/div[@class='oe_title'][1]" position="before">
+                <div class="oe_button_box" name="button_box">
+                    <button name="action_open_renew_wizard"
+                        type="object"
+                        string="Renew Document"
+                        class="oe_stat_button btn-primary"
+                        icon="fa-refresh"/>
+                </div>
+            </xpath>
+            <!-- ===================================================== -->
+            <!-- ADD RENEWAL COUNT -->
+            <!-- ===================================================== -->
+            <xpath expr="//field[@name='date_to']" position="after">
+                <field name="renewal_count" readonly="1"/>
+            </xpath>
+            <!-- ===================================================== -->
+            <!-- ADD NOTEBOOK -->
+            <!-- ===================================================== -->
+            <!-- <xpath expr="//sheet" position="inside">
+                <notebook>
+                    ATTACHMENTS
+                    <page string="Attachments">
+                        <field name="attachment_ids" widget="many2many_binary"/>
+                    </page>
+                    RENEWAL HISTORY
+                    <page string="Renewal History">
+                        <field name="renewal_history_ids">
+                            <tree>
+                                <field name="renewed_on"/>
+                                <field name="renewed_by"/>
+                                <field name="old_expiry_date"/>
+                                <field name="new_expiry_date"/>
+                            </tree>
+                        </field>
+                    </page>
+                </notebook>
+            </xpath> -->
+            <!--Replace child_ids with renewal_history_ids-->
+            <xpath expr="//label[@for='child_ids']" position="replace">
+                <label for="renewal_history_ids" string="Renewal History"/>
+            </xpath>
+            <!-- ============================================== -->
+            <!-- REPLACE CHILD IDS -->
+            <!-- ============================================== -->
+            <xpath expr="//field[@name='child_ids']" position="replace">
+                <field name="renewal_history_ids">
+                    <tree>
+                        <field name="renewed_on"/>
+                        <field name="renewed_by"/>
+                        <field name="old_expiry_date"/>
+                        <field name="new_expiry_date"/>
+                    </tree>
+                </field>
+            </xpath>
+        </field>
+    </record>
+</odoo>

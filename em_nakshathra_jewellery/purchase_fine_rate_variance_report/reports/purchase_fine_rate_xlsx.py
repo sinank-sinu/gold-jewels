@@ -132,7 +132,7 @@ class PurchaseFineRateXlsx(models.AbstractModel):
 
             for line in po.order_line:
 
-                po_rate = line.metal_amount or 0.0
+                po_rate = line.gold_rate or 0.0
 
                 difference = latest_fine_rate - po_rate
 

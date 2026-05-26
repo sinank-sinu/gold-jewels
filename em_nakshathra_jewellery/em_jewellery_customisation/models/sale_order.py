@@ -7,6 +7,8 @@ from odoo.exceptions import UserError, ValidationError
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
+    amount_rounding = fields.Char(string="Amount Rounding")
+    cash_rounding_id = fields.Many2one('account.cash.rounding')
     round_off_amount = fields.Monetary(string="Round Off", compute="_compute_round_off")
 
     def _get_customer_scheme_records(self):

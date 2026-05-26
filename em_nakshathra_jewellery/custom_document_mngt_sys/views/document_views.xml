@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_document_form_inherit_dates" model="ir.ui.view">
+        <field name="name">document.document.form.inherit.dates</field>
+        <field name="model">document.document</field>
+        <field name="inherit_id" ref="document_management_system.view_document_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <group col="2">
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                </group>
+                <group>
+                    <field name="notification_date"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
