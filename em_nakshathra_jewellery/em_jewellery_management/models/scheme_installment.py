@@ -31,24 +31,37 @@ class JewellerySchemeInstallment(models.Model):
             if rec.state == 'paid':
                 continue
 
-            account = rec.journal_id.default_account_id.id
+            # account = rec.journal_id.default_account_id.id
+            debtors_account = self.env['account.account'].search([
+                ('code', '=', '100400')
+            ], limit=1)
+
+            if not debtors_account:
+                raise ValidationError("Debtors account 100400 not found")
+
+            # Liability Account
+            liability_account = rec.journal_id.default_account_id
 
             move = self.env['account.move'].create({
                 'move_type': 'entry',
                 'journal_id': rec.journal_id.id,
                 'line_ids': [
                     (0, 0, {
-                        'name': 'Scheme Payment',
-                        'debit': rec.amount,
+                        'name': 'Scheme Liability',
+                        'partner_id': rec.enrollment_id.partner_id.id,
                         'credit': 0.0,
-                        'account_id': account
+                        'debit': rec.amount,
+                        'account_id': liability_account.id
                     }),
                     (0, 0, {
-                        'name': 'Scheme Liability',
-                        'credit': rec.amount,
+                        'name': 'Scheme Payment',
+                        'partner_id': rec.enrollment_id.partner_id.id,
                         'debit': 0.0,
-                        'account_id': account
-                    }),
+                        'credit': rec.amount,
+                        'account_id': debtors_account.id
+                    })
+                  
+                    
                 ]
             })
 

@@ -7,9 +7,27 @@ from odoo.exceptions import UserError, ValidationError
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
-    amount_rounding = fields.Char(string="Amount Rounding")
+    amount_rounding = fields.Monetary(
+        string="Round Off",
+        currency_field='currency_id',
+        default=0.0,
+        store=True,
+    )
+    # amount_rounding = fields.Char(string="Amount Rounding")
     cash_rounding_id = fields.Many2one('account.cash.rounding')
     round_off_amount = fields.Monetary(string="Round Off", compute="_compute_round_off")
+    has_gold_bullion = fields.Boolean(
+        compute="_compute_has_gold_bullion",
+        store=True,
+    )
+    @api.depends('order_line.product_id')
+    def _compute_has_gold_bullion(self):
+        for order in self:
+            order.has_gold_bullion = any(
+                line.product_template_id.name == 'Gold Bullion'
+                for line in order.order_line
+            )
+
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
@@ -274,7 +292,6 @@ class SaleOrder(models.Model):
 
         return True
 
-    
     @api.depends('amount_total')
     def _compute_round_off(self):
         for order in self:
@@ -315,6 +332,7 @@ class SaleOrder(models.Model):
             )
 
             order.tax_totals = tax_totals
+<<<<<<< HEAD
 
     @api.depends(
         'order_line.price_total',
@@ -335,3 +353,22 @@ class SaleOrder(models.Model):
 
             rounded_total = ceil(order.amount_total / 100.0) * 100
             order.amount_total = rounded_total
+=======
+ 
+    # @api.depends('order_line.price_total','order_line.price_tax')
+    # def _compute_amounts(self):
+    #     super()._compute_amounts()
+
+    #     for order in self:
+
+    #         # Skip Gold Bullion
+    #         has_gold_bullion = order.order_line.filtered(
+    #             lambda l: l.product_id.categ_id.name == 'Gold Bullion'
+    #         )
+
+    #         if has_gold_bullion:
+    #             continue
+
+    #         rounded_total = ceil(order.amount_total / 100.0) * 100
+    #         order.amount_total = rounded_total
+>>>>>>> bi_binsha_nakshathra_changes

@@ -4,6 +4,13 @@ from odoo import models, fields, api, tools, _
 class Document(models.Model):
     _inherit = 'document.document'
 
+    category_id = fields.Many2one(
+        'document.category', 
+        string='Document Category', 
+        required=True,
+        ondelete='restrict'
+    )
+
     date_from = fields.Date(
         string='Start Date',
         help="The initialization date of the contract/document."
