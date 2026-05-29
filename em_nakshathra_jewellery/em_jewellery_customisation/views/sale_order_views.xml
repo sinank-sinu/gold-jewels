@@ -1,0 +1,15 @@
+<odoo>
+    <record id="view_sale_order_form_inherit_jewellery_customisation" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.jewellery.customisation</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='payment_term_id']" position="after">
+                    <field name="has_gold_bullion"/>
+            </xpath>
+            <xpath expr="//group[@name='sale_total']" position="inside">
+                <field name="amount_rounding" invisible="has_gold_bullion == True"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

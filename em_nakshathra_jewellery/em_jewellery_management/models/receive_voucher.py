@@ -4,6 +4,7 @@ from odoo import models, fields, api,_
 class JewelleryReceiveVoucher(models.Model):
     _name = 'jewellery.receive.voucher'
     _description = 'Receive Voucher'
+    _order = 'create_date desc'
 
     def _get_branch_domain(self):
         """methode to get branch domain"""

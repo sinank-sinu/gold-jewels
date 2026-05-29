@@ -8,6 +8,7 @@
     'data': [
         'security/ir.model.access.csv',
         'data/cron_data.xml',
+        # 'views/category_views.xml',
         'views/document_views.xml',
         'views/document_document_views.xml',
         'wizard/document_renew_wizard_views.xml',

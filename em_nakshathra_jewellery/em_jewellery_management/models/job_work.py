@@ -6,6 +6,7 @@ from odoo.tools import float_compare
 class JewelleryJobWork(models.Model):
     _name = 'jewellery.job.work'
     _description = 'Jewellery Job Work Voucher'
+    _order = 'create_date desc'
 
     def _get_branch_domain(self):
         """methode to get branch domain"""
