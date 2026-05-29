@@ -332,7 +332,6 @@ class SaleOrder(models.Model):
             )
 
             order.tax_totals = tax_totals
-<<<<<<< HEAD
 
     @api.depends(
         'order_line.price_total',
@@ -353,22 +352,3 @@ class SaleOrder(models.Model):
 
             rounded_total = ceil(order.amount_total / 100.0) * 100
             order.amount_total = rounded_total
-=======
- 
-    # @api.depends('order_line.price_total','order_line.price_tax')
-    # def _compute_amounts(self):
-    #     super()._compute_amounts()
-
-    #     for order in self:
-
-    #         # Skip Gold Bullion
-    #         has_gold_bullion = order.order_line.filtered(
-    #             lambda l: l.product_id.categ_id.name == 'Gold Bullion'
-    #         )
-
-    #         if has_gold_bullion:
-    #             continue
-
-    #         rounded_total = ceil(order.amount_total / 100.0) * 100
-    #         order.amount_total = rounded_total
->>>>>>> bi_binsha_nakshathra_changes
