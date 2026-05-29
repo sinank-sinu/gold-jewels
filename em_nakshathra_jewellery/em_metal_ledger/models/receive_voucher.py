@@ -16,7 +16,7 @@ class JewelleryReceiveVoucher(models.Model):
                     'partner_id': self.job_worker_id.id,
                     'job_type': self.job_type_selection,
                     'gross_weight': line.gross_weight,
-                    'stock_out': line.fine_weight, # Receipt is stock_out (worker's account reduces)
+                    'stock_out': line.total_fine, # Receipt is stock_out (worker's account reduces)
                     'purity_id': line.purity_id.id,
                 })
             else:

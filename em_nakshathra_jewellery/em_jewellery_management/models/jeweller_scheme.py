@@ -4,6 +4,7 @@ from odoo.tools.float_utils import float_is_zero
 class JewellerySchemeEnrollment(models.Model):
     _name = 'jewellery.scheme.enrollment'
     _description = 'Jewellery Scheme Enrollment'
+    _order = 'create_date desc'
 
     name = fields.Char(default="New")
     partner_id = fields.Many2one('res.partner', required=True)
