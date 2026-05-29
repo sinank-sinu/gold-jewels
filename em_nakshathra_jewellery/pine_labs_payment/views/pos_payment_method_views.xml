@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Extend POS Payment Method form to show Pine Labs fields -->
+    <record id="view_pos_payment_method_pinelabs" model="ir.ui.view">
+        <field name="name">pos.payment.method.pine_labs</field>
+        <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='use_payment_terminal']" position="after">
+                <group name="pinelabs_config"
+                       string="Pine Labs Configuration"
+                       invisible="use_payment_terminal != 'pine_labs'">
+                    <field name="pinelabs_terminal_id"
+                           required="use_payment_terminal == 'pine_labs'"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ══════════════════════════════════════════════════
+         Pine Labs Terminal — Form View
+         ══════════════════════════════════════════════════ -->
+    <record id="view_pinelabs_terminal_form" model="ir.ui.view">
+        <field name="name">pinelabs.terminal.form</field>
+        <field name="model">pinelabs.terminal</field>
+        <field name="arch" type="xml">
+            <form string="Pine Labs Terminal">
+                <header>
+                    <button name="action_test_connection"
+                            string="Test Connection"
+                            type="object"
+                            class="btn-secondary"
+                            icon="fa-plug"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Inactive" bg_color="bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="e.g. HO Counter 1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Branch &amp; Terminal">
+                            <field name="branch_id"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                            <field name="is_production"/>
+                            <field name="demo_mode"/>
+                        </group>
+                        <group string="Pine Labs Credentials">
+                            <field name="merchant_id"/>
+                            <field name="security_token" password="True"/>
+                            <field name="client_id"/>
+                            <field name="store_id"/>
+                            <field name="terminal_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="API Configuration">
+                            <field name="base_url"
+                                   placeholder="https://instore-ism.uat.pinelabs.com/api/CloudBasedIntegration/V1"/>
+                            <field name="auto_cancel_minutes"/>
+                        </group>
+                        <group string="Accounting (Automatic Posting)">
+                            <field name="card_journal_id" required="1"/>
+                            <field name="upi_journal_id" required="1"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-info" invisible="is_production">
+                        <i class="fa fa-info-circle me-2"/>
+                        This terminal is using the <strong>UAT (Test)</strong> environment.
+                        Enable <em>Production Mode</em> to switch to live payments.
+                    </div>
+                    <div class="alert alert-success" invisible="not is_production">
+                        <i class="fa fa-check-circle me-2"/>
+                        This terminal is using the <strong>PRODUCTION</strong> environment.
+                        Real payments will be processed.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ══════════════════════════════════════════════════
+         Pine Labs Terminal — Tree/List View
+         ══════════════════════════════════════════════════ -->
+    <record id="view_pinelabs_terminal_tree" model="ir.ui.view">
+        <field name="name">pinelabs.terminal.tree</field>
+        <field name="model">pinelabs.terminal</field>
+        <field name="arch" type="xml">
+            <tree string="Pine Labs Terminals">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="branch_id"/>
+                <field name="merchant_id"/>
+                <field name="store_id"/>
+                <field name="terminal_id"/>
+                <field name="is_production" widget="boolean_toggle"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ══════════════════════════════════════════════════
+         Action
+         ══════════════════════════════════════════════════ -->
+    <record id="action_pinelabs_terminal" model="ir.actions.act_window">
+        <field name="name">Pine Labs Terminals</field>
+        <field name="res_model">pinelabs.terminal</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No Pine Labs terminals configured yet!
+            </p>
+            <p>
+                Add a terminal for each branch. Each branch supports up to
+                <strong>2 terminals</strong>. Only Administrators can manage this.
+            </p>
+        </field>
+    </record>
+
+    <!-- ══════════════════════════════════════════════════
+         Menu — under Accounting > Configuration (Admin only)
+         ══════════════════════════════════════════════════ -->
+    <menuitem id="menu_pinelabs_terminal_config"
+              name="Pine Labs Terminals"
+              parent="account.menu_finance_configuration"
+              action="action_pinelabs_terminal"
+              sequence="200"
+              groups="base.group_system"/>
+
+</odoo>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Pine Labs Transaction List View -->
+    <record id="view_pinelabs_transaction_tree" model="ir.ui.view">
+        <field name="name">pinelabs.transaction.tree</field>
+        <field name="model">pinelabs.transaction</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="create_date"/>
+                <field name="amount"/>
+                <field name="currency_id"/>
+                <field name="state" decoration-success="state=='success'"
+                       decoration-danger="state in ('failed','cancelled')"
+                       decoration-warning="state=='waiting'"
+                       widget="badge"/>
+                <field name="pinelabs_transaction_id"/>
+                <field name="approval_code"/>
+                <field name="card_type"/>
+                <field name="payment_mode"/>
+                <field name="sale_order_id"/>
+                <field name="invoice_id"/>
+                <field name="payment_id"/>
+                <field name="pos_order_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Pine Labs Transaction Form View -->
+    <record id="view_pinelabs_transaction_form" model="ir.ui.view">
+        <field name="name">pinelabs.transaction.form</field>
+        <field name="model">pinelabs.transaction</field>
+        <field name="arch" type="xml">
+            <form string="Pine Labs Transaction">
+                <header>
+                    <button name="action_retry" string="Retry"
+                            type="object" class="btn-primary"
+                            invisible="state not in ('failed', 'cancelled')"/>
+                    <button name="action_cancel" string="Cancel"
+                            type="object" class="btn-danger"
+                            invisible="state not in ('draft', 'waiting')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,waiting,success"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Payment Details">
+                            <field name="amount"/>
+                            <field name="currency_id"/>
+                            <field name="payment_date"/>
+                        </group>
+                        <group string="Terminal Response">
+                            <field name="pinelabs_transaction_id"/>
+                            <field name="approval_code"/>
+                            <field name="card_type"/>
+                            <field name="payment_mode"/>
+                            <field name="card_number_masked"/>
+                            <field name="issuer_bank"/>
+                            <field name="retrieval_reference_number"/>
+                            <field name="batch_number"/>
+                        </group>
+                    </group>
+                    <group string="Linked Records">
+                        <field name="sale_order_id"/>
+                        <field name="invoice_id"/>
+                        <field name="payment_id"/>
+                        <field name="pos_order_id"/>
+                    </group>
+                    <group string="Configuration Used">
+                        <field name="merchant_id"/>
+                        <field name="terminal_id"/>
+                    </group>
+                    <notebook>
+                        <page string="Response Log">
+                            <field name="response_log" widget="text"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="message_ids"/>
+                    <field name="activity_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- Pine Labs Transaction Graph View -->
+    <record id="view_pinelabs_transaction_graph" model="ir.ui.view">
+        <field name="name">pinelabs.transaction.graph</field>
+        <field name="model">pinelabs.transaction</field>
+        <field name="arch" type="xml">
+            <graph string="Pine Labs Transactions" type="bar">
+                <field name="create_date" interval="day"/>
+                <field name="amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <!-- Pine Labs Transaction Pivot View -->
+    <record id="view_pinelabs_transaction_pivot" model="ir.ui.view">
+        <field name="name">pinelabs.transaction.pivot</field>
+        <field name="model">pinelabs.transaction</field>
+        <field name="arch" type="xml">
+            <pivot string="Pine Labs Transactions">
+                <field name="create_date" interval="day" type="row"/>
+                <field name="state" type="col"/>
+                <field name="amount" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- Pine Labs Transaction Action -->
+    <record id="action_pinelabs_transaction" model="ir.actions.act_window">
+        <field name="name">Pine Labs Transactions</field>
+        <field name="res_model">pinelabs.transaction</field>
+        <field name="view_mode">tree,form,graph,pivot</field>
+    </record>
+
+    <!-- Menu Items -->
+    <!-- Place under Accounting/Invoicing -> Customers -->
+    <menuitem id="menu_pinelabs_transactions"
+              name="Pine Labs Transactions"
+              parent="account.menu_finance_receivables"
+              action="action_pinelabs_transaction"
+              sequence="110"/>
+
+</odoo>

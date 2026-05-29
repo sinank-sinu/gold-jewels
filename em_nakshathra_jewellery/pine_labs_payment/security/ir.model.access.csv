@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_pinelabs_transaction_user,pinelabs.transaction.user,model_pinelabs_transaction,base.group_user,1,0,0,0
+access_pinelabs_transaction_manager,pinelabs.transaction.manager,model_pinelabs_transaction,account.group_account_manager,1,1,1,1
+access_pinelabs_transaction_pos,pinelabs.transaction.pos,model_pinelabs_transaction,point_of_sale.group_pos_user,1,1,1,0
+access_pinelabs_payment_wizard,pinelabs.payment.wizard,model_pinelabs_payment_wizard,base.group_user,1,1,1,1
+access_pinelabs_terminal_user,pinelabs.terminal.user,model_pinelabs_terminal,base.group_user,1,0,0,0
+access_pinelabs_terminal_manager,pinelabs.terminal.manager,model_pinelabs_terminal,account.group_account_manager,1,1,1,1
+access_pinelabs_terminal_system,pinelabs.terminal.system,model_pinelabs_terminal,base.group_system,1,1,1,1

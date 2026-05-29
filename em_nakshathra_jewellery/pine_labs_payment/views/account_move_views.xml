@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Add 'Pay via Pine Labs' button to Account Move form view -->
+    <record id="view_move_form_pinelabs" model="ir.ui.view">
+        <field name="name">account.move.form.pinelabs</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_register_payment']" position="attributes">
+                <!-- Always hide Register Payment — Pine Labs wizard handles all payment modes including Bank -->
+                <attribute name="invisible">True</attribute>
+            </xpath>
+            <xpath expr="//header" position="inside">
+                <button name="action_pay_via_pinelabs"
+                        string="Pay via Pine Labs"
+                        type="object"
+                        class="btn-primary"
+                        invisible="state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt')" />
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Pine Labs Payments" name="pinelabs_payments" invisible="not pinelabs_transaction_ids">
+                    <field name="pinelabs_transaction_ids" readonly="1">
+                        <tree>
+                            <field name="name"/>
+                            <field name="amount"/>
+                            <field name="state" widget="badge" 
+                                   decoration-success="state == 'success'" 
+                                   decoration-danger="state == 'failed'" 
+                                   decoration-info="state in ('draft', 'waiting')"/>
+                            <field name="payment_mode"/>
+                            <field name="approval_code"/>
+                            <field name="payment_date"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
