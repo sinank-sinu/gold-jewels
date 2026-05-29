@@ -404,25 +404,10 @@ class SaleOrder(models.Model):
             ref_name = ""
 
             if po and order.unfix:
-                bills = po.invoice_ids.filtered(lambda m: m.move_type == 'in_invoice' and m.state == 'posted')
-                if bills:
-                    reduction_amount = sum(bills.mapped('amount_total'))
-                    ref_name = po.name
-            # elif order.old_gold_bill_amount and not order.unfix:
-            #     reduction_amount = order.old_gold_bill_amount
-            #     ref_name = "Old Gold Purchase"
+                # Journal is already set to Debtors via _prepare_invoice.
+                # Vendor bill amount is displayed as a field on the invoice (vendor_bill_amount).
+                pass
 
-            if reduction_amount > 0:
-                account_id = move.invoice_line_ids[0].account_id.id if move.invoice_line_ids else False
-                if account_id:
-                    self.env['account.move.line'].with_context(check_move_validity=False).create({
-                        'move_id': move.id,
-                        'name': f"Vendor Bill Reduction from {ref_name}",
-                        'quantity': 1,
-                        'price_unit': -reduction_amount,
-                        'account_id': account_id,
-                        'tax_ids': [],
-                    })
         return moves
 
     def _create_old_gold_stock(self, og):

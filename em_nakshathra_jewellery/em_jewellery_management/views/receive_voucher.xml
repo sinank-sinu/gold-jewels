@@ -66,8 +66,12 @@
                         <field name="refinery_id" invisible="not is_refinery" required="is_refinery"/>
                         <field name="wastage_weight"/>
                         <field name="total_net_weight" readonly="1"/>
-                         <field name="job_type_selection"/>
-                        <field name="making_charge_amount" invisible="job_type_selection != 'gold_alloy'"/>
+                        <field name="job_type_selection"/>
+                        <field name="making_charge_type" invisible="job_type_selection != 'gold_alloy'"/>
+                        <field name="mc_percent" invisible="making_charge_type != 'percent' or job_type_selection != 'gold_alloy'"/>
+                        <field name="making_charge_value" invisible="making_charge_type != 'amount' or job_type_selection != 'gold_alloy'"/>
+                        <field name="rate_value" invisible="making_charge_type != 'rate_per_gram' or job_type_selection != 'gold_alloy'"/>
+                        <field name="making_charge_amount" invisible="job_type_selection != 'gold_alloy'" />
                         <field name="making_charge_bill_id" invisible="1"/>
                         <field name="source_location_id"/>
                         <field name="received_location_id"/>

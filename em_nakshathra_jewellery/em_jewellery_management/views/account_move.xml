@@ -19,6 +19,7 @@
                 <field name="is_old_gold_bill" invisible="1"/>
                 <field name="unfix" invisible="1"/>
                 <field name="old_gold_price"  invisible="not old_gold_price"/>
+                <field name="vendor_bill_amount" string="PO Amount" invisible="not unfix or move_type != 'out_invoice' or not vendor_bill_amount"/>
             </xpath>
             <xpath expr="//button[@name='action_register_payment']" position="attributes">
                 <attribute name="invisible">state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt') or is_old_gold_bill or (unfix and move_type == 'in_invoice')</attribute>

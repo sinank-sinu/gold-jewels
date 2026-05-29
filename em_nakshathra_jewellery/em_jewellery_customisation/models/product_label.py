@@ -83,6 +83,21 @@ class ProductLabel(models.Model):
             first_line = self.job_work_id.job_work_line_ids[:1]  # safely take first line
             if first_line and first_line.purity_id:
                 self.purity_id = first_line.purity_id.id
+            
+            # Fetch making charge from the related receive voucher
+            receive_vouchers = self.job_work_id.receive_voucher_ids.filtered(lambda r: r.state != 'done')
+            if not receive_vouchers:
+                receive_vouchers = self.job_work_id.receive_voucher_ids
+                
+            if receive_vouchers:
+                rv = receive_vouchers[-1] # Take the latest one
+                self.purchase_making_charge_type = rv.making_charge_type
+                if rv.making_charge_type == 'percent':
+                    self.purchase_making_charge_value = rv.mc_percent
+                elif rv.making_charge_type == 'amount':
+                    self.purchase_making_charge_value = rv.making_charge_value
+                elif rv.making_charge_type == 'rate_per_gram':
+                    self.purchase_making_charge_value = rv.rate_value
     
     @api.onchange('purchase_id')
     def _onchange_purchase_id(self):

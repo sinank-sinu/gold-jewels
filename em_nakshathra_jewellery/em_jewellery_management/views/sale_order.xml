@@ -10,7 +10,7 @@
                         type="object"
                         string="Create Invoice &amp; Pay"
                         class="btn-primary"
-                        invisible="invoice_status == 'invoiced'"/>
+                        invisible="1"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="attributes">
                 <attribute name="string">Gross Weight</attribute>

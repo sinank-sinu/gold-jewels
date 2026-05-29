@@ -45,7 +45,7 @@
                     type="object"
                     string="Create Bill &amp; Pay"
                     class="btn-primary"
-                    invisible="state != 'purchase' or invoice_ids"/>
+                    invisible="1"/>
             </xpath>
 
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="after">

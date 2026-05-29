@@ -17,6 +17,27 @@ class AccountMove(models.Model):
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
     unfix = fields.Boolean(string="Unfix", copy=False)
+    vendor_bill_amount = fields.Monetary(
+        string="PO Amount",
+        compute='_compute_vendor_bill_amount',
+        store=False,
+    )
+
+    @api.depends('unfix', 'invoice_line_ids')
+    def _compute_vendor_bill_amount(self):
+        for move in self:
+            amount = 0.0
+            if move.unfix and move.move_type == 'out_invoice':
+                # Find the linked sale order
+                sale_orders = move.line_ids.mapped('sale_line_ids.order_id')
+                for order in sale_orders:
+                    po = order.purchase_order_id
+                    if po:
+                        bills = po.invoice_ids.filtered(
+                            lambda m: m.move_type == 'in_invoice' and m.state == 'posted'
+                        )
+                        amount += sum(bills.mapped('amount_total'))
+            move.vendor_bill_amount = amount
 
     @api.model
     def default_get(self, fields_list):
@@ -44,22 +65,25 @@ class AccountMove(models.Model):
     def _compute_tax_totals(self):
         res = super()._compute_tax_totals()
         for move in self.filtered(lambda move: move.tax_totals):
-            if self.old_gold_price:
-                move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed']- self.old_gold_price
-
+            if move.old_gold_price:
+                move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed'] - move.old_gold_price
+            if move.unfix and move.move_type == 'out_invoice' and move.vendor_bill_amount:
+                move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed'] - move.vendor_bill_amount
         return res
 
     def _compute_amount_one(self):
         """Perform totals computation of a move with global discounts."""
-        if self.old_gold_price:
-            if self.amount_residual<self.old_gold_price:
-                self.custom_total = self.amount_residual - self.old_gold_price
-                self.amount_residual =0.0
-                self.payment_state ='paid'
+        deduction = self.old_gold_price or 0.0
+        if self.unfix and self.move_type == 'out_invoice':
+            deduction += self.vendor_bill_amount or 0.0
+        
+        if deduction:
+            if self.amount_residual < deduction:
+                self.custom_total = self.amount_residual - deduction
+                self.amount_residual = 0.0
+                self.payment_state = 'paid'
             else:
-                self.amount_residual = (
-                        self.amount_residual - self.old_gold_price
-                )
+                self.amount_residual = self.amount_residual - deduction
 
     @api.depends(
         "line_ids.matched_debit_ids.debit_move_id.move_id.payment_id.is_matched",
@@ -82,7 +106,7 @@ class AccountMove(models.Model):
         """Modify totals computation for including global discounts."""
         res = super()._compute_amount()
         for record in self:
-            if record.old_gold_price:
+            if record.old_gold_price or (record.unfix and record.move_type == 'out_invoice'):
                 record._compute_amount_one()
             if self.env.context.get('bypass_negative_total_check') and record.amount_total < 0:
                 record.amount_total = 0.0
