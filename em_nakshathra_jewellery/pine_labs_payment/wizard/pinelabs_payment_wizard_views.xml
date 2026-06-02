@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_pinelabs_payment_wizard_form" model="ir.ui.view">
+        <field name="name">pinelabs.payment.wizard.form</field>
+        <field name="model">pinelabs.payment.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Pay via Pine Labs">
+                <field name="state" invisible="1"/>
+                <field name="payment_method_type" invisible="1"/>
+                <sheet>
+
+                    <!-- ══════════════════════════════════════════════
+                         DRAFT STATE: Choose Payment Mode
+                         ══════════════════════════════════════════════ -->
+                    <div invisible="state != 'draft'">
+
+                        <!-- Payment Mode Title -->
+                        <div style="margin-bottom: 16px;">
+                            <h5 style="font-weight: 700; color: #374151; margin: 0 0 4px 0; font-size: 14px;">
+                                Select Payment Mode
+                            </h5>
+                            <span style="color: #6B7280; font-size: 12px;">
+                                Choose how the customer will pay
+                            </span>
+                        </div>
+
+                        <!-- Payment Mode Buttons Row -->
+                        <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+
+                            <!-- CARD Button -->
+                            <button name="action_select_card" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #D1D5DB;
+                                           border-radius: 12px; background: white; cursor: pointer;
+                                           transition: all 0.2s; text-align: center;"
+                                    invisible="payment_method_type == 'card'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">💳</div>
+                                <div style="font-weight: 600; color: #374151; font-size: 13px;">Card</div>
+                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Credit / Debit</div>
+                            </button>
+
+                            <!-- CARD Button SELECTED -->
+                            <button name="action_select_card" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #4F46E5;
+                                           border-radius: 12px; background: #EEF2FF; cursor: pointer;
+                                           text-align: center; box-shadow: 0 0 0 3px rgba(79,70,229,0.15);"
+                                    invisible="payment_method_type != 'card'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">💳</div>
+                                <div style="font-weight: 700; color: #4F46E5; font-size: 13px;">Card</div>
+                                <div style="color: #6366F1; font-size: 11px; margin-top: 2px;">Credit / Debit</div>
+                                <div style="margin-top: 6px;">
+                                    <span style="background: #4F46E5; color: white; border-radius: 20px;
+                                                 padding: 2px 8px; font-size: 10px; font-weight: 600;">✓ Selected</span>
+                                </div>
+                            </button>
+
+                            <!-- UPI Button -->
+                            <button name="action_select_upi" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #D1D5DB;
+                                           border-radius: 12px; background: white; cursor: pointer;
+                                           transition: all 0.2s; text-align: center;"
+                                    invisible="payment_method_type == 'upi'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">📱</div>
+                                <div style="font-weight: 600; color: #374151; font-size: 13px;">UPI</div>
+                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Scan &amp; Pay</div>
+                            </button>
+
+                            <!-- UPI Button SELECTED -->
+                            <button name="action_select_upi" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #059669;
+                                           border-radius: 12px; background: #ECFDF5; cursor: pointer;
+                                           text-align: center; box-shadow: 0 0 0 3px rgba(5,150,105,0.15);"
+                                    invisible="payment_method_type != 'upi'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">📱</div>
+                                <div style="font-weight: 700; color: #059669; font-size: 13px;">UPI</div>
+                                <div style="color: #10B981; font-size: 11px; margin-top: 2px;">Scan &amp; Pay</div>
+                                <div style="margin-top: 6px;">
+                                    <span style="background: #059669; color: white; border-radius: 20px;
+                                                 padding: 2px 8px; font-size: 10px; font-weight: 600;">✓ Selected</span>
+                                </div>
+                            </button>
+
+                            <!-- BANK Button -->
+                            <button name="action_select_bank" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #D1D5DB;
+                                           border-radius: 12px; background: white; cursor: pointer;
+                                           transition: all 0.2s; text-align: center;"
+                                    invisible="payment_method_type == 'bank'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">🏦</div>
+                                <div style="font-weight: 600; color: #374151; font-size: 13px;">Bank</div>
+                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Transfer / Cash</div>
+                            </button>
+
+                            <!-- BANK Button SELECTED -->
+                            <button name="action_select_bank" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #D97706;
+                                           border-radius: 12px; background: #FFFBEB; cursor: pointer;
+                                           text-align: center; box-shadow: 0 0 0 3px rgba(217,119,6,0.15);"
+                                    invisible="payment_method_type != 'bank'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">🏦</div>
+                                <div style="font-weight: 700; color: #D97706; font-size: 13px;">Bank</div>
+                                <div style="color: #F59E0B; font-size: 11px; margin-top: 2px;">Transfer / Cash</div>
+                                <div style="margin-top: 6px;">
+                                    <span style="background: #D97706; color: white; border-radius: 20px;
+                                                 padding: 2px 8px; font-size: 10px; font-weight: 600;">✓ Selected</span>
+                                </div>
+                            </button>
+
+                        </div>
+
+                        <!-- Info Messages -->
+                        <div class="alert alert-info" style="border-radius: 8px; margin-bottom: 16px;"
+                             invisible="payment_method_type != 'card'">
+                            <i class="fa fa-credit-card me-2"/>
+                            Payment will be sent to the <strong>Pine Labs terminal (Card)</strong>.
+                            Please have the card ready to swipe / tap / insert.
+                        </div>
+                        <div class="alert alert-success" style="border-radius: 8px; margin-bottom: 16px;"
+                             invisible="payment_method_type != 'upi'">
+                            <i class="fa fa-qrcode me-2"/>
+                            Payment will be sent to the <strong>Pine Labs terminal (UPI)</strong>.
+                            Customer can scan the QR on the terminal screen.
+                        </div>
+                        <div class="alert alert-warning" style="border-radius: 8px; margin-bottom: 16px;"
+                             invisible="payment_method_type != 'bank'">
+                            <i class="fa fa-university me-2"/>
+                            Odoo's standard <strong>Register Payment</strong> window will open.
+                            No Pine Labs terminal request will be made.
+                        </div>
+
+                        <!-- Amount & Currency -->
+                        <group>
+                            <field name="amount"/>
+                            <field name="currency_id"/>
+                        </group>
+                    </div>
+
+                    <!-- ══════════════════════════════════════════════
+                         WAITING STATE
+                         ══════════════════════════════════════════════ -->
+                    <div invisible="state != 'waiting'">
+                        <div class="alert alert-warning" style="border-radius: 8px;">
+                            <i class="fa fa-spinner fa-spin me-2"/>
+                            Payment request sent. Please complete the transaction on the
+                            <strong>Pine Labs terminal</strong>, then click <strong>Check Status</strong>.
+                        </div>
+                        <group>
+                            <field name="pinelabs_transaction_ref"/>
+                            <field name="amount"/>
+                        </group>
+                    </div>
+
+                    <!-- ══════════════════════════════════════════════
+                         SUCCESS STATE
+                         ══════════════════════════════════════════════ -->
+                    <div invisible="state != 'success'">
+                        <div class="alert alert-success" style="border-radius: 8px;">
+                            <i class="fa fa-check-circle me-2"/>
+                            <strong>Payment successful!</strong>
+                            The invoice has been reconciled automatically.
+                        </div>
+                        <group>
+                            <field name="approval_code"/>
+                            <field name="card_type"/>
+                            <field name="payment_mode"/>
+                            <field name="txn_id"/>
+                        </group>
+                    </div>
+
+                    <!-- ══════════════════════════════════════════════
+                         FAILED STATE
+                         ══════════════════════════════════════════════ -->
+                    <div invisible="state != 'failed'">
+                        <div class="alert alert-danger" style="border-radius: 8px;">
+                            <i class="fa fa-times-circle me-2"/>
+                            <strong>Payment failed or cancelled.</strong>
+                            Please try again or choose a different payment mode.
+                        </div>
+                    </div>
+
+                </sheet>
+
+                <footer>
+                    <!-- Card / UPI: Send to Terminal -->
+                    <button name="action_initiate_payment"
+                            string="Send to Terminal"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'draft' or payment_method_type == 'bank'"/>
+
+                    <!-- Bank: Register Payment -->
+                    <button name="action_initiate_payment"
+                            string="Register Payment (Bank)"
+                            type="object"
+                            class="btn-warning"
+                            invisible="state != 'draft' or payment_method_type != 'bank'"/>
+
+                    <!-- Waiting -->
+                    <button name="action_check_status"
+                            string="Check Status"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'waiting'"/>
+                    <button name="action_cancel_payment"
+                            string="Cancel Payment"
+                            type="object"
+                            class="btn-danger"
+                            invisible="state != 'waiting'"/>
+
+                    <button string="Close" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

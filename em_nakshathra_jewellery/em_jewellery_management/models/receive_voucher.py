@@ -59,6 +59,22 @@ class JewelleryReceiveVoucher(models.Model):
         ('gold_only', 'Gold Only'),
         ('gold_alloy', 'Gold + Alloy')
     ], required=False)
+
+    making_charge_type = fields.Selection([
+        ('percent', 'Percentage'),
+        ('amount', 'Amount'),
+        ('rate_per_gram', 'Rate Per Gram')
+    ], string="MC Type", default='percent')
+    mc_percent = fields.Float(string="MC%")
+    rate_value = fields.Float(string="Rate(g)")
+    making_charge_value = fields.Float(string="Amount(mc)")
+
+    total_fine_weight = fields.Float(
+        string="Total Fine Weight",
+        compute="_compute_total_fine_weight",
+        store=True,
+        digits=(16, 3)
+    )
     making_charge_amount = fields.Monetary(string='Making Charge', currency_field='currency_id',compute="_compute_making_charge_amount",readonly=False,store=True)
     making_charge_bill_id = fields.Many2one(
         'account.move', readonly=True
@@ -201,12 +217,25 @@ class JewelleryReceiveVoucher(models.Model):
             ],
 
         }
+    @api.depends('line_ids.fine_weight')
+    def _compute_total_fine_weight(self):
+        for voucher in self:
+            voucher.total_fine_weight = sum(voucher.line_ids.mapped('fine_weight'))
+
+    @api.depends('job_type_selection', 'making_charge_type', 'mc_percent', 'making_charge_value', 'rate_value', 'total_fine_weight', 'line_ids.mc_fine')
     def _compute_making_charge_amount(self):
         for voucher in self:
-            if voucher.job_type_selection != 'gold_alloy':
-                voucher.making_charge_amount = sum(
-                    voucher.line_ids.mapped('mc_fine')
-                )
+            if voucher.job_type_selection == 'gold_alloy':
+                if voucher.making_charge_type == 'percent':
+                    voucher.making_charge_amount = voucher.total_fine_weight * (voucher.mc_percent / 100.0)
+                elif voucher.making_charge_type == 'amount':
+                    voucher.making_charge_amount = voucher.making_charge_value
+                elif voucher.making_charge_type == 'rate_per_gram':
+                    voucher.making_charge_amount = voucher.total_fine_weight * voucher.rate_value
+                else:
+                    voucher.making_charge_amount = sum(voucher.line_ids.mapped('mc_fine'))
+            else:
+                voucher.making_charge_amount = 0.0
 
 
 class JewelleryReceiveVoucherLine(models.Model):
