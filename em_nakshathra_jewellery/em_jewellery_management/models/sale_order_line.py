@@ -78,7 +78,7 @@ class SaleOrderLine(models.Model):
 
     @api.onchange('label_id','product_uom_qty')
     def _onchange_label_id(self):
-        if self.label_id:
+        if self.label_id :
             self.purity_id = self.label_id.purity_id.id
             self.mc_percent = self.label_id.sale_making_charge_value
             self.sale_making_charge_min = self.label_id.sale_making_charge_min
@@ -98,10 +98,22 @@ class SaleOrderLine(models.Model):
                 ('rate_type', '=', 'sale')
 
             ], order='date desc', limit=1)
-
             gold_rate = gold_rate_rec.rate_per_gram
             self.gold_rate = gold_rate
             self.metal_amount = self.gold_rate * self.product_uom_qty
+
+        if not self.label_id :
+            today = fields.Date.today()
+            gold_rate_rec = self.env['gold.rate.master'].search([
+                ('purity_id', '=', self.purity_id.id),
+                ('date', '<=', today),
+                ('active', '=', True),
+                ('rate_type', '=', 'sale')
+
+            ], order='date desc', limit=1)
+            gold_rate = gold_rate_rec.rate_per_gram
+            self.gold_rate = gold_rate
+
 
     @api.depends('gold_rate', 'product_uom_qty')
     def _compute_metal_amount(self):
@@ -146,7 +158,16 @@ class SaleOrderLine(models.Model):
     @api.depends('fine_weight', 'purity_id', 'order_id.purchase_order_id')
     def _compute_product_uom_qty(self):
         for rec in self:
-            if rec.order_id.purchase_order_id and rec.purity_id and rec.purity_id.percentage:
+            if (
+                rec.order_id.purchase_order_id
+                and rec.purity_id
+                and rec.purity_id.percentage
+                and rec.fine_weight
+            ):
+                # Only recompute from fine_weight when fine_weight is explicitly set
+                # (e.g. Unfix scenario). Skip for regular lines where the user has
+                # manually entered a gross weight — those should not be wiped out
+                # simply because a purchase_order_id was linked via apply_old_gold.
                 rec.product_uom_qty = rec.fine_weight / (rec.purity_id.percentage / 100.0)
             elif not rec.product_uom_qty:
                 rec.product_uom_qty = 0.0

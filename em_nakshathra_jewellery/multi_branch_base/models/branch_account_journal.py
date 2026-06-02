@@ -56,30 +56,30 @@ class AccountJournal(models.Model):
         help="Bank statements transactions will be posted on the suspense "
              "account until the final reconciliation "
              "allowing finding the right account.", string='Suspense Account',
-        domain="[('deprecated', '=', False), ('company_id', '=', company_id), \
-                        ('account_type', 'not in', ('asset_receivable', 'liability_payable')), \
-                        ('account_type', '=', 'asset_current')], '|', "
-               "('branch_id', '=', branch_id), ('branch_id', '=', False)")
+        domain="[('deprecated', '=', False), ('company_id', '=', company_id),"
+               "('account_type', 'not in', ('asset_receivable', 'liability_payable')),"
+               "('account_type', '=', 'asset_current'),"
+               "'|', ('branch_id', '=', branch_id), ('branch_id', '=', False)]")
 
     profit_account_id = fields.Many2one(
         comodel_name='account.account', check_company=True,
         help="Used to register a profit when the ending balance of a cash "
              "register differs from what the system computes",
         string='Profit Account',
-        domain="[('deprecated', '=', False), ('company_id', '=', company_id), \
-                        ('account_type', 'not in', ('asset_receivable', 'liability_payable')), \
-                        ('account_type', 'in', ('income', 'income_other')), '|', "
-               "('branch_id', '=', branch_id), ('branch_id', '=', False)]")
+        domain="[('deprecated', '=', False), ('company_id', '=', company_id),"
+               "('account_type', 'not in', ('asset_receivable', 'liability_payable')),"
+               "('account_type', 'in', ('income', 'income_other')),"
+               "'|', ('branch_id', '=', branch_id), ('branch_id', '=', False)]")
 
     loss_account_id = fields.Many2one(
         comodel_name='account.account', check_company=True,
         help="Used to register a loss when the ending balance of a cash "
              "register differs from what the system computes",
         string='Loss Account',
-        domain="[('deprecated', '=', False), ('company_id', '=', company_id), \
-                        ('account_type', 'not in', ('asset_receivable', 'liability_payable')), \
-                        ('account_type', '=', 'expense'), '|', "
-               "('branch_id', '=', branch_id), ('branch_id', '=', False)]")
+        domain="[('deprecated', '=', False), ('company_id', '=', company_id),"
+               "('account_type', 'not in', ('asset_receivable', 'liability_payable')),"
+               "('account_type', '=', 'expense'),"
+               "'|', ('branch_id', '=', branch_id), ('branch_id', '=', False)]")
 
     @api.onchange('branch_id')
     def onchange_branch_id(self):

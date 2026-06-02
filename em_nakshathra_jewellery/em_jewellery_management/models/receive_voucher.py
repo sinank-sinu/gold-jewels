@@ -1,4 +1,5 @@
 from odoo import models, fields, api,_
+from odoo.tools.populate import compute
 
 
 class JewelleryReceiveVoucher(models.Model):
@@ -68,6 +69,7 @@ class JewelleryReceiveVoucher(models.Model):
     mc_percent = fields.Float(string="MC%")
     rate_value = fields.Float(string="Rate(g)")
     making_charge_value = fields.Float(string="Amount(mc)")
+    fine_rate = fields.Float(string="Fine Rate (g)", help="Gold rate per gram used to compute MC Amount from MC Fine")
 
     total_fine_weight = fields.Float(
         string="Total Fine Weight",
@@ -75,7 +77,20 @@ class JewelleryReceiveVoucher(models.Model):
         store=True,
         digits=(16, 3)
     )
-    making_charge_amount = fields.Monetary(string='Making Charge', currency_field='currency_id',compute="_compute_making_charge_amount",readonly=False,store=True)
+    mc_fine = fields.Float(
+        string="MC Fine",
+        compute="_compute_mc_fine",
+        store=True,
+        digits=(16, 3),
+        help="MC Fine Weight = Total Net Weight × MC%"
+    )
+    making_charge_amount = fields.Monetary(
+        string='Making Charge',
+        currency_field='currency_id',
+        compute="_compute_making_charge_amount",
+        readonly=False,
+        store=True
+    )
     making_charge_bill_id = fields.Many2one(
         'account.move', readonly=True
     )
@@ -84,8 +99,20 @@ class JewelleryReceiveVoucher(models.Model):
                                         compute="_compute_source_location_id", store=True, readonly=False)
     received_location_id = fields.Many2one('stock.location',
                                           domain="[('usage', '=', 'internal'), ('location_id.usage', '!=', 'internal')]",
-                                          default=lambda self: self.env.user.branch_id.branch_location_id.id )
+                                          default=lambda self: self.env.user.branch_id.branch_location_id.id)
     currency_id = fields.Many2one('res.currency', string='Currency', default=lambda self: self.env.company.currency_id)
+
+    @api.depends('total_net_weight', 'mc_percent', 'making_charge_type')
+    def _compute_mc_fine(self):
+        for voucher in self:
+            if voucher.making_charge_type == 'percent':
+                voucher.mc_fine = voucher.total_net_weight * (voucher.mc_percent / 100.0)
+            else:
+                voucher.mc_fine = 0.0
+
+
+
+
 
     @api.depends('is_refinery', 'job_worker_id', 'refinery_id')
     def _compute_source_location_id(self):
@@ -222,18 +249,23 @@ class JewelleryReceiveVoucher(models.Model):
         for voucher in self:
             voucher.total_fine_weight = sum(voucher.line_ids.mapped('fine_weight'))
 
-    @api.depends('job_type_selection', 'making_charge_type', 'mc_percent', 'making_charge_value', 'rate_value', 'total_fine_weight', 'line_ids.mc_fine')
+    @api.depends(
+        'job_type_selection', 'making_charge_type', 'mc_percent',
+        'making_charge_value', 'rate_value', 'total_fine_weight',
+        'mc_fine', 'fine_rate', 'line_ids.mc_fine'
+    )
     def _compute_making_charge_amount(self):
         for voucher in self:
             if voucher.job_type_selection == 'gold_alloy':
                 if voucher.making_charge_type == 'percent':
-                    voucher.making_charge_amount = voucher.total_fine_weight * (voucher.mc_percent / 100.0)
+                    # MC Amount = MC Fine × Fine Rate (gold rate per gram)
+                    voucher.making_charge_amount = voucher.mc_fine * voucher.fine_rate
                 elif voucher.making_charge_type == 'amount':
                     voucher.making_charge_amount = voucher.making_charge_value
                 elif voucher.making_charge_type == 'rate_per_gram':
-                    voucher.making_charge_amount = voucher.total_fine_weight * voucher.rate_value
+                    voucher.making_charge_amount = voucher.total_net_weight * voucher.rate_value
                 else:
-                    voucher.making_charge_amount = sum(voucher.line_ids.mapped('mc_fine'))
+                    voucher.making_charge_amount = 0.0
             else:
                 voucher.making_charge_amount = 0.0
 

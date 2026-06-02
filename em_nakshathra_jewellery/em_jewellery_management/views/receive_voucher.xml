@@ -69,6 +69,8 @@
                         <field name="job_type_selection"/>
                         <field name="making_charge_type" invisible="job_type_selection != 'gold_alloy'"/>
                         <field name="mc_percent" invisible="making_charge_type != 'percent' or job_type_selection != 'gold_alloy'"/>
+                        <field name="fine_rate" invisible="making_charge_type != 'percent' or job_type_selection != 'gold_alloy'" string="Fine Rate (g)"/>
+                        <field name="mc_fine" invisible="making_charge_type != 'percent' or job_type_selection != 'gold_alloy'" readonly="1" string="MC Fine"/>
                         <field name="making_charge_value" invisible="making_charge_type != 'amount' or job_type_selection != 'gold_alloy'"/>
                         <field name="rate_value" invisible="making_charge_type != 'rate_per_gram' or job_type_selection != 'gold_alloy'"/>
                         <field name="making_charge_amount" invisible="job_type_selection != 'gold_alloy'" />

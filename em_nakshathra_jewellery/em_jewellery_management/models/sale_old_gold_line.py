@@ -298,13 +298,13 @@ class SaleOldGoldLine(models.Model):
             r.net_weight = r.gross_weight - r.stone_weight
 
 
-    @api.depends('fine', 'rate')
+    @api.depends('net_weight', 'rate')
     def _compute_amount(self):
         for rec in self:
             if not self.env.context.get('skip_old_gold_amount_compute'):
-                rec.amount = rec.fine * rec.rate
+                rec.amount = rec.net_weight * rec.rate
             elif not rec.amount:
-                rec.amount = rec.fine * rec.rate
+                rec.amount = rec.net_weight * rec.rate
 
     @api.onchange('purity_id')
     def _onchange_purity(self):
