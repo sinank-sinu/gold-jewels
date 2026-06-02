@@ -43,21 +43,76 @@ export class SalesmanCartDashboard extends Component {
         });
     }
 
+    // async loadProducts() {
+    //     this.state.products = await this.orm.searchRead(
+    //         "product.product",
+    //         [
+    //             ["sale_ok", "=", true],
+    //             ["qty_available", ">", 0],
+    //             ["detailed_type", "=", "product"]
+    //         ],
+    //         ["id", "display_name", "lst_price", "weight", "qty_available", "active_label_name"],
+    //         { 
+    //             limit: 40 
+    //         }
+    //     );
+    // }
     async loadProducts() {
-        this.state.products = await this.orm.searchRead(
-            "product.product",
-            [
+        this.state.loading = true;
+
+        try {
+            // 1. Fetch the logged-in user's branch ID from their profile
+            const userData = await this.orm.read(
+                "res.users", 
+                [this.userService.userId], 
+                ["branch_id"]
+            );
+            
+            // Extract the ID (handles many2one array format [id, "Name"] or false)
+            const userBranchId = userData[0].branch_id ? userData[0].branch_id[0] : false;
+
+            // 2. Base Domain: Must be sellable, in stock, and storable
+            const domain = [
                 ["sale_ok", "=", true],
                 ["qty_available", ">", 0],
                 ["detailed_type", "=", "product"]
-            ],
-            ["id", "display_name", "lst_price", "weight", "qty_available", "active_label_name"],
-            { 
-                limit: 40 
-            }
-        );
-    }
+            ];
 
+            // 3. STRICT BRANCH FILTER: Only display products if they have labels in the user's branch
+            if (userBranchId) {
+                domain.push(["product_label_ids.branch_id", "=", userBranchId]);
+            } else {
+                // Defensive fallback: If the user has no branch assigned, show nothing to prevent security leak
+                this.state.products = [];
+                this.state.loading = false;
+                return;
+            }
+
+            // 4. Handle search query input matching if typed
+            const query = this.state.searchQuery.trim();
+            if (query) {
+                domain.push("|", "|",
+                    ["display_name", "ilike", query],
+                    ["barcode", "ilike", query],
+                    ["product_label_ids.name", "ilike", query]
+                );
+            }
+
+            // 5. Fetch the targeted branch catalog
+            this.state.products = await this.orm.searchRead(
+                "product.product",
+                domain,
+                ["id", "display_name", "lst_price", "weight", "qty_available", "active_label_name"],
+                { limit: 40 }
+            );
+
+        } catch (error) {
+            this.notification.add("Failed to load your branch's jewelry catalog.", { type: "danger" });
+        } finally {
+            this.state.loading = false;
+        }
+    }
+    
     async getOrCreateActiveCart() {
         const carts = await this.orm.searchRead(
             "salesman.cart",
