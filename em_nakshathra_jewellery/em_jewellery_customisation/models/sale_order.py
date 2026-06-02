@@ -298,77 +298,111 @@ class SaleOrder(models.Model):
             rounded_total = ceil(order.amount_total / 100.0) * 100
             order.round_off_amount = rounded_total - order.amount_total
 
+    # @api.depends_context('lang')
+    # @api.depends('order_line.tax_id', 'order_line.price_unit', 'amount_total', 'amount_untaxed')
+    # def _compute_tax_totals(self):
+    #     super()._compute_tax_totals()
+
+    #     for order in self:
+    #         if not order.tax_totals:
+    #             continue
+            
+    #         has_gold_bullion = order.order_line.filtered(
+    #             lambda l: l.product_template_id.name == 'Gold Bullion'
+    #         )
+
+    #         if has_gold_bullion:
+    #             continue
+
+    #         tax_totals = order.tax_totals
+
+    #         original_total = tax_totals.get('amount_total', 0.0)
+
+    #         rounded_total = ceil(original_total / 100.0) * 100
+    #         round_off = rounded_total - original_total
+
+    #         tax_totals['amount_total'] = rounded_total
+    #         tax_totals['formatted_amount_total'] = order.currency_id.symbol + " %.2f" % rounded_total
+
+    #         # optional: show rounding line
+    #         tax_totals['display_rounding'] = True
+    #         tax_totals['rounding_amount'] = round_off
+    #         tax_totals['formatted_rounding_amount'] = (
+    #             order.currency_id.symbol + " %.2f" % round_off
+    #         )
+
+    #         order.tax_totals = tax_total
+    
+    def _prepare_invoice(self):
+        vals = super()._prepare_invoice()
+
+        vals.update({
+            'amount_rounding': self.amount_rounding,
+        })
+        return vals
+
     @api.depends_context('lang')
-    @api.depends('order_line.tax_id', 'order_line.price_unit', 'amount_total', 'amount_untaxed')
+    @api.depends(
+        'order_line.tax_id',
+        'order_line.price_unit',
+        'amount_total',
+        'amount_untaxed',
+        'amount_rounding'
+    )
     def _compute_tax_totals(self):
         super()._compute_tax_totals()
 
         for order in self:
             if not order.tax_totals:
                 continue
-            
-            has_gold_bullion = order.order_line.filtered(
-                lambda l: l.product_template_id.name == 'Gold Bullion'
-            )
 
-            if has_gold_bullion:
+            if order.has_gold_bullion:
                 continue
 
-            tax_totals = order.tax_totals
+            tax_totals = dict(order.tax_totals)
 
             original_total = tax_totals.get('amount_total', 0.0)
 
-            rounded_total = ceil(original_total / 100.0) * 100
-            round_off = rounded_total - original_total
+            # User has not entered Round Off
+            if not order.amount_rounding:
+                tax_totals['display_rounding'] = False
+                order.tax_totals = tax_totals
+                continue
 
-            tax_totals['amount_total'] = rounded_total
-            tax_totals['formatted_amount_total'] = order.currency_id.symbol + " %.2f" % rounded_total
+            # adjusted_total = original_total + order.amount_rounding
+            # rounded_total = ceil(adjusted_total / 100.0) * 100
+            # rounding_amount = rounded_total - adjusted_total
+            adjusted_total = original_total + order.amount_rounding
+            rounded_total = ceil(adjusted_total / 100.0) * 100
+            rounding_amount = rounded_total - original_total
 
-            # optional: show rounding line
             tax_totals['display_rounding'] = True
-            tax_totals['rounding_amount'] = round_off
+            tax_totals['rounding_amount'] = rounding_amount
             tax_totals['formatted_rounding_amount'] = (
-                order.currency_id.symbol + " %.2f" % round_off
+                order.currency_id.symbol + " %.2f" % rounding_amount
             )
 
+            tax_totals['amount_total'] = rounded_total
+            tax_totals['formatted_amount_total'] = (
+                order.currency_id.symbol + " %.2f" % rounded_total
+            )
+            # _logger.warning("TAX TOTALS = %s", tax_totals)
             order.tax_totals = tax_totals
-<<<<<<< HEAD
 
     @api.depends(
         'order_line.price_total',
         'order_line.price_tax',
+        'amount_rounding'
     )
     def _compute_amounts(self):
         super()._compute_amounts()
-
         for order in self:
-
-            # Skip Gold Bullion
-            has_gold_bullion = order.order_line.filtered(
-                lambda l: l.product_template_id.name == 'Gold Bullion'
-            )
-
-            if has_gold_bullion:
+            if order.has_gold_bullion:
                 continue
-
-            rounded_total = ceil(order.amount_total / 100.0) * 100
+            # No manual round off entered
+            if not order.amount_rounding:
+                continue
+            original_total = order.amount_total
+            adjusted_total = original_total + order.amount_rounding
+            rounded_total = ceil(adjusted_total / 100.0) * 100
             order.amount_total = rounded_total
-=======
- 
-    # @api.depends('order_line.price_total','order_line.price_tax')
-    # def _compute_amounts(self):
-    #     super()._compute_amounts()
-
-    #     for order in self:
-
-    #         # Skip Gold Bullion
-    #         has_gold_bullion = order.order_line.filtered(
-    #             lambda l: l.product_id.categ_id.name == 'Gold Bullion'
-    #         )
-
-    #         if has_gold_bullion:
-    #             continue
-
-    #         rounded_total = ceil(order.amount_total / 100.0) * 100
-    #         order.amount_total = rounded_total
->>>>>>> bi_binsha_nakshathra_changes
