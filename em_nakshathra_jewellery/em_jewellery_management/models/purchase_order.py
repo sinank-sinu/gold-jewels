@@ -79,6 +79,7 @@ class PurchaseOrder(models.Model):
             # 'product_uom_qty': total_fine,
             'fine_weight': total_fine,
             'name': product.display_name,
+            'price_unit': product.list_price or 0.0,
         })]
 
         # 🔹 Create Sale Order

@@ -22,6 +22,7 @@
         'purchase',
         'account',
         'account_payment',
+        'em_jewellery_management',
     ],
     'data': [
         'security/ir.model.access.csv',
