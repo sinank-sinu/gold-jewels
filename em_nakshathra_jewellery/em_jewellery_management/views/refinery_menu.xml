@@ -25,9 +25,7 @@
             <search>
                 <field name="name"/>
                 <field name="refinery_partner_id"/>
-                <field name="lab_purity_id"/>
                 <group expand="0" string="Group By">
-                    <filter name="group_by_lab_purity" string="Lab Purity" context="{'group_by': 'lab_purity_id'}"/>
                     <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
                 </group>
             </search>

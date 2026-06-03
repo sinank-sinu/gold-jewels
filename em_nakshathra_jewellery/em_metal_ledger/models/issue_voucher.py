@@ -81,8 +81,6 @@ class JewelleryIssueVoucher(models.Model):
                     'lab_purity': new_purity,
                     'lab_weight': line.lab_weight,
                 })
-                # lab_fine_weight is a stored computed field and will be
-                # recalculated automatically via _compute_lab_fine_weight.
 
         return {
             'type': 'ir.actions.client',
