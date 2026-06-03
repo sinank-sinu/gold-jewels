@@ -443,8 +443,9 @@ class JewelleryIssueVoucherLine(models.Model):
                 line = self.refinery_issue_id.line_ids[0]
                 self.product_id = line.product_id.id
                 self.product_template_id = line.product_id.product_tmpl_id.id
-                self.purity_id = line.purity_id.id
-                self.issued_weight = line.issue_weight
+                # Use expected_purity_id (computed output purity) instead of line's raw input purity
+                self.purity_id = self.refinery_issue_id.expected_purity_id.id or line.purity_id.id
+                self.issued_weight = self.refinery_issue_id.balance_weight
             else:
                 self.issued_weight = self.lab_weight
 

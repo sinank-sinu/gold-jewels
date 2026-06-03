@@ -48,7 +48,7 @@ class ProductLabel(models.Model):
         string="Product",
     )
     branch_id = fields.Many2one('res.branch', string='Branch', store=True,
-                                related="product_id.branch_id", readonly=False )
+                                readonly=False )
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
     job_work_id = fields.Many2one(
