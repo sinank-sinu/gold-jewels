@@ -147,150 +147,116 @@ class SaleOrder(models.Model):
             #             ol.mc_amount = 0
 
 
-    def action_apply_old_gold(self):
-        PurchaseOrder = self.env['purchase.order']
-        PurchaseLine = self.env['purchase.order.line']
-        AccountMove = self.env['account.move']
-        Payment = self.env['account.payment']
-
-        product = self.env.ref(
-            'em_jewellery_management.product_old_gold',
-            raise_if_not_found=False
-        )
-        if not product:
-            raise ValidationError(_("Old Gold product not configured."))
-
-        journal = self.env['account.journal'].search(
-            [('type', 'in', ('cash', 'bank')),
-             ('company_id', '=', self.env.company.id)],
-            limit=1
-        )
-        if not journal:
-            raise ValidationError(_("Cash/Bank journal not found."))
-
-        for order in self:
-            if not order.old_gold_line_ids:
-                raise ValidationError(_("No Old Gold lines found."))
-
-            # ------------------------------------------------
-            # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
-            # ------------------------------------------------
-            self.env['old.gold.purchase'].create({
-                'partner_id': order.partner_id.id,
-                'date': fields.Date.today(),
-                'branch_location_id': order.branch_location_id.id,
-                'sale_id': order.id,
-                'branch_id': order.branch_id.id,
-                'old_gold_line_ids': [
-                    (0, 0, {
-                        'purity_id': l.purity_id.id,
-                        'gross_weight': l.gross_weight,
-                        'stone_weight': l.stone_weight,
-                        'rate': l.rate,
-                    }) for l in order.old_gold_line_ids
-                ],
-            })
-
-            # ------------------------------------------------
-            # 2️⃣ GROUP AMOUNT BY PURITY
-            # ------------------------------------------------
-            purity_map = {}
-
-            for line in order.old_gold_line_ids:
-                purity = line.purity_id
-
-                if purity not in purity_map:
-                    purity_map[purity] = {
-                        'weight': 0.0,
-                        'amount': 0.0,
-                    }
-
-                purity_map[purity]['weight'] += line.net_weight
-                purity_map[purity]['amount'] += line.amount
-
-            # ------------------------------------------------
-            # 3️⃣ CREATE PURCHASE ORDER
-            # ------------------------------------------------
-            po = PurchaseOrder.create({
-                'partner_id': order.partner_id.id,
-                'date_order': fields.Date.today(),
-                'origin': order.name,
-                'branch_id': order.branch_id.id,
-                'sale_id': order.id,
-                # 'amount_total':order.old_gold_line_ids.amount
-            })
-
-            for purity, vals in purity_map.items():
-                total_weight = vals['weight']
-                total_amount = vals['amount']
-
-                if not total_weight:
-                    continue
-
-                rate = total_amount / total_weight  # 👈 derived gold rate
-
-                PurchaseLine.create({
-                    'order_id': po.id,
-                    'product_id': product.id,
-                    'name': f'Old Gold Purchase ({purity.name})',
-                    'product_qty': total_weight,  # ✅ grams
-                    'gold_rate': rate,
-                    'price_unit':rate,# ✅ gold rate
-                    'product_uom': product.uom_po_id.id,
-                    'taxes_id': [(6, 0, [])],
-                    'purity_id':purity.id
-                })
-            # ------------------------------------------------
-            # 4️⃣ CONFIRM PO
-            # ------------------------------------------------
-            po.button_confirm()
-            self.purchase_order_id =po.id
-
-            for picking in po.picking_ids:
-                picking.action_confirm()
-                picking.action_assign()
-
-                for move in picking.move_ids:
-                    move.quantity = move.product_uom_qty
-
-                picking.button_validate()
-
-            # ------------------------------------------------
-            # 5️⃣ CREATE & POST VENDOR BILL
-            # ------------------------------------------------
-            bill_action = po.action_create_invoice()
-            bill = AccountMove.browse(bill_action['res_id'])
-            bill.invoice_date = fields.Date.context_today(self)
-
-            bill.action_post()
-            self.old_gold_bill_id =bill.id
-
-            # ------------------------------------------------
-            # 6️⃣ REGISTER & POST PAYMENT
-            # ------------------------------------------------
-            payment = Payment.create({
-                'payment_type': 'outbound',
-                'partner_type': 'supplier',
-                'partner_id': order.partner_id.id,
-                'amount': bill.amount_total,
-                'journal_id': journal.id,
-                'date': fields.Date.today(),
-                'ref': bill.name,
-            })
-            payment.action_post()
-
-            # ------------------------------------------------
-            # 7️⃣ RECONCILE BILL & PAYMENT
-            # ------------------------------------------------
-            payable = bill.line_ids.filtered(
-                lambda l: l.account_id.account_type == 'liability_payable'
-            )
-
-            (payment.line_ids + payable).filtered(
-                lambda l: l.account_id == payable.account_id
-            ).reconcile()
-
-        return True
+    # def action_apply_old_gold(self):
+    #     PurchaseOrder = self.env['purchase.order']
+    #     PurchaseLine = self.env['purchase.order.line']
+    #     AccountMove = self.env['account.move']
+    #
+    #     product = self.env.ref(
+    #         'em_jewellery_management.product_old_gold',
+    #         raise_if_not_found=False
+    #     )
+    #     if not product:
+    #         raise ValidationError(_("Old Gold product not configured."))
+    #
+    #     for order in self:
+    #         if not order.old_gold_line_ids:
+    #             raise ValidationError(_("No Old Gold lines found."))
+    #
+    #         # ------------------------------------------------
+    #         # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
+    #         # ------------------------------------------------
+    #         self.env['old.gold.purchase'].create({
+    #             'partner_id': order.partner_id.id,
+    #             'date': fields.Date.today(),
+    #             'branch_location_id': order.branch_location_id.id,
+    #             'sale_id': order.id,
+    #             'branch_id': order.branch_id.id,
+    #             'old_gold_line_ids': [
+    #                 (0, 0, {
+    #                     'purity_id': l.purity_id.id,
+    #                     'gross_weight': l.gross_weight,
+    #                     'stone_weight': l.stone_weight,
+    #                     'rate': l.rate,
+    #                 }) for l in order.old_gold_line_ids
+    #             ],
+    #         })
+    #
+    #         # ------------------------------------------------
+    #         # 2️⃣ GROUP AMOUNT BY PURITY
+    #         # ------------------------------------------------
+    #         purity_map = {}
+    #
+    #         for line in order.old_gold_line_ids:
+    #             purity = line.purity_id
+    #
+    #             if purity not in purity_map:
+    #                 purity_map[purity] = {
+    #                     'weight': 0.0,
+    #                     'amount': 0.0,
+    #                 }
+    #
+    #             purity_map[purity]['weight'] += line.net_weight
+    #             purity_map[purity]['amount'] += line.amount
+    #
+    #         # ------------------------------------------------
+    #         # 3️⃣ CREATE PURCHASE ORDER
+    #         # ------------------------------------------------
+    #         po = PurchaseOrder.create({
+    #             'partner_id': order.partner_id.id,
+    #             'date_order': fields.Date.today(),
+    #             'origin': order.name,
+    #             'branch_id': order.branch_id.id,
+    #             'sale_id': order.id,
+    #             # 'amount_total':order.old_gold_line_ids.amount
+    #         })
+    #
+    #         for purity, vals in purity_map.items():
+    #             total_weight = vals['weight']
+    #             total_amount = vals['amount']
+    #
+    #             if not total_weight:
+    #                 continue
+    #
+    #             rate = total_amount / total_weight  # 👈 derived gold rate
+    #
+    #             PurchaseLine.create({
+    #                 'order_id': po.id,
+    #                 'product_id': product.id,
+    #                 'name': f'Old Gold Purchase ({purity.name})',
+    #                 'product_qty': total_weight,  # ✅ grams
+    #                 'gold_rate': rate,
+    #                 'price_unit':rate,# ✅ gold rate
+    #                 'product_uom': product.uom_po_id.id,
+    #                 'taxes_id': [(6, 0, [])],
+    #                 'purity_id':purity.id
+    #             })
+    #         # ------------------------------------------------
+    #         # 4️⃣ CONFIRM PO
+    #         # ------------------------------------------------
+    #         po.button_confirm()
+    #         self.purchase_order_id =po.id
+    #
+    #         for picking in po.picking_ids:
+    #             picking.action_confirm()
+    #             picking.action_assign()
+    #
+    #             for move in picking.move_ids:
+    #                 move.quantity = move.product_uom_qty
+    #
+    #             picking.button_validate()
+    #
+    #         # ------------------------------------------------
+    #         # 5️⃣ CREATE & POST VENDOR BILL
+    #         # ------------------------------------------------
+    #         bill_action = po.action_create_invoice()
+    #         bill = AccountMove.browse(bill_action['res_id'])
+    #         bill.invoice_date = fields.Date.context_today(self)
+    #
+    #         bill.action_post()
+    #         self.old_gold_bill_id = bill.id
+    #
+    #     return True
 
     @api.depends('amount_total')
     def _compute_round_off(self):
