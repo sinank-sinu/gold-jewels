@@ -4,21 +4,4 @@
          This view lives in em_metal_ledger (which inherits jewellery.receive.voucher)
          so the action_update_lab_purity method is already on the model when this
          view is validated. -->
-    <record id="view_receive_voucher_form_metal_ledger" model="ir.ui.view">
-        <field name="name">jewellery.receive.voucher.form.metal.ledger</field>
-        <field name="model">jewellery.receive.voucher</field>
-        <field name="inherit_id" ref="em_jewellery_management.view_receive_voucher_form"/>
-        <field name="arch" type="xml">
-            <!-- Insert the button right before the statusbar field in the header -->
-            <xpath expr="//header/field[@name='state']" position="before">
-                <button
-                    name="action_update_lab_purity"
-                    type="object"
-                    string="Update Lab Purity"
-                    class="btn-secondary"
-                    invisible="not is_refinery or state != 'done'"
-                    help="Update lab purity in the Refinery Lab Report and recalculate lab fine weight"/>
-            </xpath>
-        </field>
-    </record>
 </odoo>

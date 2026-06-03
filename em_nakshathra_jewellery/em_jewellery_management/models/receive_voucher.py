@@ -288,6 +288,7 @@ class JewelleryReceiveVoucherLine(models.Model):
     uom_id = fields.Many2one('uom.uom', string="UoM")
     purity_id = fields.Many2one('gold.purity', string="Purity")
     lab_purity = fields.Float(string="Lab Purity (%)")
+    lab_purity_id = fields.Many2one('gold.purity', string="Lab Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
     purchase_making_charge_value = fields.Float(string="Purchase Making Charge")
     mc_fine = fields.Float(string="MC Fine", compute="_compute_purchase_mc_fine")
@@ -314,6 +315,12 @@ class JewelleryReceiveVoucherLine(models.Model):
                 self.issue_voucher_line_id = lines[0].id
                 # Trigger follow-up logic to pull defaults from this line
                 self.onchange_issue_voucher_line_id()
+
+    @api.onchange('product_id')
+    def _onchange_product_id(self):
+        if self.product_id and self.voucher_id.is_refinery:
+            if self.product_id.purity_id:
+                self.purity_id = self.product_id.purity_id.id
 
     issue_voucher_line_id = fields.Many2one(
         'jewellery.issue.voucher.line',
@@ -381,10 +388,10 @@ class JewelleryReceiveVoucherLine(models.Model):
         for rec in self:
             rec.total_fine = rec.mc_fine + rec.fine_weight
 
-    @api.depends('net_weight', 'purity_id', 'lab_purity', 'voucher_id.is_refinery')
+    @api.depends('net_weight', 'purity_id', 'lab_purity', 'lab_purity_id', 'lab_purity_id.percentage', 'voucher_id.is_refinery')
     def _compute_fine_weight(self):
         for rec in self:
-            purity = rec.lab_purity or (rec.purity_id.percentage if rec.purity_id else 0.0)
+            purity = rec.lab_purity or (rec.lab_purity_id.percentage if rec.lab_purity_id else (rec.purity_id.percentage if rec.purity_id else 0.0))
             rec.fine_weight = rec.net_weight * (purity) / 100
 
     @api.depends(

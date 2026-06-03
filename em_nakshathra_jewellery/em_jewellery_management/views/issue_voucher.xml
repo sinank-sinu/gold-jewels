@@ -105,7 +105,7 @@
                                     <field name="issued_weight" string="Issued Weight (g)" column_invisible="not parent.is_refinery" readonly="parent.state == 'done'" />
                                     <field name="qty" string="Net Weight" readonly="1" force_save="1"/>
                                     <field name="purity_id"/>
-                                    <field name="lab_purity" string="Lab Purity (%)" column_invisible="not parent.is_refinery"/>
+                                    <field name="lab_purity_id" string="Lab Purity (%)" column_invisible="not parent.is_refinery"/>
                                     <field name="lab_fine_weight" column_invisible="not parent.is_refinery"/>
                                     <field name="refinery_fine_weight" column_invisible="not parent.is_refinery"/>
                                     <field name="uom_id"/>

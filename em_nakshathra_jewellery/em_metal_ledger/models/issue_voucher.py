@@ -1,4 +1,5 @@
 from odoo import models, fields, api
+from odoo.exceptions import UserError
 
 class JewelleryIssueVoucher(models.Model):
     _inherit = 'jewellery.issue.voucher'
@@ -41,3 +42,55 @@ class JewelleryIssueVoucher(models.Model):
                     'fine_gms_price': line.fine_gms_price,
                 })
         return res
+
+    def action_update_lab_purity(self):
+        """Update lab_purity in the linked Refinery Lab Report records and
+        recompute lab_fine_weight (lab_weight * lab_purity / 100)."""
+        self.ensure_one()
+        if not self.is_refinery:
+            raise UserError("This action is only available for Refinery receive vouchers.")
+
+        lab_reports = self.env['refinery.lab.report'].search([
+            ('voucher_name', '=', self.name),
+            ('type', '=', 'issue'),
+        ])
+        if not lab_reports:
+            raise UserError(
+                "No Refinery Lab Report records found for this voucher (%s). "
+                "Please confirm the voucher first." % self.name
+            )
+
+        # Build a mapping: if there are multiple lines, match by order / purity.
+        # For simplicity we update all matching lab report records using the
+        # lab_purity from the first refinery line that has a lab_purity set.
+        for report in lab_reports:
+            # Try to find the matching receive voucher line by purity
+            matching_line = self.line_ids.filtered(
+                lambda l: l.purity_id.id == report.purity_id.id
+            )
+            if not matching_line:
+                # Fall back to any line with a lab_purity value
+                matching_line = self.line_ids.filtered(lambda l: l.lab_purity_id)
+
+            if matching_line:
+                line = matching_line[0]
+                # Extract float percentage from the Many2one, or fallback to the manual float field
+                new_purity = line.lab_purity_id.percentage if line.lab_purity_id else line.lab_purity
+                
+                report.write({
+                    'lab_purity': new_purity,
+                    'lab_weight': line.lab_weight,
+                })
+                # lab_fine_weight is a stored computed field and will be
+                # recalculated automatically via _compute_lab_fine_weight.
+
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Lab Purity Updated',
+                'message': 'Lab purity and lab fine weight have been updated in the Refinery Lab Report.',
+                'type': 'success',
+                'sticky': False,
+            },
+        }

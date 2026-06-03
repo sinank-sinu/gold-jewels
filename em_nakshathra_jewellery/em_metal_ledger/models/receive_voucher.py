@@ -38,49 +38,4 @@ class JewelleryReceiveVoucher(models.Model):
                 })
         return res
 
-    def action_update_lab_purity(self):
-        """Update lab_purity in the linked Refinery Lab Report records and
-        recompute lab_fine_weight (lab_weight * lab_purity / 100)."""
-        self.ensure_one()
-        if not self.is_refinery:
-            raise UserError("This action is only available for Refinery receive vouchers.")
-
-        lab_reports = self.env['refinery.lab.report'].search([
-            ('voucher_name', '=', self.name),
-            ('type', '=', 'receive'),
-        ])
-        if not lab_reports:
-            raise UserError(
-                "No Refinery Lab Report records found for this voucher (%s). "
-                "Please confirm the voucher first." % self.name
-            )
-
-        # Build a mapping: if there are multiple lines, match by order / purity.
-        # For simplicity we update all matching lab report records using the
-        # lab_purity from the first refinery line that has a lab_purity set.
-        for report in lab_reports:
-            # Try to find the matching receive voucher line by purity
-            matching_line = self.line_ids.filtered(
-                lambda l: l.purity_id.id == report.purity_id.id and l.lab_purity
-            )
-            if not matching_line:
-                # Fall back to any line with a lab_purity value
-                matching_line = self.line_ids.filtered(lambda l: l.lab_purity)
-
-            if matching_line:
-                new_purity = matching_line[0].lab_purity
-                report.write({'lab_purity': new_purity})
-                # lab_fine_weight is a stored computed field and will be
-                # recalculated automatically via _compute_lab_fine_weight.
-
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': 'Lab Purity Updated',
-                'message': 'Lab purity and lab fine weight have been updated in the Refinery Lab Report.',
-                'type': 'success',
-                'sticky': False,
-            },
-        }
 

@@ -8,10 +8,19 @@
             <xpath expr="//field[@name='is_refinery']" position="after">
                 <field name="job_type_selection" invisible="is_refinery"/>
             </xpath>
+            <xpath expr="//header/field[@name='state']" position="before">
+                <button
+                        name="action_update_lab_purity"
+                        type="object"
+                        string="Update Lab Purity"
+                        class="btn-secondary"
+                        invisible="not is_refinery or state != 'done'"
+                        help="Update lab purity in the Refinery Lab Report and recalculate lab fine weight"/>
+            </xpath>
         </field>
     </record>
 </odoo>
 
-<!--
-jafar devs  development
--->
+        <!--
+        jafar devs  development
+        -->

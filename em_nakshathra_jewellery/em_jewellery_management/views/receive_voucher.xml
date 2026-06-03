@@ -94,7 +94,6 @@
                                     <field name="qty"/>
                                     <field name="uom_id"/>
                                     <field name="purity_id"/>
-                                    <field name="lab_purity" column_invisible="not parent.is_refinery"/>
                                     <field name="gross_weight" />
                                     <field name="stone_weight" column_invisible="parent.is_refinery"/>
                                     <field name="diamond_weight" column_invisible="parent.is_refinery"/>

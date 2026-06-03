@@ -99,6 +99,33 @@ class JewelleryIssueVoucher(models.Model):
             vals['name'] = self.env['ir.sequence'].next_by_code('jewellery.issue.voucher') or 'New'
         return super().create(vals)
 
+    def action_update_lab_purity(self):
+        """Update lab_weight, lab_purity (%) and lab_purity_id on all lines
+        that have a linked refinery_issue_id, pulling values from the
+        refinery issue's lab test results."""
+        self.ensure_one()
+        for line in self.line_ids:
+            issue = line.refinery_issue_id
+            if not issue:
+                continue
+
+            # lab_weight from refinery issue lab sample weight
+            line.lab_weight = issue.lab_sample_weight
+
+            # lab_purity (float %) from refinery issue lab purity percent
+            line.lab_purity = issue.lab_purity_percent
+
+            # lab_purity_id (Many2one gold.purity) — use expected_purity_id
+            # (computed from lab results on the refinery issue)
+            if issue.expected_purity_id:
+                line.lab_purity_id = issue.expected_purity_id
+            elif issue.lab_purity_percent:
+                # Fallback: find matching gold.purity by percentage
+                purity = self.env['gold.purity'].search(
+                    [('percentage', '=', round(issue.lab_purity_percent, 2))], limit=1
+                )
+                line.lab_purity_id = purity if purity else False
+
     def action_done(self):
         picking = self.env['stock.picking'].create({
             'picking_type_id': self.env.ref('stock.picking_type_internal').id,
@@ -139,7 +166,9 @@ class JewelleryIssueVoucher(models.Model):
 
         for line in lines_to_receive:
             bullion_product = self.env.ref('em_jewellery_management.product_bullion_gold')
-            purity = line.lab_purity or (line.purity_id.percentage if line.purity_id else 0.0)
+            # lab_purity is now Many2one; get percentage from it for weight calculation
+            purity_record = line.lab_purity or line.purity_id
+            purity_pct = purity_record.percentage if purity_record else 0.0
 
             # Add Refinery Balance Line
             if line.remaining_fine_weight > 0.001:
@@ -154,8 +183,8 @@ class JewelleryIssueVoucher(models.Model):
                     'issue_voucher_line_id': line.id,
                     'fine_gms_price': line.fine_gms_price,
                     'fine_issue_amount': line.fine_issue_amount,
-                    'lab_purity': purity,
-                    'gross_weight': line.remaining_fine_weight / (purity / 100) if purity else line.remaining_fine_weight,
+                    'lab_purity': line.lab_purity.id if line.lab_purity else False,
+                    'gross_weight': line.remaining_fine_weight / (purity_pct / 100) if purity_pct else line.remaining_fine_weight,
                 }))
 
             # Add Lab Balance Line
@@ -171,8 +200,8 @@ class JewelleryIssueVoucher(models.Model):
                     'issue_voucher_line_id': line.id,
                     'fine_gms_price': line.fine_gms_price,
                     'fine_issue_amount': line.fine_issue_amount,
-                    'lab_purity': purity,
-                    'gross_weight': line.remaining_lab_fine_weight / (purity / 100) if purity else line.remaining_lab_fine_weight,
+                    'lab_purity': line.lab_purity.id if line.lab_purity else False,
+                    'gross_weight': line.remaining_lab_fine_weight / (purity_pct / 100) if purity_pct else line.remaining_lab_fine_weight,
                 }))
 
         voucher = self.env['jewellery.receive.voucher'].create({
@@ -297,18 +326,10 @@ class JewelleryIssueVoucherLine(models.Model):
     qty = fields.Float(string="Net Weight", compute="_compute_qty", store=True, digits=(16, 3), readonly=False)
     gross_weight = fields.Float(string="Gross Weight (g)", compute="_compute_gross_weight", digits=(16, 3))
     stone_weight = fields.Float(string="Stone Weight (g)", digits=(16, 3))
-    lab_weight = fields.Float(string="Lab Weight (g)", compute="_compute_lab_values", store=True, digits=(16, 3))
-    lab_purity = fields.Float(string="Purity (%)", compute="_compute_lab_values", store=True)
+    lab_weight = fields.Float(string="Lab Weight (g)", store=True, digits=(16, 3))
+    lab_purity = fields.Float(string="Lab Purity (%)", store=True)
+    lab_purity_id = fields.Many2one('gold.purity', string="Lab Purity", store=True)
 
-    @api.depends('refinery_issue_id', 'refinery_issue_id.lab_sample_weight', 'refinery_issue_id.lab_purity_percent')
-    def _compute_lab_values(self):
-        for rec in self:
-            if rec.refinery_issue_id:
-                rec.lab_weight = rec.refinery_issue_id.lab_sample_weight
-                rec.lab_purity = rec.refinery_issue_id.lab_purity_percent
-            else:
-                rec.lab_weight = rec.lab_weight or 0.0
-                rec.lab_purity = rec.lab_purity or 0.0
 
     refinery_issue_id = fields.Many2one('old.gold.refinery.issue', string="Refinery Issue")
     diamond_weight = fields.Float(string="Diamond Weight (g)", digits=(16, 3))
@@ -370,10 +391,10 @@ class JewelleryIssueVoucherLine(models.Model):
             # Actually, I should update received_lab_fine_weight too if it was manual before
             line.received_lab_fine_weight = lab_received
 
-    @api.depends('lab_weight', 'lab_purity', 'purity_id.percentage', 'fine_weight', 'received_lab_fine_weight')
+    @api.depends('lab_weight', 'lab_purity', 'lab_purity_id', 'lab_purity_id.percentage', 'purity_id.percentage', 'fine_weight', 'received_lab_fine_weight')
     def _compute_lab_fine_weight(self):
         for line in self:
-            purity = line.lab_purity or (line.purity_id.percentage if line.purity_id else 0.0)
+            purity = line.lab_purity or (line.lab_purity_id.percentage if line.lab_purity_id else (line.purity_id.percentage if line.purity_id else 0.0))
             line.lab_fine_weight = line.lab_weight * (purity / 100)
             line.refinery_fine_weight = line.fine_weight - line.lab_fine_weight
             line.remaining_lab_fine_weight = line.lab_fine_weight - line.received_lab_fine_weight
@@ -406,11 +427,11 @@ class JewelleryIssueVoucherLine(models.Model):
 
 
 
-    @api.depends('issued_weight', 'lab_purity', 'voucher_id.is_refinery', 'qty', 'purity_id.percentage')
+    @api.depends('issued_weight', 'lab_purity', 'lab_purity_id', 'lab_purity_id.percentage', 'voucher_id.is_refinery', 'qty', 'purity_id.percentage')
     def _compute_fine_weight(self):
         for rec in self:
             if rec.voucher_id.is_refinery:
-                purity = rec.lab_purity or (rec.purity_id.percentage if rec.purity_id else 0.0)
+                purity = rec.lab_purity or (rec.lab_purity_id.percentage if rec.lab_purity_id else (rec.purity_id.percentage if rec.purity_id else 0.0))
                 rec.fine_weight = rec.issued_weight * (purity / 100)
 
     @api.depends('issued_weight', 'stone_weight')

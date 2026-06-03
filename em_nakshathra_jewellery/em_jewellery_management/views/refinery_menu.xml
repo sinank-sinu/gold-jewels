@@ -118,11 +118,6 @@
                             <field name="purchase_per_rate"/>
                             <field name="scrap_bar_unit_rate" invisible="1"/>
                         </group>
-                        <group string="Lab Details">
-                            <field name="lab_sample_weight"/>
-                            <field name="lab_purity_percent"/>
-                            <field name="lab_purity_id" invisible="1"/>
-                        </group>
                     </group>
                     <notebook>
                         <page string="Gold Details">
