@@ -125,6 +125,7 @@
                                       decoration-success="is_matched == True"
                                       decoration-danger="is_matched == False and (manual_qty != 0 or manual_total_weight != 0)">
                                     <field name="product_id" readonly="1"/>
+                                    <field name="purity_id" optional="show" readonly="1"/>
                                     <field name="label_id" readonly="1"/>
                                     <field name="branch_id" optional="show" readonly="1"/>
                                     <field name="location_id" optional="show" readonly="1"/>

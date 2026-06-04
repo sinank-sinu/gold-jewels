@@ -290,6 +290,13 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         readonly=True
     )
 
+    purity_id = fields.Many2one(
+        'gold.purity',
+        string='Purity',
+        related='product_id.purity_id',
+        store=True,
+    )
+
     label_id = fields.Many2one(
         'product.label',
         string='Label',
