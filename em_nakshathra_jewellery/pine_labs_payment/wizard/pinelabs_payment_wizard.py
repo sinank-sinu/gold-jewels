@@ -109,19 +109,44 @@ class PineLabsPaymentWizard(models.TransientModel):
     def _action_register_bank_payment(self):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
+        
+        active_ids = []
         if self.invoice_id:
-            # Use the standard payment register action for the invoice
-            return self.invoice_id.action_register_payment()
+            active_ids = self.invoice_id.ids
         elif self.sale_order_id:
             # For SO, find the related invoice
             invoices = self.sale_order_id.invoice_ids.filtered(
                 lambda inv: inv.state == 'posted' and inv.payment_state in ('not_paid', 'partial')
             )
             if invoices:
-                return invoices[0].action_register_payment()
-            raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
+                active_ids = invoices.ids
+            else:
+                raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
         else:
             raise UserError(_('Bank Transfer is only available for invoices or sale orders.'))
+            
+        # Create the standard payment register wizard and explicitly set the amount
+        wizard = self.env['account.payment.register'].with_context(
+            active_model='account.move',
+            active_ids=active_ids,
+        ).create({
+            'is_pine_labs_payment': True,
+            'pine_labs_amount': self.amount,
+        })
+
+        return {
+            'name': _('Register Payment'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.payment.register',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'active_model': 'account.move',
+                'active_ids': active_ids,
+                'pine_labs_wizard_amount': self.amount,
+            },
+        }
 
     # ─────────────────────────────────────────────────────────────────
     # Pine Labs: Card or UPI
@@ -138,13 +163,11 @@ class PineLabsPaymentWizard(models.TransientModel):
             branch_terminals = self._get_branch_terminals()
             if branch_terminals:
                 terminal = branch_terminals[0]
-
         if not terminal:
             raise UserError(
                 _('No Pine Labs terminal is configured for this branch. '
                   'Go to Accounting → Configuration → Pine Labs Terminals to add one.')
             )
-            
         config = terminal.get_config()
 
         billing_ref = (
