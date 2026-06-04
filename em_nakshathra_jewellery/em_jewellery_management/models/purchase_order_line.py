@@ -78,7 +78,8 @@ class PurchaseOrderLine(models.Model):
         ('rate_per_gram', 'Rate Per Gram')
 
     ], string="MC Type", default='percent')
-    total_fine = fields.Float(string="Total Fine", compute="_compute_total_fine")
+    total_fine = fields.Float(string="Total Fine", compute="_compute_total_fine",digits=(16, 3))
+
     rate_value = fields.Float(string="Rate Value")
 
 

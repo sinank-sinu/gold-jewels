@@ -7,6 +7,7 @@
             <tree>
                 <field name="name"/>
                 <field name="job_worker_id"/>
+                <field name="order_date"/>
                 <!--                <field name="job_type"/>-->
                 <field name="state"/>
             </tree>
@@ -58,7 +59,7 @@
                         <field name="job_worker_balance"/>
                         <field name="requisition_id"/>
                         <field name="total_fine_weight"/>
-
+                        <field name="order_date"/>
                     </group>
 
                     <notebook>
@@ -135,7 +136,6 @@
                         <page name="others">
                             <group>
                                 <field name="total_issued_weight" readonly="1"/>
-
                                 <field name="final_balance" readonly="1"/>
                                 <field name="total_received_weight" readonly="1"/>
                                 <field name="weight_difference" readonly="1"/>

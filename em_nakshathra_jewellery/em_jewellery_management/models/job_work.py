@@ -48,6 +48,11 @@ class JewelleryJobWork(models.Model):
     ], default='draft')
     requisition_id = fields.Many2one("material.purchase.requisition")
 
+    order_date = fields.Date(
+        string="Order Date",
+        default=fields.Date.today
+    )
+
 
     show_issue_btn = fields.Boolean(compute='_compute_buttons')
     show_receive_btn = fields.Boolean(compute='_compute_buttons')

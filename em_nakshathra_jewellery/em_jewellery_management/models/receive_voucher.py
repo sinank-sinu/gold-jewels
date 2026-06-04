@@ -101,7 +101,10 @@ class JewelleryReceiveVoucher(models.Model):
                                           domain="[('usage', '=', 'internal'), ('location_id.usage', '!=', 'internal')]",
                                           default=lambda self: self.env.user.branch_id.branch_location_id.id)
     currency_id = fields.Many2one('res.currency', string='Currency', default=lambda self: self.env.company.currency_id)
-
+    order_date = fields.Date(
+        string="Order Date",
+        default=fields.Date.today
+    )
     @api.depends('total_net_weight', 'mc_percent', 'making_charge_type')
     def _compute_mc_fine(self):
         for voucher in self:
@@ -169,6 +172,11 @@ class JewelleryReceiveVoucher(models.Model):
         self.state = 'done'
         if self.job_work_id:
             self.job_work_id.state = 'received'
+        
+        if self.is_refinery:
+            for line in self.line_ids:
+                if line.issue_voucher_line_id and line.issue_voucher_line_id.refinery_issue_id:
+                    line.issue_voucher_line_id.refinery_issue_id.state = 'received'
         
         # Produce finished product in MO if linked
         # mo = self.job_work_id.mo_id

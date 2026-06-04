@@ -31,7 +31,6 @@
                     <field name="active" widget="boolean_toggle"/>
                 </header>
                 <sheet>
-
                     <group>
                         <field name="ticket_number"/>
                         <field name="partner_id"/>
@@ -40,6 +39,7 @@
                         <field name="address"/>
                         <field name="nominee"/>
                         <field name="duration"/>
+                        <field name="branch_id"/>
                         <field name="installment_amount"/>
                         <field name="total_paid" readonly="1"/>
                         <field name="balance_amount" readonly="1"/>

@@ -68,6 +68,11 @@ class JewelleryIssueVoucher(models.Model):
 
     is_refinery = fields.Boolean(string="Is Refinery")
 
+    order_date = fields.Date(
+        string="Order Date",
+        default=fields.Date.today
+    )
+
     @api.depends('is_refinery', 'job_worker_id', 'refinery_id')
     def _compute_received_location_id(self):
         for rec in self:
@@ -145,6 +150,8 @@ class JewelleryIssueVoucher(models.Model):
                 'picking_id': picking.id,
                 'purity_id': line.purity_id.id,
             })
+            if self.is_refinery and line.refinery_issue_id:
+                line.refinery_issue_id.state = 'issued'
 
         for move_line in picking.move_line_ids:
             move_line.qty_done = move_line.product_uom_qty

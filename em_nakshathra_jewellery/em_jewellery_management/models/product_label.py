@@ -111,7 +111,12 @@ class ProductLabel(models.Model):
         store=True,digits=(16, 3)
     )
 
-    purchase_metal_rate = fields.Float(string="Purchase Metal Amount")
+    purchase_metal_rate = fields.Float(
+        string="Purchase Metal Amount",
+        compute="_compute_purchase_metal_rate",
+        store=True,
+        readonly=False
+    )
     purchase_stone_rate = fields.Float(string="Purchase Stone Amount")
     purchase_diamond_rate = fields.Float(string="Purchase Diamond Amount")
 
@@ -423,11 +428,11 @@ class ProductLabel(models.Model):
         res.barcode = '21' + ean[2:]
         return res
 
-    @api.onchange('purchase_price_per_gram')
-    def _onchange_purchase_price_per_gram(self):
+    @api.depends('purchase_price_per_gram', 'purchase_fine_weight')
+    def _compute_purchase_metal_rate(self):
         for rec in self:
             if rec.purchase_price_per_gram:
-                rec.purchase_metal_rate = rec.purchase_price_per_gram*rec.purchase_fine_weight
+                rec.purchase_metal_rate = rec.purchase_price_per_gram * rec.purchase_fine_weight
 
     # -------------------------------------------------
     # Sync Sale & Purchase fields (two-way)

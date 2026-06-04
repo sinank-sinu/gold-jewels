@@ -8,6 +8,7 @@
                 <field name="name"/>
                 <field name="job_worker_id"/>
                 <field name="is_refinery" widget="boolean_toggle"/>
+                <field name="order_date"/>
 <!--                <field name="refinery_id" invisible="not is_refinery"/>-->
                 <field name="total_net_weight" readonly="1"/>
                 <field name="state"/>
@@ -100,7 +101,7 @@
                                     name="product_id"
                                     string="Variant"
                                     widget="sol_product_many2one"/>
-                                    <field name="refinery_issue_id" column_invisible="not parent.is_refinery"/>
+                                    <field name="refinery_issue_id" column_invisible="not parent.is_refinery" domain =""/>
                                     <field name="lab_weight" column_invisible="not parent.is_refinery" readonly="True" force_save="1"/>
                                     <field name="issued_weight" string="Issued Weight (g)" column_invisible="not parent.is_refinery" readonly="parent.state == 'done'" />
                                     <field name="qty" string="Net Weight" readonly="1" force_save="1"/>
