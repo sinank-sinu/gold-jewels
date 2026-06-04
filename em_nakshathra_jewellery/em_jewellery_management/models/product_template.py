@@ -44,18 +44,18 @@ class ProductTemplate(models.Model):
             },
         }
 
-    @api.constrains('is_scheme_product')
-    def _check_single_scheme_product(self):
-        for product in self:
-            if product.is_scheme_product:
-                count = self.search_count([
-                    ('is_scheme_product', '=', True),
-                    ('id', '!=', product.id),
-                ])
-                if count:
-                    raise ValidationError(
-                        _("Only ONE product can be marked as Scheme Product.")
-                    )
+    # @api.constrains('is_scheme_product')
+    # def _check_single_scheme_product(self):
+    #     for product in self:
+    #         if product.is_scheme_product:
+    #             count = self.search_count([
+    #                 ('is_scheme_product', '=', True),
+    #                 ('id', '!=', product.id),
+    #             ])
+    #             if count:
+    #                 raise ValidationError(
+    #                     _("Only ONE product can be marked as Scheme Product.")
+    #                 )
 
 
 class Product(models.Model):
@@ -103,18 +103,18 @@ class Product(models.Model):
             },
         }
 
-    @api.constrains('is_scheme_product')
-    def _check_single_scheme_product(self):
-        for product in self:
-            if product.is_scheme_product:
-                count = self.search_count([
-                    ('is_scheme_product', '=', True),
-                    ('id', '!=', product.id),
-                ])
-                if count:
-                    raise ValidationError(
-                        _("Only ONE product can be marked as Scheme Product.")
-                    )
+    # @api.constrains('is_scheme_product')
+    # def _check_single_scheme_product(self):
+    #     for product in self:
+    #         if product.is_scheme_product:
+    #             count = self.search_count([
+    #                 ('is_scheme_product', '=', True),
+    #                 ('id', '!=', product.id),
+    #             ])
+    #             if count:
+    #                 raise ValidationError(
+    #                     _("Only ONE product can be marked as Scheme Product.")
+    #                 )
 
 
 
