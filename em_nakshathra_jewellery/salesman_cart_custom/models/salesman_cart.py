@@ -219,7 +219,15 @@ class SalesmanCart(models.Model):
 
         # 4. Fetch defaults matching target company context
         sale_order_model = self.env['sale.order'].with_company(target_company)
-        default_vals = sale_order_model.default_get(['pricelist_id', 'team_id'])
+        default_vals = sale_order_model.default_get(['pricelist_id','team_id'])
+
+        branch = self.salesman_id.branch_id
+        if not branch:
+            # Fallback if the user profile somehow misses a branch, try the partner's branch or first available
+            branch = partner.branch_id if partner.branch_id else self.env['res.branch'].search([], limit=1)
+
+        if not branch.branch_code:
+            raise UserError(_("The selected branch does not have a Branch Code configured. Please configure it in branch settings."))
 
         so_vals = {
             'partner_id': partner.id,
@@ -228,7 +236,8 @@ class SalesmanCart(models.Model):
             'company_id': target_company.id,
             'warehouse_id': warehouse.id if warehouse else False,
             'pricelist_id': default_vals.get('pricelist_id') or partner.property_product_pricelist.id,
-            'opportunity_id': self.opportunity_id.id if self.opportunity_id else False, # <-- CRUCIAL FIX HERE
+            'opportunity_id': self.opportunity_id.id if self.opportunity_id else False,
+            'branch_id': branch.id,
             'state': 'draft',
         }
         
@@ -236,12 +245,20 @@ class SalesmanCart(models.Model):
         sale_order = sale_order_model.create(so_vals)
 
         for line in self.cart_line_ids:
+            # Try to locate the exact label based on the active label name so we can link it
+            label_id = False
+            if line.active_label_name:
+                label = self.env['product.label'].search([('name', '=', line.active_label_name)], limit=1)
+                if label:
+                    label_id = label.id
+
             self.env['sale.order.line'].with_company(target_company).create({
                 'order_id': sale_order.id,
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
                 'price_unit': line.product_id.lst_price,
+                'label_id': label_id,
             })
 
         self.write({'state': 'checked_out'})

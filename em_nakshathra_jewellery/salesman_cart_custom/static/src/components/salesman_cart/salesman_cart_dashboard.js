@@ -189,7 +189,8 @@ export class SalesmanCartDashboard extends Component {
             this.state.activeCart = null;
             await this.getOrCreateActiveCart();
         } catch (error) {
-            this.notification.add("Checkout failed. Please verify inventory balances.", { type: "danger" });
+            const serverMessage = error.data?.message || error.message || "Please verify inventory balances.";
+            this.notification.add(`Checkout failed: ${serverMessage}`, { type: "danger" });
         }
     }
 }
