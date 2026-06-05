@@ -69,7 +69,7 @@ class AccountMove(models.Model):
                             'account.account'].search([
                                 ('company_id', '=', pay.company_id.id),
                                 ('branch_id', '=', pay.branch_id.id),
-                                ('internal_type', '=', 'receivable'),
+                                ('account_type', '=', 'asset_receivable'),
                             ], limit=1)
                         pay.destination_account_id = destination_account
                         if not destination_account:
@@ -77,7 +77,7 @@ class AccountMove(models.Model):
                                 'account.account'].search([
                                     ('company_id', '=', pay.company_id.id),
                                     ('branch_id', '=', False),
-                                    ('internal_type', '=', 'receivable'),
+                                    ('account_type', '=', 'asset_receivable'),
                                 ], limit=1)
                         pay.destination_account_id = destination_account
                 elif pay.partner_type == 'supplier':
@@ -91,7 +91,7 @@ class AccountMove(models.Model):
                             'account.account'].search([
                                 ('company_id', '=', pay.company_id.id),
                                 ('branch_id', '=', pay.branch_id.id),
-                                ('internal_type', '=', 'payable'),
+                                ('account_type', '=', 'liability_payable'),
                             ], limit=1)
                         pay.destination_account_id = destination_account
                         if not destination_account:
@@ -99,7 +99,7 @@ class AccountMove(models.Model):
                                 'account.account'].search([
                                     ('company_id', '=', pay.company_id.id),
                                     ('branch_id', '=', False),
-                                    ('internal_type', '=', 'payable'),
+                                    ('account_type', '=', 'liability_payable'),
                                 ], limit=1)
                             pay.destination_account_id = destination_account
         else:
