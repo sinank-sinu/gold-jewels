@@ -7,7 +7,7 @@ class OldGoldRefineryIssue(models.Model):
     def action_to_melting(self):
         # We create the RED record once moved to melting status (ISSUE)
         res = super(OldGoldRefineryIssue, self).action_to_melting()
-        
+
         # Create Refinery Margin Report (Red)
         batches = ", ".join(self.batch_ids.mapped('name')) if self.batch_ids else ""
         purity = self.expected_purity_id or (self.line_ids[0].purity_id if self.line_ids else False)

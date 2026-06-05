@@ -505,7 +505,6 @@ class ProductLabel(models.Model):
             line = self.purchase_id.order_line.filtered(
                 lambda l: l.product_id.id == self.product_id.id
             )
-
             if line:
                 line = line[0]  # take first matching line
                 self.purchase_making_charge_type = line.purchase_making_charge_type
@@ -515,7 +514,6 @@ class ProductLabel(models.Model):
                     self.purchase_making_charge_value = line.purchase_making_charge_value
                 elif line.purchase_making_charge_type == 'rate_per_gram':
                     self.purchase_making_charge_value = line.rate_value
-                
                 self.purchase_metal_rate = line.metal_amount
             else:
                 self.purchase_making_charge_value = 0

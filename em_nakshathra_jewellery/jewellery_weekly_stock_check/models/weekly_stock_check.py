@@ -96,16 +96,19 @@ class JewelleryWeeklyStockCheck(models.Model):
         self.line_ids.unlink()
         self.template_summary_ids.unlink()
 
-        # 1. Get active labels for this branch
-        labels = self.env['product.label'].search([
-            ('branch_id', '=', branch.id),
-            ('active', '=', True),
-        ])
-
-        # 2. Get on-hand stock quants for this location
+        # 1. Get on-hand stock quants for this location with quantity > 0
         quants = self.env['stock.quant'].search([
             ('location_id', 'in', self.location_ids.ids),
             ('quantity', '>', 0),
+        ])
+
+        product_ids = quants.mapped('product_id').ids
+
+        # 2. Get active labels for these products that are in the selected locations
+        labels = self.env['product.label'].search([
+            ('product_id', 'in', product_ids),
+            ('branch_location_id', 'in', self.location_ids.ids),
+            ('active', '=', True),
         ])
 
         if not labels and not quants:
