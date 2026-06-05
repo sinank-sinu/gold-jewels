@@ -508,7 +508,14 @@ class ProductLabel(models.Model):
 
             if line:
                 line = line[0]  # take first matching line
-                self.purchase_making_charge_value = line.mc_percent
+                self.purchase_making_charge_type = line.purchase_making_charge_type
+                if line.purchase_making_charge_type == 'percent':
+                    self.purchase_making_charge_value = line.mc_percent
+                elif line.purchase_making_charge_type == 'amount':
+                    self.purchase_making_charge_value = line.purchase_making_charge_value
+                elif line.purchase_making_charge_type == 'rate_per_gram':
+                    self.purchase_making_charge_value = line.rate_value
+                
                 self.purchase_metal_rate = line.metal_amount
             else:
                 self.purchase_making_charge_value = 0

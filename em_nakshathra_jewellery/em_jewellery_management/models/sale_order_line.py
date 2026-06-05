@@ -18,6 +18,10 @@ class SaleOrderLine(models.Model):
         string="Diamond Weight (g)",
         digits=(12, 3)
     )
+    sale_diamond_weight_ct = fields.Float(
+        string="Diamond Weight (ct)",
+        digits=(12, 3)
+    )
     gold_rate =fields.Float(string="Gold Rate(g)")
 
     mc_percent = fields.Float(string="Max mc")
@@ -85,6 +89,7 @@ class SaleOrderLine(models.Model):
             self.product_uom_qty = self.label_id.sale_gross_weight
             self.sale_stone_weight = self.label_id.sale_stone_weight
             self.sale_diamond_weight_gm = self.label_id.sale_diamond_weight_gm
+            self.sale_diamond_weight_ct = self.label_id.sale_diamond_weight_ct
 
             self.sale_stone_rate = self.label_id.sale_stone_rate
             self.sale_diamond_rate = self.label_id.sale_diamond_rate
