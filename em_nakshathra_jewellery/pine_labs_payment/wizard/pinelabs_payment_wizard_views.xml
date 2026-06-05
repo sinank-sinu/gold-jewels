@@ -87,7 +87,7 @@
                                     invisible="payment_method_type == 'bank'">
                                 <div style="font-size: 28px; margin-bottom: 6px;">🏦</div>
                                 <div style="font-weight: 600; color: #374151; font-size: 13px;">Bank</div>
-                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Transfer / Cash</div>
+                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Transfer</div>
                             </button>
 
                             <!-- BANK Button SELECTED -->
@@ -98,13 +98,38 @@
                                     invisible="payment_method_type != 'bank'">
                                 <div style="font-size: 28px; margin-bottom: 6px;">🏦</div>
                                 <div style="font-weight: 700; color: #D97706; font-size: 13px;">Bank</div>
-                                <div style="color: #F59E0B; font-size: 11px; margin-top: 2px;">Transfer / Cash</div>
+                                <div style="color: #F59E0B; font-size: 11px; margin-top: 2px;">Transfer</div>
                                 <div style="margin-top: 6px;">
                                     <span style="background: #D97706; color: white; border-radius: 20px;
                                                  padding: 2px 8px; font-size: 10px; font-weight: 600;">✓ Selected</span>
                                 </div>
                             </button>
 
+                            <!-- CASH Button -->
+                            <button name="action_select_cash" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #D1D5DB;
+                                           border-radius: 12px; background: white; cursor: pointer;
+                                           transition: all 0.2s; text-align: center;"
+                                    invisible="payment_method_type == 'cash'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">💵</div>
+                                <div style="font-weight: 600; color: #374151; font-size: 13px;">Cash</div>
+                                <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">Cash Payment</div>
+                            </button>
+
+                            <!-- CASH Button SELECTED -->
+                            <button name="action_select_cash" type="object"
+                                    style="flex: 1; padding: 16px 12px; border: 2px solid #10B981;
+                                           border-radius: 12px; background: #D1FAE5; cursor: pointer;
+                                           text-align: center; box-shadow: 0 0 0 3px rgba(16,185,129,0.15);"
+                                    invisible="payment_method_type != 'cash'">
+                                <div style="font-size: 28px; margin-bottom: 6px;">💵</div>
+                                <div style="font-weight: 700; color: #059669; font-size: 13px;">Cash</div>
+                                <div style="color: #059669; font-size: 11px; margin-top: 2px;">Cash Payment</div>
+                                <div style="margin-top: 6px;">
+                                    <span style="background: #10B981; color: white; border-radius: 20px;
+                                                 padding: 2px 8px; font-size: 10px; font-weight: 600;">✓ Selected</span>
+                                </div>
+                            </button>
                         </div>
 
                         <!-- Info Messages -->
@@ -125,6 +150,11 @@
                             <i class="fa fa-university me-2"/>
                             Odoo's standard <strong>Register Payment</strong> window will open.
                             No Pine Labs terminal request will be made.
+                        </div>
+                        <div class="alert alert-info" style="border-radius: 8px; margin-bottom: 16px; background-color: #d1fae5; border-color: #34d399; color: #065f46;"
+                             invisible="payment_method_type != 'cash'">
+                            <i class="fa fa-money me-2"/>
+                            Odoo's standard <strong>Register Payment</strong> window will open with the <strong>Cash</strong> journal auto-selected.
                         </div>
 
                         <!-- Amount & Currency -->
@@ -185,7 +215,7 @@
                             string="Send to Terminal"
                             type="object"
                             class="btn-primary"
-                            invisible="state != 'draft' or payment_method_type == 'bank'"/>
+                            invisible="state != 'draft' or payment_method_type in ('bank', 'cash')"/>
 
                     <!-- Bank: Register Payment -->
                     <button name="action_initiate_payment"
@@ -193,6 +223,13 @@
                             type="object"
                             class="btn-warning"
                             invisible="state != 'draft' or payment_method_type != 'bank'"/>
+
+                    <!-- Cash: Register Payment -->
+                    <button name="action_initiate_payment"
+                            string="Register Payment (Cash)"
+                            type="object"
+                            class="btn-success"
+                            invisible="state != 'draft' or payment_method_type != 'cash'"/>
 
                     <!-- Waiting -->
                     <button name="action_check_status"

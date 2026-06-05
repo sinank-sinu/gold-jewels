@@ -78,6 +78,7 @@ class AccountMove(models.Model):
             deduction += self.vendor_bill_amount or 0.0
         
         if deduction:
+            self.custom_total = 0.0
             if self.amount_residual < deduction:
                 self.custom_total = self.amount_residual - deduction
                 self.amount_residual = 0.0

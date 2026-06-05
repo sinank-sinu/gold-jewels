@@ -35,6 +35,7 @@ class PineLabsPaymentWizard(models.TransientModel):
         ('card', 'Card (Credit / Debit)'),
         ('upi', 'UPI'),
         ('bank', 'Bank Transfer (Register Payment)'),
+        ('cash', 'Cash Payment'),
     ], string='Payment Mode', required=True, default='card')
 
     state = fields.Selection([
@@ -89,6 +90,9 @@ class PineLabsPaymentWizard(models.TransientModel):
     def action_select_bank(self):
         return self._set_mode_and_refresh('bank')
 
+    def action_select_cash(self):
+        return self._set_mode_and_refresh('cash')
+
     # ─────────────────────────────────────────────────────────────────
     # Main action: routes to Bank or Pine Labs depending on mode
     # ─────────────────────────────────────────────────────────────────
@@ -99,6 +103,8 @@ class PineLabsPaymentWizard(models.TransientModel):
 
         if self.payment_method_type == 'bank':
             return self._action_register_bank_payment()
+        elif self.payment_method_type == 'cash':
+            return self._action_register_cash_payment()
         else:
             return self._action_initiate_pinelabs_payment()
 
@@ -145,6 +151,58 @@ class PineLabsPaymentWizard(models.TransientModel):
                 'active_model': 'account.move',
                 'active_ids': active_ids,
                 'pine_labs_wizard_amount': self.amount,
+            },
+        }
+
+    # ─────────────────────────────────────────────────────────────────
+    # Cash Payment: Auto-select Cash journal
+    # ─────────────────────────────────────────────────────────────────
+
+    def _action_register_cash_payment(self):
+        """Open Odoo's standard Register Payment wizard for cash with journal preset."""
+        self.ensure_one()
+        
+        cash_journal = self.env['account.journal'].search([('type', '=', 'cash'), ('company_id', '=', self.env.company.id)], limit=1)
+        if not cash_journal:
+            raise UserError(_('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
+            
+        active_ids = []
+        if self.invoice_id:
+            active_ids = self.invoice_id.ids
+        elif self.sale_order_id:
+            # For SO, find the related invoice
+            invoices = self.sale_order_id.invoice_ids.filtered(
+                lambda inv: inv.state == 'posted' and inv.payment_state in ('not_paid', 'partial')
+            )
+            if invoices:
+                active_ids = invoices.ids
+            else:
+                raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
+        else:
+            raise UserError(_('Cash Payment is only available for invoices or sale orders.'))
+            
+        # Create the standard payment register wizard and explicitly set the amount
+        wizard = self.env['account.payment.register'].with_context(
+            active_model='account.move',
+            active_ids=active_ids,
+        ).create({
+            'is_pine_labs_payment': True,
+            'pine_labs_amount': self.amount,
+            'journal_id': cash_journal.id,
+        })
+
+        return {
+            'name': _('Register Cash Payment'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.payment.register',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'active_model': 'account.move',
+                'active_ids': active_ids,
+                'pine_labs_wizard_amount': self.amount,
+                'default_journal_id': cash_journal.id,
             },
         }
 

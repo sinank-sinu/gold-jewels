@@ -31,7 +31,7 @@
                         string="Create Customer Payment"
                         type="object"
                         class="btn-danger"
-                        invisible="is_paid or move_type != 'out_invoice' or amount_total >= 0"/>
+                        invisible="move_type != 'out_invoice' or custom_total &gt;= 0"/>
             </xpath>
              <xpath expr="//field[@name='narration']" position="before">
                 <group>

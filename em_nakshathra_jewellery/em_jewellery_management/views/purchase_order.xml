@@ -39,7 +39,7 @@
                     type="object"
                     string="Create Sale Order"
                     class="btn-primary"
-                    invisible="sale_id != False"
+                    invisible="sale_id != False or not unfix"
                 />
                  <button name="action_create_bill_and_pay"
                     type="object"
