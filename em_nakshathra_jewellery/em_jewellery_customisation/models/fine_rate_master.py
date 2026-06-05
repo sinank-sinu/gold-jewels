@@ -14,6 +14,28 @@ class FineRateMaster(models.Model):
     )
     fine_rate = fields.Float(string="Fine Rate")
 
+    history_ids = fields.One2many(
+        'fine.rate.history',
+        'master_id',
+        string="1PM Update History"
+    )
+
+    def action_1pm_update(self):
+        self.ensure_one()
+
+        self.env['fine.rate.history'].create({
+            'master_id': self.id,
+            'fine_rate': self.fine_rate,
+        })
+
+        histories = self.history_ids.sorted(
+            key=lambda h: h.update_datetime,
+            reverse=True
+        )
+
+        if len(histories) > 10:
+            histories[10:].unlink()
+
    
     # name = fields.Char(
     #     string='Reference',

@@ -38,7 +38,9 @@
         <field name="arch" type="xml">
             <tree string="Stock Summary Report" create="false" edit="false" delete="false">
                 <field name="product_template_id" invisible="1"/>
-                <field name="product_id"/>
+                <field name="product_id" invisible="1"/>
+                <!--Attributes-->
+                <field name="attribute_values"/>
                 <field name ="purity_id"/>
                 <field name="ageing" string="Ageing"/>
                 <field name="opening_pcs" sum="Total Opening PCs"/>

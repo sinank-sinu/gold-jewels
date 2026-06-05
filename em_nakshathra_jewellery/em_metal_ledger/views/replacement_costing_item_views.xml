@@ -17,12 +17,14 @@
                 <field name="net_weight_purchase"/>
                 <field name="diamond_weight_purchase"/>
                 <field name="stone_weight_purchase"/>
+                <field name="purchase_making_charge_type"/>
                 <field name="purchase_mc_percent_fine"/>
+                <field name="purchase_mc_amount"/>
                 <field name="purchase_metal_rate"/>
                 <field name="diamond_amount_purchase"/>
                 <field name="stone_amount_purchase"/>
                 <field name="purchase_mc_fine"/>
-                <field name="rate_fine_next_day_1pm"/>
+                <!-- <field name="rate_fine_next_day_1pm"/> -->
                 <field name="metal_qty_on_fine" optional="show"/>
                 <field name="metal_amount_purchase" optional="show"/>
                 <field name="purchase_mc_on_fine_qty" optional="show"/>
@@ -30,6 +32,7 @@
                 <field name="purchase_metal_amount_on_fine" optional="show"/>
                 <field name="purchase_mc_amount_on_fine" optional="show"/>
                 <field name="taxable_amount_purchase" optional="show"/>
+                <field name="rate_fine_next_day_1pm"/>
                 <field name="sale_mc_percent" optional="show"/>
                 <field name="sale_metal_rate_manual"/>
                 <field name="metal_amount_sale"/>
