@@ -16,7 +16,7 @@
                     <button
                         name="action_log_rate_update"
                         type="object"
-                        string="1pm update"
+                        string="Update"
                         class="btn-primary"
                     />
                     <field name="active" widget="boolean_toggle"/>
@@ -29,7 +29,7 @@
                         <field name="rate_per_gram"/>
                         <field name="purity_id"/>
 <!--                       from jafar side-->
-                        <field name="fine_rate"/>
+                        <!-- <field name="fine_rate"/> -->
                         <field name="board_rate" invisible="1"/>
                     </group>
                 </sheet>
@@ -47,7 +47,7 @@
                 <field name="rate_type"/>
 <!--                form jafar side-->
                 <field name="board_rate" column_invisible="1"/>
-                <field name="fine_rate"/>
+                <!-- <field name="fine_rate"/> -->
                 <field name="purity_id"/>
                 <field name="active"/>
             </tree>

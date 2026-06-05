@@ -10,7 +10,11 @@ class ReplacementCostingItem(models.Model):
     salesman_id = fields.Many2one('res.users', string="Salesman")
     sales_voucher_name = fields.Char(string="Voucher")
     label_id = fields.Many2one('product.label', string="Label")
-    product_id = fields.Many2one('product.product', related='label_id.product_id', string="Product Name", store=True)
+    product_id = fields.Many2one(
+        'product.product',
+        string="Product Name"
+    )
+    # product_id = fields.Many2one('product.product', related='label_id.product_id', string="Product Name", store=True)
     purity_id = fields.Many2one('gold.purity', string="Caret")
     purity = fields.Float(string="Purity", compute="_compute_all_fields", store=True)
     
@@ -21,7 +25,13 @@ class ReplacementCostingItem(models.Model):
     diamond_weight_purchase = fields.Float(string="PO Dia Wt (g)", digits=(16, 3))
     stone_weight_purchase = fields.Float(string="PO Stone Wt (g)", digits=(16, 3))
     
+    purchase_making_charge_type = fields.Selection([
+        ('percent', 'Percentage'),
+        ('amount', 'Amount'),
+        ('rate_per_gram', 'Rate per Gram'),
+    ], string="PO MC Type")
     purchase_mc_percent_fine = fields.Float(string="PO MC %")
+    purchase_mc_amount = fields.Float(string="PO MC Amount")
     purchase_metal_rate = fields.Float(string="PO Metal Rate")
     diamond_amount_purchase = fields.Float(string="PO Dia Amt")
     stone_amount_purchase = fields.Float(string="PO Stone Amt")
@@ -65,8 +75,15 @@ class ReplacementCostingItem(models.Model):
             rec.metal_amount_purchase = rec.metal_qty_on_fine * rec.purchase_metal_rate
             
             # Purchase MC on fine qty: net weight * purchase mc percent
-            rec.purchase_mc_on_fine_qty = rec.net_weight_purchase * (rec.purchase_mc_percent_fine / 100.0)
-            rec.purchase_mc_value = rec.purchase_mc_on_fine_qty * rec.purchase_metal_rate
+            if rec.purchase_making_charge_type == 'percent':
+                rec.purchase_mc_on_fine_qty = rec.net_weight_purchase * (rec.purchase_mc_percent_fine / 100.0)
+                rec.purchase_mc_value = rec.purchase_mc_on_fine_qty * rec.purchase_metal_rate
+
+            else:  # amount or rate_per_gram
+                rec.purchase_mc_on_fine_qty = 0.0
+                rec.purchase_mc_value = rec.purchase_mc_amount
+            # rec.purchase_mc_on_fine_qty = rec.net_weight_purchase * (rec.purchase_mc_percent_fine / 100.0)
+            # rec.purchase_mc_value = rec.purchase_mc_on_fine_qty * rec.purchase_metal_rate
             
             rec.taxable_amount_purchase = rec.metal_amount_purchase + rec.purchase_mc_value + rec.diamond_amount_purchase + rec.stone_amount_purchase
             

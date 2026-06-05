@@ -31,10 +31,10 @@ class ReplacementCostingWizard(models.TransientModel):
         
         headers = [
             'Date', 'Salesman', 'Voucher', 'Label', 'Product Name', 'Caret', 'Purity', 'Branch', 'PCS',
-            'PO GW (g)', 'PO NW (g)', 'PO Dia Wt (g)', 'PO Stone Wt (g)',
-            'PO MC %', 'PO Metal Rate', 'PO Dia Amt', 'PO Stone Amt', 'PO MC Fine',
-            'Next Day 1PM Rate', 'Metal Qty On Fine', 'PO Metal Amt',
-            'PO MC On Fine Qty', 'PO MC Value', 'PO Taxable Amt',
+            'PO GW (g)', 'PO NW (g)', 'PO Dia Wt (g)', 'PO Stone Wt (g)', 'PO MC Type',
+            'PO MC %', 'PO MC Amount', 'PO Metal Rate', 'PO Dia Amt', 'PO Stone Amt', 'PO MC Fine',
+            'Metal Qty On Fine', 'PO Metal Amt',
+            'PO MC On Fine Qty', 'PO MC Value', 'PO Taxable Amt', 'Next Day 1PM Rate',
             'RPC Metal Amt', 'RPC MC Amt',
             'Sale Metal Rate', 'Sale Metal Amt', 'Sale MC %', 'Sale MC Amt',
             'Sale Dia Amt', 'Sale Stone Amt', 'Sale Taxable Amt',
@@ -68,33 +68,57 @@ class ReplacementCostingWizard(models.TransientModel):
             sheet.write(row, 10, item.net_weight_purchase)
             sheet.write(row, 11, item.diamond_weight_purchase)
             sheet.write(row, 12, item.stone_weight_purchase)
-            sheet.write(row, 13, item.purchase_mc_percent_fine)
-            sheet.write(row, 14, item.purchase_metal_rate)
-            sheet.write(row, 15, item.diamond_amount_purchase)
-            sheet.write(row, 16, item.stone_amount_purchase)
-            sheet.write(row, 17, item.purchase_mc_fine)
-            sheet.write(row, 18, item.rate_fine_next_day_1pm)
-            sheet.write(row, 19, item.metal_qty_on_fine)
-            sheet.write(row, 20, item.metal_amount_purchase)
-            sheet.write(row, 21, item.purchase_mc_on_fine_qty)
-            sheet.write(row, 22, item.purchase_mc_value)
-            sheet.write(row, 23, item.taxable_amount_purchase)
-            sheet.write(row, 24, item.purchase_metal_amount_on_fine)
-            sheet.write(row, 25, item.purchase_mc_amount_on_fine)
+            selection_dict = dict(
+                item._fields['purchase_making_charge_type'].selection
+            )
+
+            sheet.write(
+                row,
+                13,
+                selection_dict.get(item.purchase_making_charge_type, '')
+            )
+            # sheet.write(row, 13, item.purchase_making_charge_type)
+            sheet.write(
+                row, 14,
+                item.purchase_mc_percent_fine
+                if item.purchase_making_charge_type == 'percent'
+                else ''
+            )
+            # sheet.write(row, 14, item.purchase_mc_percent_fine)
+            sheet.write(
+                row, 15,
+                item.purchase_mc_amount
+                if item.purchase_making_charge_type in ('amount', 'rate_per_gram')
+                else ''
+            )
+            # sheet.write(row, 15, item.purchase_mc_amount)
+            sheet.write(row, 16, item.purchase_metal_rate)
+            sheet.write(row, 17, item.diamond_amount_purchase)
+            sheet.write(row, 18, item.stone_amount_purchase)
+            sheet.write(row, 19, item.purchase_mc_fine)
+            # sheet.write(row, 18, item.rate_fine_next_day_1pm)
+            sheet.write(row, 20, item.metal_qty_on_fine)
+            sheet.write(row, 21, item.metal_amount_purchase)
+            sheet.write(row, 22, item.purchase_mc_on_fine_qty)
+            sheet.write(row, 23, item.purchase_mc_value)
+            sheet.write(row, 24, item.taxable_amount_purchase)
+            sheet.write(row, 25, item.rate_fine_next_day_1pm)
+            sheet.write(row, 26, item.purchase_metal_amount_on_fine)
+            sheet.write(row, 27, item.purchase_mc_amount_on_fine)
             
-            sheet.write(row, 26, item.sale_metal_rate_manual)
-            sheet.write(row, 27, item.metal_amount_sale)
-            sheet.write(row, 28, item.sale_mc_percent)
-            sheet.write(row, 29, item.mc_amount_sale)
-            sheet.write(row, 30, item.diamond_amount_sale)
-            sheet.write(row, 31, item.stone_amount_sale)
-            sheet.write(row, 32, item.sale_taxable_amount)
+            sheet.write(row, 28, item.sale_metal_rate_manual)
+            sheet.write(row, 29, item.metal_amount_sale)
+            sheet.write(row, 30, item.sale_mc_percent)
+            sheet.write(row, 31, item.mc_amount_sale)
+            sheet.write(row, 32, item.diamond_amount_sale)
+            sheet.write(row, 33, item.stone_amount_sale)
+            sheet.write(row, 34, item.sale_taxable_amount)
             
-            sheet.write(row, 33, item.metal_profit)
-            sheet.write(row, 34, item.mc_profit)
-            sheet.write(row, 35, item.diamond_profit)
-            sheet.write(row, 36, item.stone_profit)
-            sheet.write(row, 37, item.total_gp)
+            sheet.write(row, 35, item.metal_profit)
+            sheet.write(row, 36, item.mc_profit)
+            sheet.write(row, 37, item.diamond_profit)
+            sheet.write(row, 38, item.stone_profit)
+            sheet.write(row, 39, item.total_gp)
             
             row += 1
             

@@ -10,3 +10,4 @@ from . import fine_rate_master
 from . import stock_rule
 from . import purchase_order
 from . import account_move
+from . import fine_rate_history
