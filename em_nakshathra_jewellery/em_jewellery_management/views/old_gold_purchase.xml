@@ -161,6 +161,7 @@
     <menuitem id="menu_old_gold_root"
               name="Old Gold"
               parent="em_jewellery_management.menu_jewellery_root"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_billing_staff"
               sequence="20"/>
 
     <!-- Old Gold Purchase -->
