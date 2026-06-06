@@ -72,7 +72,9 @@ export class SalesmanCartDashboard extends Component {
             const userBranchId = userData[0].branch_id ? userData[0].branch_id[0] : false;
 
             // 2. Base Domain: Must be sellable, in stock, and storable
-            const domain = [
+            // We use explicit prefix '&' operators to avoid AST parsing errors in Odoo 17.
+            let domain = [
+                "&", "&", "&",
                 ["sale_ok", "=", true],
                 ["qty_available", ">", 0],
                 ["detailed_type", "=", "product"]
@@ -91,6 +93,8 @@ export class SalesmanCartDashboard extends Component {
             // 4. Handle search query input matching if typed
             const query = this.state.searchQuery.trim();
             if (query) {
+                // Insert a root '&' operator for the new condition block
+                domain.unshift("&");
                 domain.push("|", "|",
                     ["display_name", "ilike", query],
                     ["barcode", "ilike", query],
