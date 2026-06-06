@@ -111,7 +111,9 @@ export class SalesmanCartDashboard extends Component {
             );
 
         } catch (error) {
-            this.notification.add("Failed to load your branch's jewelry catalog.", { type: "danger" });
+            console.error("Load Products Error:", error);
+            const serverMessage = error.data?.message || error.message || "Failed to load your branch's jewelry catalog.";
+            this.notification.add(`Catalog Error: ${serverMessage}`, { type: "danger" });
         } finally {
             this.state.loading = false;
         }
