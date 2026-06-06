@@ -26,3 +26,4 @@ from .import account_move
 from .import jeweller_scheme
 from .import scheme_installment
 from . import mrp_production
+from . import account_payment

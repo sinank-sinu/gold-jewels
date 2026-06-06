@@ -45,6 +45,28 @@ class SaleOrder(models.Model):
         readonly=True,
     )
 
+    advance_payment_ids = fields.One2many('account.payment', 'sale_id', string='Advance Payments')
+    advance_payment_count = fields.Integer(compute='_compute_advance_payment_count')
+
+    def _compute_advance_payment_count(self):
+        for order in self:
+            order.advance_payment_count = len(order.advance_payment_ids)
+
+    def action_view_advance_payments(self):
+        self.ensure_one()
+        return {
+            'name': _('Advance Payments'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.payment',
+            'view_mode': 'tree,form',
+            'domain': [('sale_id', '=', self.id)],
+            'context': {
+                'default_sale_id': self.id,
+                'default_partner_id': self.partner_id.id,
+                'default_payment_type': 'inbound',
+            },
+        }
+
     active_scheme_id = fields.Many2one(
         'jewellery.scheme.enrollment',
         string="Customer Scheme",
@@ -488,6 +510,24 @@ class SaleOrder(models.Model):
             invoices.action_post()
 
         return True
+
+    def action_advance_payment(self):
+        self.ensure_one()
+        return {
+            'name': _('Advance Payment'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.payment',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_payment_type': 'inbound',
+                'default_partner_type': 'customer',
+                'default_partner_id': self.partner_id.id,
+                'default_amount': self.amount_total,
+                'default_currency_id': self.currency_id.id,
+                'default_sale_id': self.id,
+            }
+        }
 
 
 

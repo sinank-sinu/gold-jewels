@@ -116,6 +116,14 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
         
+        if self.payment_id and self.payment_id.state == 'draft':
+            bank_journal = self.env['account.journal'].search([('type', '=', 'bank'), ('company_id', '=', self.env.company.id)], limit=1)
+            if not bank_journal:
+                raise UserError(_('No bank journal found.'))
+            self.payment_id.journal_id = bank_journal.id
+            self.payment_id.action_post()
+            return {'type': 'ir.actions.act_window_close'}
+
         active_ids = []
         if self.invoice_id:
             active_ids = self.invoice_id.ids
@@ -166,6 +174,11 @@ class PineLabsPaymentWizard(models.TransientModel):
         if not cash_journal:
             raise UserError(_('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
             
+        if self.payment_id and self.payment_id.state == 'draft':
+            self.payment_id.journal_id = cash_journal.id
+            self.payment_id.action_post()
+            return {'type': 'ir.actions.act_window_close'}
+
         active_ids = []
         if self.invoice_id:
             active_ids = self.invoice_id.ids
