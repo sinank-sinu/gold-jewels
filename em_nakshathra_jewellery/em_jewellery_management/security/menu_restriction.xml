@@ -48,7 +48,7 @@
 
     <!-- Restrict Requisitions -->
     <record id="cr_material_purchase_requisitions.material_purchase_requisitions_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('em_jewellery_management.group_jewellery_purchase_user'), ref('base.group_system')])]"/>
     </record>
 
     <!-- Restrict Link Tracker -->
@@ -67,7 +67,7 @@
 
     <!-- Restrict Purchase -->
     <record id="purchase.menu_purchase_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('em_jewellery_management.group_jewellery_purchase_user'), ref('base.group_system')])]"/>
     </record>
 
     <!-- Restrict Manufacturing -->
