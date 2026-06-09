@@ -13,6 +13,7 @@
     'data': [
         "security/res_group.xml",
         'security/sale_order_rule.xml',
+        'security/purchase_order_rule.xml',
         'security/ir.model.access.csv',
         'security/menu_restriction.xml',
         'data/jewellery_sequence.xml',
