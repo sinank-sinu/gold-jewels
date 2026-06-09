@@ -11,11 +11,13 @@
         'security/ir.model.access.csv',
         'views/jewellery_menu.xml',
         'views/jewellery_scheme_enrollment_views.xml',
+        'views/scheme_report_wizard_views.xml',
         'reports/scheme_margin_report.xml',
         'views/product_label.xml',
         'views/fine_rate_master_view.xml',
         'views/stock_picking_views.xml',
         'views/sale_order_views.xml',
+        
 
     ],
 

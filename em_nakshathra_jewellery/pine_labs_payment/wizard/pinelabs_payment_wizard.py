@@ -50,6 +50,7 @@ class PineLabsPaymentWizard(models.TransientModel):
     card_type = fields.Char(string='Card Type', readonly=True)
     payment_mode = fields.Char(string='Payment Mode Result', readonly=True)
     txn_id = fields.Many2one('pinelabs.transaction', string='Transaction Record', readonly=True)
+    scheme_installment_id = fields.Many2one('jewellery.scheme.installment', string='Scheme Installment Row')
 
     def _get_branch_terminals(self):
         """Return pinelabs.terminal records for the current invoice/document branch."""
@@ -109,7 +110,68 @@ class PineLabsPaymentWizard(models.TransientModel):
     def _action_register_bank_payment(self):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
-        
+        # ─── NEW HOOK: Handle Scheme Installments for Bank Transfer directly ───
+        if self.scheme_installment_id:
+            rec = self.scheme_installment_id
+            
+            # Find a fallback Bank/Cash journal since terminal configurations are for Pine Labs card/upi
+            payment_journal = self.env['account.journal'].search([
+                ('type', '=', 'bank'),
+                ('company_id', '=', self.env.company.id),
+            ], limit=1)
+
+            if not payment_journal:
+                raise UserError(_("No valid Bank journal found in your Chart of Accounts."))
+
+            # Target dynamic Debtors Account Search matching your exact accounting structure logic
+            debtors_account = self.env['account.account'].search([
+                ('code', '=', '100400')
+            ], limit=1)
+
+            if not debtors_account:
+                raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
+
+            liability_account = payment_journal.default_account_id
+            if not liability_account:
+                raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
+
+            # Generate the financial transaction entry document exactly like your original custom button
+            move = self.env['account.move'].create({
+                'move_type': 'entry',
+                'journal_id': payment_journal.id,
+                'ref': _('Scheme Payment via Bank Transfer - %s') % (rec.enrollment_id.name or ''),
+                'line_ids': [
+                    (0, 0, {
+                        'name': _('Scheme Liability - %s') % (rec.enrollment_id.name or ''),
+                        'partner_id': rec.enrollment_id.partner_id.id,
+                        'credit': 0.0,
+                        'debit': self.amount,
+                        'account_id': liability_account.id
+                    }),
+                    (0, 0, {
+                        'name': _('Scheme Payment via Bank Transfer'),
+                        'partner_id': rec.enrollment_id.partner_id.id,
+                        'debit': 0.0,
+                        'credit': self.amount,
+                        'account_id': debtors_account.id
+                    })
+                ]
+            })
+
+            # Force entry validation adjustments straight down to General Ledgers
+            move.action_post()
+
+            # Pass values straight down into your installment row list columns layout fields
+            rec.write({
+                'journal_id': payment_journal.id,
+                'move_id': move.id,
+                'transaction_id': 'BANK-TRANSFER',
+                'state': 'paid'
+            })
+            
+            # Close the wizard popup upon success
+            return {'type': 'ir.actions.act_window_close'}
+        # ─── LEGACY CODO ODOO FLOW (INVOICES / SALE ORDERS) ───
         active_ids = []
         if self.invoice_id:
             active_ids = self.invoice_id.ids

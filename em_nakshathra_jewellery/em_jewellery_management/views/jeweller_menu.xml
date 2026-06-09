@@ -31,13 +31,19 @@
         sequence="90"
         groups="em_jewellery_management.group_jewellery_manager"
     />
-    <menuitem id="menu_scheme_enrollment"
+    <!-- Main Scheme Menu -->
+    <menuitem id="menu_scheme_enrollment_category"
               name="Schemes"
               parent="menu_jewellery_root"
+              groups="em_jewellery_management.group_jewellery_manager"
+              sequence="10"/>
+    <!--Submenu Scheme-->          
+    <menuitem id="menu_scheme_enrollment_list_view"
+              name="Schemes"
+              parent="menu_scheme_enrollment_category"
               action="em_jewellery_management.action_scheme_enrollment"
-              groups="em_jewellery_management.group_jewellery_manager"/>
-    />
-
+              groups="em_jewellery_management.group_jewellery_manager"
+              sequence="15"/>
 
      <menuitem
         id="menu_job_work_root"
