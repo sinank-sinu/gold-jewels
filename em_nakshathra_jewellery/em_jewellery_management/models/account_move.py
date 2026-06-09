@@ -17,6 +17,7 @@ class AccountMove(models.Model):
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
     unfix = fields.Boolean(string="Unfix", copy=False)
+    is_approved = fields.Boolean(string="Manager Approved", default=False, copy=False)
     vendor_bill_amount = fields.Monetary(
         string="PO Amount",
         compute='_compute_vendor_bill_amount',
@@ -112,6 +113,18 @@ class AccountMove(models.Model):
             if self.env.context.get('bypass_negative_total_check') and record.amount_total < 0:
                 record.amount_total = 0.0
         return res
+    def action_approve_bill(self):
+        for move in self:
+            if not self.env.user.has_group('em_jewellery_management.group_jewellery_manager'):
+                raise ValidationError(_("Only managers can approve vendor bills."))
+            move.is_approved = True
+
+    def action_post(self):
+        for move in self:
+            if move.move_type == 'in_invoice' and not move.is_approved:
+                raise ValidationError(_("This vendor bill must be approved by a manager before it can be confirmed."))
+        return super().action_post()
+
 
     def _post(self, soft=True):
         posted = super(AccountMove, self.with_context(bypass_negative_total_check=True))._post(soft)
