@@ -24,9 +24,16 @@
             <xpath expr="//button[@name='action_register_payment']" position="attributes">
                 <attribute name="invisible">state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt') or is_old_gold_bill or (unfix and move_type == 'in_invoice')</attribute>
             </xpath>
+            <xpath expr="//button[@name='action_post'][2]" position="attributes">
+                <attribute name="invisible">hide_post_button or move_type == 'entry' or display_inactive_currency_warning or (move_type == 'in_invoice' and not is_approved)</attribute>
+            </xpath>
             <xpath expr="//header" position="inside">
                 <field name="unfix" invisible="1"/>
                 <field name="amount_total" invisible="1"/>
+                <field name="is_approved" invisible="1"/>
+                <button name="action_approve_bill" string="Approve Bill" type="object" class="btn-success"
+                        invisible="move_type != 'in_invoice' or state != 'draft' or is_approved"
+                        groups="em_jewellery_management.group_jewellery_manager"/>
                 <button name="action_create_old_gold_vendor_payment"
                         string="Create Customer Payment"
                         type="object"
