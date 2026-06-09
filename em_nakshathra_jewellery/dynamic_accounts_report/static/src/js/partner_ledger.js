@@ -18,6 +18,7 @@ class PartnerLedger extends owl.Component {
         this.dialog = useService("dialog");
         this.state = useState({
             partners: null,
+            visible_partners: null,
             data: null,
             total: null,
             title: null,
@@ -73,11 +74,13 @@ class PartnerLedger extends owl.Component {
             self.state.total_debit = totalDebitSum
             self.state.total_credit = totalCreditSum
             self.state.title = action_title
+            self.state.visible_partners = partner_list;
         }
         catch (el) {
             window.location.href;
         }
     }
+
         async printPdf(ev) {
         /**
          * Generates and displays a PDF report for the partner ledger.
@@ -368,6 +371,7 @@ class PartnerLedger extends owl.Component {
         this.state.total = partner_totals
         this.state.total_debit = totalDebitSum
         this.state.total_credit = totalCreditSum
+        this.state.visible_partners = partner_list;
         if ($(this.unfoldButton.el.classList).find("selected-filter")) {
             this.unfoldButton.el.classList.remove("selected-filter")
         }

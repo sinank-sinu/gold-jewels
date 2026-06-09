@@ -13,10 +13,12 @@ class GeneralLedger extends owl.Component {
         this.initial_render = true;
         this.orm = useService('orm');
         this.action = useService('action');
+        this.notification = useService('notification');
         this.tbody = useRef('tbody');
         this.unfoldButton = useRef('unfoldButton');
         this.state = useState({
             account: null,
+            account_meta: {},   // {acc_name: {total, offset, account_id}}
             account_data: null,
             account_data_list: null,
             account_total: null,
@@ -37,6 +39,9 @@ class GeneralLedger extends owl.Component {
                         'accural': true
                     },
         });
+        // Track active filters so expandAccount can pass them to the server
+        this._activeFilters = null;
+        this.PAGE_SIZE = 500;
         this.load_data(self.initial_render = true);
     }
     async load_data() {
@@ -82,33 +87,131 @@ class GeneralLedger extends owl.Component {
             window.location.href;
         }
     }
+
+    // Internal: fetch one page of lines for an account and store in state
+    async _fetchAccountPage(account_name, account_id, offset) {
+        const f = this._activeFilters;
+        // known_total: from summary (first load) or from existing meta (page nav)
+        const known_total = this.state.account_meta[account_name]
+            ? this.state.account_meta[account_name].total
+            : (this.state.account_total[account_name]
+                ? this.state.account_total[account_name].line_count
+                : null);
+        const result = await this.orm.call(
+            "account.general.ledger", "get_account_lines",
+            [account_id,
+             f ? f.journal_id : null,
+             f ? f.date_range : null,
+             f ? f.options    : null,
+             f ? f.analytic   : null,
+             f ? f.method     : null,
+             this.PAGE_SIZE,
+             offset,
+             known_total,
+            ]
+        );
+        this.state.account_data[account_name] = result.lines;
+        this.state.account_meta[account_name] = {
+            total:      result.total,
+            offset:     result.offset,
+            account_id: account_id,
+            expanded:   true,
+        };
+    }
+
+    // Called when the account row is clicked — toggle expand/collapse
+    async expandAccount(account_name, account_id) {
+        const meta = this.state.account_meta[account_name];
+        if (meta) {
+            // Already loaded — just toggle visibility
+            meta.expanded = !meta.expanded;
+            return;
+        }
+        // First click — fetch data, then show
+        await this._fetchAccountPage(account_name, account_id, 0);
+        // expanded: true is set inside _fetchAccountPage
+    }
+
+    // Navigate to next page within an expanded account
+    async nextAccountPage(account_name) {
+        const meta = this.state.account_meta[account_name];
+        if (meta && meta.offset + this.PAGE_SIZE < meta.total) {
+            await this._fetchAccountPage(
+                account_name, meta.account_id, meta.offset + this.PAGE_SIZE);
+        }
+    }
+
+    // Navigate to previous page within an expanded account
+    async prevAccountPage(account_name) {
+        const meta = this.state.account_meta[account_name];
+        if (meta && meta.offset > 0) {
+            await this._fetchAccountPage(
+                account_name, meta.account_id,
+                Math.max(0, meta.offset - this.PAGE_SIZE));
+        }
+    }
+
+    // Load ALL lines for every account — used only before Print / Export
+    async _loadAllAccountLines() {
+        const accounts = this.state.account || [];
+        for (const account of accounts) {
+            if (!this.state.account_total || !this.state.account_total[account]) continue;
+            const acc_id = this.state.account_total[account]['account_id'];
+            const f = this._activeFilters;
+            const result = await this.orm.call(
+                "account.general.ledger", "get_account_lines",
+                [acc_id,
+                 f ? f.journal_id : null,
+                 f ? f.date_range : null,
+                 f ? f.options    : null,
+                 f ? f.analytic   : null,
+                 f ? f.method     : null,
+                 0,   // limit=0 → no limit
+                 0,
+                ]
+            );
+            this.state.account_data[account] = result.lines;
+        }
+    }
+
+    _totalLineCount() {
+        return Object.values(this.state.account_total || {})
+            .reduce((sum, acc) => sum + (acc.line_count || 0), 0);
+    }
+
     async printPdf(ev) {
         ev.preventDefault();
         var self = this;
-        let totals = {
-            'total_debit':this.state.total_debit,
-            'total_credit':this.state.total_credit,
-            'currency':this.state.currency,
-        }
         var action_title = self.props.action.display_name;
+        let totals = {
+            'total_debit':  this.state.total_debit,
+            'total_credit': this.state.total_credit,
+            'currency':     this.state.currency,
+        };
+        // Send account summaries only (empty line arrays per account).
+        // The template renders account headers + totals without individual lines,
+        // keeping the HTML small and avoiding the lxml MemoryError.
+        const summaryData = {};
+        (this.state.account || []).forEach(acc => { summaryData[acc] = []; });
         return self.action.doAction({
             'type': 'ir.actions.report',
             'report_type': 'qweb-pdf',
             'report_name': 'dynamic_accounts_report.general_ledger',
             'report_file': 'dynamic_accounts_report.general_ledger',
             'data': {
-                'account': self.state.account,
-                'data': self.state.account_data,
-                'total': self.state.account_total,
-                'title': action_title,
-                'filters': this.filter(),
+                'account':     self.state.account,
+                'data':        summaryData,
+                'total':       self.state.account_total,
+                'title':       action_title,
+                'filters':     this.filter(),
                 'grand_total': totals,
-                'report_name': self.props.action.display_name
+                'report_name': self.props.action.display_name,
             },
             'display_name': self.props.action.display_name,
         });
     }
     async print_xlsx() {
+        await this._loadAllAccountLines();
         var self = this;
         let totals = {
             'total_debit':this.state.total_debit,
@@ -171,6 +274,7 @@ class GeneralLedger extends owl.Component {
         this.state.account = null
         this.state.account_data = null
         this.state.account_total = null
+        this.state.account_meta = {}
         this.state.filter_applied = true;
         if (ev) {
             if (ev.input && ev.input.attributes.placeholder.value == 'Account' && !is_delete) {
@@ -280,6 +384,14 @@ class GeneralLedger extends owl.Component {
                 }
             }
         }
+        // Save active filters so expandAccount can pass them per-account
+        this._activeFilters = {
+            journal_id: this.state.selected_journal_list,
+            date_range:  this.state.date_range,
+            options:     this.state.options,
+            analytic:    this.state.selected_analytic_list,
+            method:      this.state.method,
+        };
         let filtered_data = await this.orm.call("account.general.ledger", "get_filter_values", [this.state.selected_journal_list, this.state.date_range, this.state.options, this.state.selected_analytic_list,this.state.method]);
         $.each(filtered_data, function (index, value) {
             if (index !== 'account_totals' && index !== 'journal_ids' && index !== 'analytic_ids') {
@@ -304,6 +416,8 @@ class GeneralLedger extends owl.Component {
     }
     async unfoldAll(ev) {
         if (!ev.target.classList.contains("selected-filter")) {
+            // Load all lines before expanding so rows have content
+            await this._loadAllAccountLines();
             for (var length = 0; length < this.tbody.el.children.length; length++) {
                 $(this.tbody.el.children[length])[0].classList.add('show')
             }

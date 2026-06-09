@@ -34,99 +34,29 @@ class AccountGeneralLedger(models.TransientModel):
     _name = 'account.general.ledger'
     _description = 'General Ledger Report'
 
-    @api.model
-    def view_report(self, option, tag):
-        """
-        Retrieve partner ledger report data based on options and tags.
-
-        :param option: The options to filter the report data.
-        :type option: str
-
-        :param tag: The tag to filter the report data.
-        :type tag: str
-
-        :return: A dictionary containing the partner ledger report data.
-        :rtype: dict
-        """
-        account_dict = {}
-        account_totals = {}
-        move_line_ids = self.env['account.move.line'].search(
-            [('parent_state', '=', 'posted')])
-        account_ids = move_line_ids.mapped('account_id')
-        account_dict['journal_ids'] = self.env['account.journal'].search_read(
-            [], ['name'])
-        account_dict['analytic_ids'] = self.env[
-            'account.analytic.account'].search_read(
-            [], ['name'])
-        for account in account_ids:
-            move_line_id = move_line_ids.filtered(
-                lambda x: x.account_id == account)
-            move_line_list = []
-            for move_line in move_line_id:
-                move_line_data = move_line.read(
-                    ['date', 'name', 'move_name', 'debit', 'credit',
-                     'partner_id', 'account_id', 'journal_id', 'move_id',
-                     'analytic_line_ids'])
-                move_line_list.append(move_line_data)
-            account_dict[account.display_name] = move_line_list
-            currency_id = self.env.company.currency_id.symbol
-            account_totals[account.display_name] = {
-                'total_debit': round(sum(move_line_id.mapped('debit')), 2),
-                'total_credit': round(sum(move_line_id.mapped('credit')), 2),
-                'currency_id': currency_id,
-                'account_id': account.id}
-            account_dict['account_totals'] = account_totals
-        return account_dict
-
-    @api.model
-    def get_filter_values(self, journal_id, date_range, options, analytic,
-                          method):
-        """
-        Retrieve filtered values for the partner ledger report.
-
-        :param journal_id: The journal IDs to filter the report data.
-        :type journal_id: list
-
-        :param date_range: The date range option to filter the report data.
-        :type date_range: str or dict
-
-        :param options: The additional options to filter the report data.
-        :type options: dict
-
-        :param method: Find the method
-        :type options: dict
-
-        :param analytic: The analytic IDs to filter the report data.
-        :type analytic: list
-
-        :return: A dictionary containing the filtered values for the partner
-        ledger report.
-        :rtype: dict
-        """
-        account_dict = {}
-        account_totals = {}
+    def _build_filter_domain(self, journal_id, date_range, options, analytic,
+                              method):
+        """Build move-line domain from the JS filter state."""
         today = fields.Date.today()
         quarter_start, quarter_end = date_utils.get_quarter(today)
         previous_quarter_start = quarter_start - relativedelta(months=3)
         previous_quarter_end = quarter_start - relativedelta(days=1)
         if options == {}:
             options = None
-        if options is None:
-            option_domain = ['posted']
-        elif 'draft' in options:
-            option_domain = ['posted', 'draft']
+        option_domain = ['posted', 'draft'] if (options and 'draft' in options) \
+            else ['posted']
         domain = [('journal_id', 'in', journal_id),
-                  ('parent_state', 'in', option_domain), ] if journal_id else [
-            ('parent_state', 'in', option_domain), ]
+                  ('parent_state', 'in', option_domain)] if journal_id else [
+            ('parent_state', 'in', option_domain)]
         if method == {}:
             method = None
-        if method is not None and 'cash' in method:
+        if method and 'cash' in method:
             domain += [('journal_id', 'in',
-                        self.env.company.tax_cash_basis_journal_id.ids), ]
+                        self.env.company.tax_cash_basis_journal_id.ids)]
         if analytic:
-            analytic_line = self.env['account.analytic.line'].search(
-                [('account_id', 'in', analytic)]).mapped('id')
-            domain += [('analytic_line_ids', 'in', analytic_line)]
+            analytic_line_ids = self.env['account.analytic.line'].search(
+                [('account_id', 'in', analytic)]).ids
+            domain += [('analytic_line_ids', 'in', analytic_line_ids)]
         if date_range:
             if date_range == 'month':
                 domain += [('date', '>=', today.replace(day=1)),
@@ -138,63 +68,280 @@ class AccountGeneralLedger(models.TransientModel):
                 domain += [('date', '>=', quarter_start),
                            ('date', '<=', quarter_end)]
             elif date_range == 'last-month':
-                last_month_start = today.replace(day=1) - relativedelta(
-                    months=1)
-                last_month_end = last_month_start + relativedelta(
-                    day=calendar.monthrange(last_month_start.year,
-                                            last_month_start.month)[
-                        1])
-                domain += [('date', '>=', last_month_start),
-                           ('date', '<=', last_month_end)]
+                lm_start = today.replace(day=1) - relativedelta(months=1)
+                lm_end = lm_start + relativedelta(
+                    day=calendar.monthrange(lm_start.year, lm_start.month)[1])
+                domain += [('date', '>=', lm_start), ('date', '<=', lm_end)]
             elif date_range == 'last-year':
-                last_year_start = today.replace(month=1,
-                                                day=1) - relativedelta(years=1)
-                last_year_end = last_year_start.replace(month=12, day=31)
-                domain += [('date', '>=', last_year_start),
-                           ('date', '<=', last_year_end)]
+                ly_start = today.replace(month=1, day=1) - relativedelta(years=1)
+                ly_end = ly_start.replace(month=12, day=31)
+                domain += [('date', '>=', ly_start), ('date', '<=', ly_end)]
             elif date_range == 'last-quarter':
                 domain += [('date', '>=', previous_quarter_start),
                            ('date', '<=', previous_quarter_end)]
-            elif 'start_date' in date_range and 'end_date' in date_range:
-                start_date = datetime.strptime(date_range['start_date'],
-                                               '%Y-%m-%d').date()
-                end_date = datetime.strptime(date_range['end_date'],
-                                             '%Y-%m-%d').date()
-                domain += [('date', '>=', start_date),
-                           ('date', '<=', end_date)]
-            elif 'start_date' in date_range:
-                start_date = datetime.strptime(date_range['start_date'],
-                                               '%Y-%m-%d').date()
-                domain += [('date', '>=', start_date)]
-            elif 'end_date' in date_range:
-                end_date = datetime.strptime(date_range['end_date'],
-                                             '%Y-%m-%d').date()
-                domain += [('date', '<=', end_date)]
-        move_line_ids = self.env['account.move.line'].search(domain)
-        account_ids = move_line_ids.mapped('account_id')
+            elif isinstance(date_range, dict):
+                if 'start_date' in date_range and date_range['start_date']:
+                    domain += [('date', '>=', datetime.strptime(
+                        date_range['start_date'], '%Y-%m-%d').date())]
+                if 'end_date' in date_range and date_range['end_date']:
+                    domain += [('date', '<=', datetime.strptime(
+                        date_range['end_date'], '%Y-%m-%d').date())]
+        return domain
+
+    def _summary_from_domain(self, domain):
+        """Return account_dict with summaries only (no line details).
+        line_count is included free from read_group so get_account_lines
+        never needs a separate search_count.
+        """
+        account_dict = {}
+        account_totals = {}
+        currency_id = self.env.company.currency_id.symbol
+        groups = self.env['account.move.line'].read_group(
+            domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id'],
+        )
+        for group in groups:
+            if not group['account_id']:
+                continue
+            acc_id, acc_name = group['account_id']
+            account_dict[acc_name] = []
+            account_totals[acc_name] = {
+                'total_debit': round(group['debit'] or 0.0, 2),
+                'total_credit': round(group['credit'] or 0.0, 2),
+                'currency_id': currency_id,
+                'account_id': acc_id,
+                'line_count': group['account_id_count'],  # free from read_group
+            }
+        account_dict['account_totals'] = account_totals
+        return account_dict
+
+    @api.model
+    def view_report(self, option, tag):
+        """Return account summaries only — lines are fetched lazily per account."""
+        domain = [('parent_state', '=', 'posted')]
+        account_dict = self._summary_from_domain(domain)
         account_dict['journal_ids'] = self.env['account.journal'].search_read(
             [], ['name'])
         account_dict['analytic_ids'] = self.env[
-            'account.analytic.account'].search_read(
+            'account.analytic.account'].search_read([], ['name'])
+        return account_dict
+
+    @api.model
+    def get_pdf_data(self, filters):
+        """Fetch all data for PDF generation entirely server-side.
+        filters format from JS filter():
+          journal   = list of journal name strings
+          analytic  = list of analytic name strings
+          options   = dict  (e.g. {'draft': True})
+          start_date / end_date = 'YYYY-MM-DD' strings or null
+        """
+        options    = filters.get('options') or {}
+        start_date = filters.get('start_date')
+        end_date   = filters.get('end_date')
+
+        # Resolve journal names → IDs
+        journal_names = [n for n in (filters.get('journal') or []) if n]
+        journal_ids   = []
+        if journal_names:
+            journal_ids = self.env['account.journal'].search(
+                [('name', 'in', journal_names)]).ids
+
+        # Build filter domain using existing helper
+        date_range = None
+        if start_date or end_date:
+            date_range = {}
+            if start_date:
+                date_range['start_date'] = start_date
+            if end_date:
+                date_range['end_date'] = end_date
+
+        if journal_ids or date_range or options:
+            domain = self._build_filter_domain(
+                journal_ids, date_range, options, None, None)
+        else:
+            domain = [('parent_state', '=', 'posted')]
+
+        # Account summaries via read_group (fast)
+        summary        = self._summary_from_domain(domain)
+        account_totals = summary.get('account_totals', {})
+        account_names  = [k for k in summary
+                          if k not in ('account_totals', 'journal_ids', 'analytic_ids')]
+        currency_id    = self.env.company.currency_id.symbol
+
+        # Build SQL WHERE for line fetching
+        option_domain = ['posted', 'draft'] if (options and 'draft' in options) \
+            else ['posted']
+        where_parts = ["AND aml.parent_state = ANY(%s)"]
+        params      = (option_domain,)
+        if journal_ids:
+            where_parts.append("AND aml.journal_id = ANY(%s)")
+            params += (journal_ids,)
+        if start_date:
+            where_parts.append("AND aml.date >= %s")
+            params += (start_date,)
+        if end_date:
+            where_parts.append("AND aml.date <= %s")
+            params += (end_date,)
+        where_extra = ' '.join(where_parts)
+
+        # Fetch lines per account with fast SQL JOIN
+        data = {}
+        for acc_name in account_names:
+            acc_id = account_totals[acc_name]['account_id']
+            lines  = self._account_lines_sql(
+                acc_id, where_extra, params, limit=0, offset=0)
+            data[acc_name] = [[line] for line in lines]
+
+        total_debit  = sum(v.get('total_debit',  0) for v in account_totals.values())
+        total_credit = sum(v.get('total_credit', 0) for v in account_totals.values())
+        return {
+            'account':     account_names,
+            'data':        data,
+            'total':       account_totals,
+            'grand_total': {
+                'total_debit':  round(total_debit,  2),
+                'total_credit': round(total_credit, 2),
+                'currency':     currency_id,
+            },
+        }
+
+    def _account_lines_sql(self, account_id, where_extra='', params_extra=(),
+                            limit=500, offset=0):
+        """Single raw-SQL query — JOIN partner+move in one round-trip.
+        Returns a list of dicts already formatted to match ORM Many2one style.
+        """
+        limit_clause = 'LIMIT %s' % limit if limit else ''
+        sql = """
+            SELECT
+                aml.id,
+                aml.date,
+                aml.name,
+                aml.move_name,
+                aml.debit,
+                aml.credit,
+                aml.partner_id,
+                rp.name       AS partner_name,
+                aml.account_id,
+                aml.journal_id,
+                aml.move_id,
+                am.name       AS move_ref
+            FROM account_move_line aml
+            LEFT JOIN res_partner   rp ON rp.id = aml.partner_id
+            LEFT JOIN account_move  am ON am.id = aml.move_id
+            WHERE aml.account_id = %%s
+              AND aml.company_id = ANY(%%s)
+              %s
+            ORDER BY aml.id ASC
+            %s
+            OFFSET %%s
+        """ % (where_extra, limit_clause)
+
+        company_ids = list(self.env.companies.ids)
+        self.env.cr.execute(sql, (account_id, company_ids) + params_extra + (offset,))
+        rows = self.env.cr.dictfetchall()
+
+        lines = []
+        for r in rows:
+            lines.append({
+                'id':         r['id'],
+                'date':       r['date'],
+                'name':       r['name'] or '',
+                'move_name':  r['move_name'] or '',
+                'debit':      r['debit'] or 0.0,
+                'credit':     r['credit'] or 0.0,
+                'partner_id': [r['partner_id'], r['partner_name']]
+                              if r['partner_id'] else False,
+                'account_id': [r['account_id'], ''],
+                'journal_id': [r['journal_id'], ''],
+                'move_id':    [r['move_id'], r['move_ref'] or ''],
+            })
+        return lines
+
+    @api.model
+    def get_account_lines(self, account_id, journal_id=None, date_range=None,
+                          options=None, analytic=None, method=None,
+                          limit=500, offset=0, known_total=None):
+        """Fetch paginated journal lines for a single account.
+
+        limit=0 → no limit (used by print/export).
+        known_total → skips search_count.
+        Returns {lines, total, offset}.
+        """
+        # Build extra WHERE fragments for filters
+        where_parts = ["AND aml.parent_state = ANY(%s)"]
+        params = ()
+
+        if options == {}:
+            options = None
+        state_list = ['posted', 'draft'] if (options and 'draft' in options) \
+            else ['posted']
+        params += (state_list,)
+
+        if journal_id:
+            where_parts.append("AND aml.journal_id = ANY(%s)")
+            params += (journal_id,)
+
+        if date_range and isinstance(date_range, dict):
+            if date_range.get('start_date'):
+                where_parts.append("AND aml.date >= %s")
+                params += (date_range['start_date'],)
+            if date_range.get('end_date'):
+                where_parts.append("AND aml.date <= %s")
+                params += (date_range['end_date'],)
+        elif date_range and isinstance(date_range, str):
+            today = fields.Date.today()
+            quarter_start, quarter_end = date_utils.get_quarter(today)
+            prev_qs = quarter_start - relativedelta(months=3)
+            prev_qe = quarter_start - relativedelta(days=1)
+            date_map = {
+                'month':        (today.replace(day=1), today),
+                'year':         (today.replace(month=1, day=1), today),
+                'quarter':      (quarter_start, quarter_end),
+                'last-month':   (today.replace(day=1) - relativedelta(months=1),
+                                 today.replace(day=1) - relativedelta(days=1)),
+                'last-year':    (today.replace(month=1, day=1) - relativedelta(years=1),
+                                 today.replace(month=1, day=1) - relativedelta(days=1)),
+                'last-quarter': (prev_qs, prev_qe),
+            }
+            if date_range in date_map:
+                s, e = date_map[date_range]
+                where_parts.append("AND aml.date BETWEEN %s AND %s")
+                params += (s, e)
+
+        where_extra = ' '.join(where_parts)
+
+        # Count: use known_total when available (free from read_group summary)
+        if known_total is not None:
+            total = known_total
+        else:
+            count_sql = """
+                SELECT COUNT(*) FROM account_move_line aml
+                WHERE aml.account_id = %%s
+                  AND aml.company_id = ANY(%%s)
+                  %s
+            """ % where_extra
+            self.env.cr.execute(count_sql,
+                                (account_id, list(self.env.companies.ids)) + params)
+            total = self.env.cr.fetchone()[0]
+
+        lines = self._account_lines_sql(
+            account_id, where_extra, params, limit=limit, offset=offset)
+
+        return {'lines': [[line] for line in lines], 'total': total,
+                'offset': offset}
+
+    @api.model
+    def get_filter_values(self, journal_id, date_range, options, analytic,
+                          method):
+        """Return account summaries for the given filters — lines loaded lazily."""
+        domain = self._build_filter_domain(
+            journal_id, date_range, options, analytic, method)
+        account_dict = self._summary_from_domain(domain)
+        account_dict['journal_ids'] = self.env['account.journal'].search_read(
             [], ['name'])
-        for account in account_ids:
-            move_line_id = move_line_ids.filtered(
-                lambda x: x.account_id == account)
-            move_line_list = []
-            for move_line in move_line_id:
-                move_line_data = move_line.read(
-                    ['date', 'name', 'move_name', 'debit', 'credit',
-                     'partner_id', 'account_id', 'journal_id', 'move_id',
-                     'analytic_line_ids'])
-                move_line_list.append(move_line_data)
-            account_dict[account.display_name] = move_line_list
-            currency_id = self.env.company.currency_id.symbol
-            account_totals[account.display_name] = {
-                'total_debit': round(sum(move_line_id.mapped('debit')), 2),
-                'total_credit': round(sum(move_line_id.mapped('credit')), 2),
-                'currency_id': currency_id,
-                'account_id': account.id}
-            account_dict['account_totals'] = account_totals
+        account_dict['analytic_ids'] = self.env[
+            'account.analytic.account'].search_read([], ['name'])
         return account_dict
 
     @api.model
