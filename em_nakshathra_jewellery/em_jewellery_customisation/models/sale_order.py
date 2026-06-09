@@ -15,11 +15,13 @@ class SaleOrder(models.Model):
     )
     # amount_rounding = fields.Char(string="Amount Rounding")
     cash_rounding_id = fields.Many2one('account.cash.rounding')
-    round_off_amount = fields.Monetary(string="Round Off", compute="_compute_round_off")
+    # round_off_amount = fields.Monetary(string="Round Off", compute="_compute_round_off")
     has_gold_bullion = fields.Boolean(
         compute="_compute_has_gold_bullion",
         store=True,
     )
+
+
     @api.depends('order_line.product_id')
     def _compute_has_gold_bullion(self):
         for order in self:
@@ -27,7 +29,6 @@ class SaleOrder(models.Model):
                 line.product_template_id.name == 'Gold Bullion'
                 for line in order.order_line
             )
-
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
@@ -147,158 +148,13 @@ class SaleOrder(models.Model):
             #             ol.mc_amount = 0
 
 
-    # def action_apply_old_gold(self):
-    #     PurchaseOrder = self.env['purchase.order']
-    #     PurchaseLine = self.env['purchase.order.line']
-    #     AccountMove = self.env['account.move']
-    #
-    #     product = self.env.ref(
-    #         'em_jewellery_management.product_old_gold',
-    #         raise_if_not_found=False
-    #     )
-    #     if not product:
-    #         raise ValidationError(_("Old Gold product not configured."))
-    #
+    # @api.depends('amount_total')
+    # def _compute_round_off(self):
     #     for order in self:
-    #         if not order.old_gold_line_ids:
-    #             raise ValidationError(_("No Old Gold lines found."))
-    #
-    #         # ------------------------------------------------
-    #         # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
-    #         # ------------------------------------------------
-    #         self.env['old.gold.purchase'].create({
-    #             'partner_id': order.partner_id.id,
-    #             'date': fields.Date.today(),
-    #             'branch_location_id': order.branch_location_id.id,
-    #             'sale_id': order.id,
-    #             'branch_id': order.branch_id.id,
-    #             'old_gold_line_ids': [
-    #                 (0, 0, {
-    #                     'purity_id': l.purity_id.id,
-    #                     'gross_weight': l.gross_weight,
-    #                     'stone_weight': l.stone_weight,
-    #                     'rate': l.rate,
-    #                 }) for l in order.old_gold_line_ids
-    #             ],
-    #         })
-    #
-    #         # ------------------------------------------------
-    #         # 2️⃣ GROUP AMOUNT BY PURITY
-    #         # ------------------------------------------------
-    #         purity_map = {}
-    #
-    #         for line in order.old_gold_line_ids:
-    #             purity = line.purity_id
-    #
-    #             if purity not in purity_map:
-    #                 purity_map[purity] = {
-    #                     'weight': 0.0,
-    #                     'amount': 0.0,
-    #                 }
-    #
-    #             purity_map[purity]['weight'] += line.net_weight
-    #             purity_map[purity]['amount'] += line.amount
-    #
-    #         # ------------------------------------------------
-    #         # 3️⃣ CREATE PURCHASE ORDER
-    #         # ------------------------------------------------
-    #         po = PurchaseOrder.create({
-    #             'partner_id': order.partner_id.id,
-    #             'date_order': fields.Date.today(),
-    #             'origin': order.name,
-    #             'branch_id': order.branch_id.id,
-    #             'sale_id': order.id,
-    #             # 'amount_total':order.old_gold_line_ids.amount
-    #         })
-    #
-    #         for purity, vals in purity_map.items():
-    #             total_weight = vals['weight']
-    #             total_amount = vals['amount']
-    #
-    #             if not total_weight:
-    #                 continue
-    #
-    #             rate = total_amount / total_weight  # 👈 derived gold rate
-    #
-    #             PurchaseLine.create({
-    #                 'order_id': po.id,
-    #                 'product_id': product.id,
-    #                 'name': f'Old Gold Purchase ({purity.name})',
-    #                 'product_qty': total_weight,  # ✅ grams
-    #                 'gold_rate': rate,
-    #                 'price_unit':rate,# ✅ gold rate
-    #                 'product_uom': product.uom_po_id.id,
-    #                 'taxes_id': [(6, 0, [])],
-    #                 'purity_id':purity.id
-    #             })
-    #         # ------------------------------------------------
-    #         # 4️⃣ CONFIRM PO
-    #         # ------------------------------------------------
-    #         po.button_confirm()
-    #         self.purchase_order_id =po.id
-    #
-    #         for picking in po.picking_ids:
-    #             picking.action_confirm()
-    #             picking.action_assign()
-    #
-    #             for move in picking.move_ids:
-    #                 move.quantity = move.product_uom_qty
-    #
-    #             picking.button_validate()
-    #
-    #         # ------------------------------------------------
-    #         # 5️⃣ CREATE & POST VENDOR BILL
-    #         # ------------------------------------------------
-    #         bill_action = po.action_create_invoice()
-    #         bill = AccountMove.browse(bill_action['res_id'])
-    #         bill.invoice_date = fields.Date.context_today(self)
-    #
-    #         bill.action_post()
-    #         self.old_gold_bill_id = bill.id
-    #
-    #     return True
+    #         rounded_total = ceil(order.amount_total / 100.0) * 100
+    #         order.round_off_amount = rounded_total - order.amount_total
 
-    @api.depends('amount_total')
-    def _compute_round_off(self):
-        for order in self:
-            rounded_total = ceil(order.amount_total / 100.0) * 100
-            order.round_off_amount = rounded_total - order.amount_total
-
-    # @api.depends_context('lang')
-    # @api.depends('order_line.tax_id', 'order_line.price_unit', 'amount_total', 'amount_untaxed')
-    # def _compute_tax_totals(self):
-    #     super()._compute_tax_totals()
-
-    #     for order in self:
-    #         if not order.tax_totals:
-    #             continue
-            
-    #         has_gold_bullion = order.order_line.filtered(
-    #             lambda l: l.product_template_id.name == 'Gold Bullion'
-    #         )
-
-    #         if has_gold_bullion:
-    #             continue
-
-    #         tax_totals = order.tax_totals
-
-    #         original_total = tax_totals.get('amount_total', 0.0)
-
-    #         rounded_total = ceil(original_total / 100.0) * 100
-    #         round_off = rounded_total - original_total
-
-    #         tax_totals['amount_total'] = rounded_total
-    #         tax_totals['formatted_amount_total'] = order.currency_id.symbol + " %.2f" % rounded_total
-
-    #         # optional: show rounding line
-    #         tax_totals['display_rounding'] = True
-    #         tax_totals['rounding_amount'] = round_off
-    #         tax_totals['formatted_rounding_amount'] = (
-    #             order.currency_id.symbol + " %.2f" % round_off
-    #         )
-
-    #         order.tax_totals = tax_total
-    
+  
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
 
@@ -307,6 +163,9 @@ class SaleOrder(models.Model):
         })
         return vals
 
+
+
+    # --- 1. Update Frontend Widget Totals ---
     @api.depends_context('lang')
     @api.depends(
         'order_line.tax_id',
@@ -316,44 +175,43 @@ class SaleOrder(models.Model):
         'amount_rounding'
     )
     def _compute_tax_totals(self):
+        # Calculate original totals first
         super()._compute_tax_totals()
 
         for order in self:
             if not order.tax_totals:
                 continue
 
+            # Bypass modification if gold bullion rules apply
             if order.has_gold_bullion:
                 continue
 
+            # Ensure we are modifying a regular dict copy
             tax_totals = dict(order.tax_totals)
-
             original_total = tax_totals.get('amount_total', 0.0)
 
-            # User has not entered Round Off
+            # Simple logic: If no manual rounding value is provided, fallback to standard display
             if not order.amount_rounding:
                 tax_totals['display_rounding'] = False
                 order.tax_totals = tax_totals
                 continue
 
-            # adjusted_total = original_total + order.amount_rounding
-            # rounded_total = ceil(adjusted_total / 100.0) * 100
-            # rounding_amount = rounded_total - adjusted_total
-            adjusted_total = original_total + order.amount_rounding
-            rounded_total = ceil(adjusted_total / 100.0) * 100
-            rounding_amount = rounded_total - original_total
+            # NEW REQUIREMENT: Direct addition without the 'ceil to 100' logic
+            new_total = original_total + order.amount_rounding
+            rounding_amount = order.amount_rounding
 
+            # Format the data according to Odoo UI standards
             tax_totals['display_rounding'] = True
             tax_totals['rounding_amount'] = rounding_amount
-            tax_totals['formatted_rounding_amount'] = (
-                order.currency_id.symbol + " %.2f" % rounding_amount
-            )
+            tax_totals['formatted_rounding_amount'] = (order.currency_id.symbol + " %.2f" % rounding_amount)
 
-            tax_totals['amount_total'] = rounded_total
-            tax_totals['formatted_amount_total'] = (
-                order.currency_id.symbol + " %.2f" % rounded_total
-            )
-            # _logger.warning("TAX TOTALS = %s", tax_totals)
+            tax_totals['amount_total'] = new_total
+            tax_totals['formatted_amount_total'] = order.currency_id.format(new_total)
+            
+
+            # Assign back the updated object to refresh the view layer
             order.tax_totals = tax_totals
+
 
     @api.depends(
         'order_line.price_total',
@@ -361,14 +219,80 @@ class SaleOrder(models.Model):
         'amount_rounding'
     )
     def _compute_amounts(self):
+        # Calculate baseline amounts first
         super()._compute_amounts()
+        
         for order in self:
             if order.has_gold_bullion:
                 continue
-            # No manual round off entered
+            
             if not order.amount_rounding:
                 continue
-            original_total = order.amount_total
-            adjusted_total = original_total + order.amount_rounding
-            rounded_total = ceil(adjusted_total / 100.0) * 100
-            order.amount_total = rounded_total
+            
+            # Directly append your entered amount to the master record total
+            order.amount_total = order.amount_total + order.amount_rounding
+
+
+    # @api.depends_context('lang')
+    # @api.depends(
+    #     'order_line.tax_id',
+    #     'order_line.price_unit',
+    #     'amount_total',
+    #     'amount_untaxed',
+    #     'amount_rounding'
+    # )
+    # def _compute_tax_totals(self):
+    #     super()._compute_tax_totals()
+
+    #     for order in self:
+    #         if not order.tax_totals:
+    #             continue
+
+    #         if order.has_gold_bullion:
+    #             continue
+
+    #         tax_totals = dict(order.tax_totals)
+
+    #         original_total = tax_totals.get('amount_total', 0.0)
+
+    #         # User has not entered Round Off
+    #         if not order.amount_rounding:
+    #             tax_totals['display_rounding'] = False
+    #             order.tax_totals = tax_totals
+    #             continue
+    #         # adjusted_total = original_total + order.amount_rounding
+    #         # rounded_total = ceil(adjusted_total / 100.0) * 100
+    #         # rounding_amount = rounded_total - adjusted_total
+    #         adjusted_total = original_total + order.amount_rounding
+    #         rounded_total = ceil(adjusted_total / 100.0) * 100
+    #         rounding_amount = rounded_total - original_total
+
+    #         tax_totals['display_rounding'] = True
+    #         tax_totals['rounding_amount'] = rounding_amount
+    #         tax_totals['formatted_rounding_amount'] = (
+    #             order.currency_id.symbol + " %.2f" % rounding_amount
+    #         )
+
+    #         tax_totals['amount_total'] = rounded_total
+    #         tax_totals['formatted_amount_total'] = (
+    #             order.currency_id.symbol + " %.2f" % rounded_total
+    #         )
+    #         order.tax_totals = tax_totals
+
+    # @api.depends(
+    #     'order_line.price_total',
+    #     'order_line.price_tax',
+    #     'amount_rounding'
+    # )
+    # def _compute_amounts(self):
+    #     super()._compute_amounts()
+    #     for order in self:
+    #         if order.has_gold_bullion:
+    #             continue
+    #         # No manual round off entered
+    #         if not order.amount_rounding:
+    #             continue
+    #         original_total = order.amount_total
+    #         adjusted_total = original_total + order.amount_rounding
+    #         rounded_total = ceil(adjusted_total / 100.0) * 100
+    #         order.amount_total = rounded_total

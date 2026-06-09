@@ -38,9 +38,15 @@
         <field name="arch" type="xml">
             <tree string="Stock Summary Report" create="false" edit="false" delete="false">
                 <field name="product_template_id" invisible="1"/>
-                <field name="product_id" invisible="1"/>
+                <field name="product_id" column_invisible="1"/>
                 <!--Attributes-->
-                <field name="attribute_values"/>
+                <!-- <field name="attribute_values"/> -->
+                <field name="type_value"/>
+                <field name="variety_value"/>
+                <field name="design_value"/>
+                <field name="size_value"/>
+                <field name="stone_colour_value"/>
+                <field name="metal_colour_value"/>
                 <field name ="purity_id"/>
                 <field name="ageing" string="Ageing"/>
                 <field name="opening_pcs" sum="Total Opening PCs"/>
