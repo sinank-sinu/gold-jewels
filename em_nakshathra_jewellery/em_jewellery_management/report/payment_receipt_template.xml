@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_payment_receipt_document_inherit_sale" inherit_id="account.report_payment_receipt_document">
+        <xpath expr="//div[hasclass('mb-4')]" position="inside">
+            <div class="row mt-2" t-if="o.sale_id">
+                <div class="col-6">
+                    Sales Order: <span t-field="o.sale_id.name"/>
+                 </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

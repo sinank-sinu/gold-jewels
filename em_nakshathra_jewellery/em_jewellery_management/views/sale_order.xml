@@ -11,6 +11,11 @@
                         string="Create Invoice &amp; Pay"
                         class="btn-primary"
                         invisible="1"/>
+                <button name="action_advance_payment"
+                        type="object"
+                        string="Advance Payment"
+                        class="btn-primary"
+                        invisible="state != 'draft'"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="attributes">
                 <attribute name="string">Gross Weight</attribute>
@@ -121,7 +126,13 @@
 <!--                    <field name="old_gold_bill_amount" widget="monetary"/>-->
                     <span class="o_stat_text">Customer Bill</span>
                 </button>
-
+                <button name="action_view_advance_payments"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-money"
+                        invisible="advance_payment_count == 0">
+                    <field name="advance_payment_count" widget="statinfo" string="Payments"/>
+                </button>
             </xpath>
             <xpath expr="//field[@name='order_line']" position="after">
                 <group>
