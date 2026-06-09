@@ -119,7 +119,6 @@ class HRMobileAPI(http.Controller):
         return {"status": "success", "data": history}
 
     #Team Status API
-    @http.route('/api/hr/team/status', type='json', auth='user', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_team_status(self, **kwargs):
         employee = request.env.user.employee_id
         # Find employees who report to this person

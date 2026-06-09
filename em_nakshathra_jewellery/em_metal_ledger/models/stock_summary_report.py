@@ -137,11 +137,20 @@ class StockSummaryReportWizard(models.TransientModel):
             ageing = label.age if label else 0
 
             #Attribute values
-            attribute_values = ', '.join(
-                product.product_template_attribute_value_ids.mapped(
-                    'product_attribute_value_id.name'
-                )
-            )
+ 
+            attribute_map = {}
+            for ptav in product.product_template_attribute_value_ids:
+                attribute_map[
+                    ptav.attribute_id.name.strip().lower()
+                ] = ptav.product_attribute_value_id.name
+
+            type_value = attribute_map.get('type', '')
+            variety_value = attribute_map.get('variety', '')
+            design_value = attribute_map.get('design', '')
+            size_value = attribute_map.get('size', '')
+            stone_colour_value = attribute_map.get('stone colour', '')
+            metal_colour_value = attribute_map.get('metal colour', '')
+
             
             # Only add to report if there is any activity or stock
             if any([o_pcs, o_gross, o_net, in_pcs, in_gross, in_net, out_pcs, out_gross, out_net, c_pcs, c_gross, c_net, min_stock]):
@@ -168,7 +177,12 @@ class StockSummaryReportWizard(models.TransientModel):
                     'stock_gap': stock_gap,
                     'purity_id': purity_id,
                     'ageing': ageing,
-                    'attribute_values': attribute_values,
+                    'type_value': type_value,
+                    'variety_value': variety_value,
+                    'design_value': design_value,
+                    'size_value': size_value,
+                    'stone_colour_value': stone_colour_value,
+                    'metal_colour_value': metal_colour_value,
                 })
 
         if report_lines:
@@ -222,4 +236,9 @@ class StockSummaryReportLine(models.TransientModel):
     turnover_ratio = fields.Float(string='Turnover Ratio', digits=(16, 2))
     dio = fields.Float(string='DIO', digits=(16, 0))
     stock_gap = fields.Float(string='Stock Gap', digits=(16, 3))
-    attribute_values = fields.Char(string="Attributes")
+    type_value = fields.Char(string="Type")
+    variety_value = fields.Char(string="Variety")
+    design_value = fields.Char(string="Design")
+    size_value = fields.Char(string="Size")
+    stone_colour_value = fields.Char(string="Stone Colour")
+    metal_colour_value = fields.Char(string="Metal Colour")

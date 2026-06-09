@@ -46,7 +46,7 @@ class AccountMove(models.Model):
 
             move.show_create_sale_order = True
 
-    def action_create_sale_order(self):
+    def action_custom_create_sale_order(self):
         self.ensure_one()
 
         if self.sale_order_id:
@@ -62,10 +62,8 @@ class AccountMove(models.Model):
             'em_jewellery_management.product_bullion_gold'
         )
         original_so = self.invoice_line_ids.sale_line_ids.order_id[:1]
-        purchase_order = original_so.purchase_order_id
 
         sale_order = self.env['sale.order'].create({
-            'purchase_order_id': purchase_order.id,
             'from_invoice': True,
             'partner_id': self.partner_id.id,
             'origin': self.name,
