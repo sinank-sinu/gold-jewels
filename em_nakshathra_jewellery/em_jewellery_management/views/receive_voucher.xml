@@ -38,6 +38,15 @@
                               name="action_create_making_charge_bill"
                               type="object" string="Making Charge Bill" class="btn-secondary"
                               invisible="making_charge_bill_id or job_type_selection != 'gold_alloy'"/>
+                      <button
+                              name="action_edit_voucher"
+                              type="object"
+                              string="Edit Voucher"
+                              class="btn-warning"
+                              groups="base.group_system"
+                              invisible="state != 'done'"
+                              confirm="This will reset the voucher to Approved state so you can edit quantities. Continue?"
+                      />
                       <field name="state" widget="statusbar" statusbar_visible="draft,waiting_department_approval,waiting_ir_approval,approved,done"/>
                  </header>
                 <sheet>

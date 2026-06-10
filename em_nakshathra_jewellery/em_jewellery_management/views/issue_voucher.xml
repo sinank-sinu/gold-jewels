@@ -45,6 +45,15 @@
                                 class="btn-primary"
                                 invisible="not is_refinery or state != 'done'"
                         />
+                        <button
+                                name="action_edit_voucher"
+                                type="object"
+                                string="Edit Voucher"
+                                class="btn-warning"
+                                groups="base.group_system"
+                                invisible="state != 'done'"
+                                confirm="This will reverse the stock transfer and reset the voucher to Approved state so you can edit quantities. Continue?"
+                        />
                     <field name="state" widget="statusbar" statusbar_visible="draft,waiting_department_approval,waiting_ir_approval,approved,done"/>
                 </header>
                 <sheet>

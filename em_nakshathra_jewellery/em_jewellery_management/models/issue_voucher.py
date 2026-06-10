@@ -132,6 +132,78 @@ class JewelleryIssueVoucher(models.Model):
                 line.lab_purity_id = purity if purity else False
 
     def action_done(self):
+        """Confirm the Issue Voucher and create / update stock moves.
+
+        - First-time confirm: create a new internal picking and validate it.
+        - Re-confirm after Edit: the original picking_id already exists.
+          Instead of creating a new picking we directly adjust stock.quant
+          records at both locations using the quantity delta (new qty - old
+          qty), then update the original move quantities to reflect the
+          change.  This works even when on-hand stock is zero.
+        """
+        uom_gram = self.env.ref('uom.product_uom_gram')
+
+        # ── Re-confirm after Edit ──────────────────────────────────────────
+        if self.picking_id and self.picking_id.state == 'done':
+            Quant = self.env['stock.quant'].sudo()
+            for line in self.line_ids:
+                new_qty = line.qty if self.is_refinery else line.gross_weight
+                product  = line.product_id
+
+                # Find the corresponding move on the original picking
+                old_move = self.picking_id.move_ids.filtered(
+                    lambda m: m.product_id == product
+                )
+                old_qty = sum(old_move.mapped('product_uom_qty')) if old_move else 0.0
+                delta = new_qty - old_qty
+
+                if delta:
+                    # Remove delta from source (more issued → debit source)
+                    src_quant = Quant.search([
+                        ('product_id', '=', product.id),
+                        ('location_id', '=', self.source_location_id.id),
+                    ], limit=1)
+                    if src_quant:
+                        src_quant.quantity -= delta
+                    else:
+                        Quant.create({
+                            'product_id': product.id,
+                            'location_id': self.source_location_id.id,
+                            'quantity': -delta,
+                        })
+
+                    # Add delta at destination
+                    dst_quant = Quant.search([
+                        ('product_id', '=', product.id),
+                        ('location_id', '=', self.received_location_id.id),
+                    ], limit=1)
+                    if dst_quant:
+                        dst_quant.quantity += delta
+                    else:
+                        Quant.create({
+                            'product_id': product.id,
+                            'location_id': self.received_location_id.id,
+                            'quantity': delta,
+                        })
+
+                    # Keep stock.move and stock.move.line records in sync
+                    if old_move:
+                        move = old_move[0]
+                        move.sudo().write({'product_uom_qty': new_qty})
+                        # Update move lines: 'quantity' (Odoo 17 rename of
+                        # qty_done) is what shows in the Transfer's Operations
+                        # tab and affects valuation.
+                        for ml in move.move_line_ids:
+                            # Only 'quantity' (done qty) is writable on stock.move.line in Odoo 17
+                            ml.sudo().write({'quantity': new_qty})
+
+                if self.is_refinery and line.refinery_issue_id:
+                    line.refinery_issue_id.state = 'issued'
+
+            self.state = 'done'
+            return
+
+        # ── First-time confirm: create a new picking ───────────────────────
         picking = self.env['stock.picking'].create({
             'picking_type_id': self.env.ref('stock.picking_type_internal').id,
             'location_id': self.source_location_id.id,
@@ -144,7 +216,7 @@ class JewelleryIssueVoucher(models.Model):
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.qty if self.is_refinery else line.gross_weight,
                 'name': line.product_id.name,
-                'product_uom': self.env.ref('uom.product_uom_gram').id,
+                'product_uom': uom_gram.id,
                 'location_id': picking.location_id.id,
                 'location_dest_id': picking.location_dest_id.id,
                 'picking_id': picking.id,
@@ -153,10 +225,13 @@ class JewelleryIssueVoucher(models.Model):
             if self.is_refinery and line.refinery_issue_id:
                 line.refinery_issue_id.state = 'issued'
 
+        picking.action_confirm()
+        picking.action_assign()
         for move_line in picking.move_line_ids:
-            move_line.qty_done = move_line.product_uom_qty
+            # Read qty from parent stock.move (product_uom_qty is invalid on move.line in Odoo 17)
+            move_line.quantity = move_line.move_id.product_uom_qty
 
-        picking.button_validate()
+        picking.with_context(skip_backorder=True).button_validate()
 
         self.picking_id = picking.id
         self.state = 'done'
@@ -297,6 +372,38 @@ class JewelleryIssueVoucher(models.Model):
                 "approved_date": fields.Date.context_today(self),
             }
         )
+
+    def action_edit_voucher(self):
+        """Reset a 'done' Issue Voucher back to 'approved' for editing.
+
+        No stock operations are performed here. The original picking
+        remains as-is.  When the user re-confirms (action_done), stock
+        quants are adjusted in place using the quantity delta.
+        Editing is allowed even when Receive Vouchers exist.
+        """
+        self.ensure_one()
+
+        # Simply reset state — no stock reversal needed.
+        # action_done will handle the delta adjustment on re-confirm.
+        self.state = 'approved'
+
+        # Reset refinery issue states: 'melting' is the state before 'issued'
+        if self.is_refinery:
+            for line in self.line_ids:
+                if line.refinery_issue_id and line.refinery_issue_id.state == 'issued':
+                    line.refinery_issue_id.state = 'melting'
+
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Voucher Unlocked for Editing'),
+                'message': _('Issue Voucher has been reset to Approved. '
+                             'Update quantities and click Confirm to apply.'),
+                'type': 'success',
+                'sticky': False,
+            },
+        }
 
     total_net_weight = fields.Float(
         string="Total Net Weight (g)",

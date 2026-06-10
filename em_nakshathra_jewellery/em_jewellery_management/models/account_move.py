@@ -122,6 +122,9 @@ class AccountMove(models.Model):
     def action_post(self):
         for move in self:
             if move.move_type == 'in_invoice' and not move.is_approved:
+                is_old_gold_po = any(po.is_old_gold for po in move.line_ids.mapped('purchase_line_id.order_id'))
+                if move.is_old_gold_bill or move.unfix or is_old_gold_po:
+                    continue
                 raise ValidationError(_("This vendor bill must be approved by a manager before it can be confirmed."))
         return super().action_post()
 
