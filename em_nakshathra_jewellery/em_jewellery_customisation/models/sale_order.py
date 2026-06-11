@@ -148,12 +148,6 @@ class SaleOrder(models.Model):
             #             ol.mc_amount = 0
 
 
-    # @api.depends('amount_total')
-    # def _compute_round_off(self):
-    #     for order in self:
-    #         rounded_total = ceil(order.amount_total / 100.0) * 100
-    #         order.round_off_amount = rounded_total - order.amount_total
-
   
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()

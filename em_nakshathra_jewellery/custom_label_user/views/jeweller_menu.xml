@@ -1,9 +1,9 @@
 <odoo>
-    <record id="em_jewellery_management.menu_jewellery_root"
+    <!-- <record id="em_jewellery_management.menu_jewellery_root"
             model="ir.ui.menu">
         <field name="groups_id"
                eval="[(4, ref('custom_label_user.group_product_label_user'))]"/>
-    </record>
+    </record> -->
 
     <menuitem id="menu_product_label_root"
           name="Location Wise Products"

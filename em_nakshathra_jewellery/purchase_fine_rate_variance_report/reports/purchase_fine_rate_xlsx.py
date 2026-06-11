@@ -158,13 +158,9 @@ class PurchaseFineRateXlsx(models.AbstractModel):
                             line.product_qty,
                             number_format)
 
-                sheet.write(row, 4,
-                            po_rate,
-                            number_format)
+                sheet.write(row, 4, po_rate, number_format)
 
-                sheet.write(row, 5,
-                            latest_fine_rate,
-                            number_format)
+                sheet.write(row, 5, latest_fine_rate, number_format)
 
                 sheet.write(row, 6,
                             difference,
