@@ -82,7 +82,8 @@ class ProductMovementWizard(models.TransientModel):
         rows = []
         for p in products:
             rows.append({
-                'name': p.display_name,
+                'name': p.name,
+                'variant': p.display_name,
                 'category': p.categ_id.complete_name or '',
                 'qty': data[p.id],
             })

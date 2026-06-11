@@ -99,11 +99,30 @@ class OldGoldMarginXlsx(models.AbstractModel):
             ], order='date desc', limit=1)
             board_rate = gold_rate.rate_per_gram if gold_rate else 0
 
+            # Fetch Fine Rate from fine.rate.master matching the report date
+            fine_rate_rec = self.env['fine.rate.master'].search([
+                ('date', '=', date_value)
+            ], order='date desc', limit=1)
+
+            purchase_fine_rate = 0
+
+            if fine_rate_rec:
+                history_line = self.env['fine.rate.history'].search([
+                    ('master_id', '=', fine_rate_rec.id)
+                ], order='id desc', limit=1)
+                if history_line:
+                    purchase_fine_rate = history_line.fine_rate
+                else:
+                    # Fallback to the main form view rate field if no history item exists
+                    purchase_fine_rate = fine_rate_rec.fine_rate or 0
+
+            # purchase_fine_rate = fine_rate_rec.fine_rate if fine_rate_rec else 0
+
             #Calculations
             less_2_board = board_rate * 0.98
             gain_loss_board = less_2_board - purchase_rate
             expected_fine = net_wt * (purity / 100)
-            purchase_fine_rate = amount / expected_fine if expected_fine else 0
+            # purchase_fine_rate = amount / expected_fine if expected_fine else 0
             market_fine_rate = 10000
             gain_loss_market = market_fine_rate - purchase_fine_rate
 
