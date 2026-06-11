@@ -5,7 +5,7 @@
         <field name="name">Product Template Branch Restriction</field>
         <field name="model_id" ref="product.model_product_template"/>
         <field name="domain_force">
-            [ '|', ('branch_id', '=', False), ('branch_id', '=', user.branch_id.id) ]
+            [ '|', ('branch_id', '=', False), ('branch_id', 'in', user.branch_ids.ids) ]
         </field>
         <field name="groups" eval="[(4, ref('custom_label_user.group_product_label_user'))]"/>
     </record>
@@ -14,7 +14,7 @@
         <field name="name">Product Variant Branch Restriction</field>
         <field name="model_id" ref="product.model_product_product"/>
         <field name="domain_force">
-            [ '|', ('branch_id', '=', False), ('branch_id', '=', user.branch_id.id) ]
+            [ '|', ('branch_id', '=', False), ('branch_id', 'in', user.branch_ids.ids) ]
         </field>
         <field name="groups" eval="[(4, ref('custom_label_user.group_product_label_user'))]"/>
     </record>
