@@ -122,13 +122,34 @@ class OldGoldMarginXlsx(models.AbstractModel):
                 start_dt = datetime.combine(next_day, time.min)  # 00:00:00
                 end_dt   = datetime.combine(next_day, time.max)  # 23:59:59
 
-                rate_rec = self.env['gold.rate.update.log'].search([
-                    ('rate_datetime', '>=', start_dt),
-                    ('rate_datetime', '<=', end_dt),
-                ], order='rate_datetime desc', limit=1)
+                # rate_rec = self.env['gold.rate.update.log'].search([
+                #     ('rate_datetime', '>=', start_dt),
+                #     ('rate_datetime', '<=', end_dt),
+                # ], order='rate_datetime desc', limit=1
 
-                if rate_rec:
-                    fine_rate_next_day_1_PM = rate_rec.board_rate or 0.0
+                fine_rate_rec = self.env['fine.rate.master'].search([
+                    ('date', '=', issue_date)
+                ], order='date desc', limit=1)
+
+                fine_rate_next_day_1_PM = 0
+
+                if fine_rate_rec:
+                    history_line = self.env['fine.rate.history'].search([
+                        ('master_id', '=', fine_rate_rec.id)
+                    ], order='id desc', limit=1)
+                    if history_line:
+                        fine_rate_next_day_1_PM = history_line.fine_rate
+                    else:
+                        # Fallback to the main form view rate field if no history item exists
+                        fine_rate_next_day_1_PM = fine_rate_rec.fine_rate or 0
+
+                # rate_rec = self.env['fine.rate.history'].search([
+                #     ('update_datetime', '>=', start_dt),
+                #     ('update_datetime', '<=', end_dt),
+                # ], order='update_datetime desc', limit=1)
+
+                # if rate_rec:
+                #     fine_rate_next_day_1_PM = rate_rec.fine_rate or 0.0
             fine_as_per_1_PM_rate =  (amount / fine_rate_next_day_1_PM if fine_rate_next_day_1_PM else 0)
             gain_loss = fine_as_per_1_PM_rate - fine_rcd
             
