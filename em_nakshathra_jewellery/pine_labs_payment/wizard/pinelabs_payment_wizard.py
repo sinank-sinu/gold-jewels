@@ -52,6 +52,7 @@ class PineLabsPaymentWizard(models.TransientModel):
     payment_mode = fields.Char(string='Payment Mode Result', readonly=True)
     txn_id = fields.Many2one('pinelabs.transaction', string='Transaction Record', readonly=True)
     scheme_installment_id = fields.Many2one('jewellery.scheme.installment', string='Scheme Installment Row')
+    
 
     def _get_branch_terminals(self):
         """Return pinelabs.terminal records for the current invoice/document branch."""
@@ -116,6 +117,14 @@ class PineLabsPaymentWizard(models.TransientModel):
     def _action_register_bank_payment(self):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
+        
+        if self.payment_id and self.payment_id.state == 'draft':
+            bank_journal = self.env['account.journal'].search([('type', '=', 'bank'), ('company_id', '=', self.env.company.id)], limit=1)
+            if not bank_journal:
+                raise UserError(_('No bank journal found.'))
+            self.payment_id.journal_id = bank_journal.id
+            self.payment_id.action_post()
+            return {'type': 'ir.actions.act_window_close'}
         # ─── NEW HOOK: Handle Scheme Installments for Bank Transfer directly ───
         if self.scheme_installment_id:
             rec = self.scheme_installment_id
@@ -177,7 +186,6 @@ class PineLabsPaymentWizard(models.TransientModel):
             
             # Close the wizard popup upon success
             return {'type': 'ir.actions.act_window_close'}
-        # ─── LEGACY CODO ODOO FLOW (INVOICES / SALE ORDERS) ───
         active_ids = []
         if self.invoice_id:
             active_ids = self.invoice_id.ids
@@ -223,12 +231,77 @@ class PineLabsPaymentWizard(models.TransientModel):
     def _action_register_cash_payment(self):
         """Open Odoo's standard Register Payment wizard for cash with journal preset."""
         self.ensure_one()
-
-        cash_journal = self.env['account.journal'].search(
-            [('type', '=', 'cash'), ('company_id', '=', self.env.company.id)], limit=1)
+        
+        cash_journal = self.env['account.journal'].search([('type', '=', 'cash'), ('company_id', '=', self.env.company.id)], limit=1)
         if not cash_journal:
-            raise UserError(
-                _('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
+            raise UserError(_('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
+            
+        if self.payment_id and self.payment_id.state == 'draft':
+            self.payment_id.journal_id = cash_journal.id
+            self.payment_id.action_post()
+            return {'type': 'ir.actions.act_window_close'}
+
+        # ─── NEW HOOK: Handle Scheme Installments for Cash Transfer directly ───
+        if self.scheme_installment_id:
+            rec = self.scheme_installment_id
+            
+            # Find a fallback Bank/Cash journal since terminal configurations are for Pine Labs card/upi
+            payment_journal = self.env['account.journal'].search([
+                ('type', '=', 'cash'),
+                ('company_id', '=', self.env.company.id),
+            ], limit=1)
+
+            if not payment_journal:
+                raise UserError(_("No valid cash journal found in your Chart of Accounts."))
+
+            # Target dynamic Debtors Account Search matching your exact accounting structure logic
+            debtors_account = self.env['account.account'].search([
+                ('code', '=', '100400')
+            ], limit=1)
+
+            if not debtors_account:
+                raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
+
+            liability_account = payment_journal.default_account_id
+            if not liability_account:
+                raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
+
+            # Generate the financial transaction entry document exactly like your original custom button
+            move = self.env['account.move'].create({
+                'move_type': 'entry',
+                'journal_id': payment_journal.id,
+                'ref': _('Scheme Payment via Cash - %s') % (rec.enrollment_id.name or ''),
+                'line_ids': [
+                    (0, 0, {
+                        'name': _('Scheme Liability - %s') % (rec.enrollment_id.name or ''),
+                        'partner_id': rec.enrollment_id.partner_id.id,
+                        'credit': 0.0,
+                        'debit': self.amount,
+                        'account_id': liability_account.id
+                    }),
+                    (0, 0, {
+                        'name': _('Scheme Payment via Cash'),
+                        'partner_id': rec.enrollment_id.partner_id.id,
+                        'debit': 0.0,
+                        'credit': self.amount,
+                        'account_id': debtors_account.id
+                    })
+                ]
+            })
+
+            # Force entry validation adjustments straight down to General Ledgers
+            move.action_post()
+
+            # Pass values straight down into your installment row list columns layout fields
+            rec.write({
+                'journal_id': payment_journal.id,
+                'move_id': move.id,
+                'transaction_id': 'CASH-TRANSFER',
+                'state': 'paid'
+            })
+            
+            # Close the wizard popup upon success
+            return {'type': 'ir.actions.act_window_close'}
 
         active_ids = []
         if self.invoice_id:
@@ -244,7 +317,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
         else:
             raise UserError(_('Cash Payment is only available for invoices or sale orders.'))
-
+            
         # Create the standard payment register wizard and explicitly set the amount
         wizard = self.env['account.payment.register'].with_context(
             active_model='account.move',
@@ -293,10 +366,10 @@ class PineLabsPaymentWizard(models.TransientModel):
         config = terminal.get_config()
 
         billing_ref = (
-                self.sale_order_id.name or
-                (self.invoice_id and self.invoice_id.name) or
-                (self.payment_id and self.payment_id.name) or
-                f'PAY-{int(time.time())}'
+            self.sale_order_id.name or
+            (self.invoice_id and self.invoice_id.name) or
+            (self.payment_id and self.payment_id.name) or
+            f'PAY-{int(time.time())}'
         )
 
         # Determine AllowedPaymentMode from wizard selection
@@ -322,8 +395,8 @@ class PineLabsPaymentWizard(models.TransientModel):
             raise UserError(_('Pine Labs Error: %s') % response['error'])
 
         ref_id = (
-                response.get('PlutusTransactionReferenceID') or
-                response.get('plutusTransactionReferenceID')
+            response.get('PlutusTransactionReferenceID') or
+            response.get('plutusTransactionReferenceID')
         )
         if not ref_id:
             txn.state = 'failed'
@@ -397,14 +470,14 @@ class PineLabsPaymentWizard(models.TransientModel):
                 journal = txn.pinelabs_terminal_id.card_journal_id
             elif self.payment_method_type == 'upi':
                 journal = txn.pinelabs_terminal_id.upi_journal_id
-
+                
             if not journal:
                 # Fallback to the first available bank/cash journal if not configured on the terminal
                 journal = self.env['account.journal'].search([
                     ('type', 'in', ('bank', 'cash')),
                     ('company_id', '=', self.env.company.id),
                 ], limit=1)
-
+            
             if journal:
                 is_outbound = self.invoice_id.move_type in ('in_invoice', 'out_refund')
                 payment = self.env['account.payment'].create({

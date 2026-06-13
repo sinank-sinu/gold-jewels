@@ -16,6 +16,7 @@
                 <field name="stock_in" string="Fine Issue" sum="Total Fine Issue"/>
                 <field name="stock_out" string="Fine Receipt" sum="Total Fine Receipt"/>
                 <field name="purity_id"/>
+                <field name="branch_id"/>
                 <field name="balance_weight" string="Balance"/>
             </tree>
         </field>
@@ -36,6 +37,7 @@
                         <group>
                             <field name="partner_id"/>
                             <field name="purity_id"/>
+                            <field name="branch_id"/>
                             <field name="job_type" optional="hide"/>
                             <field name="gross_weight"/>
                             <field name="stock_in" string="Fine Issue"/>
@@ -58,10 +60,33 @@
             </p>
         </field>
     </record>
-
-    <menuitem id="menu_job_work_report"
+    <!-- <menuitem id="menu_job_work_report"
               name="Job Work Report"
               parent="menu_metal_ledger_root"
-              action="action_job_work_report"
               sequence="20"/>
+
+    <menuitem id="menu_job_work_report_report"
+              name="Job Work Report"
+              parent="menu_job_work_report"
+              action="action_job_work_report"
+              sequence="10"/> -->
+
+    <!--Job Work Report Root Menu-->
+    <menuitem id="menu_job_work_report_root"
+          name="Job Work Reports"
+          parent="menu_metal_ledger_root"
+          sequence="20"/>
+    <!--Job Work Report Sub Menu-->
+    <menuitem id="menu_job_work_report"
+          name="Job Work Report"
+          parent="menu_job_work_report_root"
+          action="action_job_work_report"
+          sequence="10"/>
+
+    <!--XLSX MENU → CALL WIZARD-->
+    <!-- <menuitem id="menu_refinery_margin_xlsx"
+          name="Refinery Margin XLSX Report"
+          parent="menu_refinery_margin_root"
+          action="action_refinery_margin_wizard"
+          sequence="20"/> -->
 </odoo>

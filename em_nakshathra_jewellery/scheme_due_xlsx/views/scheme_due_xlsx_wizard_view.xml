@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_scheme_due_xlsx_wizard_form" model="ir.ui.view">
+        <field name="name">scheme.due.xlsx.wizard.form</field>
+        <field name="model">scheme.due.xlsx.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Scheme Due XLSX Report Wizard">
+                <group>
+                    <group>
+                        <field name="start_date"/>
+                        <field name="end_date"/>
+                    </group>
+                    <group>
+                        <field name="branch_ids" widget="many2many_tags"/>
+                        <field name="partner_ids" widget="many2many_tags"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_generate_xlsx" string="Download XLSX" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_scheme_due_xlsx_wizard" model="ir.actions.act_window">
+        <field name="name">Scheme Due XLSX Report</field>
+        <field name="res_model">scheme.due.xlsx.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_scheme_due_xlsx_wizard_form"/>
+        <field name="target">new</field>
+    </record>
+
+    <!-- XLSX Report under Scheme Due Report menu -->
+    <menuitem id="menu_scheme_due_xlsx_report"
+              name="Scheme Due XLSX Report"
+              parent="em_jewellery_management.menu_scheme_enrollment_category"
+              action="scheme_due_xlsx.action_scheme_due_xlsx_wizard"
+              sequence="20"/>
+    
+
+
+    <!-- Add button to Scheme Due Report tree view -->
+    <!-- <record id="view_scheme_due_report_tree_inherit" model="ir.ui.view">
+        <field name="name">scheme.due.report.tree.inherit</field>
+        <field name="model">scheme.due.report</field>
+        <field name="inherit_id" ref="em_metal_ledger.view_scheme_due_report_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">false</attribute>
+            </xpath>
+        </field>
+    </record> -->
+
+    <!-- Add print action to Scheme Due Report form view -->
+    <!-- <record id="view_scheme_due_report_form_inherit" model="ir.ui.view">
+        <field name="name">scheme.due.report.form.inherit</field>
+        <field name="model">scheme.due.report</field>
+        <field name="inherit_id" ref="em_metal_ledger.view_scheme_due_report_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <div class="oe_button_box" name="button_box">
+                    <button name="%(action_scheme_due_xlsx_wizard)d" string="XLSX Report" type="action" class="oe_stat_button" icon="fa-file-excel"/>
+                </div>
+            </xpath>
+        </field>
+    </record> -->
+
+</odoo>

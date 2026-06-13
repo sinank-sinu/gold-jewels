@@ -1,0 +1,36 @@
+<odoo>
+    <record id="view_capital_gain_wizard_form" model="ir.ui.view">
+        <field name="name">capital.gain.wizard.form</field>
+        <field name="model">capital.gain.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Capital Gain Report">
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                </group>
+                <footer>
+                    <button name="action_print_report"
+                            string="Print Report"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_capital_gain_wizard" model="ir.actions.act_window">
+        <field name="name">Capital Gain Report</field>
+        <field name="res_model">capital.gain.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_purchase_capital_gain"
+        name="Capital Gain Report"
+        parent="purchase.purchase_report_main"
+        action="action_capital_gain_wizard"
+        sequence="51"/>
+</odoo>
