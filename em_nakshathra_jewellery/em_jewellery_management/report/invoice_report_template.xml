@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_invoice_document_jewellery" inherit_id="account.report_invoice_document">
+        
+        <!-- Hide default sections for customer invoices (out_invoice) -->
+        <xpath expr="//h2" position="attributes">
+            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+        </xpath>
+
+        <xpath expr="//div[@id='informations']" position="attributes">
+            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+        </xpath>
+
+        <xpath expr="//table[@name='invoice_line_table']" position="attributes">
+            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+        </xpath>
+
+        <xpath expr="//div[@id='right-elements']" position="attributes">
+            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+        </xpath>
+
+        <!-- Custom Jewellery Invoice Design -->
+        <xpath expr="//h2" position="before">
+            <t t-if="o.move_type == 'out_invoice'">
+                
+                <style>
+                    .jewellery-invoice {
+                        font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                        color: #333333;
+                    }
+                    .jewellery-header {
+                        color: #DAA520; /* Elegant Gold */
+                        font-weight: 400;
+                        margin-bottom: 25px;
+                        border-bottom: 2px solid #DAA520;
+                        padding-bottom: 15px;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                    }
+                    .jewellery-info-box {
+                        background-color: #fcfcfc;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 6px;
+                        padding: 15px;
+                        margin-bottom: 20px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                    }
+                    .customer-details h5 {
+                        color: #2C3E50;
+                        font-weight: 600;
+                        margin-bottom: 12px;
+                        text-transform: uppercase;
+                        font-size: 1rem;
+                    }
+                    .jewellery-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 20px;
+                        font-size: 0.85em;
+                    }
+                    .jewellery-table th {
+                        background-color: #2C3E50; /* Dark Charcoal */
+                        color: #ffffff;
+                        padding: 12px 8px;
+                        text-align: center;
+                        border: 1px solid #2C3E50;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                    }
+                    .jewellery-table td {
+                        padding: 10px 8px;
+                        border: 1px solid #e0e0e0;
+                        text-align: right;
+                        vertical-align: middle;
+                    }
+                    .jewellery-table td.text-left {
+                        text-align: left;
+                    }
+                    .jewellery-table tr:nth-child(even) {
+                        background-color: #fdfdfd;
+                    }
+                    .jewellery-totals {
+                        width: 100%;
+                        margin-top: 25px;
+                        font-size: 0.9em;
+                    }
+                    .jewellery-totals td {
+                        padding: 10px;
+                    }
+                    .jewellery-totals .totals-label {
+                        text-align: right;
+                        font-weight: 600;
+                        width: 80%;
+                        color: #555555;
+                    }
+                    .jewellery-totals .totals-value {
+                        text-align: right;
+                        font-weight: 600;
+                        border-bottom: 1px solid #e0e0e0;
+                    }
+                    .jewellery-totals .deduction-label {
+                        color: #E74C3C;
+                    }
+                    .jewellery-totals .deduction-value {
+                        color: #E74C3C;
+                    }
+                    .jewellery-totals .grand-total {
+                        color: #2C3E50;
+                        font-size: 1.25em;
+                        border-top: 2px solid #DAA520;
+                        border-bottom: 2px solid #DAA520;
+                        background-color: #fafafa;
+                    }
+                </style>
+
+                <div class="jewellery-invoice">
+                    <h2 class="jewellery-header">
+                        Tax Invoice <span t-if="o.name != '/'" t-field="o.name"/>
+                    </h2>
+
+                    <div class="row">
+                        <div class="col-7 customer-details">
+                            <h5>Customer Details</h5>
+                            <div t-if="o.partner_id" style="font-size: 0.9em; line-height: 1.5;">
+                                <strong style="font-size: 1.1em; color: #2C3E50;"><span t-field="o.partner_id.name"/></strong><br/>
+                                <span t-if="o.partner_id.street" t-field="o.partner_id.street"/><br t-if="o.partner_id.street"/>
+                                <span t-if="o.partner_id.city" t-field="o.partner_id.city"/>
+                                <span t-if="o.partner_id.state_id" t-field="o.partner_id.state_id.name"/>
+                                <span t-if="o.partner_id.zip" t-field="o.partner_id.zip"/><br t-if="o.partner_id.city or o.partner_id.state_id or o.partner_id.zip"/>
+                                <span t-if="o.partner_id.phone"><i class="fa fa-phone"/> <span t-field="o.partner_id.phone"/></span><br t-if="o.partner_id.phone"/>
+                                <span t-if="o.partner_id.email"><i class="fa fa-envelope"/> <span t-field="o.partner_id.email"/></span>
+                                <br t-if="o.partner_id.vat"/>
+                                <span t-if="o.partner_id.vat"><strong>TRN: </strong><span t-field="o.partner_id.vat"/></span>
+                            </div>
+                        </div>
+                        <div class="col-5">
+                            <div class="jewellery-info-box">
+                                <div class="row mb-2">
+                                    <div class="col-5"><strong>Invoice Date:</strong></div>
+                                    <div class="col-7 text-right"><span t-field="o.invoice_date"/></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-5"><strong>Due Date:</strong></div>
+                                    <div class="col-7 text-right"><span t-field="o.invoice_date_due"/></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-5"><strong>Source:</strong></div>
+                                    <div class="col-7 text-right"><span t-field="o.invoice_origin"/></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Details Table -->
+                    <table class="jewellery-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Product Details</th>
+                                <th>Name</th>
+                                <th>Caret</th>
+                                <th>Gross Weight</th>
+                                <th>Net Weight</th>
+                                <th>Diam Net Weight</th>
+                                <th>Stone Net Weight</th>
+                                <th>Stone Amount</th>
+                                <th>Daimond Weight</th>
+                                <th>Metal Amount</th>
+                                <th>MC</th>
+                                <th>Tax</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-set="total_discount" t-value="0.0"/>
+                            <t t-foreach="o.invoice_line_ids" t-as="line">
+                                <!-- Find the sale order line linked to this invoice line -->
+                                <t t-set="sale_line" t-value="line.sale_line_ids and line.sale_line_ids[0] or False"/>
+                                
+                                <t t-if="not line.display_type">
+                                    <!-- Discount calculation for display at the bottom if any -->
+                                    <t t-if="sale_line and sale_line.mc_discount">
+                                        <t t-set="total_discount" t-value="total_discount + sale_line.mc_discount"/>
+                                    </t>
+                                    <t t-if="line.discount">
+                                        <t t-set="total_discount" t-value="total_discount + ((line.price_unit * line.quantity) * (line.discount / 100.0))"/>
+                                    </t>
+                                    
+                                    <tr>
+                                        <td class="text-left">
+                                            <span t-field="line.name"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="line.product_id.name"/>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.purity_id">
+                                                <span t-field="sale_line.purity_id.name"/>
+                                            </t>
+                                            <t t-elif="line.purity_id">
+                                                <span t-field="line.purity_id.name"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.product_uom_qty">
+                                                <span t-esc="'{0:,.3f}'.format(sale_line.product_uom_qty)"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.net_weight">
+                                                <span t-esc="'{0:,.3f}'.format(sale_line.net_weight)"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.sale_diamond_weight_gm">
+                                                <span t-esc="'{0:,.3f}'.format(sale_line.sale_diamond_weight_gm)"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.sale_stone_weight">
+                                                <span t-esc="'{0:,.3f}'.format(sale_line.sale_stone_weight)"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.sale_stone_rate">
+                                                <span t-field="sale_line.sale_stone_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.sale_diamond_weight_ct">
+                                                <span t-esc="'{0:,.3f}'.format(sale_line.sale_diamond_weight_ct)"/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.metal_amount">
+                                                <span t-field="sale_line.metal_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <t t-if="sale_line and sale_line.mc_amount_actual">
+                                                <span t-field="sale_line.mc_amount_actual" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
+                                            <t t-else="">-</t>
+                                        </td>
+                                        <td>
+                                            <span t-esc="', '.join(map(lambda x: (x.description or x.name), line.tax_ids))" id="line_tax_ids"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="line.price_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </t>
+                        </tbody>
+                    </table>
+
+                    <!-- Totals -->
+                    <table class="jewellery-totals">
+                        <tr>
+                            <td class="totals-label">Subtotal:</td>
+                            <td class="totals-value">
+                                <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        
+                        <tr t-if="total_discount > 0">
+                            <td class="totals-label deduction-label">Total Discount:</td>
+                            <td class="totals-value deduction-value">
+                                - <span t-esc="total_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="totals-label">Taxes:</td>
+                            <td class="totals-value">
+                                <span t-field="o.amount_tax" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        
+                        <tr t-if="o.old_gold_price">
+                            <td class="totals-label deduction-label">Less Old Gold Price:</td>
+                            <td class="totals-value deduction-value">
+                                - <span t-field="o.old_gold_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        
+                        <tr t-if="o.sale_return_price">
+                            <td class="totals-label deduction-label">Less Sale Return Price:</td>
+                            <td class="totals-value deduction-value">
+                                - <span t-field="o.sale_return_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="totals-label grand-total">Net Amount Due:</td>
+                            <td class="totals-value grand-total">
+                                <span t-field="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                        
+                        <tr t-if="o.payment_state in ['paid', 'in_payment']">
+                            <td class="totals-label" style="color: #27AE60;">Paid Amount:</td>
+                            <td class="totals-value" style="color: #27AE60;">
+                                <span t-esc="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </t>
+        </xpath>
+    </template>
+</odoo>

@@ -598,7 +598,11 @@ class SaleOrder(models.Model):
 
     def action_advance_payment(self):
         self.ensure_one()
-        # Create a draft advance payment
+        journal = self.env['account.journal'].search([
+            ('type', 'in', ('bank', 'cash')),
+            ('company_id', '=', self.env.company.id)
+        ], limit=1)
+
         payment = self.env['account.payment'].create({
             'payment_type': 'inbound',
             'partner_type': 'customer',
@@ -606,6 +610,7 @@ class SaleOrder(models.Model):
             'amount': self.amount_total,
             'currency_id': self.currency_id.id,
             'sale_id': self.id,
+            'journal_id': journal.id if journal else False,
         })
         
         return {
