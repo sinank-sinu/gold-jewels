@@ -38,3 +38,5 @@ access_sale_order_line_salesman,sale.order.line,sale.model_sale_order_line,em_je
 access_sale_order_line_manager,sale.order.line,sale.model_sale_order_line,em_jewellery_management.group_jewellery_manager,1,1,1,1
 access_mrp_bom_salesman,mrp.bom,mrp.model_mrp_bom,em_jewellery_management.group_jewellery_salesman,1,0,0,0
 access_mrp_bom_line_salesman,mrp.bom.line,mrp.model_mrp_bom_line,em_jewellery_management.group_jewellery_salesman,1,0,0,0
+access_sale_return_line,sale.return.line,model_sale_return_line,em_jewellery_management.group_jewellery_salesman,1,1,1,1
+access_sale_return_line_manager,sale.return.line,model_sale_return_line,em_jewellery_management.group_jewellery_manager,1,1,1,1

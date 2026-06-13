@@ -55,7 +55,7 @@ class AccountPartnerLedger(models.TransientModel):
         move_line_ids = self.env['account.move.line'].search(
             [('account_type', 'in',
               ['liability_payable', 'asset_receivable']),
-             ('parent_state', '=', 'posted')])
+             ('parent_state', '=', 'posted')], limit=500)
         partner_ids = move_line_ids.mapped('partner_id')
         for partner in partner_ids:
             total_debit_balance = 0
@@ -424,7 +424,7 @@ class AccountPartnerLedger(models.TransientModel):
                 sheet.merge_range('J9:K9', 'Credit', sub_heading)
                 sheet.merge_range('L9:M9', 'Balance', sub_heading)
                 row = 8
-                for partner in data['partners']:
+                for partner in data['partners'] or []:
                     row += 1
                     sheet.write(row, col, partner, txt_name)
                     sheet.write(row, col + 1, ' ', txt_name)
@@ -434,14 +434,14 @@ class AccountPartnerLedger(models.TransientModel):
                     sheet.merge_range(row, col + 5, row, col + 6, ' ',
                                       txt_name)
                     sheet.merge_range(row, col + 7, row, col + 8,
-                                      data['total'][partner]['total_debit'],
+                                      data['total'][partner]['total_debit'] or 0,
                                       txt_name)
                     sheet.merge_range(row, col + 9, row, col + 10,
-                                      data['total'][partner]['total_credit'],
+                                      data['total'][partner]['total_credit'] or 0,
                                       txt_name)
                     sheet.merge_range(row, col + 11, row, col + 12,
-                                      data['total'][partner]['total_debit'] -
-                                      data['total'][partner]['total_credit'],
+                                      (data['total'][partner]['total_debit'] or 0)-
+                                      (data['total'][partner]['total_credit'] or 0),
                                       txt_name)
                     if data['total'][partner]['initial_balance'] != 0:
                         row += 1
@@ -479,17 +479,22 @@ class AccountPartnerLedger(models.TransientModel):
                         sheet.merge_range(row, col + 11, row, col + 12, ' ',
                                           txt_name)
                 row += 1
+                grand_total = data.get('grand_total') or {}
+                g_debit = float(grand_total.get('total_debit') or 0)
+                g_credit = float(grand_total.get('total_credit') or 0)
                 sheet.merge_range(row, col, row, col + 6, 'Total', filter_head)
                 sheet.merge_range(row, col + 7, row, col + 8,
-                                  data['grand_total']['total_debit'],
-                                  filter_head)
+                                  # (data['grand_total']['total_debit'] or 0),
+                                  g_debit, filter_head)
                 sheet.merge_range(row, col + 9, row, col + 10,
-                                  data['grand_total']['total_credit'],
-                                  filter_head)
+                                  # data['grand_total']['total_credit'],
+                                  g_credit, filter_head)
                 sheet.merge_range(row, col + 11, row, col + 12,
-                                  data['grand_total']['total_debit'] -
-                                  data['grand_total']['total_credit'],
-                                  filter_head)
+                                  # (data['grand_total']['total_debit'] or 0) -
+                                  # (data['grand_total']['total_credit'] or 0),
+                                  # filter_head)
+                                  g_debit - g_credit,filter_head)
+
         workbook.close()
         output.seek(0)
         response.stream.write(output.read())

@@ -69,7 +69,6 @@ class PurchaseRequisition(models.Model):
     request_type = fields.Selection(
         [
             ("purchase order", "Purchase Order"),
-            ("internal picking", "Internal Picking"),
             ("work order", "Work Order"),
         ],
         string="Requisition Type",
@@ -252,7 +251,6 @@ class MaterialPurchaseRequisitionLine(models.Model):
     request_action = fields.Selection(
         [
             ("purchase order", "Purchase Order"),
-            ("internal picking", "Internal Picking"),
             ("work order", "Work Order"),
 
         ],

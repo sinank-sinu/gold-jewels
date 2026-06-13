@@ -27,3 +27,5 @@ from .import jeweller_scheme
 from .import scheme_installment
 from . import mrp_production
 from . import account_payment
+from . import sale_return_line
+

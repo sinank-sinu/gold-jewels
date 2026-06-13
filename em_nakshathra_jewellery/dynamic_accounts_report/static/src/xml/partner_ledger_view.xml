@@ -219,9 +219,9 @@
                                 <!-- Table Body -->
                                 <tbody t-ref="tbody">
                                     <!-- Iterate over partners -->
-                                    <t t-if="state.partners">
+                                    <t t-if="state.visible_partners">
                                         <t t-set="i" t-value="0"/>
-                                        <t t-foreach="state.partners"
+                                        <t t-foreach="state.visible_partners"
                                            t-as="partner"
                                            t-key="partner_index">
                                             <t t-set="i" t-value="i + 1"/>

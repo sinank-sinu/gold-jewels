@@ -272,13 +272,13 @@
                                            t-as="account"
                                            t-key="account_index">
                                             <t t-set="i" t-value="i + 1"/>
+                                            <t t-if="!state.account_total or !state.account_total[account]"><tr/></t>
+                                            <t t-if="state.account_total and state.account_total[account]">
                                             <tr class="border-bottom border-dark border-gainsboro">
                                                 <th>
-                                                    <div data-bs-toggle="collapse"
-                                                         t-attf-href="#account-{{i}}"
-                                                         aria-expanded="false"
-                                                         t-attf-aria-controls="account-{{i}}"
-                                                         class="ms-3 collapsed">
+                                                    <div class="ms-3"
+                                                         style="cursor:pointer;"
+                                                         t-on-click="() => this.expandAccount(account, state.account_total[account].account_id)">
                                                         <a class="btn header o_heading">
                                                             <span class="toggle-icon">
                                                                 <i class="fa fa-caret-down"/>
@@ -328,11 +328,32 @@
                                                     </span>
                                                 </th>
                                             </tr>
-                                            <t t-foreach="state.account_data[account]"
-                                               t-as="valuelist"
-                                               t-key="valuelist_index">
-                                                <tr class="border-bottom border-gainsboro collapse"
-                                                    t-attf-id="account-{{i}}">
+                                            <t t-if="state.account_meta[account] and state.account_meta[account].expanded">
+                                                <t t-set="acct_meta" t-value="state.account_meta[account]"/>
+                                                <tr>
+                                                    <th colspan="11" style="padding:6px 18px;">
+                                                        <div style="display:flex;align-items:center;gap:12px;">
+                                                            <button class="btn btn-outline-secondary btn-sm"
+                                                                    t-att-disabled="acct_meta.offset === 0 ? 'disabled' : false"
+                                                                    t-on-click="() => this.prevAccountPage(account)">
+                                                                &#8592; Prev
+                                                            </button>
+                                                            <span>
+                                                                Page <t t-esc="Math.floor(acct_meta.offset / 500) + 1"/> of <t t-esc="Math.ceil(acct_meta.total / 500)"/>
+                                                                (<t t-esc="acct_meta.total"/> lines)
+                                                            </span>
+                                                            <button class="btn btn-outline-secondary btn-sm"
+                                                                    t-att-disabled="acct_meta.offset + 500 >= acct_meta.total ? 'disabled' : false"
+                                                                    t-on-click="() => this.nextAccountPage(account)">
+                                                                Next &#8594;
+                                                            </button>
+                                                        </div>
+                                                    </th>
+                                                </tr>
+                                                <t t-foreach="state.account_data[account]"
+                                                   t-as="valuelist"
+                                                   t-key="valuelist_index">
+                                                <tr class="border-bottom border-gainsboro">
                                                     <th colspan="6">
                                                         <span style="gap: 12px;display: flex;">
                                                             <t t-esc="valuelist[0]['move_name']"/>
@@ -391,6 +412,8 @@
                                                     </th>
                                                     <th/>
                                                 </tr>
+                                                </t>
+                                            </t>
                                             </t>
                                         </t>
                                     </t>

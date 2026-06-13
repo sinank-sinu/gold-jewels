@@ -12,7 +12,10 @@ class AccountMove(models.Model):
     unfix = fields.Boolean(string="Unfix", default=False)
     job_work_id = fields.Many2one('jewellery.job.work')
     old_gold_price = fields.Monetary(string="Old Gold Price")
+    sale_return_price = fields.Monetary(string="Sale Return Price")
+    is_sale_return = fields.Boolean(string="Sale Return", compute="_compute_is_sale_return", store=True, readonly=False)
     custom_total = fields.Monetary(string="Paid to")
+
     is_paid = fields.Boolean(string="Is Paid")
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
@@ -23,6 +26,13 @@ class AccountMove(models.Model):
         compute='_compute_vendor_bill_amount',
         store=False,
     )
+
+    @api.depends('invoice_line_ids.sale_line_ids.order_id.is_sale_return', 'invoice_line_ids.purchase_line_id.order_id.is_sale_return_po')
+    def _compute_is_sale_return(self):
+        for move in self:
+            is_so_return = any(line.sale_line_ids.order_id.is_sale_return for line in move.invoice_line_ids if line.sale_line_ids)
+            is_po_return = any(line.purchase_line_id.order_id.is_sale_return_po for line in move.invoice_line_ids if line.purchase_line_id)
+            move.is_sale_return = is_so_return or is_po_return
 
     @api.depends('unfix', 'invoice_line_ids')
     def _compute_vendor_bill_amount(self):
@@ -70,11 +80,13 @@ class AccountMove(models.Model):
                 move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed'] - move.old_gold_price
             if move.unfix and move.move_type == 'out_invoice' and move.vendor_bill_amount:
                 move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed'] - move.vendor_bill_amount
+            if move.sale_return_price:
+                move.tax_totals['amount_untaxed'] = move.tax_totals['amount_untaxed'] - move.sale_return_price
         return res
 
     def _compute_amount_one(self):
         """Perform totals computation of a move with global discounts."""
-        deduction = self.old_gold_price or 0.0
+        deduction = (self.old_gold_price or 0.0) + (self.sale_return_price or 0.0)
         if self.unfix and self.move_type == 'out_invoice':
             deduction += self.vendor_bill_amount or 0.0
         
@@ -101,14 +113,15 @@ class AccountMove(models.Model):
         "line_ids.amount_residual_currency",
         "line_ids.payment_id.state",
         "line_ids.full_reconcile_id",
-        "old_gold_price"
+        "old_gold_price",
+        "sale_return_price"
 
     )
     def _compute_amount(self):
         """Modify totals computation for including global discounts."""
         res = super()._compute_amount()
         for record in self:
-            if record.old_gold_price or (record.unfix and record.move_type == 'out_invoice'):
+            if record.old_gold_price or record.sale_return_price or (record.unfix and record.move_type == 'out_invoice'):
                 record._compute_amount_one()
             if self.env.context.get('bypass_negative_total_check') and record.amount_total < 0:
                 record.amount_total = 0.0
@@ -123,10 +136,12 @@ class AccountMove(models.Model):
         for move in self:
             if move.move_type == 'in_invoice' and not move.is_approved:
                 is_old_gold_po = any(po.is_old_gold for po in move.line_ids.mapped('purchase_line_id.order_id'))
-                if move.is_old_gold_bill or move.unfix or is_old_gold_po:
+                is_sale_return_po = any(po.is_sale_return_po for po in move.line_ids.mapped('purchase_line_id.order_id'))
+                if move.is_old_gold_bill or move.is_sale_return or move.unfix or is_old_gold_po or is_sale_return_po:
                     continue
                 raise ValidationError(_("This vendor bill must be approved by a manager before it can be confirmed."))
         return super().action_post()
+
 
 
     def _post(self, soft=True):
