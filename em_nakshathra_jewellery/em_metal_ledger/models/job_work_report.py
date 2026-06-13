@@ -29,6 +29,7 @@ class JobWorkReport(models.Model):
     balance_weight = fields.Float(string='Balance', digits=(16, 3), store=True)
     
     purity_id = fields.Many2one('gold.purity', string='Purity')
+    branch_id = fields.Many2one('res.branch', string='Branch')
     # ------------------------------------------------------------------
     # Running-balance helper (GLOBAL, exactly like Metal Ledger)
     # ------------------------------------------------------------------

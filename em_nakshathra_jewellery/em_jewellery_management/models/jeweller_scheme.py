@@ -12,6 +12,7 @@ class JewellerySchemeEnrollment(models.Model):
     whatsapp_number = fields.Char(string="WhatsApp Number")
     address = fields.Text(string="Address")
     nominee = fields.Char(string="Nominee")
+    date_of_joining = fields.Date(string="Date of Joining", default=fields.Date.today)
 
     def _get_branch_domain(self):
         """methode to get branch domain"""

@@ -1,0 +1,11 @@
+<odoo>
+    <record id="action_purchase_capital_gain_xlsx" model="ir.actions.report">
+        <field name="name">Capital Gain Report</field>
+        <field name="model">purchase.order</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">purchase_fine_rate_variance_report.capital_gain_xlsx</field>
+        <field name="report_file">purchase_fine_rate_variance_report.capital_gain_xlsx</field>
+        <field name="binding_model_id" ref="purchase.model_purchase_order"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

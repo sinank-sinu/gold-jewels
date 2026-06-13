@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Root Application -->
+    <menuitem
+        id="menu_product_label_app"
+        name="Product Labels"
+        sequence="5"
+        groups="custom_label_user.group_product_label_user"
+    />
+
+    <!-- Ornament Labels -->
+    <menuitem
+        id="menu_product_label_app_labels"
+        name="Ornament Labels"
+        parent="menu_product_label_app"
+        action="em_jewellery_management.action_product_label"
+        sequence="10"
+        groups="custom_label_user.group_product_label_user"
+    />
+
+    <!-- Location Wise Products -->
+    <menuitem
+        id="menu_product_label_app_location_stock"
+        name="Location Wise Products"
+        parent="menu_product_label_app"
+        action="custom_label_user.action_location_wise_stock"
+        sequence="20"
+        groups="custom_label_user.group_product_label_user"
+    />
+
+    <!-- Internal Transfers -->
+    <menuitem
+        id="menu_product_label_app_internal_transfer"
+        name="Internal Transfers"
+        parent="menu_product_label_app"
+        action="stock.action_picking_tree_internal"
+        sequence="30"
+        groups="custom_label_user.group_product_label_user"
+    />
+
+</odoo>

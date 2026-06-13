@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="action_report_job_work_xlsx" model="ir.actions.report">
+        <field name="name">Job Work XLSX Report</field>
+        <field name="model">job.work.report</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">job_work_xlsx.job_work_xlsx</field>
+        <field name="report_file">job_work_xlsx_report</field>
+    </record>
+</odoo>

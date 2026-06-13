@@ -19,10 +19,11 @@ class JewelleryIssueVoucher(models.Model):
                     'voucher_name': self.name,
                     'type': 'issue',
                     'partner_id': self.job_worker_id.id,
+                    'branch_id': self.branch_id.id,
                     'job_type': self.job_type_selection,
                     'gross_weight': line.gross_weight,
                     'stock_in': line.fine_weight, # Issue is stock_in for worker's account
-                    'purity_id': line.purity_id.id,
+                    'purity_id': line.purity_id.id, 
                 })
             else:
                 # Refinery Lab Report synchronization

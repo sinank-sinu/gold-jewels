@@ -32,20 +32,24 @@
                 </header>
                 <sheet>
                     <group>
-                        <field name="ticket_number"/>
-                        <field name="partner_id"/>
-                        <field name="phone"/>
-                        <field name="whatsapp_number"/>
-                        <field name="address"/>
-                        <field name="nominee"/>
-                        <field name="duration"/>
-                        <field name="branch_id"/>
-                        <field name="installment_amount"/>
-                        <field name="total_paid" readonly="1"/>
-                        <field name="balance_amount" readonly="1"/>
-                        <field name="state" invisible="1"/>
+                        <group>
+                            <field name="ticket_number"/>
+                            <field name="partner_id"/>
+                            <field name="phone"/>
+                            <field name="whatsapp_number"/>
+                            <field name="address"/>
+                            <field name="nominee"/>
+                        </group>
+                        <group>
+                            <field name="date_of_joining"/>
+                            <field name="duration"/>
+                            <field name="branch_id"/>
+                            <field name="installment_amount"/>
+                            <field name="total_paid" readonly="1"/>
+                            <field name="balance_amount" readonly="1"/>
+                            <field name="state" invisible="1"/>
+                        </group>
                     </group>
-
                     <notebook>
                         <page string="Installments">
                             <field name="scheme_line_ids">
