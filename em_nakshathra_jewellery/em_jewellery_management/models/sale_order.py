@@ -44,6 +44,17 @@ class SaleOrder(models.Model):
         string='Bill Amount',
         readonly=True,
     )
+    is_sale_return = fields.Boolean(string='Sale Return', default=False)
+    sale_return_line_ids = fields.One2many('sale.return.line', 'sale_id')
+    sale_return_po_id = fields.Many2one('purchase.order', string='Sale Return PO', readonly=True, copy=False)
+    sale_return_bill_id = fields.Many2one('account.move', string='Sale Return Vendor Bill', readonly=True, copy=False)
+    sale_return_bill_amount = fields.Monetary(
+        related='sale_return_bill_id.amount_total',
+        currency_field='currency_id',
+        string='Return Bill Amount',
+        readonly=True,
+    )
+
 
     advance_payment_ids = fields.One2many('account.payment', 'sale_id', string='Advance Payments')
     advance_payment_count = fields.Integer(compute='_compute_advance_payment_count')
@@ -497,7 +508,81 @@ class SaleOrder(models.Model):
         vals = super()._prepare_invoice()
         vals['old_gold_price'] = self.old_gold_bill_amount
         vals['unfix'] = self.unfix
+        vals['sale_return_price'] = self.sale_return_bill_amount
+        vals['is_sale_return'] = self.is_sale_return
         return vals
+
+    def action_open_sale_return_bill(self):
+        self.ensure_one()
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Sale Return Vendor Bill'),
+            'res_model': 'account.move',
+            'view_mode': 'form',
+            'res_id': self.sale_return_bill_id.id,
+            'context': {'create': False, 'hide_payment_button': True},
+        }
+
+    def action_apply_sale_return(self):
+        PurchaseOrder = self.env['purchase.order']
+        PurchaseLine = self.env['purchase.order.line']
+        AccountMove = self.env['account.move']
+
+        for order in self:
+            if not order.sale_return_line_ids:
+                raise ValidationError(_("No Sale Return lines found."))
+
+            po = PurchaseOrder.create({
+                'partner_id': order.partner_id.id,
+                'date_order': fields.Date.today(),
+                'origin': order.name,
+                'branch_id': order.branch_id.id,
+                'sale_id': order.id,
+                'is_sale_return_po': True,
+            })
+
+            for line in order.sale_return_line_ids:
+                PurchaseLine.create({
+                    'order_id': po.id,
+                    'product_id': line.product_id.id,
+                    'name': f'Sale Return ({line.product_id.name})',
+                    'product_qty': line.net_weight or 1.0,
+                    'purity_id': line.purity_id.id,
+                    'gold_rate': line.rate,
+                    'price_unit': line.rate,
+                    'product_uom': line.product_id.uom_po_id.id,
+                    'taxes_id': [(6, 0, [])],
+                })
+
+            # Confirm PO
+            po.button_confirm()
+            order.sale_return_po_id = po.id
+
+            for line in po.order_line:
+                line.qty_received = line.product_qty
+
+            for picking in po.picking_ids:
+                picking.action_confirm()
+                picking.action_assign()
+
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+                    move.picked = True
+
+                try:
+                    picking.button_validate()
+                except Exception:
+                    pass
+
+            # Create & Post Vendor Bill
+            bill_action = po.action_create_invoice()
+            bill = AccountMove.browse(bill_action['res_id'])
+            bill.invoice_date = fields.Date.context_today(self)
+            bill.action_post()
+            order.sale_return_bill_id = bill.id
+
+        return True
 
     def action_create_invoice_and_pay(self):
         for order in self:
@@ -513,21 +598,29 @@ class SaleOrder(models.Model):
 
     def action_advance_payment(self):
         self.ensure_one()
+        # Create a draft advance payment
+        payment = self.env['account.payment'].create({
+            'payment_type': 'inbound',
+            'partner_type': 'customer',
+            'partner_id': self.partner_id.id,
+            'amount': self.amount_total,
+            'currency_id': self.currency_id.id,
+            'sale_id': self.id,
+        })
+        
         return {
-            'name': _('Advance Payment'),
+            'name': _('Advance Payment via Pine Labs'),
             'type': 'ir.actions.act_window',
-            'res_model': 'account.payment',
+            'res_model': 'pinelabs.payment.wizard',
             'view_mode': 'form',
             'target': 'new',
             'context': {
-                'default_payment_type': 'inbound',
-                'default_partner_type': 'customer',
-                'default_partner_id': self.partner_id.id,
-                'default_amount': self.amount_total,
-                'default_currency_id': self.currency_id.id,
-                'default_sale_id': self.id,
+                'default_amount': payment.amount,
+                'default_payment_id': payment.id,
+                'default_sale_order_id': self.id,
             }
         }
+
 
 
 

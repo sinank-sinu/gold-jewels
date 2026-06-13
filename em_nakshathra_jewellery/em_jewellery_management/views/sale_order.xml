@@ -15,7 +15,7 @@
                         type="object"
                         string="Advance Payment"
                         class="btn-primary"
-                        invisible="state != 'draft'"/>
+                        invisible="state != 'draft' or advance_payment_count != 0"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="attributes">
                 <attribute name="string">Gross Weight</attribute>
@@ -84,6 +84,7 @@
             <xpath expr="//field[@name='order_line']" position="after">
                 <group>
                     <field name="has_old_gold" widget="boolean_toggle"/>
+                    <field name="is_sale_return" widget="boolean_toggle"/>
                 </group>
                  <group>
                     <field name="branch_location_id" readonly="old_gold_bill_id != False" required="has_old_gold"/>
@@ -94,6 +95,11 @@
                             string="Apply Old Gold"
                             style="width: 600px;"
                             invisible="has_old_gold == False or old_gold_bill_id != False"/>
+                     <button name="action_apply_sale_return"
+                            type="object"
+                            string="Apply Sale Return"
+                            style="width: 600px;"
+                            invisible="is_sale_return == False or sale_return_bill_id != False"/>
 <!--                    </group>-->
 
                             <div class="clearfix"/>
@@ -109,12 +115,26 @@
                             <field name="amount" readonly="1"/>
                         </tree>
                     </field>
+                    <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False" readonly="sale_return_bill_id != False">
+                        <tree editable="bottom">
+                            <field name="product_id"/>
+                            <field name="purity_id"/>
+                            <field name="gross_weight"/>
+                            <field name="stone_weight"/>
+                            <field name="net_weight" readonly="1"/>
+                            <field name="rate"/>
+                            <field name="amount" readonly="1"/>
+                        </tree>
+                    </field>
 <!--                </group>-->
             </xpath>
             <xpath expr="//field[@name='source_id']" position="after">
                 <field name="purchase_order_id"/>
                 <field name="old_gold_bill_id"/>
                 <field name="old_gold_bill_amount"/>
+                <field name="sale_return_po_id" invisible="is_sale_return == False"/>
+                <field name="sale_return_bill_id" invisible="is_sale_return == False"/>
+                <field name="sale_return_bill_amount" invisible="is_sale_return == False"/>
                 <field name="unfix" widget="boolean_toggle"/>
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
@@ -125,6 +145,13 @@
                         invisible="old_gold_bill_id==False">
 <!--                    <field name="old_gold_bill_amount" widget="monetary"/>-->
                     <span class="o_stat_text">Customer Bill</span>
+                </button>
+               <button name="action_open_sale_return_bill"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-pencil-square-o"
+                        invisible="sale_return_bill_id==False">
+                    <span class="o_stat_text">Return Bill</span>
                 </button>
                 <button name="action_view_advance_payments"
                         type="object"

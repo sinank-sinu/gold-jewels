@@ -5,6 +5,7 @@ class AccountPaymentRegister(models.TransientModel):
 
 
     old_gold_price = fields.Monetary(string="Old Gold Price")
+    sale_return_price = fields.Monetary(string="Sale Return Price")
     currency_id = fields.Many2one(
         comodel_name='res.currency',
         string='Currency',
@@ -19,8 +20,9 @@ class AccountPaymentRegister(models.TransientModel):
         moves = batch_result['lines'].mapped('move_id')
         move = moves[0]
 
-        if move.old_gold_price:
+        if move.old_gold_price or move.sale_return_price:
             self.old_gold_price = move.old_gold_price
+            self.sale_return_price = move.sale_return_price
             self.amount = move.amount_residual
             # self.currency_id = move.currency_id.id
 
@@ -34,6 +36,7 @@ class AccountPaymentRegister(models.TransientModel):
     #         if wizard.amount and wizard.old_gold_price:
     #             wizard.amount = wizard.amount-wizard.old_gold_price
     #
+ 
 
 
     @api.depends('can_edit_wizard', 'amount')
@@ -41,11 +44,12 @@ class AccountPaymentRegister(models.TransientModel):
         res = super()._compute_payment_difference()
 
         for wizard in self:
-            if wizard.amount and wizard.old_gold_price:
+            deduction = (wizard.old_gold_price or 0.0) + (wizard.sale_return_price or 0.0)
+            if wizard.amount and deduction:
                 if wizard.can_edit_wizard and wizard.payment_date:
                     batch_result = wizard._get_batches()[0]
                     total_amount_residual_in_wizard_currency = wizard\
                         ._get_total_amount_in_wizard_currency_to_full_reconcile(batch_result, early_payment_discount=False)[0]
-                    wizard.payment_difference = (total_amount_residual_in_wizard_currency-wizard.old_gold_price) - wizard.amount
+                    wizard.payment_difference = (total_amount_residual_in_wizard_currency - deduction) - wizard.amount
             else:
                 wizard.payment_difference = 0.0

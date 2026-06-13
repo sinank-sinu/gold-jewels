@@ -122,6 +122,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 [('type', '=', 'bank'), ('company_id', '=', self.env.company.id)], limit=1)
             if not bank_journal:
                 raise UserError(_('No bank journal found.'))
+            self.payment_id.amount = self.amount
             self.payment_id.journal_id = bank_journal.id
             self.payment_id.action_post()
             return {'type': 'ir.actions.act_window_close'}
@@ -240,6 +241,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 _('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
 
         if self.payment_id and self.payment_id.state == 'draft':
+            self.payment_id.amount = self.amount
             self.payment_id.journal_id = cash_journal.id
             self.payment_id.action_post()
             return {'type': 'ir.actions.act_window_close'}
@@ -502,7 +504,19 @@ class PineLabsPaymentWizard(models.TransientModel):
                 lines.reconcile()
 
         if self.payment_id and self.payment_id.state == 'draft':
+            self.payment_id.amount = self.amount
             self.payment_id.pinelabs_transaction_id = txn.id
+            
+            # Update the journal if using Card/UPI for advance payments
+            journal = False
+            if self.payment_method_type == 'card':
+                journal = txn.pinelabs_terminal_id.card_journal_id
+            elif self.payment_method_type == 'upi':
+                journal = txn.pinelabs_terminal_id.upi_journal_id
+                
+            if journal:
+                self.payment_id.journal_id = journal.id
+                
             self.payment_id.action_post()
 
     def action_cancel_payment(self):

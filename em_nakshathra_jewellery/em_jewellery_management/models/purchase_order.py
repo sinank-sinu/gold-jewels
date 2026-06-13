@@ -15,7 +15,12 @@ class PurchaseOrder(models.Model):
         string='Old Gold Purchase',
         default=False
     )
+    is_sale_return_po = fields.Boolean(
+        string='Is Sale Return PO',
+        default=False
+    )
     unfix = fields.Boolean(
+
         string='Unfix',
         default=False
     )
