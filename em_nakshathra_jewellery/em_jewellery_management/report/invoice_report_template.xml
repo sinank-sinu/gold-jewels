@@ -4,24 +4,24 @@
         
         <!-- Hide default sections for customer invoices (out_invoice) -->
         <xpath expr="//h2" position="attributes">
-            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+            <attribute name="t-if">o.move_type not in ('out_invoice', 'in_invoice')</attribute>
         </xpath>
 
         <xpath expr="//div[@id='informations']" position="attributes">
-            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+            <attribute name="t-if">o.move_type not in ('out_invoice', 'in_invoice')</attribute>
         </xpath>
 
         <xpath expr="//table[@name='invoice_line_table']" position="attributes">
-            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+            <attribute name="t-if">o.move_type not in ('out_invoice', 'in_invoice')</attribute>
         </xpath>
 
         <xpath expr="//div[@id='right-elements']" position="attributes">
-            <attribute name="t-if">o.move_type != 'out_invoice'</attribute>
+            <attribute name="t-if">o.move_type not in ('out_invoice', 'in_invoice')</attribute>
         </xpath>
 
         <!-- Custom Jewellery Invoice Design -->
         <xpath expr="//h2" position="before">
-            <t t-if="o.move_type == 'out_invoice'">
+            <t t-if="o.move_type in ('out_invoice', 'in_invoice')">
                 
                 <style>
                     .jewellery-invoice {
@@ -115,12 +115,17 @@
 
                 <div class="jewellery-invoice">
                     <h2 class="jewellery-header">
-                        Tax Invoice <span t-if="o.name != '/'" t-field="o.name"/>
+                        <span t-if="o.move_type == 'out_invoice'">Tax Invoice</span>
+                        <span t-if="o.move_type == 'in_invoice'">Vendor Bill</span>
+                        <span t-if="o.name != '/'" t-field="o.name"/>
                     </h2>
 
                     <div class="row">
                         <div class="col-7 customer-details">
-                            <h5>Customer Details</h5>
+                            <h5>
+                                <span t-if="o.move_type == 'out_invoice'">Customer Details</span>
+                                <span t-if="o.move_type == 'in_invoice'">Vendor Details</span>
+                            </h5>
                             <div t-if="o.partner_id" style="font-size: 0.9em; line-height: 1.5;">
                                 <strong style="font-size: 1.1em; color: #2C3E50;"><span t-field="o.partner_id.name"/></strong><br/>
                                 <span t-if="o.partner_id.street" t-field="o.partner_id.street"/><br t-if="o.partner_id.street"/>
@@ -175,8 +180,9 @@
                             <t t-foreach="o.invoice_line_ids" t-as="line">
                                 <!-- Find the sale order line linked to this invoice line -->
                                 <t t-set="sale_line" t-value="line.sale_line_ids and line.sale_line_ids[0] or False"/>
+                                <t t-set="purchase_line" t-value="line.purchase_line_id or False"/>
                                 
-                                <t t-if="not line.display_type">
+                                <t t-if="line.display_type == 'product' or not line.display_type">
                                     <!-- Discount calculation for display at the bottom if any -->
                                     <t t-if="sale_line and sale_line.mc_discount">
                                         <t t-set="total_discount" t-value="total_discount + sale_line.mc_discount"/>
@@ -196,6 +202,9 @@
                                             <t t-if="sale_line and sale_line.purity_id">
                                                 <span t-field="sale_line.purity_id.name"/>
                                             </t>
+                                            <t t-elif="purchase_line and purchase_line.purity_id">
+                                                <span t-field="purchase_line.purity_id.name"/>
+                                            </t>
                                             <t t-elif="line.purity_id">
                                                 <span t-field="line.purity_id.name"/>
                                             </t>
@@ -205,11 +214,17 @@
                                             <t t-if="sale_line and sale_line.product_uom_qty">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.product_uom_qty)"/>
                                             </t>
+                                            <t t-elif="purchase_line and purchase_line.product_qty">
+                                                <span t-esc="'{0:,.3f}'.format(purchase_line.product_qty)"/>
+                                            </t>
                                             <t t-else="">-</t>
                                         </td>
                                         <td>
                                             <t t-if="sale_line and sale_line.net_weight">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.net_weight)"/>
+                                            </t>
+                                            <t t-elif="purchase_line and purchase_line.net_weight">
+                                                <span t-esc="'{0:,.3f}'.format(purchase_line.net_weight)"/>
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
@@ -217,17 +232,26 @@
                                             <t t-if="sale_line and sale_line.sale_diamond_weight_gm">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.sale_diamond_weight_gm)"/>
                                             </t>
+                                            <t t-elif="purchase_line and purchase_line.diamond_weight_gm">
+                                                <span t-esc="'{0:,.3f}'.format(purchase_line.diamond_weight_gm)"/>
+                                            </t>
                                             <t t-else="">-</t>
                                         </td>
                                         <td>
                                             <t t-if="sale_line and sale_line.sale_stone_weight">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.sale_stone_weight)"/>
                                             </t>
+                                            <t t-elif="purchase_line and purchase_line.stone_weight">
+                                                <span t-esc="'{0:,.3f}'.format(purchase_line.stone_weight)"/>
+                                            </t>
                                             <t t-else="">-</t>
                                         </td>
                                         <td>
                                             <t t-if="sale_line and sale_line.sale_stone_rate">
                                                 <span t-field="sale_line.sale_stone_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
+                                            <t t-elif="purchase_line and purchase_line.stone_rate">
+                                                <span t-field="purchase_line.stone_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
@@ -241,11 +265,17 @@
                                             <t t-if="sale_line and sale_line.metal_amount">
                                                 <span t-field="sale_line.metal_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
+                                            <t t-elif="purchase_line and purchase_line.metal_amount">
+                                                <span t-field="purchase_line.metal_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
                                             <t t-else="">-</t>
                                         </td>
                                         <td>
                                             <t t-if="sale_line and sale_line.mc_amount_actual">
                                                 <span t-field="sale_line.mc_amount_actual" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </t>
+                                            <t t-elif="purchase_line and purchase_line.mc_amount">
+                                                <span t-field="purchase_line.mc_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
