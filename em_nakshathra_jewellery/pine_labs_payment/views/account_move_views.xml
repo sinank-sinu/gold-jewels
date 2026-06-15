@@ -31,7 +31,7 @@
                         string="Pay via Pine Labs"
                         type="object"
                         class="btn-primary"
-                        invisible="unfix or is_sale_return or state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt')" />
+                        invisible="unfix or state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt')" />
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="Pine Labs Payments" name="pinelabs_payments" invisible="not pinelabs_transaction_ids">

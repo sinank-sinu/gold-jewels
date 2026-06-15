@@ -20,6 +20,13 @@
         </xpath>
 
         <!-- Custom Jewellery Invoice Design -->
+        <xpath expr="//t[@t-set='address']" position="after">
+            <!-- Clear default Odoo address so it doesn't print awkwardly on page 2 -->
+            <t t-if="o.move_type in ('out_invoice', 'in_invoice')">
+                <t t-set="address" t-value="''"/>
+            </t>
+        </xpath>
+
         <xpath expr="//h2" position="before">
             <t t-if="o.move_type in ('out_invoice', 'in_invoice')">
                 
@@ -55,20 +62,21 @@
                     .jewellery-table {
                         width: 100%;
                         border-collapse: collapse;
-                        margin-top: 20px;
-                        font-size: 0.85em;
+                        margin-top: 15px;
+                        font-size: 0.75em;
                     }
                     .jewellery-table th {
                         background-color: #2C3E50; /* Dark Charcoal */
                         color: #ffffff;
-                        padding: 12px 8px;
+                        padding: 6px 4px;
                         text-align: center;
                         border: 1px solid #2C3E50;
                         font-weight: 600;
-                        text-transform: uppercase;
+                        font-size: 0.9em;
+                        vertical-align: middle;
                     }
                     .jewellery-table td {
-                        padding: 10px 8px;
+                        padding: 6px 4px;
                         border: 1px solid #e0e0e0;
                         text-align: right;
                         vertical-align: middle;
@@ -79,18 +87,29 @@
                     .jewellery-table tr:nth-child(even) {
                         background-color: #fdfdfd;
                     }
-                    .jewellery-totals {
+                    .clearfix::after {
+                        content: "";
+                        clear: both;
+                        display: table;
+                    }
+                    .jewellery-totals-wrapper {
+                        page-break-inside: avoid;
                         width: 100%;
-                        margin-top: 25px;
-                        font-size: 0.9em;
+                    }
+                    .jewellery-totals {
+                        float: right;
+                        width: 40%;
+                        margin-top: 15px;
+                        font-size: 0.85em;
+                        border-collapse: collapse;
                     }
                     .jewellery-totals td {
-                        padding: 10px;
+                        padding: 8px;
                     }
                     .jewellery-totals .totals-label {
                         text-align: right;
                         font-weight: 600;
-                        width: 80%;
+                        width: 60%;
                         color: #555555;
                     }
                     .jewellery-totals .totals-value {
@@ -106,7 +125,7 @@
                     }
                     .jewellery-totals .grand-total {
                         color: #2C3E50;
-                        font-size: 1.25em;
+                        font-size: 1.15em;
                         border-top: 2px solid #DAA520;
                         border-bottom: 2px solid #DAA520;
                         background-color: #fafafa;
@@ -129,7 +148,7 @@
                             <div t-if="o.partner_id" style="font-size: 0.9em; line-height: 1.5;">
                                 <strong style="font-size: 1.1em; color: #2C3E50;"><span t-field="o.partner_id.name"/></strong><br/>
                                 <span t-if="o.partner_id.street" t-field="o.partner_id.street"/><br t-if="o.partner_id.street"/>
-                                <span t-if="o.partner_id.city" t-field="o.partner_id.city"/>
+                                <span t-if="o.partner_id.city" t-esc="o.partner_id.city"/>
                                 <span t-if="o.partner_id.state_id" t-field="o.partner_id.state_id.name"/>
                                 <span t-if="o.partner_id.zip" t-field="o.partner_id.zip"/><br t-if="o.partner_id.city or o.partner_id.state_id or o.partner_id.zip"/>
                                 <span t-if="o.partner_id.phone"><i class="fa fa-phone"/> <span t-field="o.partner_id.phone"/></span><br t-if="o.partner_id.phone"/>
@@ -160,19 +179,19 @@
                     <table class="jewellery-table">
                         <thead>
                             <tr>
-                                <th class="text-left">Product Details</th>
-                                <th>Name</th>
-                                <th>Caret</th>
-                                <th>Gross Weight</th>
-                                <th>Net Weight</th>
-                                <th>Diam Net Weight</th>
-                                <th>Stone Net Weight</th>
-                                <th>Stone Amount</th>
-                                <th>Daimond Weight</th>
-                                <th>Metal Amount</th>
-                                <th>MC</th>
-                                <th>Tax</th>
-                                <th>Total</th>
+                                <th class="text-left" style="width: 14%;">Product Details</th>
+                                <th style="width: 12%;">Name</th>
+                                <th style="width: 5%;">Crt</th>
+                                <th style="width: 7%;">Gr.Wt</th>
+                                <th style="width: 7%;">Nt.Wt</th>
+                                <th style="width: 7%;">D.Wt(g)</th>
+                                <th style="width: 7%;">St.Wt</th>
+                                <th style="width: 8%;">St.Amt</th>
+                                <th style="width: 6%;">D.Wt(c)</th>
+                                <th style="width: 9%;">Metal Amt</th>
+                                <th style="width: 6%;">MC</th>
+                                <th style="width: 6%;">Tax</th>
+                                <th style="width: 6%;">Total</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -292,58 +311,72 @@
                     </table>
 
                     <!-- Totals -->
-                    <table class="jewellery-totals">
-                        <tr>
-                            <td class="totals-label">Subtotal:</td>
-                            <td class="totals-value">
-                                <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
-                        
-                        <tr t-if="total_discount > 0">
-                            <td class="totals-label deduction-label">Total Discount:</td>
-                            <td class="totals-value deduction-value">
-                                - <span t-esc="total_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
+                    <div class="clearfix jewellery-totals-wrapper">
+                        <table class="jewellery-totals">
+                            <tr>
+                                <td class="totals-label">Subtotal:</td>
+                                <td class="totals-value">
+                                    <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                            
+                            <tr t-if="total_discount > 0">
+                                <td class="totals-label deduction-label">Total Discount:</td>
+                                <td class="totals-value deduction-value">
+                                    - <span t-esc="total_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
 
-                        <tr>
-                            <td class="totals-label">Taxes:</td>
-                            <td class="totals-value">
-                                <span t-field="o.amount_tax" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
-                        
-                        <tr t-if="o.old_gold_price">
-                            <td class="totals-label deduction-label">Less Old Gold Price:</td>
-                            <td class="totals-value deduction-value">
-                                - <span t-field="o.old_gold_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
-                        
-                        <tr t-if="o.sale_return_price">
-                            <td class="totals-label deduction-label">Less Sale Return Price:</td>
-                            <td class="totals-value deduction-value">
-                                - <span t-field="o.sale_return_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
+                            <tr>
+                                <td class="totals-label">Taxes:</td>
+                                <td class="totals-value">
+                                    <span t-field="o.amount_tax" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                            
+                            <tr t-if="o.old_gold_price">
+                                <td class="totals-label deduction-label">Less Old Gold Price:</td>
+                                <td class="totals-value deduction-value">
+                                    - <span t-field="o.old_gold_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                            
+                            <tr t-if="o.sale_return_price">
+                                <td class="totals-label deduction-label">Less Sale Return Price:</td>
+                                <td class="totals-value deduction-value">
+                                    - <span t-field="o.sale_return_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
 
-                        <tr>
-                            <td class="totals-label grand-total">Net Amount Due:</td>
-                            <td class="totals-value grand-total">
-                                <span t-field="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
-                        
-                        <tr t-if="o.payment_state in ['paid', 'in_payment']">
-                            <td class="totals-label" style="color: #27AE60;">Paid Amount:</td>
-                            <td class="totals-value" style="color: #27AE60;">
-                                <span t-esc="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                            </td>
-                        </tr>
-                    </table>
+                            <tr>
+                                <td class="totals-label grand-total">Net Amount Due:</td>
+                                <td class="totals-value grand-total">
+                                    <span t-field="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                            
+                            <tr t-if="o.payment_state in ['paid', 'in_payment']">
+                                <td class="totals-label" style="color: #27AE60;">Paid Amount:</td>
+                                <td class="totals-value" style="color: #27AE60;">
+                                    <span t-esc="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
                 </div>
             </t>
+        </xpath>
+    </template>
+
+    <!-- Make the company logo larger and centered across all standard reports -->
+    <template id="jewellery_external_layout_standard" inherit_id="web.external_layout_standard">
+        <xpath expr="//div[hasclass('row')][1]" position="replace">
+            <div class="row mb-3">
+                <div class="col-12 text-center">
+                    <img t-if="company.logo" t-att-src="image_data_uri(company.logo)" style="max-height: 150px; max-width: 100%; margin: 0 auto;" alt="Logo"/>
+                    <div t-if="company.report_header" t-field="company.report_header" name="moto" class="text-center mt-2 text-muted"/>
+                </div>
+            </div>
         </xpath>
     </template>
 </odoo>
