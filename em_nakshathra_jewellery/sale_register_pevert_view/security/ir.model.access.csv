@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_sale_register_line_user,sale.register.line user,model_sale_register_line,base.group_user,1,0,0,0
+access_sale_register_line_manager,sale.register.line manager,model_sale_register_line,sales_team.group_sale_manager,1,0,0,0

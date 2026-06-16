@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         TREE / LIST VIEW
+         ════════════════════════════════════════════════════════════════ -->
+    <record id="view_sale_register_line_tree" model="ir.ui.view">
+        <field name="name">sale.register.line.tree</field>
+        <field name="model">sale.register.line</field>
+        <field name="arch" type="xml">
+            <tree string="Sale Register" create="false" edit="false" delete="false">
+                <field name="so_number" string="SO Number"/>
+                <field name="date_order" string="Date"/>
+                <field name="partner_id" string="Customer"/>
+                <field name="salesperson_id" string="Salesperson"/>
+                <field name="branch_id" string="Branch"/>
+                <field name="state" string="Status"/>
+                <field name="product_id" string="Product"/>
+                <field name="purity_id" string="Purity"/>
+                <field name="quantity" string="Qty" sum="Total Qty"/>
+                <field name="qty_delivered" string="Delivered" sum="Total Delivered"/>
+                <field name="product_uom_id" string="UoM"/>
+                <field name="net_weight" string="Net Wt (g)" sum="Total Net Wt" digits="[16,3]"/>
+                <field name="fine_weight" string="Fine Wt (g)" sum="Total Fine Wt" digits="[16,3]"/>
+                <field name="gold_rate" string="Gold Rate"/>
+                <field name="metal_amount" string="Metal Amt" sum="Total Metal"/>
+                <field name="mc_percent_actual" string="MC%"/>
+                <field name="mc_amount_actual" string="MC Amount" sum="Total MC"/>
+                <field name="mc_discount" string="Discount" sum="Total Discount"/>
+                <field name="price_unit" string="Unit Price"/>
+                <field name="price_subtotal" string="Subtotal" sum="Total Subtotal"/>
+                <field name="price_tax" string="Tax" sum="Total Tax"/>
+                <field name="amount_total" string="Order Total" sum="Grand Total"/>
+                <field name="currency_id" string="Currency" optional="show"/>
+                <field name="old_gold_amount" string="Old Gold" sum="Total Old Gold"/>
+                <field name="bank_amount" string="Bank" sum="Total Bank"/>
+                <field name="cash_amount" string="Cash" sum="Total Cash"/>
+                <field name="card_amount" string="Card" sum="Total Card"/>
+                <field name="upi_amount" string="UPI" sum="Total UPI"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         PIVOT VIEW
+         ════════════════════════════════════════════════════════════════ -->
+    <record id="view_sale_register_line_pivot" model="ir.ui.view">
+        <field name="name">sale.register.line.pivot</field>
+        <field name="model">sale.register.line</field>
+        <field name="arch" type="xml">
+            <pivot string="Sale Register" disable_linking="False">
+                <field name="date_order"       type="row" interval="month"/>
+                <field name="branch_id"        type="row"/>
+                <field name="partner_id"       type="row"/>
+                <field name="state"            type="col"/>
+                <field name="amount_total"     type="measure"/>
+                <field name="metal_amount"     type="measure"/>
+                <field name="mc_amount_actual" type="measure"/>
+                <field name="price_subtotal"   type="measure"/>
+                <field name="old_gold_amount"  type="measure"/>
+                <field name="bank_amount"      type="measure"/>
+                <field name="cash_amount"      type="measure"/>
+                <field name="card_amount"      type="measure"/>
+                <field name="upi_amount"       type="measure"/>
+                <field name="net_weight"       type="measure"/>
+                <field name="fine_weight"      type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         GRAPH VIEW
+         ════════════════════════════════════════════════════════════════ -->
+    <record id="view_sale_register_line_graph" model="ir.ui.view">
+        <field name="name">sale.register.line.graph</field>
+        <field name="model">sale.register.line</field>
+        <field name="arch" type="xml">
+            <graph string="Sale Register" type="bar" stacked="True">
+                <field name="date_order" type="row" interval="month"/>
+                <field name="branch_id"  type="row"/>
+                <field name="amount_total" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         SEARCH VIEW
+         ════════════════════════════════════════════════════════════════ -->
+    <record id="view_sale_register_line_search" model="ir.ui.view">
+        <field name="name">sale.register.line.search</field>
+        <field name="model">sale.register.line</field>
+        <field name="arch" type="xml">
+            <search string="Search Sale Register">
+                <field name="so_number"      string="SO Number"/>
+                <field name="partner_id"     string="Customer"/>
+                <field name="salesperson_id" string="Salesperson"/>
+                <field name="branch_id"      string="Branch"/>
+                <field name="product_id"     string="Product"/>
+                <field name="purity_id"      string="Purity"/>
+                <field name="date_order"     string="Date"/>
+
+                <!-- ── Filters ────────────────────────── -->
+                <filter string="Confirmed Orders"
+                        name="filter_sale"
+                        domain="[('state','=','sale')]"/>
+                <filter string="Locked / Done"
+                        name="filter_done"
+                        domain="[('state','=','done')]"/>
+                <separator/>
+                <filter string="Today"
+                        name="filter_today"
+                        domain="[('date_order','=',context_today().strftime('%Y-%m-%d'))]"/>
+                <filter string="This Month"
+                        name="filter_this_month"
+                        domain="[('date_order','&gt;=', (context_today().replace(day=1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Year"
+                        name="filter_this_year"
+                        domain="[('date_order','&gt;=', (context_today().replace(month=1,day=1)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+
+                <!-- ── Group By ───────────────────────── -->
+                <group expand="0" string="Group By">
+                    <filter string="Branch"
+                            name="group_branch"
+                            context="{'group_by':'branch_id'}"/>
+                    <filter string="Customer"
+                            name="group_customer"
+                            context="{'group_by':'partner_id'}"/>
+                    <filter string="Salesperson"
+                            name="group_salesperson"
+                            context="{'group_by':'salesperson_id'}"/>
+                    <filter string="Purity"
+                            name="group_purity"
+                            context="{'group_by':'purity_id'}"/>
+                    <filter string="Status"
+                            name="group_state"
+                            context="{'group_by':'state'}"/>
+                    <filter string="Date: Month"
+                            name="group_month"
+                            context="{'group_by':'date_order:month'}"/>
+                    <filter string="Date: Quarter"
+                            name="group_quarter"
+                            context="{'group_by':'date_order:quarter'}"/>
+                    <filter string="Date: Year"
+                            name="group_year"
+                            context="{'group_by':'date_order:year'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         ACTION
+         ════════════════════════════════════════════════════════════════ -->
+    <record id="action_sale_register_pivot_view" model="ir.actions.act_window">
+        <field name="name">Sale Register View</field>
+        <field name="res_model">sale.register.line</field>
+        <field name="view_mode">tree,pivot,graph</field>
+        <field name="search_view_id" ref="view_sale_register_line_search"/>
+        <field name="context">{
+            'search_default_filter_sale': 1,
+            'search_default_filter_done': 1
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No sale orders found.
+            </p>
+            <p>Confirm or lock sales orders to see them here.</p>
+        </field>
+    </record>
+
+    <!-- Link tree view explicitly -->
+    <record id="action_sale_register_pivot_view_tree" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_sale_register_line_tree"/>
+        <field name="act_window_id" ref="action_sale_register_pivot_view"/>
+    </record>
+
+    <!-- Link pivot view explicitly -->
+    <record id="action_sale_register_pivot_view_pivot" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">pivot</field>
+        <field name="view_id" ref="view_sale_register_line_pivot"/>
+        <field name="act_window_id" ref="action_sale_register_pivot_view"/>
+    </record>
+
+    <!-- Link graph view explicitly -->
+    <record id="action_sale_register_pivot_view_graph" model="ir.actions.act_window.view">
+        <field name="sequence">3</field>
+        <field name="view_mode">graph</field>
+        <field name="view_id" ref="view_sale_register_line_graph"/>
+        <field name="act_window_id" ref="action_sale_register_pivot_view"/>
+    </record>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         MENU ITEM  – appears under Reporting > Sales (same parent as
+         the existing "Sale Register Report" XLSX wizard menu)
+         ════════════════════════════════════════════════════════════════ -->
+    <menuitem
+        id="menu_sale_register_pevert_view"
+        name="Sale Register View"
+        parent="sale.menu_sale_report"
+        action="action_sale_register_pivot_view"
+        sequence="61"/>
+
+</odoo>

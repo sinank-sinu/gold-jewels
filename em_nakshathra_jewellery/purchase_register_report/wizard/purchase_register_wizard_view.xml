@@ -1,0 +1,44 @@
+<odoo>
+
+    <record id="view_purchase_register_wizard"
+            model="ir.ui.view">
+        <field name="name">purchase.register.wizard.form</field>
+        <field name="model">purchase.register.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Purchase Register Report">
+                <group>
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+                    <group>
+                        <field name="branch_ids" widget="many2many_tags"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_download_report"
+                            string="Download"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_purchase_register_wizard" model="ir.actions.act_window">
+        <field name="name">Purchase Register Report</field>
+        <field name="res_model">purchase.register.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_purchase_register_report"
+        name="Purchase Register Report"
+        parent="purchase.purchase_report_main"
+        action="action_purchase_register_wizard"
+        sequence="60"/>
+
+</odoo>
