@@ -5,7 +5,7 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-             <xpath expr="//header" position="inside">
+            <xpath expr="//header" position="inside">
                 <button name="action_create_invoice_and_pay"
                         type="object"
                         string="Create Invoice &amp; Pay"
@@ -16,6 +16,21 @@
                         string="Advance Payment"
                         class="btn-primary"
                         invisible="state != 'draft' or advance_payment_count != 0"/>
+                <button name="action_edit_main_order"
+                        type="object"
+                        string="Edit Order"
+                        class="btn-secondary"
+                        groups="base.group_system"
+                        invisible="state not in ('sale', 'done') or is_editing_main_so == True"/>
+                <button name="action_save_main_order"
+                        type="object"
+                        string="Save Order"
+                        class="btn-primary"
+                        groups="base.group_system"
+                        invisible="is_editing_main_so == False"/>
+            </xpath>
+            <xpath expr="//sheet/group" position="before">
+                <field name="is_editing_main_so" invisible="1"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="attributes">
                 <attribute name="string">Gross Weight</attribute>
@@ -95,17 +110,41 @@
                             string="Apply Old Gold"
                             style="width: 600px;"
                             invisible="has_old_gold == False or old_gold_bill_id != False"/>
+                     <button name="action_edit_old_gold"
+                            type="object"
+                            string="Edit Old Gold"
+                            class="btn-secondary"
+                            groups="base.group_system"
+                            invisible="old_gold_bill_id == False or is_editing_old_gold == True"/>
+                     <button name="action_save_old_gold"
+                            type="object"
+                            string="Save Old Gold"
+                            class="btn-primary"
+                            groups="base.group_system"
+                            invisible="is_editing_old_gold == False"/>
                      <button name="action_apply_sale_return"
                             type="object"
                             string="Apply Sale Return"
                             style="width: 600px;"
                             invisible="is_sale_return == False or sale_return_bill_id != False"/>
+                     <button name="action_edit_sale_return"
+                            type="object"
+                            string="Edit Sale Return"
+                            class="btn-secondary"
+                            groups="base.group_system"
+                            invisible="sale_return_bill_id == False or is_editing_sale_return == True"/>
+                     <button name="action_save_sale_return"
+                            type="object"
+                            string="Save Sale Return"
+                            class="btn-primary"
+                            groups="base.group_system"
+                            invisible="is_editing_sale_return == False"/>
 <!--                    </group>-->
 
                             <div class="clearfix"/>
 
 <!--                <group invisible="has_old_gold == False">-->
-                    <field name="old_gold_line_ids" no_label="1" invisible="has_old_gold == False" readonly="old_gold_bill_id != False">
+                    <field name="old_gold_line_ids" no_label="1" invisible="has_old_gold == False" readonly="old_gold_bill_id != False and not is_editing_old_gold">
                         <tree editable="bottom" >
                             <field name="purity_id"/>
                             <field name="gross_weight"/>
@@ -115,7 +154,7 @@
                             <field name="amount" readonly="1"/>
                         </tree>
                     </field>
-                    <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False" readonly="sale_return_bill_id != False">
+                    <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False" readonly="sale_return_bill_id != False and not is_editing_sale_return">
                         <tree editable="bottom">
                             <field name="product_id"/>
                             <field name="purity_id"/>
@@ -136,6 +175,8 @@
                 <field name="sale_return_bill_id" invisible="is_sale_return == False"/>
                 <field name="sale_return_bill_amount" invisible="is_sale_return == False"/>
                 <field name="unfix" widget="boolean_toggle"/>
+                <field name="is_editing_old_gold" invisible="1"/>
+                <field name="is_editing_sale_return" invisible="1"/>
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                <button name="action_open_old_gold_bill"

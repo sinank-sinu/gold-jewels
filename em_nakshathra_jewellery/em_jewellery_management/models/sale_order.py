@@ -55,6 +55,10 @@ class SaleOrder(models.Model):
         readonly=True,
     )
 
+    # Editing flags – unlock line tables when True
+    is_editing_main_so = fields.Boolean(string='Editing Main Order', default=False, copy=False)
+    is_editing_old_gold = fields.Boolean(string='Editing Old Gold', default=False, copy=False)
+    is_editing_sale_return = fields.Boolean(string='Editing Sale Return', default=False, copy=False)
 
     advance_payment_ids = fields.One2many('account.payment', 'sale_id', string='Advance Payments')
     advance_payment_count = fields.Integer(compute='_compute_advance_payment_count')
@@ -503,6 +507,378 @@ class SaleOrder(models.Model):
             'res_id': self.old_gold_bill_id.id,
             'context': {'create': False, 'hide_payment_button': True},
         }
+
+    # ── Edit / Save – Old Gold ───────────────────────────────────────────────
+
+    def action_edit_old_gold(self):
+        """Unlock the Old Gold table for editing."""
+        self.ensure_one()
+        self.is_editing_old_gold = True
+
+    def action_save_old_gold(self):
+        """Persist edits: reverse old stock, create new moves, update vendor bill."""
+        self.ensure_one()
+        self._update_old_gold_stock_and_bill()
+        self.is_editing_old_gold = False
+
+    def _safe_reverse_or_cancel_picking(self, picking):
+        """Reverse a picking via return-wizard if it has done moves; otherwise cancel it."""
+        has_done_moves = any(m.state == 'done' for m in picking.move_ids)
+        if has_done_moves or picking.state == 'done':
+            try:
+                return_wizard = self.env['stock.return.picking'].with_context(
+                    active_id=picking.id, active_model='stock.picking'
+                ).create({'picking_id': picking.id})
+                return_action = return_wizard.create_returns()
+                return_pick_id = return_action.get('res_id')
+                if return_pick_id:
+                    return_pick = self.env['stock.picking'].browse(return_pick_id)
+                    return_pick.action_confirm()
+                    return_pick.action_assign()
+                    for move in return_pick.move_ids:
+                        move.quantity = move.product_uom_qty
+                    return_pick.button_validate()
+            except Exception:
+                pass
+        else:
+            try:
+                picking.action_cancel()
+            except Exception:
+                pass
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # UPDATE OLD GOLD – stock + bill
+    # Strategy:
+    #   • Stock  → reverse the original picking (return transfer) then create a
+    #             new picking with the updated weights.
+    #             The PO is left untouched to avoid done-move cancellation errors.
+    #   • Bill   → reset to draft, wipe lines, rebuild from current lines, re-post.
+    # ────────────────────────────────────────────────────────────────────────────
+
+    def _update_old_gold_stock_and_bill(self):
+        """Reverse old-gold pickings, update PO lines in-place, rebuild vendor bill preserving PO links."""
+        if not self.old_gold_line_ids:
+            raise ValidationError(_("No Old Gold lines to update."))
+
+        po = self.purchase_order_id
+
+        # ─ 1. Reverse / cancel existing PO pickings (do NOT touch PO lines) ────────
+        if po:
+            active_pickings = po.picking_ids.filtered(lambda p: p.state != 'cancel')
+            for picking in active_pickings:
+                self._safe_reverse_or_cancel_picking(picking)
+
+        product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+        if not product:
+            raise ValidationError(_("Old Gold product not configured."))
+
+        # ─ 2. Group current Old Gold lines by Purity ───────────────────────────────
+        purity_map = {}
+        for line in self.old_gold_line_ids:
+            purity = line.purity_id
+            if purity not in purity_map:
+                purity_map[purity] = {'weight': 0.0, 'amount': 0.0}
+            purity_map[purity]['weight'] += line.net_weight
+            purity_map[purity]['amount'] += line.amount
+
+        # ─ 3. Update PO lines in-place via write() ─────────────────────────────────
+        if po:
+            existing_po_lines = list(po.order_line)
+            purity_list = list(purity_map.items())
+
+            for i, (purity, vals) in enumerate(purity_list):
+                qty = vals['weight']
+                rate = vals['amount'] / qty if qty else 0.0
+                
+                if i < len(existing_po_lines):
+                    # Update existing PO line
+                    existing_po_lines[i].write({
+                        'product_id': product.id,
+                        'name': f'Old Gold Purchase ({purity.name})',
+                        'product_qty': qty,
+                        'price_unit': rate,
+                        'gold_rate': rate,
+                    })
+                    existing_po_lines[i].qty_received = qty
+                else:
+                    # Create new PO line
+                    new_line = self.env['purchase.order.line'].create({
+                        'order_id': po.id,
+                        'product_id': product.id,
+                        'name': f'Old Gold Purchase ({purity.name})',
+                        'product_qty': qty,
+                        'price_unit': rate,
+                        'gold_rate': rate,
+                        'product_uom': product.uom_po_id.id,
+                        'taxes_id': [(6, 0, [])],
+                    })
+                    new_line.qty_received = qty
+
+        # ─ 4. Create fresh pickings from updated PO to link stock properly ─────────
+        if po:
+            po._create_picking()
+            
+            # Set custom fields on newly created Old Gold pickings
+            for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+                picking.write({
+                    'is_old_gold': True,
+                    'sale_old_id': self.id,
+                    'branch_id': self.branch_id.id,
+                })
+                picking.action_confirm()
+                picking.action_assign()
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+                    move.picked = True
+                try:
+                    picking.button_validate()
+                except Exception:
+                    pass
+
+        # ─ 5. Update vendor bill lines in-place (preserve purchase_line_id / PO link)
+        bill = self.old_gold_bill_id
+        if bill:
+            if bill.state == 'posted':
+                bill.button_draft()
+
+            # Build a map: product_id → PO line (assuming one product for all, we map by index/sequence)
+            po_lines = list(po.order_line) if po else []
+
+            existing_bill_lines = bill.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+            existing_list = list(existing_bill_lines)
+            purity_list = list(purity_map.items())
+
+            for i, (purity, vals) in enumerate(purity_list):
+                qty = vals['weight']
+                rate = vals['amount'] / qty if qty else 0.0
+                po_line = po_lines[i] if i < len(po_lines) else False
+
+                if i < len(existing_list):
+                    # Update existing bill line
+                    write_vals = {
+                        'product_id': product.id,
+                        'name': f'Old Gold ({purity.name})',
+                        'quantity': qty,
+                        'price_unit': rate,
+                        'tax_ids': [(5, 0, 0)],
+                    }
+                    if po_line:
+                        write_vals['purchase_line_id'] = po_line.id
+                    existing_list[i].with_context(check_move_validity=False).write(write_vals)
+                else:
+                    # Create new bill line
+                    create_vals = {
+                        'move_id': bill.id,
+                        'product_id': product.id,
+                        'name': f'Old Gold ({purity.name})',
+                        'quantity': qty,
+                        'price_unit': rate,
+                        'tax_ids': [(5, 0, 0)],
+                    }
+                    if po_line:
+                        create_vals['purchase_line_id'] = po_line.id
+                    self.env['account.move.line'].with_context(check_move_validity=False).create(create_vals)
+
+            # Remove surplus old bill lines
+            if len(existing_list) > len(purity_list):
+                surplus = existing_list[len(purity_list):]
+                for old_line in surplus:
+                    old_line.with_context(check_move_validity=False).unlink()
+
+            bill.invoice_date = fields.Date.context_today(self)
+            bill.is_old_gold_bill = True
+            bill.action_post()
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # EDIT / SAVE – Main Order buttons
+    # ────────────────────────────────────────────────────────────────────────────
+
+    def action_edit_main_order(self):
+        """Unlock the Main Order table for editing."""
+        self.ensure_one()
+        self.is_editing_main_so = True
+
+    def action_save_main_order(self):
+        """Persist edits: trigger new procurement, update invoice."""
+        self.ensure_one()
+        self._update_main_so_stock_and_bill()
+        self.is_editing_main_so = False
+
+    def _update_main_so_stock_and_bill(self):
+        """Trigger new procurement and update invoices."""
+        # 2. Trigger procurement to generate new deliveries for the updated quantities
+        if self.order_line:
+            self.order_line._action_launch_stock_rule()
+
+        # 3. Update customer invoices in-place
+        invoices = self.invoice_ids.filtered(
+            lambda inv: inv.state != 'cancel' and inv.move_type == 'out_invoice'
+        )
+        for invoice in invoices:
+            if invoice.state == 'posted':
+                invoice.button_draft()
+            
+            # Sync the invoice lines from the corresponding SO lines
+            for inv_line in invoice.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+                so_line = inv_line.sale_line_ids and inv_line.sale_line_ids[0] or False
+                if so_line:
+                    inv_line.with_context(check_move_validity=False).write({
+                        'quantity': so_line.product_uom_qty,
+                        'price_unit': so_line.price_unit,
+                    })
+            
+            # Recompute tax totals since we bypassed validity checks
+            invoice.with_context(check_move_validity=False)._compute_tax_totals()
+            invoice.action_post()
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # EDIT / SAVE – Sale Return buttons
+    # ────────────────────────────────────────────────────────────────────────────
+
+    def action_edit_sale_return(self):
+        """Unlock the Sale Return table for editing."""
+        self.ensure_one()
+        self.is_editing_sale_return = True
+
+    def action_save_sale_return(self):
+        """Persist edits: reverse old stock, create new picking, rebuild vendor bill."""
+        self.ensure_one()
+        self._update_sale_return_stock_and_bill()
+        self.is_editing_sale_return = False
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # UPDATE SALE RETURN – stock + bill
+    # Strategy:
+    #   • Stock  → use _safe_reverse_or_cancel_picking for the PO's pickings,
+    #             then create NEW direct pickings (not via PO) to avoid
+    #             done-move errors from po.order_line.unlink().
+    #             The original PO is left as-is.
+    #   • Bill   → reset to draft, wipe lines, rebuild from current lines, re-post.
+    # ────────────────────────────────────────────────────────────────────────────
+
+    def _update_sale_return_stock_and_bill(self):
+        """Reverse existing sale-return pickings, create new direct ones, rebuild vendor bill."""
+        if not self.sale_return_line_ids:
+            raise ValidationError(_("No Sale Return lines to update."))
+
+        po = self.sale_return_po_id
+
+        # ─ 1. Reverse / cancel existing PO pickings (do NOT touch PO lines) ───
+        if po:
+            active_pickings = po.picking_ids.filtered(lambda p: p.state != 'cancel')
+            for picking in active_pickings:
+                self._safe_reverse_or_cancel_picking(picking)
+
+        # ─ 2. Update PO lines in-place via write() – safe with done stock moves ─
+        #      unlink() would fail because done moves block it;
+        #      write() only updates the line record, no move cancellation triggered.
+        if po:
+            existing_po_lines = list(po.order_line)
+            sale_return_lines = list(self.sale_return_line_ids)
+
+            for i, sr_line in enumerate(sale_return_lines):
+                qty = sr_line.net_weight or 1.0
+                if i < len(existing_po_lines):
+                    # Update the existing PO line in place
+                    existing_po_lines[i].write({
+                        'product_id': sr_line.product_id.id,
+                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'product_qty': qty,
+                        'price_unit': sr_line.rate,
+                    })
+                    existing_po_lines[i].qty_received = qty
+                else:
+                    # More sale return lines than original PO lines → create new
+                    new_line = self.env['purchase.order.line'].create({
+                        'order_id': po.id,
+                        'product_id': sr_line.product_id.id,
+                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'product_qty': qty,
+                        'purity_id': sr_line.purity_id.id if sr_line.purity_id else False,
+                        'gold_rate': sr_line.rate,
+                        'price_unit': sr_line.rate,
+                        'product_uom': sr_line.product_id.uom_po_id.id,
+                        'taxes_id': [(6, 0, [])],
+                    })
+                    new_line.qty_received = qty
+
+        # ─ 3. Create fresh pickings from updated PO to link stock properly ──────
+        if po:
+            # Trigger PO to create new pickings for the updated quantities
+            po._create_picking()
+            
+            # Confirm and validate the newly created pickings
+            for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+                picking.action_confirm()
+                picking.action_assign()
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+                    move.picked = True
+                try:
+                    picking.button_validate()
+                except Exception:
+                    pass
+
+        # ─ 4. Update vendor bill lines in-place (preserve purchase_line_id / PO link) ─
+        # Do NOT unlink() all lines — that breaks the bill→PO relationship.
+        # Instead: update existing lines via write(), create new ones if needed,
+        # and only unlink lines that have no matching sale return entry.
+        bill = self.sale_return_bill_id
+        if bill:
+            if bill.state == 'posted':
+                bill.button_draft()
+
+            # Build a map: product_id → PO line (to preserve purchase_line_id)
+            po_line_map = {}
+            if po:
+                for po_line in po.order_line:
+                    po_line_map.setdefault(po_line.product_id.id, po_line)
+
+            # Only consider product lines (skip tax/section lines)
+            existing_bill_lines = bill.invoice_line_ids.filtered(
+                lambda l: l.display_type == 'product'
+            )
+            existing_list = list(existing_bill_lines)
+            sale_return_lines = list(self.sale_return_line_ids)
+
+            for i, sr_line in enumerate(sale_return_lines):
+                qty = sr_line.net_weight or 1.0
+                po_line = po_line_map.get(sr_line.product_id.id)
+                if i < len(existing_list):
+                    # Update the existing bill line in-place (keeps purchase_line_id)
+                    write_vals = {
+                        'product_id': sr_line.product_id.id,
+                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'quantity': qty,
+                        'price_unit': sr_line.rate,
+                        'tax_ids': [(5, 0, 0)],
+                    }
+                    if po_line:
+                        write_vals['purchase_line_id'] = po_line.id
+                    existing_list[i].with_context(check_move_validity=False).write(write_vals)
+                else:
+                    # More sale return lines than existing bill lines → create new
+                    create_vals = {
+                        'move_id': bill.id,
+                        'product_id': sr_line.product_id.id,
+                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'quantity': qty,
+                        'price_unit': sr_line.rate,
+                        'tax_ids': [(5, 0, 0)],
+                    }
+                    if po_line:
+                        create_vals['purchase_line_id'] = po_line.id
+                    self.env['account.move.line'].with_context(check_move_validity=False).create(create_vals)
+
+            # Remove surplus old bill lines beyond the count of sale return lines
+            if len(existing_list) > len(sale_return_lines):
+                surplus = existing_list[len(sale_return_lines):]
+                for old_line in surplus:
+                    old_line.with_context(check_move_validity=False).unlink()
+
+            bill.invoice_date = fields.Date.context_today(self)
+            bill.is_sale_return = True
+            bill.action_post()
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()

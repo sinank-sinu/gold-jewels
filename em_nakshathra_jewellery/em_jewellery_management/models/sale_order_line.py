@@ -191,6 +191,22 @@ class SaleOrderLine(models.Model):
 
         return values
 
+    def write(self, values):
+        # Intercept quantity reductions when editing the main order to safely reverse pickings 
+        # BEFORE Odoo's native sale_stock validation triggers a UserError.
+        if 'product_uom_qty' in values:
+            for line in self:
+                if line.order_id.is_editing_main_so:
+                    # If quantity has changed and is less than delivered, we must reverse pickings
+                    if values['product_uom_qty'] != line.product_uom_qty and values['product_uom_qty'] < line.qty_delivered:
+                        out_pickings = line.order_id.picking_ids.filtered(
+                            lambda p: p.state != 'cancel' and p.picking_type_id.code == 'outgoing'
+                        )
+                        for picking in out_pickings:
+                            line.order_id._safe_reverse_or_cancel_picking(picking)
+
+        return super(SaleOrderLine, self).write(values)
+
 
 
 

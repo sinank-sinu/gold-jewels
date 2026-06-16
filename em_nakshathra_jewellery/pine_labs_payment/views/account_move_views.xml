@@ -27,11 +27,12 @@
             </xpath> -->
             <xpath expr="//header" position="inside">
                 <field name="is_sale_return" invisible="1"/>
+                <field name="custom_total" invisible="1"/>
                 <button name="action_pay_via_pinelabs"
                         string="Pay via Pine Labs"
                         type="object"
                         class="btn-primary"
-                        invisible="unfix or state != 'posted' or payment_state not in ('not_paid', 'partial') or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt')" />
+                        invisible="(is_sale_return and move_type in ('in_invoice', 'in_refund', 'in_receipt')) or unfix or state != 'posted' or (payment_state not in ('not_paid', 'partial') and custom_total &gt;= 0) or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund', 'out_receipt', 'in_receipt')" />
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="Pine Labs Payments" name="pinelabs_payments" invisible="not pinelabs_transaction_ids">
