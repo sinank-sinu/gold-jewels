@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_purchase_order_form_inherit_edit" model="ir.ui.view">
+        <field name="name">purchase.order.form.inherit.edit</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <field name="is_editing_main_po" invisible="1"/>
+                
+                <button name="action_edit_main_po" 
+                        string="Edit Order" 
+                        type="object" 
+                        class="btn-secondary" 
+                        groups="base.group_system"
+                        invisible="state != 'purchase' or is_editing_main_po" />
+                        
+                <button name="action_save_main_po" 
+                        string="Save Order" 
+                        type="object" 
+                        class="btn-primary" 
+                        groups="base.group_system"
+                        invisible="state != 'purchase' or not is_editing_main_po" />
+            </xpath>
+        </field>
+    </record>
+</odoo>

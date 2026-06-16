@@ -192,6 +192,9 @@ class SaleOrderLine(models.Model):
         return values
 
     def write(self, values):
+        if self.filtered(lambda l: l.order_id.is_editing_main_so):
+            self = self.with_context(mail_notrack=True, disable_so_chatter_track=True)
+            
         # Intercept quantity reductions when editing the main order to safely reverse pickings 
         # BEFORE Odoo's native sale_stock validation triggers a UserError.
         if 'product_uom_qty' in values:

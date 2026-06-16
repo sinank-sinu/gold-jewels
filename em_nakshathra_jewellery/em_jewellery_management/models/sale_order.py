@@ -57,6 +57,30 @@ class SaleOrder(models.Model):
 
     # Editing flags – unlock line tables when True
     is_editing_main_so = fields.Boolean(string='Editing Main Order', default=False, copy=False)
+
+    def write(self, vals):
+        if self.filtered('is_editing_main_so') or vals.get('is_editing_main_so') or self.filtered('is_editing_old_gold') or vals.get('is_editing_old_gold') or self.filtered('is_editing_sale_return') or vals.get('is_editing_sale_return'):
+            self = self.with_context(mail_notrack=True, tracking_disable=True, disable_so_chatter_track=True)
+            res = super(SaleOrder, self).write(vals)
+            self.env.flush_all()
+            return res
+        return super(SaleOrder, self).write(vals)
+
+    def message_post_with_source(self, source, render_values=None, subtype_xmlid=None, **kwargs):
+        if self.env.context.get('disable_so_chatter_track'):
+            return self.env['mail.message']
+        return super(SaleOrder, self).message_post_with_source(source, render_values=render_values, subtype_xmlid=subtype_xmlid, **kwargs)
+
+    def message_post(self, **kwargs):
+        if self.env.context.get('disable_so_chatter_track'):
+            return self.env['mail.message']
+        return super(SaleOrder, self).message_post(**kwargs)
+
+    def _track_prepare(self, fields_iter):
+        track_self = self.filtered(lambda r: not r.is_editing_main_so)
+        if not track_self:
+            return
+        return super(SaleOrder, track_self)._track_prepare(fields_iter)
     is_editing_old_gold = fields.Boolean(string='Editing Old Gold', default=False, copy=False)
     is_editing_sale_return = fields.Boolean(string='Editing Sale Return', default=False, copy=False)
 
@@ -520,6 +544,7 @@ class SaleOrder(models.Model):
         self.ensure_one()
         self._update_old_gold_stock_and_bill()
         self.is_editing_old_gold = False
+        self.with_context(mail_notrack=True, tracking_disable=True).env.flush_all()
 
     def _safe_reverse_or_cancel_picking(self, picking):
         """Reverse a picking via return-wizard if it has done moves; otherwise cancel it."""
@@ -537,8 +562,12 @@ class SaleOrder(models.Model):
                     return_pick.action_assign()
                     for move in return_pick.move_ids:
                         move.quantity = move.product_uom_qty
-                    return_pick.button_validate()
-            except Exception:
+                        move.picked = True
+                    return_pick.with_context(skip_sms=True, skip_backorder=True, cancel_backorder=True).button_validate()
+                    self.env.flush_all()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Error validating return picking: %s", str(e))
                 pass
         else:
             try:
@@ -557,6 +586,7 @@ class SaleOrder(models.Model):
 
     def _update_old_gold_stock_and_bill(self):
         """Reverse old-gold pickings, update PO lines in-place, rebuild vendor bill preserving PO links."""
+        self = self.with_context(mail_notrack=True, tracking_disable=True, disable_po_chatter_track=True, disable_so_chatter_track=True)
         if not self.old_gold_line_ids:
             raise ValidationError(_("No Old Gold lines to update."))
 
@@ -703,9 +733,11 @@ class SaleOrder(models.Model):
         self.ensure_one()
         self._update_main_so_stock_and_bill()
         self.is_editing_main_so = False
+        self.with_context(mail_notrack=True, tracking_disable=True).env.flush_all()
 
     def _update_main_so_stock_and_bill(self):
         """Trigger new procurement and update invoices."""
+        self = self.with_context(mail_notrack=True, tracking_disable=True, disable_po_chatter_track=True, disable_so_chatter_track=True)
         # 2. Trigger procurement to generate new deliveries for the updated quantities
         if self.order_line:
             self.order_line._action_launch_stock_rule()
@@ -713,7 +745,7 @@ class SaleOrder(models.Model):
         # 3. Update customer invoices in-place
         invoices = self.invoice_ids.filtered(
             lambda inv: inv.state != 'cancel' and inv.move_type == 'out_invoice'
-        )
+        ).with_context(mail_notrack=True, tracking_disable=True)
         for invoice in invoices:
             if invoice.state == 'posted':
                 invoice.button_draft()
@@ -745,6 +777,7 @@ class SaleOrder(models.Model):
         self.ensure_one()
         self._update_sale_return_stock_and_bill()
         self.is_editing_sale_return = False
+        self.with_context(mail_notrack=True, tracking_disable=True).env.flush_all()
 
     # ────────────────────────────────────────────────────────────────────────────
     # UPDATE SALE RETURN – stock + bill
@@ -758,6 +791,7 @@ class SaleOrder(models.Model):
 
     def _update_sale_return_stock_and_bill(self):
         """Reverse existing sale-return pickings, create new direct ones, rebuild vendor bill."""
+        self = self.with_context(mail_notrack=True, tracking_disable=True, disable_po_chatter_track=True, disable_so_chatter_track=True)
         if not self.sale_return_line_ids:
             raise ValidationError(_("No Sale Return lines to update."))
 
