@@ -731,6 +731,28 @@ class SaleOrder(models.Model):
     def action_save_main_order(self):
         """Persist edits: trigger new procurement, update invoice."""
         self.ensure_one()
+        # Sync updated line values back to their connected labels
+        for line in self.order_line:
+            if line.label_id:
+                label_vals = {
+                    'sale_purity_id': line.purity_id.id if line.purity_id else False,
+                    'sale_making_charge_value': line.mc_percent,
+                    'sale_making_charge_min': line.sale_making_charge_min,
+                    'sale_gross_weight': line.product_uom_qty,
+                    'sale_stone_weight': line.sale_stone_weight,
+                    'sale_diamond_weight_gm': line.sale_diamond_weight_gm,
+                    'sale_diamond_weight_ct': line.sale_diamond_weight_ct,
+                    'sale_stone_rate': line.sale_stone_rate,
+                    'sale_diamond_rate': line.sale_diamond_rate,
+                    
+                    # Sync to purchase fields to mimic label's onchange
+                    'purchase_gross_weight': line.product_uom_qty,
+                    'purchase_stone_weight': line.sale_stone_weight,
+                    'purchase_diamond_weight_gm': line.sale_diamond_weight_gm,
+                    'purchase_diamond_weight_ct': line.sale_diamond_weight_ct,
+                }
+                line.label_id.write(label_vals)
+                
         self._update_main_so_stock_and_bill()
         self.is_editing_main_so = False
         self.with_context(mail_notrack=True, tracking_disable=True).env.flush_all()
