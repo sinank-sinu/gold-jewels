@@ -80,7 +80,7 @@ class SaleOrderLine(models.Model):
         for rec in self:
             rec.mc_amount = rec.metal_amount * (rec.mc_percent / 100.0)
 
-    @api.onchange('label_id','product_uom_qty')
+    @api.onchange('label_id')
     def _onchange_label_id(self):
         if self.label_id :
             self.purity_id = self.label_id.purity_id.id

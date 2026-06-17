@@ -740,6 +740,14 @@ class SaleOrder(models.Model):
         self = self.with_context(mail_notrack=True, tracking_disable=True, disable_po_chatter_track=True, disable_so_chatter_track=True)
         # 2. Trigger procurement to generate new deliveries for the updated quantities
         if self.order_line:
+            # Sync label_id to existing moves
+            for line in self.order_line:
+                for move in line.move_ids.filtered(lambda m: m.state != 'cancel'):
+                    if not line.label_id and move.label_id:
+                        move.label_id = False
+                    elif line.label_id and move.label_id != line.label_id:
+                        move.label_id = line.label_id.id
+            
             self.order_line._action_launch_stock_rule()
 
         # 3. Update customer invoices in-place
