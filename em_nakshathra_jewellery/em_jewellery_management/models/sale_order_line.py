@@ -80,7 +80,7 @@ class SaleOrderLine(models.Model):
         for rec in self:
             rec.mc_amount = rec.metal_amount * (rec.mc_percent / 100.0)
 
-    @api.onchange('label_id')
+    @api.onchange('label_id','purity_id')
     def _onchange_label_id(self):
         if self.label_id :
             self.purity_id = self.label_id.purity_id.id
@@ -90,7 +90,6 @@ class SaleOrderLine(models.Model):
             self.sale_stone_weight = self.label_id.sale_stone_weight
             self.sale_diamond_weight_gm = self.label_id.sale_diamond_weight_gm
             self.sale_diamond_weight_ct = self.label_id.sale_diamond_weight_ct
-
             self.sale_stone_rate = self.label_id.sale_stone_rate
             self.sale_diamond_rate = self.label_id.sale_diamond_rate
 

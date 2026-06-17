@@ -40,3 +40,6 @@ access_mrp_bom_salesman,mrp.bom,mrp.model_mrp_bom,em_jewellery_management.group_
 access_mrp_bom_line_salesman,mrp.bom.line,mrp.model_mrp_bom_line,em_jewellery_management.group_jewellery_salesman,1,0,0,0
 access_sale_return_line,sale.return.line,model_sale_return_line,em_jewellery_management.group_jewellery_salesman,1,1,1,1
 access_sale_return_line_manager,sale.return.line,model_sale_return_line,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_account_move_salesman,account.move,account.model_account_move,em_jewellery_management.group_jewellery_salesman,1,1,1,0
+access_account_move_line_salesman,account.move.line,account.model_account_move_line,em_jewellery_management.group_jewellery_salesman,1,1,1,0
+access_stock_picking_salesman,stock.picking,stock.model_stock_picking,em_jewellery_management.group_jewellery_salesman,1,1,1,0

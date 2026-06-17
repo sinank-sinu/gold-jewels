@@ -22,6 +22,13 @@ class JewellerySchemeEnrollment(models.Model):
             lambda branch: branch.company_id == company)
         return [('id', 'in', branch.ids)]
 
+    user_id = fields.Many2one(
+        'res.users',
+        string='Salesperson',
+        default=lambda self: self.env.user.id,
+        tracking=True
+    )
+
     branch_id = fields.Many2one('res.branch', string='Branch', store=True,
                                 domain=_get_branch_domain,
                                 help='Leave this field empty if this account is'

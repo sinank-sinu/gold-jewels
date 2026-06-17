@@ -41,6 +41,7 @@
                             <field name="nominee"/>
                         </group>
                         <group>
+                            <field name="user_id"/>
                             <field name="date_of_joining"/>
                             <field name="duration"/>
                             <field name="branch_id"/>

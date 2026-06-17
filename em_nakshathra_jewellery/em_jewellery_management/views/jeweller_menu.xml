@@ -35,14 +35,14 @@
     <menuitem id="menu_scheme_enrollment_category"
               name="Schemes"
               parent="menu_jewellery_root"
-              groups="em_jewellery_management.group_jewellery_manager"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
               sequence="10"/>
     <!--Submenu Scheme-->          
     <menuitem id="menu_scheme_enrollment_list_view"
               name="Schemes"
               parent="menu_scheme_enrollment_category"
               action="em_jewellery_management.action_scheme_enrollment"
-              groups="em_jewellery_management.group_jewellery_manager"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
               sequence="15"/>
 
      <menuitem
