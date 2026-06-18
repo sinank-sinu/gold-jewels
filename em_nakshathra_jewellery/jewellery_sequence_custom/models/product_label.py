@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
 
@@ -8,14 +8,14 @@ class ProductLabel(models.Model):
 
     @api.model
     def create(self, vals):
-        if vals.get('name', "New") == "New":
-            branch = self.env['res.branch'].browse(vals.get('branch_id')) if vals.get('branch_id') else self.env.user.branch_id
+        if vals.get('name', "New") == "New" or vals.get('name', _('New')) == _('New'):
+            branch_id = vals.get('branch_id')
+            branch = self.env['res.branch'].browse(branch_id) if branch_id else self.env.user.branch_id
+            
             if not branch or not branch.branch_code:
-                raise ValidationError("Branch code is missing!")
-            seq = self.env['ir.sequence'].next_by_code('product.label')
-            if not seq:
-                raise ValidationError("Sequence not working!")
-            vals['name'] = f"{branch.branch_code}/{seq}"
-        res = super().create(vals)
-        return res
-
+                raise ValidationError("Branch code is missing for this Product Label!")
+            
+            standard_sequence = self.env['ir.sequence'].next_by_code('product.label') or "New"
+            vals['name'] = f"{branch.branch_code}/{standard_sequence}"
+            
+        return super().create(vals)
