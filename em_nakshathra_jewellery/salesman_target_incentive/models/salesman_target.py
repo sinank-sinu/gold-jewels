@@ -24,7 +24,6 @@ class SalesmanTarget(models.Model):
     employee_id = fields.Many2one(
         'hr.employee',
         string='Employee',
-        compute='_compute_employee_id',
         store=True,
     )
 
@@ -32,6 +31,10 @@ class SalesmanTarget(models.Model):
         'res.branch',
         string='Branch',
         required=True,
+    )
+    branch_salesman_count = fields.Integer(
+        string='Branch Salesmen Count',
+        compute='_compute_branch_salesman_count',
     )
     date_from = fields.Date(string='Period From', required=True)
     date_to = fields.Date(string='Period To', required=True)
@@ -57,6 +60,11 @@ class SalesmanTarget(models.Model):
         digits=(16, 3),
         required=True,
     )
+    target_diamond_ct = fields.Float(
+        string='Target Diamond (CT)',
+        digits=(16, 3),
+        required=True,
+    )
 
     incentive_amount = fields.Monetary(
         string='Fixed Incentive Amount',
@@ -65,6 +73,10 @@ class SalesmanTarget(models.Model):
     )
 
     # BRANCH TARGETS
+    branch_target_amount = fields.Monetary(
+        string='Branch Target Amount',
+        currency_field='currency_id',
+    )
     branch_target_gms_22k = fields.Float(
         string='Branch Target GMS (grams) 22K',
         digits=(16, 3),
@@ -77,6 +89,10 @@ class SalesmanTarget(models.Model):
 
     branch_target_gms_22kt = fields.Float(
         string='Branch Target GMS (grams) 22KT',
+        digits=(16, 3),
+    )
+    branch_target_diamond_ct = fields.Float(
+        string='Branch Target Diamond (CT)',
         digits=(16, 3),
     )
 
@@ -112,6 +128,13 @@ class SalesmanTarget(models.Model):
         digits=(16, 3),
     )
 
+    achieved_diamond_ct = fields.Float(
+        string='Achieved Diamond (CT)',
+        compute='_compute_achievements',
+        store=True,
+        digits=(16, 3),
+    )
+
     achieved_gms = fields.Float(
         string='Achieved Total GMS',
         compute='_compute_achievements',
@@ -136,6 +159,13 @@ class SalesmanTarget(models.Model):
 
     branch_achieved_gms_22kt = fields.Float(
         string='Branch Achieved 22KT GMS',
+        compute='_compute_achievements',
+        store=True,
+        digits=(16, 3),
+    )
+
+    branch_achieved_diamond_ct = fields.Float(
+        string='Branch Achieved Diamond (CT)',
         compute='_compute_achievements',
         store=True,
         digits=(16, 3),
@@ -188,14 +218,68 @@ class SalesmanTarget(models.Model):
     notes = fields.Text()
 
     # EMPLOYEE
-    @api.depends('salesman_id')
-    def _compute_employee_id(self):
-        for rec in self:
-            employee = self.env['hr.employee'].search([
-                ('user_id', '=', rec.salesman_id.id)
-            ], limit=1)
+    # @api.depends('salesman_id')
+    # def _compute_employee_id(self):
+    #     for rec in self:
+    #         employee = self.env['hr.employee'].search([
+    #             ('user_id', '=', rec.salesman_id.id)
+    #         ], limit=1)
+    #
+    #         rec.employee_id = employee
 
-            rec.employee_id = employee
+    @api.depends('branch_id')
+    def _compute_branch_salesman_count(self):
+        for rec in self:
+            if rec.branch_id:
+                count = self.env['res.users'].search_count([
+                    ('branch_ids', 'in', rec.branch_id.id),
+                    ('share', '=', False)
+                ])
+                rec.branch_salesman_count = count
+            else:
+                rec.branch_salesman_count = 0
+
+    @api.onchange('branch_target_gms_22k', 'branch_target_gms_18ct', 'branch_target_gms_22kt', 'branch_target_diamond_ct', 'branch_target_amount', 'branch_id')
+    def _onchange_branch_targets(self):
+        for rec in self:
+            count = rec.branch_salesman_count or 1
+            if count > 0:
+                rec.target_amount = rec.branch_target_amount / count
+                rec.target_gms_22k = rec.branch_target_gms_22k / count
+                rec.target_gms_18ct = rec.branch_target_gms_18ct / count
+                rec.target_gms_22kt = rec.branch_target_gms_22kt / count
+                rec.target_diamond_ct = rec.branch_target_diamond_ct / count
+
+    @api.onchange('branch_id')
+    def _onchange_fetch_branch_targets(self):
+        for rec in self:
+            if rec.branch_id:
+                existing = self.env['salesman.target'].search([
+                    ('branch_id', '=', rec.branch_id.id),
+                    ('id', '!=', rec._origin.id if rec._origin else False)
+                ], limit=1, order='create_date desc, id desc')
+
+                if existing:
+                    rec.branch_target_amount = existing.branch_target_amount
+                    rec.branch_target_gms_22k = existing.branch_target_gms_22k
+                    rec.branch_target_gms_18ct = existing.branch_target_gms_18ct
+                    rec.branch_target_gms_22kt = existing.branch_target_gms_22kt
+                    rec.branch_target_diamond_ct = existing.branch_target_diamond_ct
+                    rec.target_diamond_ct = existing.target_diamond_ct
+                    rec.date_from = existing.date_from
+                    rec.date_to = existing.date_to
+                    rec.incentive_amount = existing.incentive_amount
+
+    def action_view_branch_salesmen(self):
+        self.ensure_one()
+        return {
+            'name': _('Branch Salesmen'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'res.users',
+            'view_mode': 'tree,form',
+            'domain': [('branch_ids', 'in', self.branch_id.id), ('share', '=', False)],
+            'context': {'default_branch_id': self.branch_id.id},
+        }
 
     # ACHIEVEMENTS
     @api.depends(
@@ -214,10 +298,12 @@ class SalesmanTarget(models.Model):
             rec.achieved_gms_22k = 0.0
             rec.achieved_gms_18ct = 0.0
             rec.achieved_gms_22kt = 0.0
+            rec.achieved_diamond_ct = 0.0
 
             rec.branch_achieved_gms_22k = 0.0
             rec.branch_achieved_gms_18ct = 0.0
             rec.branch_achieved_gms_22kt = 0.0
+            rec.branch_achieved_diamond_ct = 0.0
 
             rec.amount_progress = 0.0
             rec.gms_progress = 0.0
@@ -225,7 +311,7 @@ class SalesmanTarget(models.Model):
             rec.is_achieved = False
             rec.earned_incentive = 0.0
 
-            if not rec.salesman_id:
+            if not rec.salesman_id or not rec.date_from or not rec.date_to:
                 continue
 
             start_date = fields.Datetime.to_datetime(rec.date_from)
@@ -252,11 +338,13 @@ class SalesmanTarget(models.Model):
 
             salesman_lines = SaleOrderLine.search(salesman_domain)
 
+
             achieved_amount = 0.0
 
             achieved_22k = 0.0
             achieved_18ct = 0.0
             achieved_22kt = 0.0
+            achieved_diamond_ct = 0.0
 
             for line in salesman_lines:
 
@@ -284,6 +372,8 @@ class SalesmanTarget(models.Model):
                     achieved_22kt += grams
                     achieved_amount += amount
 
+                achieved_diamond_ct += line.sale_diamond_weight_ct or 0.0
+
             # =====================================================
             # BRANCH SALES
             # =====================================================
@@ -300,6 +390,7 @@ class SalesmanTarget(models.Model):
             branch_22k = 0.0
             branch_18ct = 0.0
             branch_22kt = 0.0
+            branch_diamond_ct = 0.0
 
             for line in branch_lines:
 
@@ -321,6 +412,8 @@ class SalesmanTarget(models.Model):
 
                 elif purity == '22KT':
                     branch_22kt += grams
+
+                branch_diamond_ct += line.sale_diamond_weight_ct or 0.0
 
             # =====================================================
             # PROGRESS
@@ -360,6 +453,7 @@ class SalesmanTarget(models.Model):
                 and achieved_22k >= rec.target_gms_22k
                 and achieved_18ct >= rec.target_gms_18ct
                 and achieved_22kt >= rec.target_gms_22kt
+                and achieved_diamond_ct >= rec.target_diamond_ct
             )
 
             # IMPORTANT:
@@ -379,10 +473,12 @@ class SalesmanTarget(models.Model):
             rec.achieved_gms_22k = achieved_22k
             rec.achieved_gms_18ct = achieved_18ct
             rec.achieved_gms_22kt = achieved_22kt
+            rec.achieved_diamond_ct = achieved_diamond_ct
 
             rec.branch_achieved_gms_22k = branch_22k
             rec.branch_achieved_gms_18ct = branch_18ct
             rec.branch_achieved_gms_22kt = branch_22kt
+            rec.branch_achieved_diamond_ct = branch_diamond_ct
 
             rec.achieved_gms = total_achieved
 
@@ -390,7 +486,7 @@ class SalesmanTarget(models.Model):
             rec.gms_progress = min(gms_progress, 100.0)
 
     # VALIDATIONS
-    @api.constrains('branch_id','date_from','date_to','target_gms_22k','target_gms_18ct','target_gms_22kt','branch_target_gms_22k','branch_target_gms_18ct','branch_target_gms_22kt')
+    @api.constrains('branch_id','date_from','date_to','target_gms_22k','target_gms_18ct','target_gms_22kt','target_diamond_ct','branch_target_gms_22k','branch_target_gms_18ct','branch_target_gms_22kt','branch_target_diamond_ct')
     def _check_branch_target_limit(self):
         for rec in self:
             records = self.search([
@@ -402,10 +498,12 @@ class SalesmanTarget(models.Model):
             total_22k = sum(records.mapped('target_gms_22k'))
             total_18ct = sum(records.mapped('target_gms_18ct'))
             total_22kt = sum(records.mapped('target_gms_22kt'))
+            total_diamond_ct = sum(records.mapped('target_diamond_ct'))
 
             total_22k += rec.target_gms_22k
             total_18ct += rec.target_gms_18ct
             total_22kt += rec.target_gms_22kt
+            total_diamond_ct += rec.target_diamond_ct
 
             if total_22k > rec.branch_target_gms_22k:
                 raise ValidationError(_(
@@ -437,6 +535,16 @@ class SalesmanTarget(models.Model):
                     total_22kt
                 ))
 
+            if total_diamond_ct > rec.branch_target_diamond_ct:
+                raise ValidationError(_(
+                    'Total Diamond CT target exceeds Branch Target.\n'
+                    'Allowed: %s\n'
+                    'Current Total: %s'
+                ) % (
+                    rec.branch_target_diamond_ct,
+                    total_diamond_ct
+                ))
+
     @api.constrains('target_amount', 'target_gms_22k', 'target_gms_18ct', 'target_gms_22kt', 'incentive_amount')
     def _check_positive_targets(self):
         for rec in self:
@@ -454,6 +562,8 @@ class SalesmanTarget(models.Model):
 
             if rec.incentive_amount <= 0:
                 raise ValidationError(_('Incentive Amount must be greater than zero.'))
+            if rec.branch_target_amount < 0:
+                raise ValidationError(_('Branch Target Amount must be positive.'))
             if rec.branch_target_gms_22k < 0:
                 raise ValidationError(_('Branch 22K Target must be positive.'))
 
@@ -462,6 +572,12 @@ class SalesmanTarget(models.Model):
 
             if rec.branch_target_gms_22kt < 0:
                 raise ValidationError(_('Branch 22KT Target must be positive.'))
+
+            if rec.branch_target_diamond_ct < 0:
+                raise ValidationError(_('Branch Diamond CT Target must be positive.'))
+
+            if rec.target_diamond_ct < 0:
+                raise ValidationError(_('Target Diamond CT must be positive.'))
 
     # DATE VALIDATION
     @api.constrains('date_from', 'date_to')

@@ -27,6 +27,7 @@
                 <field name="mc_percent_actual" string="MC%"/>
                 <field name="mc_amount_actual" string="MC Amount" sum="Total MC"/>
                 <field name="mc_discount" string="Discount" sum="Total Discount"/>
+                <field name="sale_return_price" string="Sale Return Price" sum="Total Return Price"/>
                 <field name="price_unit" string="Unit Price"/>
                 <field name="price_subtotal" string="Subtotal" sum="Total Subtotal"/>
                 <field name="price_tax" string="Tax" sum="Total Tax"/>
@@ -56,6 +57,7 @@
                 <field name="amount_total"     type="measure"/>
                 <field name="metal_amount"     type="measure"/>
                 <field name="mc_amount_actual" type="measure"/>
+                <field name="sale_return_price" type="measure"/>
                 <field name="price_subtotal"   type="measure"/>
                 <field name="old_gold_amount"  type="measure"/>
                 <field name="bank_amount"      type="measure"/>

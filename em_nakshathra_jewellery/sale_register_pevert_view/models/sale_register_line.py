@@ -41,6 +41,7 @@ class SaleRegisterLine(models.Model):
     mc_percent_actual = fields.Float('MC%', readonly=True)
     mc_amount_actual  = fields.Float('MC Amount', readonly=True)
     mc_discount     = fields.Float('Discount', readonly=True)
+    sale_return_price = fields.Float('Sale Return Price', readonly=True)
 
     # Payments (first line per order only, to avoid pivot double-count)
     old_gold_amount = fields.Float('Old Gold Amount', readonly=True)
@@ -110,6 +111,12 @@ class SaleRegisterLine(models.Model):
             WHERE table_name='sale_order_line' AND column_name='mc_discount'
         """)
         mc_discount_expr = "COALESCE(sol.mc_discount, 0)" if self.env.cr.fetchone() else "0::numeric"
+
+        self.env.cr.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='sale_order_line' AND column_name='sale_return_price'
+        """)
+        sale_return_price_expr = "COALESCE(sol.sale_return_price, 0)" if self.env.cr.fetchone() else "0::numeric"
 
         # In Odoo 17, sale.order.invoice_ids is computed (no M2M table).
         # Real link: sale_order_line -> sale_order_line_invoice_rel -> account_move_line -> account_move
@@ -202,6 +209,7 @@ class SaleRegisterLine(models.Model):
                     """ + mc_percent_expr + """         AS mc_percent_actual,
                     """ + mc_amount_expr + """          AS mc_amount_actual,
                     """ + mc_discount_expr + """        AS mc_discount,
+                    """ + sale_return_price_expr + """  AS sale_return_price,
                     CASE WHEN lr.rn = 1 THEN """ + old_gold_expr + """
                          ELSE 0 END                    AS old_gold_amount,
                     CASE WHEN lr.rn = 1 THEN COALESCE(pd.bank_amount, 0)

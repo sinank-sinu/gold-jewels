@@ -69,10 +69,12 @@
                             <field name="target_gms_22k"/>
                             <field name="target_gms_18ct"/>
                             <field name="target_gms_22kt"/>
+                            <field name="target_diamond_ct"/>
                             <field name="branch_id"/>
                             <field name="branch_target_gms_22k"/>
                             <field name="branch_target_gms_18ct"/>
                             <field name="branch_target_gms_22kt"/>
+                            <field name="branch_target_diamond_ct"/>
 
                             <field name="incentive_amount"/>
                             <field name="payslip_id"/>
@@ -83,9 +85,11 @@
                             <field name="achieved_gms_22k"/>
                             <field name="achieved_gms_18ct"/>
                             <field name="achieved_gms_22kt"/>
+                            <field name="achieved_diamond_ct"/>
                             <field name="branch_achieved_gms_22k"/>
                             <field name="branch_achieved_gms_18ct"/>
                             <field name="branch_achieved_gms_22kt"/>
+                            <field name="branch_achieved_diamond_ct"/>
                             <field name="earned_incentive" readonly="1"/>
                         </group>
                     </group>
