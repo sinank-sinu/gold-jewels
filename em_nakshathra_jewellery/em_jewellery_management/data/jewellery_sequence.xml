@@ -140,6 +140,7 @@
         <field name="padding">5</field>
         <field name="number_next">1</field>
         <field name="number_increment">1</field>
+        <field name="company_id" eval="False"/>
     </record>
 
      <record id="seq_jewellery_job_work" model="ir.sequence">
@@ -149,6 +150,7 @@
         <field name="padding">5</field>
          <field name="number_next">1</field>
         <field name="number_increment">1</field>
+        <field name="company_id" eval="False"/>
     </record>
     <record id="seq_jewellery_issue_voucher" model="ir.sequence">
         <field name="name">Jewellery Issue Voucher</field>
@@ -157,6 +159,7 @@
         <field name="padding">5</field>
         <field name="number_increment">1</field>
         <field name="number_next">1</field>
+        <field name="company_id" eval="False"/>
     </record>
     <record id="seq_jewellery_receive_voucher" model="ir.sequence">
         <field name="name">Jewellery Receive Voucher</field>
@@ -165,6 +168,7 @@
         <field name="padding">5</field>
         <field name="number_increment">1</field>
         <field name="number_next">1</field>
+        <field name="company_id" eval="False"/>
     </record>
     <record id="seq_refinery" model="ir.sequence">
         <field name="name">Refinery Order</field>
@@ -173,6 +177,8 @@
         <field name="padding">5</field>
         <field name="number_next">1</field>
         <field name="number_increment">1</field>
+        <field name="company_id" eval="False"/>
+
     </record>
 
 
