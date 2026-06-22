@@ -4,9 +4,10 @@
     'category': 'Sales',
     'summary': 'Add certification fields to sale orders',
     'description': 'This module adds image upload and diamond certification fields to the sale order other info section.',
-    'depends': ['sale'],
+    'depends': ['sale', 'em_jewellery_management'],
     'data': [
         'views/sale_order_views.xml',
+        'views/product_label_view.xml',
     ],
     'auto_install': False,
     'application': True,

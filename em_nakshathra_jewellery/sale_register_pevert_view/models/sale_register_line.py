@@ -112,12 +112,6 @@ class SaleRegisterLine(models.Model):
         """)
         mc_discount_expr = "COALESCE(sol.mc_discount, 0)" if self.env.cr.fetchone() else "0::numeric"
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='sale_return_price'
-        """)
-        sale_return_price_expr = "COALESCE(sol.sale_return_price, 0)" if self.env.cr.fetchone() else "0::numeric"
-
         # In Odoo 17, sale.order.invoice_ids is computed (no M2M table).
         # Real link: sale_order_line -> sale_order_line_invoice_rel -> account_move_line -> account_move
         self.env.cr.execute("""
@@ -176,6 +170,21 @@ class SaleRegisterLine(models.Model):
                     JOIN account_journal aj ON aj.id = am2.journal_id
                     GROUP BY sol_p.order_id
                 ),
+                invoice_data AS (
+                    SELECT
+                        sol_i.order_id,
+                        COALESCE(am_i.sale_return_price, 0) AS sale_return_price
+                    FROM sale_order_line sol_i
+                    JOIN sale_order_line_invoice_rel slir_i
+                        ON slir_i.order_line_id = sol_i.id
+                    JOIN account_move_line aml_inv_i
+                        ON aml_inv_i.id = slir_i.invoice_line_id
+                    JOIN account_move am_i
+                        ON am_i.id = aml_inv_i.move_id
+                       AND am_i.move_type IN ('out_invoice', 'out_refund')
+                       AND am_i.state = 'posted'
+                    GROUP BY sol_i.order_id, am_i.sale_return_price
+                ),
                 line_rank AS (
                     SELECT sol.id,
                            ROW_NUMBER() OVER (PARTITION BY sol.order_id ORDER BY sol.id) AS rn
@@ -209,7 +218,8 @@ class SaleRegisterLine(models.Model):
                     """ + mc_percent_expr + """         AS mc_percent_actual,
                     """ + mc_amount_expr + """          AS mc_amount_actual,
                     """ + mc_discount_expr + """        AS mc_discount,
-                    """ + sale_return_price_expr + """  AS sale_return_price,
+                    CASE WHEN lr.rn = 1 THEN COALESCE(id.sale_return_price, 0)
+                         ELSE 0 END                    AS sale_return_price,
                     CASE WHEN lr.rn = 1 THEN """ + old_gold_expr + """
                          ELSE 0 END                    AS old_gold_amount,
                     CASE WHEN lr.rn = 1 THEN COALESCE(pd.bank_amount, 0)
@@ -224,6 +234,7 @@ class SaleRegisterLine(models.Model):
                 JOIN sale_order so   ON sol.order_id = so.id
                 JOIN line_rank lr    ON lr.id = sol.id
                 LEFT JOIN payment_data pd ON pd.order_id = so.id
+                LEFT JOIN invoice_data id ON id.order_id = so.id
                 WHERE so.state IN ('sale', 'done')
             )
         """)

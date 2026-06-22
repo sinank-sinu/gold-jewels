@@ -8,13 +8,20 @@
             <xpath expr="//notebook/page[@name='other_information']" position="inside">
                 <group string="Certification">
                     <group>
-                        <field name="certification_image" widget="image" class="oe_avatar"/>
+                        <field name="certification_image"
+                               widget="binary"
+                               filename="certification_image_name"
+                               string="Upload your file"/>
                         <field name="certification_image_name" invisible="1"/>
                     </group>
                     <group>
                         <field name="diamond_certification" placeholder="Enter diamond certification details..."/>
                     </group>
                 </group>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='fine_weight']" position="after">
+                <field name="other_weight_g" optional="hide"/>
+                <field name="other_weight_amount" optional="hide"/>
             </xpath>
         </field>
     </record>
