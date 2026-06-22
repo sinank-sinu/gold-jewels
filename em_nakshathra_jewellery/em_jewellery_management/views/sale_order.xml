@@ -54,6 +54,7 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="after">
                 <field name="sale_stone_weight" optional="hide"/>
+                <field name="sale_stone_weight_ct" optional="hide"/>
                 <field name="sale_diamond_weight_gm" optional="hide"/>
                 <field name="sale_diamond_weight_ct" optional="hide"/>
                 <field name="net_weight" optional="hide"/>

@@ -14,6 +14,10 @@ class SaleOrderLine(models.Model):
     purity_id = fields.Many2one('gold.purity', string="Purity")
     net_weight = fields.Float(string="Net Weight  (g)",compute="_compute_net_weight",digits=(16, 3))
     sale_stone_weight = fields.Float(string="Stone Weight (g)",digits=(16, 3))
+    sale_stone_weight_ct = fields.Float(
+        string="Stone Weight (ct)",
+        digits=(12, 3)
+    )
     sale_diamond_weight_gm = fields.Float(
         string="Diamond Weight (g)",
         digits=(12, 3)
@@ -88,6 +92,7 @@ class SaleOrderLine(models.Model):
             self.sale_making_charge_min = self.label_id.sale_making_charge_min
             self.product_uom_qty = self.label_id.sale_gross_weight
             self.sale_stone_weight = self.label_id.sale_stone_weight
+            self.sale_stone_weight_ct = self.label_id.sale_stone_weight_ct
             self.sale_diamond_weight_gm = self.label_id.sale_diamond_weight_gm
             self.sale_diamond_weight_ct = self.label_id.sale_diamond_weight_ct
             self.sale_stone_rate = self.label_id.sale_stone_rate
@@ -199,13 +204,53 @@ class SaleOrderLine(models.Model):
         if 'product_uom_qty' in values:
             for line in self:
                 if line.order_id.is_editing_main_so:
-                    # If quantity has changed and is less than delivered, we must reverse pickings
-                    if values['product_uom_qty'] != line.product_uom_qty and values['product_uom_qty'] < line.qty_delivered:
-                        out_pickings = line.order_id.picking_ids.filtered(
-                            lambda p: p.state != 'cancel' and p.picking_type_id.code == 'outgoing'
-                        )
-                        for picking in out_pickings:
-                            line.order_id._safe_reverse_or_cancel_picking(picking)
+                    new_qty = values['product_uom_qty']
+                    if new_qty != line.product_uom_qty:
+                        moves = line.move_ids.filtered(lambda m: m.state == 'done')
+                        for move in moves:
+                            old_qty = move.quantity
+                            if old_qty == 0:
+                                continue
+                            
+                            qty_diff = new_qty - old_qty
+                            
+                            # 1. Update move lines
+                            for ml in move.move_line_ids:
+                                ml.with_context(mail_notrack=True).sudo().write({
+                                    'quantity': new_qty,
+                                })
+                            
+                            # 2. Update move
+                            move.with_context(mail_notrack=True).sudo().write({
+                                'product_uom_qty': new_qty,
+                                'quantity': new_qty,
+                            })
+                            
+                            # 3. Update valuation
+                            svls = move.stock_valuation_layer_ids
+                            for svl in svls:
+                                if svl.quantity != 0:
+                                    ratio = new_qty / old_qty
+                                    svl.with_context(mail_notrack=True).sudo().write({
+                                        'quantity': new_qty,
+                                        'value': svl.value * ratio,
+                                    })
+                            
+                            # 4. Adjust Quants
+                            self.env['stock.quant'].sudo()._update_available_quantity(
+                                move.product_id,
+                                move.location_id,
+                                -qty_diff,
+                            )
+                            self.env['stock.quant'].sudo()._update_available_quantity(
+                                move.product_id,
+                                move.location_dest_id,
+                                qty_diff,
+                            )
+                            
+                        # Force flush and invalidation so Odoo's native checks see the new qty_delivered
+                        self.env.flush_all()
+                        line.invalidate_recordset(['qty_delivered'])
 
         return super(SaleOrderLine, self).write(values)
 

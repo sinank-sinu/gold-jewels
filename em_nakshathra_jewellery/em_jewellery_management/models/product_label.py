@@ -68,6 +68,7 @@ class ProductLabel(models.Model):
     )
     sale_gross_weight = fields.Float(string="Sale Gross Weight (g)",digits=(16, 3))
     sale_stone_weight = fields.Float(string="Sale Stone Weight (g)",digits=(16, 3))
+    sale_stone_weight_ct = fields.Float(string="Sale Stone Weight (ct)",digits=(12, 4))
     sale_diamond_weight = fields.Float(string="Sale Diamond Weight (g)",digits=(16, 3))
 
     sale_net_weight = fields.Float(
@@ -103,6 +104,7 @@ class ProductLabel(models.Model):
 
     purchase_gross_weight = fields.Float(string="Purchase Gross Amount (g)",digits=(16, 3))
     purchase_stone_weight = fields.Float(string="Purchase Stone Weight (g)",digits=(16, 3))
+    purchase_stone_weight_ct = fields.Float(string="Purchase Stone Weight (ct)",digits=(12, 4))
     purchase_diamond_weight = fields.Float(string="Purchase Diamond Weight (g)",digits=(16, 3))
 
     purchase_net_weight = fields.Float(
@@ -320,6 +322,34 @@ class ProductLabel(models.Model):
         else:
             self.purchase_diamond_weight_ct = 0.0
 
+    @api.onchange('sale_stone_weight_ct')
+    def _onchange_sale_stone_weight_ct(self):
+        if self.sale_stone_weight_ct:
+            self.sale_stone_weight = self.sale_stone_weight_ct * 0.2
+        else:
+            self.sale_stone_weight = 0.0
+
+    @api.onchange('sale_stone_weight')
+    def _onchange_sale_stone_weight(self):
+        if self.sale_stone_weight:
+            self.sale_stone_weight_ct = self.sale_stone_weight / 0.2
+        else:
+            self.sale_stone_weight_ct = 0.0
+
+    @api.onchange('purchase_stone_weight_ct')
+    def _onchange_purchase_stone_weight_ct(self):
+        if self.purchase_stone_weight_ct:
+            self.purchase_stone_weight = self.purchase_stone_weight_ct * 0.2
+        else:
+            self.purchase_stone_weight = 0.0
+
+    @api.onchange('purchase_stone_weight')
+    def _onchange_purchase_stone_weight(self):
+        if self.purchase_stone_weight:
+            self.purchase_stone_weight_ct = self.purchase_stone_weight / 0.2
+        else:
+            self.purchase_stone_weight_ct = 0.0
+
     # =========================
     # COMPUTES
     # =========================
@@ -443,6 +473,7 @@ class ProductLabel(models.Model):
     @api.onchange(
         'sale_gross_weight',
         'sale_stone_weight',
+        'sale_stone_weight_ct',
         'sale_diamond_weight_gm',
         'sale_stone_rate',
         'sale_diamond_rate'
@@ -456,6 +487,7 @@ class ProductLabel(models.Model):
 
             rec.purchase_gross_weight = rec.sale_gross_weight
             rec.purchase_stone_weight = rec.sale_stone_weight
+            rec.purchase_stone_weight_ct = rec.sale_stone_weight_ct
             rec.purchase_diamond_weight_gm = rec.sale_diamond_weight_gm
 
             # rec.purchase_stone_rate = rec.sale_stone_rate
@@ -466,6 +498,7 @@ class ProductLabel(models.Model):
     @api.onchange(
         'purchase_gross_weight',
         'purchase_stone_weight',
+        'purchase_stone_weight_ct',
         'purchase_diamond_weight_gm',
         'purchase_stone_rate',
         'purchase_diamond_rate'
@@ -479,6 +512,7 @@ class ProductLabel(models.Model):
 
             rec.sale_gross_weight = rec.purchase_gross_weight
             rec.sale_stone_weight = rec.purchase_stone_weight
+            rec.sale_stone_weight_ct = rec.purchase_stone_weight_ct
             rec.sale_diamond_weight_gm = rec.purchase_diamond_weight_gm
 
             # rec.sale_stone_rate = rec.purchase_stone_rate

@@ -87,6 +87,7 @@
                                 <group string="Weights">
                                     <field name="sale_gross_weight"/>
                                     <field name="sale_stone_weight"/>
+                                    <field name="sale_stone_weight_ct"/>
                                     <field name="sale_diamond_weight_gm"/>
                                     <field name="sale_diamond_weight_ct"/>
                                     <field name="sale_net_weight" readonly="1"/>
@@ -122,6 +123,7 @@
                                 <group string="Weights">
                                     <field name="purchase_gross_weight"/>
                                     <field name="purchase_stone_weight"/>
+                                    <field name="purchase_stone_weight_ct"/>
                                     <field name="purchase_diamond_weight_gm"/>
                                     <field name="purchase_diamond_weight_ct"/>
                                     <field name="purchase_net_weight" readonly="1"/>

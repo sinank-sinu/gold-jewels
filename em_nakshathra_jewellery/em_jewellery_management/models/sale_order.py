@@ -740,6 +740,7 @@ class SaleOrder(models.Model):
                     'sale_making_charge_min': line.sale_making_charge_min,
                     'sale_gross_weight': line.product_uom_qty,
                     'sale_stone_weight': line.sale_stone_weight,
+                    'sale_stone_weight_ct': line.sale_stone_weight_ct,
                     'sale_diamond_weight_gm': line.sale_diamond_weight_gm,
                     'sale_diamond_weight_ct': line.sale_diamond_weight_ct,
                     'sale_stone_rate': line.sale_stone_rate,
@@ -748,6 +749,7 @@ class SaleOrder(models.Model):
                     # Sync to purchase fields to mimic label's onchange
                     'purchase_gross_weight': line.product_uom_qty,
                     'purchase_stone_weight': line.sale_stone_weight,
+                    'purchase_stone_weight_ct': line.sale_stone_weight_ct,
                     'purchase_diamond_weight_gm': line.sale_diamond_weight_gm,
                     'purchase_diamond_weight_ct': line.sale_diamond_weight_ct,
                 }
@@ -769,9 +771,7 @@ class SaleOrder(models.Model):
                         move.label_id = False
                     elif line.label_id and move.label_id != line.label_id:
                         move.label_id = line.label_id.id
-            
-            self.order_line._action_launch_stock_rule()
-
+        # No new pickings should be created; sale_order_line.py handles the direct updates.
         # 3. Update customer invoices in-place
         invoices = self.invoice_ids.filtered(
             lambda inv: inv.state != 'cancel' and inv.move_type == 'out_invoice'
