@@ -31,7 +31,7 @@ class AccountPaymentRegister(models.TransientModel):
     journal_id = fields.Many2one('account.journal', store=True, readonly=False,
                                  compute='_compute_journal_id',
                                  domain="[('company_id', '=', company_id), "
-                                        "('type', 'in', ('bank', 'cash'))]")
+                                        "('type', 'in', ('bank', 'cash')), ('branch_id', '=', branch_id)]")
 
     @api.depends('company_id', 'source_currency_id')
     def _compute_journal_id(self):
@@ -41,6 +41,10 @@ class AccountPaymentRegister(models.TransientModel):
         branch = lines.branch_id
         if branch:
             for wizard in self:
+                if wizard.journal_id:
+                    wizard.branch_id = branch.id
+                    continue
+
                 domain = [
                     ('type', 'in', ('bank', 'cash')),
                     ('branch_id', '=', branch.id),
@@ -48,17 +52,21 @@ class AccountPaymentRegister(models.TransientModel):
 
                 journal = self.env['account.journal'].search(
                     domain, limit=1)
-                if not journal:
-                    domain = [
-                        ('type', 'in', ('bank', 'cash')),
-                        ('branch_id', '=', False),
-                    ]
-                    journal = self.env['account.journal'].search(
-                        domain, limit=1)
                 wizard.journal_id = journal
+                wizard.branch_id = branch.id
         else:
             res = super(AccountPaymentRegister, self)._compute_journal_id()
             return res
+
+    def action_create_payments(self):
+        from odoo.exceptions import ValidationError
+        for rec in self:
+            if rec.branch_id:
+                if not rec.journal_id:
+                    raise ValidationError("No Bank/Cash journal found for this branch. Please create a journal for this branch.")
+                if rec.journal_id.branch_id != rec.branch_id:
+                    raise ValidationError("The selected journal does not belong to the same branch. Please select a journal for this branch.")
+        return super(AccountPaymentRegister, self).action_create_payments()
 
     def _create_payment_vals_from_wizard(self, batch_result):
         vals = super()._create_payment_vals_from_wizard(batch_result)

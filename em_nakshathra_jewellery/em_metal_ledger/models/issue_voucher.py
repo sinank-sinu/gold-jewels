@@ -76,7 +76,7 @@ class JewelleryIssueVoucher(models.Model):
             if matching_line:
                 line = matching_line[0]
                 # Extract float percentage from the Many2one, or fallback to the manual float field
-                new_purity = line.lab_purity_id if line.lab_purity_id else line.lab_purity
+                new_purity = line.lab_purity_id.percentage if line.lab_purity_id else line.lab_purity
                 
                 report.write({
                     'lab_purity': new_purity,

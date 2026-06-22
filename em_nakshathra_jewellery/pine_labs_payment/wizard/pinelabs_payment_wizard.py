@@ -117,13 +117,28 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
 
-        if self.payment_id and self.payment_id.state == 'draft':
-            bank_journal = self.env['account.journal'].search(
-                [('type', '=', 'bank'), ('company_id', '=', self.env.company.id)], limit=1)
-            if not bank_journal:
-                raise UserError(_('No bank journal found.'))
-            self.payment_id.amount = self.amount
+        branch = None
+        if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
+            branch = self.invoice_id.branch_id
+        if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
+            branch = self.sale_order_id.branch_id
+        if not branch and self.scheme_installment_id and hasattr(self.scheme_installment_id.enrollment_id, 'branch_id'):
+            branch = self.scheme_installment_id.enrollment_id.branch_id
+        if not branch:
+            branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
 
+        domain = [('type', '=', 'bank'), ('company_id', '=', self.env.company.id)]
+        if branch:
+            domain.append(('branch_id', '=', branch.id))
+
+        bank_journal = self.env['account.journal'].search(domain, limit=1)
+        if not bank_journal:
+            if branch:
+                raise UserError(_('No bank journal found for branch %s. Please create a bank branch journal first.') % branch.name)
+            else:
+                raise UserError(_('No bank journal found. Please create a bank journal first.'))
+        if self.payment_id and self.payment_id.state == 'draft':
+            self.payment_id.amount = self.amount
             self.payment_id.journal_id = bank_journal.id
             self.payment_id.action_post()
             return {'type': 'ir.actions.act_window_close'}
@@ -131,19 +146,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.scheme_installment_id:
             rec = self.scheme_installment_id
 
-            # Find a fallback Bank/Cash journal since terminal configurations are for Pine Labs card/upi
-            payment_journal = self.env['account.journal'].search([
-                ('type', '=', 'bank'),
-                ('company_id', '=', self.env.company.id),
-            ], limit=1)
-
-            if not payment_journal:
-                raise UserError(_("No valid Bank journal found in your Chart of Accounts."))
+            payment_journal = bank_journal
 
             # Target dynamic Debtors Account Search matching your exact accounting structure logic
-            debtors_account = self.env['account.account'].search([
-                ('code', '=', '100400')
-            ], limit=1)
+            debtors_domain = [('code', '=', '100400')]
+            if branch:
+                debtors_domain = ['&', ('code', '=', '100400'), '|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
+            debtors_account = self.env['account.account'].search(debtors_domain, limit=1)
 
             if not debtors_account:
                 raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
@@ -153,7 +162,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
 
             # Generate the financial transaction entry document exactly like your original custom button
-            move = self.env['account.move'].create({
+            move_vals = {
                 'move_type': 'entry',
                 'journal_id': payment_journal.id,
                 'ref': _('Scheme Payment via Bank Transfer - %s') % (rec.enrollment_id.name or ''),
@@ -173,7 +182,10 @@ class PineLabsPaymentWizard(models.TransientModel):
                         'account_id': debtors_account.id
                     })
                 ]
-            })
+            }
+            if branch:
+                move_vals['branch_id'] = branch.id
+            move = self.env['account.move'].create(move_vals)
 
             # Force entry validation adjustments straight down to General Ledgers
             move.action_post()
@@ -203,13 +215,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         else:
             raise UserError(_('Bank Transfer is only available for invoices or sale orders.'))
 
-        # Create the standard payment register wizard and explicitly set the amount
         wizard = self.env['account.payment.register'].with_context(
             active_model='account.move',
             active_ids=active_ids,
         ).create({
             'is_pine_labs_payment': True,
             'pine_labs_amount': self.amount,
+            'journal_id': bank_journal.id,
         })
 
         return {
@@ -223,6 +235,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 'active_model': 'account.move',
                 'active_ids': active_ids,
                 'pine_labs_wizard_amount': self.amount,
+                'default_journal_id': bank_journal.id,
             },
         }
 
@@ -234,11 +247,26 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Open Odoo's standard Register Payment wizard for cash with journal preset."""
         self.ensure_one()
 
-        cash_journal = self.env['account.journal'].search(
-            [('type', '=', 'cash'), ('company_id', '=', self.env.company.id)], limit=1)
+        branch = None
+        if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
+            branch = self.invoice_id.branch_id
+        if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
+            branch = self.sale_order_id.branch_id
+        if not branch and self.scheme_installment_id and hasattr(self.scheme_installment_id.enrollment_id, 'branch_id'):
+            branch = self.scheme_installment_id.enrollment_id.branch_id
+        if not branch:
+            branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
+
+        domain = [('type', '=', 'cash'), ('company_id', '=', self.env.company.id)]
+        if branch:
+            domain.append(('branch_id', '=', branch.id))
+
+        cash_journal = self.env['account.journal'].search(domain, limit=1)
         if not cash_journal:
-            raise UserError(
-                _('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
+            if branch:
+                raise UserError(_('No cash journal found for branch %s. Please create a cash branch journal first to proceed with cash payment.') % branch.name)
+            else:
+                raise UserError(_('No cash journal found. Please create a cash journal first to proceed with cash payment.'))
 
         if self.payment_id and self.payment_id.state == 'draft':
             self.payment_id.amount = self.amount
@@ -250,19 +278,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.scheme_installment_id:
             rec = self.scheme_installment_id
 
-            # Find a fallback Bank/Cash journal since terminal configurations are for Pine Labs card/upi
-            payment_journal = self.env['account.journal'].search([
-                ('type', '=', 'cash'),
-                ('company_id', '=', self.env.company.id),
-            ], limit=1)
-
-            if not payment_journal:
-                raise UserError(_("No valid cash journal found in your Chart of Accounts."))
+            payment_journal = cash_journal
 
             # Target dynamic Debtors Account Search matching your exact accounting structure logic
-            debtors_account = self.env['account.account'].search([
-                ('code', '=', '100400')
-            ], limit=1)
+            debtors_domain = [('code', '=', '100400')]
+            if branch:
+                debtors_domain = ['&', ('code', '=', '100400'), '|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
+            debtors_account = self.env['account.account'].search(debtors_domain, limit=1)
 
             if not debtors_account:
                 raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
@@ -272,7 +294,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                 raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
 
             # Generate the financial transaction entry document exactly like your original custom button
-            move = self.env['account.move'].create({
+            move_vals = {
                 'move_type': 'entry',
                 'journal_id': payment_journal.id,
                 'ref': _('Scheme Payment via Cash - %s') % (rec.enrollment_id.name or ''),
@@ -292,7 +314,10 @@ class PineLabsPaymentWizard(models.TransientModel):
                         'account_id': debtors_account.id
                     })
                 ]
-            })
+            }
+            if branch:
+                move_vals['branch_id'] = branch.id
+            move = self.env['account.move'].create(move_vals)
 
             # Force entry validation adjustments straight down to General Ledgers
             move.action_post()
