@@ -592,17 +592,11 @@ class SaleOrder(models.Model):
 
         po = self.purchase_order_id
 
-        # ─ 1. Reverse / cancel existing PO pickings (do NOT touch PO lines) ────────
-        if po:
-            active_pickings = po.picking_ids.filtered(lambda p: p.state != 'cancel')
-            for picking in active_pickings:
-                self._safe_reverse_or_cancel_picking(picking)
-
         product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
         if not product:
             raise ValidationError(_("Old Gold product not configured."))
 
-        # ─ 2. Group current Old Gold lines by Purity ───────────────────────────────
+        # ─ 1. Group current Old Gold lines by Purity ───────────────────────────────
         purity_map = {}
         for line in self.old_gold_line_ids:
             purity = line.purity_id
@@ -611,8 +605,11 @@ class SaleOrder(models.Model):
             purity_map[purity]['weight'] += line.net_weight
             purity_map[purity]['amount'] += line.amount
 
-        # ─ 3. Update PO lines in-place via write() ─────────────────────────────────
+        # ─ 2. Update PO lines in-place via write() ─────────────────────────────────
         if po:
+            # Enable silent SQL update mode for the PO
+            po.is_editing_main_po = True
+            
             existing_po_lines = list(po.order_line)
             purity_list = list(purity_map.items())
 
@@ -621,7 +618,7 @@ class SaleOrder(models.Model):
                 rate = vals['amount'] / qty if qty else 0.0
                 
                 if i < len(existing_po_lines):
-                    # Update existing PO line
+                    # Update existing PO line (triggers our SQL logic in PurchaseOrderLine.write)
                     existing_po_lines[i].write({
                         'product_id': product.id,
                         'name': f'Old Gold Purchase ({purity.name})',
@@ -644,11 +641,12 @@ class SaleOrder(models.Model):
                     })
                     new_line.qty_received = qty
 
-        # ─ 4. Create fresh pickings from updated PO to link stock properly ─────────
-        if po:
+            # ─ 3. Create fresh pickings for any NEW PO lines ─────────
+            # Temporarily disable edit mode so _create_picking functions normally
+            po.is_editing_main_po = False
             po._create_picking()
             
-            # Set custom fields on newly created Old Gold pickings
+            # For any pickings that are still waiting (newly created), validate them
             for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
                 picking.write({
                     'is_old_gold': True,
@@ -827,23 +825,20 @@ class SaleOrder(models.Model):
 
         po = self.sale_return_po_id
 
-        # ─ 1. Reverse / cancel existing PO pickings (do NOT touch PO lines) ───
+        # ─ 1. Update PO lines in-place via write() – safe with done stock moves ─
+        #      write() only updates the line record, and our custom PurchaseOrderLine.write 
+        #      SQL interceptor will handle the stock and valuation updates silently.
         if po:
-            active_pickings = po.picking_ids.filtered(lambda p: p.state != 'cancel')
-            for picking in active_pickings:
-                self._safe_reverse_or_cancel_picking(picking)
-
-        # ─ 2. Update PO lines in-place via write() – safe with done stock moves ─
-        #      unlink() would fail because done moves block it;
-        #      write() only updates the line record, no move cancellation triggered.
-        if po:
+            # Enable silent SQL update mode for the PO
+            po.is_editing_main_po = True
+            
             existing_po_lines = list(po.order_line)
             sale_return_lines = list(self.sale_return_line_ids)
 
             for i, sr_line in enumerate(sale_return_lines):
                 qty = sr_line.net_weight or 1.0
                 if i < len(existing_po_lines):
-                    # Update the existing PO line in place
+                    # Update the existing PO line in place (triggers our SQL logic)
                     existing_po_lines[i].write({
                         'product_id': sr_line.product_id.id,
                         'name': f'Sale Return ({sr_line.product_id.name})',
@@ -866,9 +861,11 @@ class SaleOrder(models.Model):
                     })
                     new_line.qty_received = qty
 
-        # ─ 3. Create fresh pickings from updated PO to link stock properly ──────
+        # ─ 2. Create fresh pickings from updated PO to link stock properly ──────
         if po:
-            # Trigger PO to create new pickings for the updated quantities
+            # Temporarily disable edit mode so _create_picking functions normally
+            po.is_editing_main_po = False
+            # Trigger PO to create new pickings for any NEW lines
             po._create_picking()
             
             # Confirm and validate the newly created pickings

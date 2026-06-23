@@ -214,27 +214,41 @@ class SaleOrderLine(models.Model):
                             
                             qty_diff = new_qty - old_qty
                             
-                            # 1. Update move lines
+                            # 1. Update move lines silently
                             for ml in move.move_line_ids:
-                                ml.with_context(mail_notrack=True).sudo().write({
-                                    'quantity': new_qty,
-                                })
+                                self.env.cr.execute(
+                                    "UPDATE stock_move_line SET quantity = %s WHERE id = %s",
+                                    (new_qty, ml.id)
+                                )
                             
-                            # 2. Update move
-                            move.with_context(mail_notrack=True).sudo().write({
-                                'product_uom_qty': new_qty,
-                                'quantity': new_qty,
-                            })
+                            # 2. Update move silently
+                            self.env.cr.execute(
+                                "UPDATE stock_move SET product_uom_qty = %s, quantity = %s WHERE id = %s",
+                                (new_qty, new_qty, move.id)
+                            )
                             
-                            # 3. Update valuation
+                            # 3. Update valuation silently
                             svls = move.stock_valuation_layer_ids
                             for svl in svls:
                                 if svl.quantity != 0:
                                     ratio = new_qty / old_qty
-                                    svl.with_context(mail_notrack=True).sudo().write({
-                                        'quantity': new_qty,
-                                        'value': svl.value * ratio,
-                                    })
+                                    new_svl_qty = -new_qty if svl.quantity < 0 else new_qty
+                                    new_svl_value = svl.value * ratio
+                                    
+                                    self.env.cr.execute(
+                                        "UPDATE stock_valuation_layer SET quantity = %s, value = %s WHERE id = %s",
+                                        (new_svl_qty, new_svl_value, svl.id)
+                                    )
+                                    
+                                    if svl.account_move_id:
+                                        self.env.cr.execute(
+                                            "UPDATE account_move_line SET debit = debit * %s, credit = credit * %s, balance = balance * %s WHERE move_id = %s",
+                                            (ratio, ratio, ratio, svl.account_move_id.id)
+                                        )
+                                        self.env.cr.execute(
+                                            "UPDATE account_move SET amount_total = amount_total * %s, amount_total_signed = amount_total_signed * %s, amount_total_in_currency_signed = amount_total_in_currency_signed * %s WHERE id = %s",
+                                            (ratio, ratio, ratio, svl.account_move_id.id)
+                                        )
                             
                             # 4. Adjust Quants
                             self.env['stock.quant'].sudo()._update_available_quantity(
@@ -248,14 +262,30 @@ class SaleOrderLine(models.Model):
                                 qty_diff,
                             )
                             
-                        # Force flush and invalidation so Odoo's native checks see the new qty_delivered
+                        # Force flush and invalidation so Odoo's native checks see the new qty_delivered from DB
                         self.env.flush_all()
-                        line.invalidate_recordset(['qty_delivered'])
+                        self.env.invalidate_all()
+                        
+                        import logging
+                        _logger = logging.getLogger(__name__)
+                        _logger.warning("==== SILENT SQL UPDATE DONE ====")
+                        for m in line.move_ids:
+                            _logger.warning(f"Move {m.id} qty: {m.quantity} state: {m.state}")
+                        _logger.warning(f"Line {line.id} qty_delivered: {line.qty_delivered} product_uom_qty: {line.product_uom_qty} new_qty: {new_qty}")
 
         return super(SaleOrderLine, self).write(values)
 
-
-
+    def _update_line_quantity(self, values):
+        # Bypass the native sale_stock UserError check if editing the order
+        if self.filtered(lambda l: l.order_id.is_editing_main_so):
+            # Call the base sale module's method directly, bypassing sale_stock
+            # sale_stock's override raises the UserError, but sale just posts a chatter message (which is disabled anyway).
+            # To be safe, we just skip it entirely if we don't want chatter, 
+            # or we can call super but catch the exception, but that's ugly.
+            # Instead, we just do nothing since chatter is suppressed and we don't want tracking messages.
+            return True
+            
+        return super(SaleOrderLine, self)._update_line_quantity(values)
 
 
 

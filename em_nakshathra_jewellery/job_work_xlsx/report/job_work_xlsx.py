@@ -81,8 +81,10 @@ class JobWorkXlsx(models.AbstractModel):
         total_gross_weight = 0.0
         total_fine_issue = 0.0
         total_fine_receipt = 0.0
+        running_balance = 0.0
 
         for rec in docs:
+            running_balance = running_balance - (rec.stock_in or 0.0) + (rec.stock_out or 0.0)
             sheet.write(row, 0, row_no, text_format)
             sheet.write(row, 1, str(rec.date or ''), text_format)
             sheet.write(row, 2, rec.branch_id.name if rec.branch_id else '', text_format)
@@ -93,7 +95,7 @@ class JobWorkXlsx(models.AbstractModel):
             sheet.write(row, 7, rec.gross_weight, number_format)
             sheet.write(row, 8, rec.stock_in, number_format)
             sheet.write(row, 9, rec.stock_out, number_format)
-            sheet.write(row, 10, rec.balance_weight, number_format)
+            sheet.write(row, 10, running_balance, number_format)
 
             # =========================
             # Totals
