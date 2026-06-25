@@ -136,9 +136,10 @@ export class SalesmanCartDashboard extends Component {
 
                 if (seenLabelIds.has(labelId)) continue; // Already added this label
                 if (productId && !inStockProductIds.has(productId)) continue; // Product no longer in stock
+                if (!labelDetails[labelId]) continue; // Skip inactive or deleted labels
 
                 seenLabelIds.add(labelId);
-                const detail = labelDetails[labelId] || {};
+                const detail = labelDetails[labelId];
                 unifiedList.push({
                     unique_id: 'label_' + labelId,
                     type: 'label',

@@ -259,21 +259,51 @@ class SalesmanCart(models.Model):
         for line in self.cart_line_ids:
             # Locate the exact label so we can link it
             sale_label_id = False
+            label_rec = False
             if line.label_id:
-                sale_label_id = line.label_id.id
+                label_rec = line.label_id
+                sale_label_id = label_rec.id
             elif line.active_label_name:
                 label = self.env['product.label'].search([('name', '=', line.active_label_name)], limit=1)
                 if label:
+                    label_rec = label
                     sale_label_id = label.id
 
-            self.env['sale.order.line'].with_company(target_company).create({
+            sol_vals = {
                 'order_id': sale_order.id,
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
                 'price_unit': line.product_id.lst_price,
                 'label_id': sale_label_id,
-            })
+            }
+
+            if label_rec:
+                sol_vals.update({
+                    'purity_id': label_rec.purity_id.id,
+                    'mc_percent': label_rec.sale_making_charge_value,
+                    'sale_making_charge_min': label_rec.sale_making_charge_min,
+                    'product_uom_qty': label_rec.sale_gross_weight or line.qty,
+                    'sale_stone_weight': label_rec.sale_stone_weight,
+                    'sale_stone_weight_ct': label_rec.sale_stone_weight_ct,
+                    'sale_diamond_weight_gm': label_rec.sale_diamond_weight_gm,
+                    'sale_diamond_weight_ct': label_rec.sale_diamond_weight_ct,
+                    'sale_stone_rate': label_rec.sale_stone_rate,
+                    'sale_diamond_rate': label_rec.sale_diamond_rate,
+                })
+                # Fetch current gold rate based on purity
+                from odoo import fields
+                today = fields.Date.today()
+                gold_rate_rec = self.env['gold.rate.master'].search([
+                    ('purity_id', '=', label_rec.purity_id.id),
+                    ('date', '<=', today),
+                    ('active', '=', True),
+                    ('rate_type', '=', 'sale')
+                ], order='date desc', limit=1)
+                if gold_rate_rec:
+                    sol_vals['gold_rate'] = gold_rate_rec.rate_per_gram
+
+            self.env['sale.order.line'].with_company(target_company).create(sol_vals)
 
         self.write({'state': 'checked_out'})
         return sale_order.id
