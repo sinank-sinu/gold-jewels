@@ -32,83 +32,154 @@ export class SalesmanCartDashboard extends Component {
         if (!query) {
             return this.state.products;
         }
-        return this.state.products.filter(product => {
-            const matchName = product.display_name && product.display_name.toLowerCase().includes(query);
-            
-            // Check if the product has an active label name and if it matches what was typed
-            const matchLabel = product.active_label_name && product.active_label_name.toLowerCase().includes(query);
-            
-            // Return true if either condition matches
-            return matchName || matchLabel;
+        return this.state.products.filter(item => {
+            const matchName = item.name && item.name.toLowerCase().includes(query);
+            const matchSubName = item.sub_name && item.sub_name.toLowerCase().includes(query);
+            return matchName || matchSubName;
         });
     }
 
-    // async loadProducts() {
-    //     this.state.products = await this.orm.searchRead(
-    //         "product.product",
-    //         [
-    //             ["sale_ok", "=", true],
-    //             ["qty_available", ">", 0],
-    //             ["detailed_type", "=", "product"]
-    //         ],
-    //         ["id", "display_name", "lst_price", "weight", "qty_available", "active_label_name"],
-    //         { 
-    //             limit: 40 
-    //         }
-    //     );
-    // }
     async loadProducts() {
         this.state.loading = true;
 
         try {
-            // 1. Fetch the logged-in user's branch ID from their profile
-            const userData = await this.orm.read(
-                "res.users", 
-                [this.userService.userId], 
-                ["branch_id"]
-            );
-            
-            // Extract the ID (handles many2one array format [id, "Name"] or false)
+            // 1. Fetch user's branch
+            const userData = await this.orm.read("res.users", [this.userService.userId], ["branch_id"]);
             const userBranchId = userData[0].branch_id ? userData[0].branch_id[0] : false;
+            console.log("User Branch ID:", userBranchId);
 
-            // 2. Base Domain: Must be sellable, in stock, and storable
-            // We use explicit prefix '&' operators to avoid AST parsing errors in Odoo 17.
-            let domain = [
-                "&", "&", "&",
-                ["sale_ok", "=", true],
-                ["qty_available", ">", 0],
-                ["detailed_type", "=", "product"]
-            ];
-
-            // 3. STRICT BRANCH FILTER: Only display products if they have labels in the user's branch
-            if (userBranchId) {
-                domain.push(["product_label_ids.branch_id", "=", userBranchId]);
-            } else {
-                // Defensive fallback: If the user has no branch assigned, show nothing to prevent security leak
+            if (!userBranchId) {
                 this.state.products = [];
                 this.state.loading = false;
                 return;
             }
 
-            // 4. Handle search query input matching if typed
+            // 2. Look up stock.location records that belong to this branch
+            const branchLocations = await this.orm.searchRead(
+                "stock.location",
+                [["branch_id", "=", userBranchId], ["usage", "=", "internal"]],
+                ["id", "complete_name"]
+            );
+            const branchLocationIds = branchLocations.map(l => l.id);
+            console.log("Branch Locations:", branchLocations.map(l => l.complete_name), "IDs:", branchLocationIds);
+
+            if (branchLocationIds.length === 0) {
+                this.state.products = [];
+                this.state.loading = false;
+                this.notification.add("No stock locations found for your branch. Please contact administrator.", { type: "warning" });
+                return;
+            }
+
             const query = this.state.searchQuery.trim();
+
+            // 3. Fetch ALL stock.move.line records arriving at branch locations (done state)
+            //    Both with and without label_id
+            let smlDomain = [
+                "&",
+                ["location_dest_id", "in", branchLocationIds],
+                ["state", "=", "done"]
+            ];
             if (query) {
-                // Insert a root '&' operator for the new condition block
-                domain.unshift("&");
-                domain.push("|", "|",
-                    ["display_name", "ilike", query],
-                    ["barcode", "ilike", query],
-                    ["product_label_ids.name", "ilike", query]
+                smlDomain.unshift("&");
+                smlDomain.push("|", "|",
+                    ["product_id.name", "ilike", query],
+                    ["label_id.name", "ilike", query],
+                    ["label_id.barcode", "ilike", query]
                 );
             }
 
-            // 5. Fetch the targeted branch catalog
-            this.state.products = await this.orm.searchRead(
-                "product.product",
-                domain,
-                ["id", "display_name", "lst_price", "weight", "qty_available", "active_label_name"],
-                { limit: 40 }
+            let allMoveLines = await this.orm.searchRead(
+                "stock.move.line",
+                smlDomain,
+                ["id", "label_id", "product_id", "quantity", "location_dest_id"],
+                { limit: 200 }
             );
+            console.log("All stock.move.line in branch (done):", allMoveLines.length);
+
+            // 4. Separate into labeled and unlabeled lines
+            const labeledLines = allMoveLines.filter(ml => ml.label_id && ml.label_id[0]);
+            const unlabeledLines = allMoveLines.filter(ml => !ml.label_id || !ml.label_id[0]);
+
+            // 5. Fetch extra label details (gross weight) for labeled lines
+            const uniqueLabelIds = [...new Set(labeledLines.map(ml => ml.label_id[0]))];
+            let labelDetails = {};
+            if (uniqueLabelIds.length > 0) {
+                const labelRecords = await this.orm.searchRead(
+                    "product.label",
+                    [["id", "in", uniqueLabelIds]],
+                    ["id", "name", "sale_gross_weight", "barcode"]
+                );
+                for (let lr of labelRecords) {
+                    labelDetails[lr.id] = lr;
+                }
+            }
+
+            // 6. Fetch current on-hand stock from stock.quant to verify stock still exists
+            let quants = await this.orm.searchRead(
+                "stock.quant",
+                [["location_id", "in", branchLocationIds], ["quantity", ">", 0]],
+                ["product_id", "quantity", "location_id"],
+                { limit: 200 }
+            );
+            const inStockProductIds = new Set(quants.map(q => q.product_id[0]));
+            const inStockLabelIds = new Set();
+
+            // For labeled lines, cross-check that the product still has stock in branch
+            const seenLabelIds = new Set();
+            const seenUnlabeledProductIds = new Set();
+            let unifiedList = [];
+
+            // A. Show labeled items (one card per unique label that still has stock)
+            for (let ml of labeledLines) {
+                const labelId = ml.label_id[0];
+                const productId = ml.product_id ? ml.product_id[0] : false;
+
+                if (seenLabelIds.has(labelId)) continue; // Already added this label
+                if (productId && !inStockProductIds.has(productId)) continue; // Product no longer in stock
+
+                seenLabelIds.add(labelId);
+                const detail = labelDetails[labelId] || {};
+                unifiedList.push({
+                    unique_id: 'label_' + labelId,
+                    type: 'label',
+                    db_id: labelId,
+                    product_id: productId,
+                    name: ml.label_id[1] || detail.name || 'Unknown Label',
+                    sub_name: ml.product_id ? ml.product_id[1] : 'Unknown Product',
+                    weight: detail.sale_gross_weight || ml.quantity,
+                    price_info: ''
+                });
+                if (productId) inStockLabelIds.add(productId); // Track that this product is covered by a label
+            }
+
+            // B. Show unlabeled products — grouped by product, only if still in stock
+            //    Skip products that are already fully shown via a labeled card
+            for (let ml of unlabeledLines) {
+                const productId = ml.product_id ? ml.product_id[0] : false;
+                if (!productId) continue;
+                if (!inStockProductIds.has(productId)) continue; // No stock anymore
+                if (seenUnlabeledProductIds.has(productId)) continue; // Already shown
+                // If the product has a labeled card shown, still show it as a separate product card
+                // (because this is a DIFFERENT transfer without a label)
+                seenUnlabeledProductIds.add(productId);
+
+                const prodQuants = quants.filter(q => q.product_id[0] === productId);
+                const totalQty = prodQuants.reduce((sum, q) => sum + q.quantity, 0);
+
+                unifiedList.push({
+                    unique_id: 'product_' + productId,
+                    type: 'product',
+                    db_id: productId,
+                    product_id: productId,
+                    name: ml.product_id[1],
+                    sub_name: 'Stock Item',
+                    weight: totalQty,
+                    price_info: ''
+                });
+            }
+
+            console.log("Unified catalog items:", unifiedList.length, "(labeled:", seenLabelIds.size, ", unlabeled products:", seenUnlabeledProductIds.size, ")");
+            this.state.products = unifiedList;
 
         } catch (error) {
             console.error("Load Products Error:", error);
@@ -118,7 +189,7 @@ export class SalesmanCartDashboard extends Component {
             this.state.loading = false;
         }
     }
-    
+
     async getOrCreateActiveCart() {
         const carts = await this.orm.searchRead(
             "salesman.cart",
@@ -141,17 +212,23 @@ export class SalesmanCartDashboard extends Component {
         this.state.cartLines = await this.orm.searchRead(
             "salesman.cart.line",
             [["cart_id", "=", cartId]],
-            ["id", "product_id", "qty", "weight", "price_subtotal", "active_label_name"]
+            ["id", "product_id", "qty", "weight", "price_subtotal", "label_id"]
         );
     }
 
-    async addToCart(productId) {
+    async addToCart(uniqueId) {
         this.state.loading = true;
         try {
+            const item = this.state.products.find(p => p.unique_id === uniqueId);
+            if (!item || !item.product_id) return;
+
+            let productId = item.product_id;
+            let labelId = item.type === 'label' ? item.db_id : false;
+
             await this.orm.call(
                 "salesman.cart",
                 "action_add_product",
-                [this.state.activeCart.id, productId]
+                [this.state.activeCart.id, productId, false, 1.0, labelId]
             );
             this.notification.add("Item secure in your showroom tray!", { type: "success" });
             await this.loadCartLines(this.state.activeCart.id);

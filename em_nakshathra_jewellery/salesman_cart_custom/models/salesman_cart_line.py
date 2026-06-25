@@ -8,6 +8,7 @@ class SalesmanCartLine(models.Model):
 
     cart_id = fields.Many2one('salesman.cart', ondelete='cascade')
     product_id = fields.Many2one('product.product', required=True)
+    label_id = fields.Many2one('product.label', string='Label')
     lot_id = fields.Many2one('stock.lot', string='Serial/Lot Number')
     qty = fields.Float(string='Qty', default=1.0)
     weight = fields.Float(string='Gross Weight (g)', related='product_id.weight', store=True)

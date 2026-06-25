@@ -102,6 +102,12 @@ class StockMoveLine(models.Model):
         store=True,
         readonly=False,
     )
+    label_id = fields.Many2one(
+        'product.label',
+        string="Label",
+        related='move_id.label_id',
+        store=True,
+    )
 
 
 class StockValuationLayer(models.Model):
