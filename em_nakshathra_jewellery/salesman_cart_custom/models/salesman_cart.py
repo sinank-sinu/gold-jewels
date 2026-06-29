@@ -41,6 +41,13 @@ class SalesmanCart(models.Model):
         if self.state != 'draft':
             raise UserError(_("You can only add items to an active cart."))
             
+        if label_id:
+            label_rec = self.env['product.label'].browse(label_id)
+            if label_rec.sale_gross_weight:
+                qty = label_rec.sale_gross_weight
+            elif label_rec.purchase_gross_weight:
+                qty = label_rec.purchase_gross_weight
+            
         salesman_loc = self.salesman_id.salesman_location_id
         if not salesman_loc:
             raise UserError(_("Please assign a dedicated Stock Location to your user profile first."))
@@ -274,7 +281,6 @@ class SalesmanCart(models.Model):
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
-                'price_unit': line.product_id.lst_price,
                 'label_id': sale_label_id,
             }
 
@@ -290,6 +296,8 @@ class SalesmanCart(models.Model):
                     'sale_diamond_weight_ct': label_rec.sale_diamond_weight_ct,
                     'sale_stone_rate': label_rec.sale_stone_rate,
                     'sale_diamond_rate': label_rec.sale_diamond_rate,
+                    'other_weight_g': label_rec.other_weight_g,
+                    'other_weight_amount': label_rec.other_weight_amount,
                 })
                 # Fetch current gold rate based on purity
                 from odoo import fields

@@ -148,7 +148,8 @@ export class SalesmanCartDashboard extends Component {
                     name: ml.label_id[1] || detail.name || 'Unknown Label',
                     sub_name: ml.product_id ? ml.product_id[1] : 'Unknown Product',
                     weight: detail.sale_gross_weight || ml.quantity,
-                    price_info: ''
+                    price_info: '',
+                    inputWeight: 1.0
                 });
                 if (productId) inStockLabelIds.add(productId); // Track that this product is covered by a label
             }
@@ -175,7 +176,8 @@ export class SalesmanCartDashboard extends Component {
                     name: ml.product_id[1],
                     sub_name: 'Stock Item',
                     weight: totalQty,
-                    price_info: ''
+                    price_info: '',
+                    inputWeight: 1.0
                 });
             }
 
@@ -225,11 +227,24 @@ export class SalesmanCartDashboard extends Component {
 
             let productId = item.product_id;
             let labelId = item.type === 'label' ? item.db_id : false;
+            let qty = item.type === 'label' ? 1.0 : (parseFloat(item.inputWeight) || 1.0);
+
+            if (qty <= 0) {
+                this.notification.add("Please enter a valid weight greater than zero.", { type: "warning" });
+                this.state.loading = false;
+                return;
+            }
+
+            if (item.type === 'product' && qty > item.weight) {
+                this.notification.add(`Cannot add ${qty}. Only ${item.weight} available in stock.`, { type: "warning" });
+                this.state.loading = false;
+                return;
+            }
 
             await this.orm.call(
                 "salesman.cart",
                 "action_add_product",
-                [this.state.activeCart.id, productId, false, 1.0, labelId]
+                [this.state.activeCart.id, productId, false, qty, labelId]
             );
             this.notification.add("Item secure in your showroom tray!", { type: "success" });
             await this.loadCartLines(this.state.activeCart.id);
