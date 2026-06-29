@@ -19,10 +19,6 @@
                     </group>
                 </group>
             </xpath>
-            <xpath expr="//field[@name='order_line']/tree//field[@name='fine_weight']" position="after">
-                <field name="other_weight_g" optional="hide"/>
-                <field name="other_weight_amount" optional="hide"/>
-            </xpath>
         </field>
     </record>
 </odoo>

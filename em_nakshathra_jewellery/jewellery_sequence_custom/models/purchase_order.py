@@ -10,9 +10,12 @@ class PurchaseOrder(models.Model):
             if vals.get('name', _('New')) == _('New'):
                 branch_id = vals.get('branch_id')
                 branch = self.env['res.branch'].browse(branch_id) if branch_id else self.env.user.branch_id
+                print("branch", branch)
                 
                 if not branch or not branch.branch_code:
-                    raise ValidationError("Branch code is missing for this Purchase Order!")
+                    standard_sequence = self.env['ir.sequence'].next_by_code('purchase.order') or _('New')
+                    vals['name'] = standard_sequence
+                    continue
                 
                 # Let Odoo generate the standard sequence (e.g., 'P00123')
                 standard_sequence = self.env['ir.sequence'].next_by_code('purchase.order') or _('New')

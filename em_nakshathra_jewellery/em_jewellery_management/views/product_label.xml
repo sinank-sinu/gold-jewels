@@ -5,20 +5,20 @@
         <field name="model">product.label</field>
         <field name="arch" type="xml">
             <form>
-                 <header>
+                <header>
                     <button
-                        name="action_set_active"
-                        type="object"
-                        string="Set Active"
-                        class="btn-primary"
-                        invisible="active"
+                            name="action_set_active"
+                            type="object"
+                            string="Set Active"
+                            class="btn-primary"
+                            invisible="active"
                     />
-                     <button
-                        name="action_stock_in"
-                        type="object"
-                        string="Transfer"
-                        class="btn-primary"
-                        invisible="is_stocked_in"
+                    <button
+                            name="action_stock_in"
+                            type="object"
+                            string="Transfer"
+                            class="btn-primary"
+                            invisible="is_stocked_in"
                     />
                     <field name="active" widget="boolean_toggle"/>
                     <field name="is_stocked_in" invisible="1"/>
@@ -38,13 +38,13 @@
                         </button>
                     </div>
 
-                     <div class="oe_title">
+                    <div class="oe_title">
                         <h1>
                             <field name="name" readonly="1"/>
                         </h1>
                     </div>
                     <group>
-                        <field name ="age" readonly="1"/>
+                        <field name="age" readonly="1"/>
                         <field name="product_id"/>
                         <field name="branch_id"/>
                         <field name="source_location_id" required="1"/>
@@ -60,7 +60,8 @@
                                 <field name="barcode" readonly="1"/>
                             </group>
                             <group>
-                                <field name="job_work_id"  domain="[('state', 'in', ['received', 'done']),('job_work_line_ids.product_id','=',product_id)]"/>
+                                <field name="job_work_id"
+                                       domain="[('state', 'in', ['received', 'done']),('job_work_line_ids.product_id','=',product_id)]"/>
                                 <field name="unlabelled_weight_jw"/>
 
                                 <field name="purchase_id"/>
@@ -79,9 +80,11 @@
                         <page name="Sale Details">
                             <group string="Jewellery Sale Details">
                                 <group>
-<!--                                    <field name="sale_purity_id"/>-->
-<!--                                    <field name="sale_price_per_gram"/>-->
+                                    <!--                                    <field name="sale_purity_id"/>-->
+                                    <!--                                    <field name="sale_price_per_gram"/>-->
                                     <field name="sale_fine_weight"/>
+                                    <field name="other_weight_g"/>
+                                    <field name="other_weight_amount"/>
                                 </group>
 
                                 <group string="Weights">
@@ -94,7 +97,7 @@
                                 </group>
 
                                 <group string="Rates">
-<!--                                    <field name="sale_metal_rate"/>-->
+                                    <!--                                    <field name="sale_metal_rate"/>-->
                                     <field name="sale_stone_rate"/>
                                     <field name="sale_diamond_rate"/>
                                 </group>
@@ -103,14 +106,14 @@
                                     <field name="sale_making_charge_type"/>
                                     <field name="sale_making_charge_value"/>
                                     <field name="sale_making_charge_min"/>
-                                    <field name="sale_making_charge_amount" readonly="1"  invisible="1"/>
+                                    <field name="sale_making_charge_amount" readonly="1" invisible="1"/>
                                 </group>
                             </group>
                         </page>
                         <page name="Purchase Details">
-                             <group string="Jewellery Purchase Details">
+                            <group string="Jewellery Purchase Details">
                                 <group>
-<!--                                    <field name="purchase_purity_id"/>-->
+                                    <!--                                    <field name="purchase_purity_id"/>-->
                                     <field name="purchase_price_per_gram"/>
                                     <field name="purchase_fine_weight"/>
                                     <field name="certification_charge"/>
@@ -156,7 +159,7 @@
         <field name="arch" type="xml">
             <tree>
                 <field name="name"/>
-                <field name ="age" readonly="1"/>
+                <field name="age" readonly="1"/>
                 <field name="product_tmpl_id"/>
 
             </tree>
@@ -173,7 +176,6 @@
             </p>
         </field>
     </record>
-
 
 
 </odoo>

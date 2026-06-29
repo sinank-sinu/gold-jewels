@@ -187,6 +187,9 @@ class ProductLabel(models.Model):
     others = fields.Float(string="Others")
     stock_move_count = fields.Integer(compute="_compute_stock_move_count")
 
+    other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
+    other_weight_amount = fields.Float(string="Other Weight Amount")
+
     def _compute_stock_move_count(self):
         for rec in self:
             rec.stock_move_count = self.env['stock.move'].search_count([('label_id', '=', rec.id)])
@@ -239,6 +242,7 @@ class ProductLabel(models.Model):
             'location_id': self.source_location_id.id,
             'location_dest_id': self.branch_location_id.id,
             'origin': self.name,
+            'branch_id': self.branch_id.id,
         })
 
         self.env['stock.move'].create({
@@ -251,6 +255,7 @@ class ProductLabel(models.Model):
             'picking_id': picking.id,
             'label_id': self.id,
             'purity_id': self.purity_id.id if self.purity_id else False,
+            'branch_id': self.branch_id.id,
         })
 
         # Process and validate the picking

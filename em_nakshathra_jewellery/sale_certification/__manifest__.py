@@ -7,7 +7,6 @@
     'depends': ['sale', 'em_jewellery_management'],
     'data': [
         'views/sale_order_views.xml',
-        'views/product_label_view.xml',
     ],
     'auto_install': False,
     'application': True,

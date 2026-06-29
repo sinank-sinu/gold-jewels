@@ -65,7 +65,8 @@
                 <field name="metal_amount" />
                 <field name="sale_stone_rate" optional="hide"/>
                 <field name="sale_diamond_rate" optional="hide"/>
-
+                <field name="other_weight_g" optional="hide"/>
+                <field name="other_weight_amount" optional="hide"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='price_unit']" position="before">
                     <field name="fine_weight" optinal="hide"/>

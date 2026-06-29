@@ -52,6 +52,8 @@ class SaleOrderLine(models.Model):
     mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual" )
     mc_discount = fields.Float(string="Discount", compute="_compute_mc_discount")
     sale_making_charge_min = fields.Float(string="Sale Making Charge Min")
+    other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
+    other_weight_amount = fields.Float(string="Other Weight Amount")
 
     # @api.depends('mc_amount_actual', 'metal_amount')
     # def _compute_effective_mc_percent(self):
@@ -97,6 +99,8 @@ class SaleOrderLine(models.Model):
             self.sale_diamond_weight_ct = self.label_id.sale_diamond_weight_ct
             self.sale_stone_rate = self.label_id.sale_stone_rate
             self.sale_diamond_rate = self.label_id.sale_diamond_rate
+            self.other_weight_g = self.label_id.other_weight_g
+            self.other_weight_amount = self.label_id.other_weight_amount
 
             gold_rate = 0.0
             today = fields.Date.today()
@@ -148,11 +152,11 @@ class SaleOrderLine(models.Model):
             rec.metal_amount = rec.gold_rate * rec.net_weight
 
 
-    @api.depends('metal_amount', 'mc_amount', 'sale_diamond_rate', 'sale_stone_rate','mc_amount_actual')
+    @api.depends('metal_amount', 'mc_amount', 'sale_diamond_rate', 'sale_stone_rate','mc_amount_actual', 'other_weight_amount')
     def _compute_subtotal(self):
         for rec in self:
-            rec.price_subtotal_actual = rec.metal_amount + rec.mc_amount + rec.sale_stone_rate + rec.sale_diamond_rate
-            rec.price_subtotal = rec.metal_amount + rec.mc_amount_actual + rec.sale_stone_rate + rec.sale_diamond_rate
+            rec.price_subtotal_actual = rec.metal_amount + rec.mc_amount + rec.sale_stone_rate + rec.sale_diamond_rate + rec.other_weight_amount
+            rec.price_subtotal = rec.metal_amount + rec.mc_amount_actual + rec.sale_stone_rate + rec.sale_diamond_rate + rec.other_weight_amount
 
     @api.depends('price_subtotal', 'product_uom_qty')
     def _compute_price_unit(self):

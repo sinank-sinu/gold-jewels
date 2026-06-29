@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="action_import_sales_custom" model="ir.actions.act_url">
+            <field name="name">Import Sales Data</field>
+            <field name="url">/import/sales_migration/form</field>
+            <field name="target">new</field>
+        </record>
+
+        <menuitem id="menu_import_sales_custom"
+                  name="Import Sales (Custom)"
+                  parent="sale.sale_menu_root"
+                  action="action_import_sales_custom"
+                  sequence="100"/>
+    </data>
+</odoo>
