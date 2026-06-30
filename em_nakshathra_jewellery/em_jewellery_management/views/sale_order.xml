@@ -205,21 +205,23 @@
                 </button>
             </xpath>
             <xpath expr="//field[@name='order_line']" position="after">
+                <field name="scheme_line_id" invisible="1"/>
+                <field name="active_scheme_id" invisible="1"/>
                 <group>
-                    <field name="apply_scheme" readonly="state !='draft'" widget="boolean_toggle"/>
+                    <field name="apply_scheme" widget="boolean_toggle"/>
                     <button
                         name="action_apply_scheme"
                         string="Apply Scheme"
                         type="object"
                         class="btn-primary"
-                        invisible="not apply_scheme or state not in ('draft', 'sent')"/>
+                        invisible="not apply_scheme or state not in ('draft', 'sent', 'sale') or scheme_line_id != False"/>
 
                     <button
                         name="action_remove_scheme"
                         string="Remove Scheme"
                         type="object"
                         class="btn-secondary"
-                        invisible="not apply_scheme or state not in ('draft', 'sent')"/>
+                        invisible="not apply_scheme or scheme_line_id == False or state not in ('draft', 'sent', 'sale')"/>
                 </group>
             </xpath>
             <xpath expr="//form/div[contains(@class,'oe_chatter')]" position="replace"/>
