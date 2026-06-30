@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Menu Item in User & Companies Submenu -->
+        <menuitem id="menu_activity_report"
+                  name="Activity Report"
+                  parent="base.menu_users"
+                  action="activity_report_wizard_action"
+                  sequence="10"/>
+    </data>
+</odoo>
