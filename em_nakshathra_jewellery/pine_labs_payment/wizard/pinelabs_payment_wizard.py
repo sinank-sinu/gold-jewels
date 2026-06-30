@@ -3,6 +3,8 @@ import time
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+from dateutil.relativedelta import relativedelta  # Added for safe month arithmetic
+
 
 # Maps wizard payment_method_type to Pine Labs AllowedPaymentMode codes
 PINE_LABS_MODE_MAP = {
@@ -97,17 +99,18 @@ class PineLabsPaymentWizard(models.TransientModel):
     # ─────────────────────────────────────────────────────────────────
     # Main action: routes to Bank or Pine Labs depending on mode
     # ─────────────────────────────────────────────────────────────────
-
     def action_initiate_payment(self):
-        """Route to Bank (Odoo) or Pine Labs terminal depending on payment_method_type."""
+        """Route to Bank / Cash / Pine Labs and handle installment allocation."""
         self.ensure_one()
 
         if self.payment_method_type == 'bank':
-            return self._action_register_bank_payment()
+            result = self._action_register_bank_payment()
         elif self.payment_method_type == 'cash':
-            return self._action_register_cash_payment()
+            result = self._action_register_cash_payment()
         else:
-            return self._action_initiate_pinelabs_payment()
+            result = self._action_initiate_pinelabs_payment()
+        return result
+
 
     # ─────────────────────────────────────────────────────────────────
     # Bank Transfer: Use Odoo's standard Register Payment wizard
@@ -189,10 +192,22 @@ class PineLabsPaymentWizard(models.TransientModel):
 
             # Force entry validation adjustments straight down to General Ledgers
             move.action_post()
+            if self.scheme_installment_id:
 
-            # Pass values straight down into your installment row list columns layout fields
+                enrollment = self.scheme_installment_id.enrollment_id
+
+                self._allocate_installments(
+                    enrollment=enrollment,
+                    payment_amount=self.scheme_installment_id.amount,
+                    move=move,transaction_type="BANK-TRANSFER")
+                if (
+                        self.scheme_installment_id
+                        and self.scheme_installment_id.amount != enrollment.installment_amount
+                ):
+                    self.scheme_installment_id.unlink()
+
             rec.write({
-                'journal_id': payment_journal.id,
+                'journal_id': move.journal_id.id,
                 'move_id': move.id,
                 'transaction_id': 'BANK-TRANSFER',
                 'state': 'paid'
@@ -322,6 +337,22 @@ class PineLabsPaymentWizard(models.TransientModel):
             # Force entry validation adjustments straight down to General Ledgers
             move.action_post()
 
+            if self.scheme_installment_id:
+
+                enrollment = self.scheme_installment_id.enrollment_id
+
+                self._allocate_installments(
+                    enrollment=enrollment,
+                    payment_amount=self.scheme_installment_id.amount,
+                    move=move,
+                    transaction_type='CASH',
+                )
+                if (
+                        self.scheme_installment_id
+                        and self.scheme_installment_id.amount != enrollment.installment_amount
+                ):
+                    self.scheme_installment_id.unlink()
+
             # Pass values straight down into your installment row list columns layout fields
             rec.write({
                 'journal_id': payment_journal.id,
@@ -448,6 +479,124 @@ class PineLabsPaymentWizard(models.TransientModel):
             'view_mode': 'form',
             'target': 'new',
         }
+
+
+
+    #installments for scheme
+
+    def _allocate_installments(self, enrollment, payment_amount, move, transaction_type):
+
+        Installment = self.env['jewellery.scheme.installment']
+
+        inst_amt = enrollment.installment_amount
+
+        if not inst_amt or payment_amount <= 0:
+            return
+
+        installments_to_pay = int(payment_amount / inst_amt)
+
+        joining_date = enrollment.date_of_joining
+        today = fields.Date.today()
+
+        # --------------------------------------------------
+        # STEP 1: REMOVE ANY TEMP BULK PAYMENT RECORD (IMPORTANT)
+        # --------------------------------------------------
+        if self.scheme_installment_id:
+            self.scheme_installment_id.unlink()
+
+        # --------------------------------------------------
+        # STEP 2: ENSURE INSTALLMENTS EXIST UP TO CURRENT MONTH
+        # --------------------------------------------------
+        months_due = (
+                             (today.year - joining_date.year) * 12 +
+                             (today.month - joining_date.month)
+                     ) + 1
+
+        existing = Installment.search([
+            ('enrollment_id', '=', enrollment.id)
+        ])
+
+        existing_dates = set(existing.mapped('date'))
+
+        for i in range(months_due):
+            due_date = joining_date + relativedelta(months=i)
+
+            if due_date not in existing_dates:
+                Installment.create({
+                    'enrollment_id': enrollment.id,
+                    'date': due_date,
+                    'amount': inst_amt,
+                    'state': 'draft',
+                })
+
+        # --------------------------------------------------
+        # STEP 3: REFRESH ALL INSTALLMENTS (ORDERED)
+        # --------------------------------------------------
+        all_installments = Installment.search([
+            ('enrollment_id', '=', enrollment.id)
+        ], order='date asc')
+
+        # --------------------------------------------------
+        # STEP 4: PAY EXISTING DRAFT INSTALLMENTS FIRST
+        # --------------------------------------------------
+        paid_count = 0
+
+        draft_installments = all_installments.filtered(
+            lambda x: x.state == 'draft'
+        )
+
+        for inst in draft_installments:
+
+            if paid_count >= installments_to_pay:
+                break
+
+            inst.write({
+                'state': 'paid',
+                'amount': inst_amt,
+                'journal_id': move.journal_id.id,
+                'move_id': move.id,
+                'transaction_id': transaction_type,
+            })
+
+            paid_count += 1
+
+        # --------------------------------------------------
+        # STEP 5: ADVANCE PAYMENT → ALWAYS USE SEQUENCE INDEX
+        # --------------------------------------------------
+        while paid_count < installments_to_pay:
+
+            existing_installments = Installment.search([
+                ('enrollment_id', '=', enrollment.id)
+            ], order='date asc')
+
+            next_index = len(existing_installments)
+
+            next_date = joining_date + relativedelta(months=next_index)
+
+            installment = Installment.search([
+                ('enrollment_id', '=', enrollment.id),
+                ('date', '=', next_date)
+            ], limit=1)
+
+            vals = {
+                'state': 'paid',
+                'amount': inst_amt,
+                'journal_id': move.journal_id.id,
+                'move_id': move.id,
+                'transaction_id': transaction_type,
+            }
+
+            if installment:
+                installment.write(vals)
+            else:
+                vals.update({
+                    'enrollment_id': enrollment.id,
+                    'date': next_date,
+                })
+                Installment.create(vals)
+
+            paid_count += 1
+
 
     # ─────────────────────────────────────────────────────────────────
     # Status check & cancel (Pine Labs only)
