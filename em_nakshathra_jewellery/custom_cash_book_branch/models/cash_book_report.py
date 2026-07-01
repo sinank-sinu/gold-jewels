@@ -122,7 +122,9 @@ class CashBookReport(models.TransientModel):
             move_lines_total[move_lines.mapped('account_id').display_name] = {
                 'total_debit': round(sum(move_lines.mapped('debit')), 2),
                 'total_credit': round(sum(move_lines.mapped('credit')), 2),
-                'currency_id': currency_id
+                'currency_id': currency_id,
+                'account_id': account['id'],
+                'line_count': len(move_lines)
             }
             
         branches = self.env['res.branch'].search([]).read(['id', 'name'])

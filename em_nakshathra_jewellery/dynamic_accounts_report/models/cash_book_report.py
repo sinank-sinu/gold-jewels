@@ -75,10 +75,90 @@ class CashBookReport(models.TransientModel):
             move_lines_total[move_lines.mapped('account_id').display_name] = {
                 'total_debit': round(sum(move_lines.mapped('debit')), 2),
                 'total_credit': round(sum(move_lines.mapped('credit')), 2),
-                'currency_id': currency_id}
+                'currency_id': currency_id,
+                'account_id': account['id'],
+                'line_count': len(move_lines)}
         data['move_lines_total'] = move_lines_total
         data['accounts'] = accounts
         return data
+
+    @api.model
+    def get_account_lines(self, account_id, journal_id=None, partner_id=None,
+                          date_range=None, options=None, branch_ids=None,
+                          limit=500, offset=0, known_total=None):
+        journals = self.env['account.journal'].search([('type', '=', 'cash')])
+        option_domain = ['posted']
+        if options is not None and 'draft' in options:
+            option_domain = ['posted', 'draft']
+            
+        domain = [
+            ('parent_state', 'in', option_domain),
+            ('journal_id', 'in', journals.ids),
+            ('account_id', '=', account_id),
+        ]
+        if partner_id:
+            domain.append(('partner_id', 'in', partner_id))
+            
+        has_branch = hasattr(self.env['account.move'], 'branch_id')
+        if branch_ids and has_branch:
+            domain.append(('move_id.branch_id', 'in', branch_ids))
+            
+        if date_range:
+            today = fields.Date.today()
+            quarter_start, quarter_end = date_utils.get_quarter(today)
+            previous_quarter_start = quarter_start - relativedelta(months=3)
+            previous_quarter_end = quarter_start - relativedelta(days=1)
+            
+            if date_range == 'month':
+                domain.append(('date', '>=', today.replace(day=1)))
+                domain.append(('date', '<=', (today + relativedelta(months=1, day=1)) - relativedelta(days=1)))
+            elif date_range == 'year':
+                domain.append(('date', '>=', today.replace(month=1, day=1)))
+                domain.append(('date', '<=', today.replace(month=12, day=31)))
+            elif date_range == 'quarter':
+                domain += [('date', '>=', quarter_start), ('date', '<=', quarter_end)]
+            elif date_range == 'last-month':
+                last_month = today - relativedelta(months=1)
+                domain.append(('date', '>=', last_month.replace(day=1)))
+                domain.append(('date', '<=', (last_month + relativedelta(months=1, day=1)) - relativedelta(days=1)))
+            elif date_range == 'last-year':
+                last_year = today - relativedelta(years=1)
+                domain.append(('date', '>=', last_year.replace(month=1, day=1)))
+                domain.append(('date', '<=', last_year.replace(month=12, day=31)))
+            elif date_range == 'last-quarter':
+                domain += [('date', '>=', previous_quarter_start), ('date', '<=', previous_quarter_end)]
+            elif isinstance(date_range, dict):
+                if 'start_date' in date_range and date_range['start_date']:
+                    domain.append(('date', '>=', datetime.strptime(date_range['start_date'], '%Y-%m-%d').date()))
+                if 'end_date' in date_range and date_range['end_date']:
+                    domain.append(('date', '<=', datetime.strptime(date_range['end_date'], '%Y-%m-%d').date()))
+
+        # Search move lines
+        move_lines = self.env['account.move.line'].search(domain, order='date asc, id asc')
+        total = len(move_lines)
+        
+        # Paginate
+        if limit:
+            paginated_lines = move_lines[offset:offset+limit]
+        else:
+            paginated_lines = move_lines
+            
+        # Read fields
+        fields_to_read = ['date', 'journal_id', 'partner_id', 'move_name', 'debit', 'move_id', 'credit', 'name', 'ref']
+        lines_data = paginated_lines.read(fields_to_read)
+        
+        # Inject branch details if present
+        for line, raw_data in zip(paginated_lines, lines_data):
+            if has_branch and line.move_id and line.move_id.branch_id:
+                raw_data['branch_id'] = [line.move_id.branch_id.id, line.move_id.branch_id.name]
+            else:
+                raw_data['branch_id'] = False
+                
+        return {
+            'lines': lines_data,
+            'total': total,
+            'offset': offset
+        }
 
     @api.model
     def get_filter_values(self, partner_id, data_range, account_list, options):
@@ -198,7 +278,9 @@ class CashBookReport(models.TransientModel):
             move_lines_total[move_lines.mapped('account_id').display_name] = {
                 'total_debit': round(sum(move_lines.mapped('debit')), 2),
                 'total_credit': round(sum(move_lines.mapped('credit')), 2),
-                'currency_id': currency_id}
+                'currency_id': currency_id,
+                'account_id': account['id'],
+                'line_count': len(move_lines)}
         data['move_lines_total'] = move_lines_total
         return data
 

@@ -203,18 +203,14 @@
                                     </thead>
                                     <tbody t-ref="tbody">
                                         <t t-if="state.move_line">
-                                            <t t-set="i" t-value="0"/>
                                             <t t-foreach="state.move_line"
                                                t-as="move_line"
                                                t-key="move_line_index">
-                                                <t t-set="i" t-value="i + 1"/>
                                                 <tr class="border-bottom border-dark border-gainsboro">
                                                     <th>
-                                                        <div data-bs-toggle="collapse"
-                                                             t-attf-href="#move_line-{{i}}"
-                                                             aria-expanded="false"
-                                                             t-attf-aria-controls="move_line-{{i}}"
-                                                             class="ms-3 collapsed">
+                                                        <div class="ms-3"
+                                                             style="cursor:pointer;"
+                                                             t-on-click="() => this.expandAccount(move_line, state.total[move_line].account_id)">
                                                             <a class="btn header o_heading">
                                                                 <span class="toggle-icon">
                                                                     <i class="fa fa-caret-down"/>
@@ -256,82 +252,107 @@
                                                         </span>
                                                     </th>
                                                 </tr>
-                                                <t t-foreach="state.data[move_line]"
-                                                   t-as="valuelist"
-                                                   t-key="valuelist_index">
-                                                    <tr class="border-bottom border-gainsboro collapse"
-                                                        t-attf-id="move_line-{{i}}">
-                                                        <th colspan="6">
-                                                            <span style="gap: 12px;display: flex;">
-                                                                <t t-esc="valuelist['date']"/>
-                                                                <a type="button"
-                                                                   class="dropdown-toggle"
-                                                                   data-bs-toggle="dropdown">
-                                                                </a>
-                                                                <div class="dropdown-menu  journals">
-                                                                    <button t-att-data-id="valuelist['move_id'][0]"
-                                                                            type="button"
-                                                                            t-on-click="gotoJournalEntry"
-                                                                            style="border: none;
-                                                                            background-color: inherit;
-                                                                            padding: 4px 8px;
-                                                                            font-size: 16px;
-                                                                            cursor: pointer;
-                                                                            display: inline-block;">
-                                                                        View
-                                                                        Journal
-                                                                        Entry
-                                                                    </button>
-                                                                    <div role="separator"
-                                                                         class="dropdown-divider"/>
-                                                                </div>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-esc="valuelist['journal_id'][1]"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-esc="valuelist['partner_id'][1]"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-if="valuelist['ref']"
-                                                                   t-esc="valuelist['ref']"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-if="valuelist['move_name']"
-                                                                   t-esc="valuelist['move_name']"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-if="valuelist['name']"
-                                                                   t-esc="valuelist['name']"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-if="valuelist['debit']"
-                                                                   t-esc="state.total[move_line]['currency_id']"/>
-                                                                <t t-if="valuelist['debit']"
-                                                                   t-esc="valuelist['debit']"/>
-                                                            </span>
-                                                        </th>
-                                                        <th>
-                                                            <span>
-                                                                <t t-if="valuelist['credit']"
-                                                                   t-esc="state.total[move_line]['currency_id']"/>
-                                                                <t t-if="valuelist['credit']"
-                                                                   t-esc="valuelist['credit']"/>
-                                                            </span>
+                                                <t t-if="state.account_meta[move_line] and state.account_meta[move_line].expanded">
+                                                    <t t-set="acct_meta" t-value="state.account_meta[move_line]"/>
+                                                    <tr>
+                                                        <th colspan="14" style="padding:6px 18px;">
+                                                            <div style="display:flex;align-items:center;gap:12px;">
+                                                                <button class="btn btn-outline-secondary btn-sm"
+                                                                        t-att-disabled="acct_meta.offset === 0 ? 'disabled' : false"
+                                                                        t-on-click="() => this.prevAccountPage(move_line)">
+                                                                    &#8592; Prev
+                                                                </button>
+                                                                <span>
+                                                                    Page <t t-esc="Math.floor(acct_meta.offset / 500) + 1"/> of <t t-esc="Math.ceil(acct_meta.total / 500)"/>
+                                                                    (<t t-esc="acct_meta.total"/> lines)
+                                                                </span>
+                                                                <button class="btn btn-outline-secondary btn-sm"
+                                                                        t-att-disabled="acct_meta.offset + 500 >= acct_meta.total ? 'disabled' : false"
+                                                                        t-on-click="() => this.nextAccountPage(move_line)">
+                                                                    Next &#8594;
+                                                                </button>
+                                                            </div>
                                                         </th>
                                                     </tr>
+                                                    <t t-foreach="state.data[move_line]"
+                                                       t-as="valuelist"
+                                                       t-key="valuelist_index">
+                                                        <tr class="border-bottom border-gainsboro collapse show">
+                                                            <th colspan="6">
+                                                                <span style="gap: 12px;display: flex;">
+                                                                    <t t-esc="valuelist['date']"/>
+                                                                    <a type="button"
+                                                                       class="dropdown-toggle"
+                                                                       data-bs-toggle="dropdown">
+                                                                    </a>
+                                                                    <div class="dropdown-menu  journals">
+                                                                        <button t-att-data-id="valuelist['move_id'][0]"
+                                                                                type="button"
+                                                                                t-on-click="gotoJournalEntry"
+                                                                                style="border: none;
+                                                                                background-color: inherit;
+                                                                                padding: 4px 8px;
+                                                                                font-size: 16px;
+                                                                                cursor: pointer;
+                                                                                display: inline-block;">
+                                                                            View
+                                                                            Journal
+                                                                            Entry
+                                                                        </button>
+                                                                        <div role="separator"
+                                                                             class="dropdown-divider"/>
+                                                                    </div>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-esc="valuelist['journal_id'][1]"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-esc="valuelist['partner_id'][1]"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-if="valuelist['ref']"
+                                                                       t-esc="valuelist['ref']"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-if="valuelist['move_name']"
+                                                                       t-esc="valuelist['move_name']"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-if="valuelist['name']"
+                                                                       t-esc="valuelist['name']"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-if="valuelist['debit']"
+                                                                       t-esc="state.total[move_line]['currency_id']"/>
+                                                                    <t t-if="valuelist['debit']"
+                                                                       t-esc="valuelist['debit']"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span>
+                                                                    <t t-if="valuelist['credit']"
+                                                                       t-esc="state.total[move_line]['currency_id']"/>
+                                                                    <t t-if="valuelist['credit']"
+                                                                       t-esc="valuelist['credit']"/>
+                                                                </span>
+                                                            </th>
+                                                            <th>
+                                                                <span/>
+                                                            </th>
+                                                        </tr>
+                                                    </t>
                                                 </t>
                                             </t>
                                         </t>

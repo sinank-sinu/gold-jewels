@@ -18,6 +18,7 @@ class BankBook extends owl.Component {
         this.unfoldButton = useRef('unfoldButton');
         this.state = useState({
             move_line: null,
+            account_meta: {},   // {acc_name: {total, offset, account_id, expanded}}
             data: null,
             total: null,
             accounts: null,
@@ -32,13 +33,11 @@ class BankBook extends owl.Component {
             currency: null,
             message_list : [],
         });
+        this.PAGE_SIZE = 500;
         this.load_data(self.initial_render = true);
-
     }
+
     async load_data() {
-        /**
-         * Loads the data for the bank book report.
-         */
         let move_line_list = []
         let move_lines_total = ''
         let accounts = [];
@@ -52,11 +51,11 @@ class BankBook extends owl.Component {
             self.state.data = await self.orm.call("bank.book.report", "view_report", []);
             for (const index in self.state.data) {
                 const value = self.state.data[index];
-                if (index !== 'move_lines_total' && index !== 'accounts') {
+                if (index !== 'move_lines_total' && index !== 'accounts' && index !== 'branches') {
                     move_line_list.push(index);
                 } else if (index === 'accounts') {
                     self.state.accounts = value;
-                } else {
+                } else if (index === 'move_lines_total') {
                     move_lines_total = value;
                     for (const moveLine of Object.values(move_lines_total)) {
                         currency = moveLine.currency_id;
@@ -75,13 +74,86 @@ class BankBook extends owl.Component {
             window.location.href;
         }
     }
+
+    // Lazy load line pagination helper
+    async _fetchAccountPage(account_name, account_id, offset) {
+        const known_total = this.state.account_meta[account_name]
+            ? this.state.account_meta[account_name].total
+            : (this.state.total[account_name]
+                ? this.state.total[account_name].line_count
+                : null);
+
+        const result = await this.orm.call(
+            "bank.book.report", "get_account_lines",
+            [account_id,
+             null, // resolved in python
+             this.state.selected_partner || null,
+             this.state.date_range || null,
+             this.state.options || null,
+             null, // branch_ids
+             this.PAGE_SIZE,
+             offset,
+             known_total
+            ]
+        );
+        this.state.data[account_name] = result.lines;
+        this.state.account_meta[account_name] = {
+            total:      result.total,
+            offset:     result.offset,
+            account_id: account_id,
+            expanded:   true,
+        };
+    }
+
+    async expandAccount(account_name, account_id) {
+        const meta = this.state.account_meta[account_name];
+        if (meta) {
+            meta.expanded = !meta.expanded;
+            return;
+        }
+        await this._fetchAccountPage(account_name, account_id, 0);
+    }
+
+    async nextAccountPage(account_name) {
+        const meta = this.state.account_meta[account_name];
+        if (meta && meta.offset + this.PAGE_SIZE < meta.total) {
+            await this._fetchAccountPage(
+                account_name, meta.account_id, meta.offset + this.PAGE_SIZE);
+        }
+    }
+
+    async prevAccountPage(account_name) {
+        const meta = this.state.account_meta[account_name];
+        if (meta && meta.offset > 0) {
+            await this._fetchAccountPage(
+                account_name, meta.account_id,
+                Math.max(0, meta.offset - this.PAGE_SIZE));
+        }
+    }
+
+    // Load ALL lines for print/export
+    async _loadAllAccountLines() {
+        const accounts = this.state.move_line || [];
+        for (const account of accounts) {
+            if (!this.state.total || !this.state.total[account]) continue;
+            const acc_id = this.state.total[account]['account_id'];
+            const result = await this.orm.call(
+                "bank.book.report", "get_account_lines",
+                [acc_id,
+                 null,
+                 this.state.selected_partner || null,
+                 this.state.date_range || null,
+                 this.state.options || null,
+                 null,
+                 0,   // limit=0 -> no limit
+                 0,
+                ]
+            );
+            this.state.data[account] = result.lines;
+        }
+    }
+
     gotoJournalEntry(ev) {
-        /**
-         * Navigates to the journal entry form view based on the selected event target.
-         *
-         * @param {Event} ev - The event object triggered by the action.
-         * @returns {Promise} - A promise that resolves to the result of the action.
-         */
         return this.action.doAction({
             type: "ir.actions.act_window",
             res_model: 'account.move',
@@ -90,18 +162,16 @@ class BankBook extends owl.Component {
             target: "current",
         });
     }
+
     getDomain() {
         return [];
     }
+
     async printPdf(ev) {
-        /**
-         * Generates and displays a PDF report for the bank book.
-         *
-         * @param {Event} ev - The event object triggered by the action.
-         * @returns {Promise} - A promise that resolves to the result of the action.
-         */
         ev.preventDefault();
         var self = this;
+        // Fetch all lines before printing
+        await this._loadAllAccountLines();
         let totals = {
             'total_debit':this.state.total_debit,
             'total_credit':this.state.total_credit,
@@ -125,10 +195,11 @@ class BankBook extends owl.Component {
             'display_name': self.props.action.display_name,
         });
     }
+
     filter() {
-    var self=this;
-    let startDate, endDate;
-    let startYear, startMonth, startDay, endYear, endMonth, endDay;
+        var self=this;
+        let startDate, endDate;
+        let startYear, startMonth, startDay, endYear, endMonth, endDay;
         if (self.state.date_range){
             const today = new Date();
             if (self.state.date_range === 'year') {
@@ -156,17 +227,16 @@ class BankBook extends owl.Component {
                  startDate = new Date(self.state.date_range.start_date);
                  endDate = new Date(self.state.date_range.end_date);
             }
-        // Get the date components for start and end dates
-        if (startDate) {
-        startYear = startDate.getFullYear();
-        startMonth = startDate.getMonth() + 1;
-        startDay = startDate.getDate();
-        }
-        if (endDate) {
-        endYear = endDate.getFullYear();
-        endMonth = endDate.getMonth() + 1;
-        endDay = endDate.getDate();
-        }
+            if (startDate) {
+                startYear = startDate.getFullYear();
+                startMonth = startDate.getMonth() + 1;
+                startDay = startDate.getDate();
+            }
+            if (endDate) {
+                endYear = endDate.getFullYear();
+                endMonth = endDate.getMonth() + 1;
+                endDay = endDate.getDate();
+            }
         }
         const selectedAccountIDs = Object.values(self.state.selected_account_list);
         const selectedAccountNames = selectedAccountIDs.map((accountID) => {
@@ -180,19 +250,18 @@ class BankBook extends owl.Component {
             'start_date': null,
             'end_date': null,
         };
-        // Check if start and end dates are available before adding them to the filters object
         if (startYear !== undefined && startMonth !== undefined && startDay !== undefined &&
             endYear !== undefined && endMonth !== undefined && endDay !== undefined) {
             filters['start_date'] = `${startYear}-${startMonth < 10 ? '0' : ''}${startMonth}-${startDay < 10 ? '0' : ''}${startDay}`;
             filters['end_date'] = `${endYear}-${endMonth < 10 ? '0' : ''}${endMonth}-${endDay < 10 ? '0' : ''}${endDay}`;
         }
-        return filters
+        return filters;
     }
+
     async print_xlsx() {
-        /**
-         * Generates and downloads an XLSX report for the bank book.
-         */
         var self = this;
+        // Fetch all lines before exporting
+        await this._loadAllAccountLines();
         var action_title = self.props.action.display_name;
         let totals = {
             'total_debit':this.state.total_debit,
@@ -224,21 +293,14 @@ class BankBook extends owl.Component {
             error: (error) => self.call('crash_manager', 'rpc_error', error),
         });
     }
+
     async applyFilter(val, ev, is_delete = false) {
-        /**
-         * Applies filters to the bank book report based on the provided values.
-         *
-         * @param {any} val - The value of the filter.
-         * @param {Event} ev - The event object triggered by the action.
-         * @param {boolean} is_delete - Indicates whether the filter value is being deleted.
-         * @returns {void}
-         */
         let move_line_list = []
-        let move_line_value = []
         let move_line_totals = ''
         this.state.move_line = null
         this.state.data = null
         this.state.total = null
+        this.state.account_meta = {}; // Clear active pagination states
         this.state.filter_applied = true;
         let totalDebitSum = 0;
         let totalCreditSum = 0;
@@ -302,11 +364,10 @@ class BankBook extends owl.Component {
         for (const index in filtered_data) {
             const value = filtered_data[index];
 
-            if (index !== 'move_lines_total') {
+            if (index !== 'move_lines_total' && index !== 'accounts' && index !== 'branches') {
                 move_line_list.push(index);
-            } else {
+            } else if (index === 'move_lines_total') {
                 move_line_totals = value;
-
                 for (const moveLine of Object.values(move_line_totals)) {
                     totalDebitSum += moveLine.total_debit || 0;
                     totalCreditSum += moveLine.total_credit || 0;
@@ -322,21 +383,29 @@ class BankBook extends owl.Component {
             this.unfoldButton.el.classList.remove("selected-filter")
         }
     }
+
     async unfoldAll(ev) {
-        /**
-         * Unfolds all items in the table body if the event target does not have the 'selected-filter' class,
-         * or folds all items if the event target has the 'selected-filter' class.
-         *
-         * @param {Event} ev - The event object triggered by the action.
-         */
         if (!ev.target.classList.contains("selected-filter")) {
-            for (var length = 0; length < this.tbody.el.children.length; length++) {
-                $(this.tbody.el.children[length])[0].classList.add('show')
+            await this._loadAllAccountLines();
+            for (const account of this.state.move_line || []) {
+                if (this.state.account_meta[account]) {
+                    this.state.account_meta[account].expanded = true;
+                } else {
+                    const acc_id = this.state.total[account]['account_id'];
+                    this.state.account_meta[account] = {
+                        total:      (this.state.data[account] || []).length,
+                        offset:     0,
+                        account_id: acc_id,
+                        expanded:   true,
+                    };
+                }
             }
             ev.target.classList.add("selected-filter");
         } else {
-            for (var length = 0; length < this.tbody.el.children.length; length++) {
-                $(this.tbody.el.children[length])[0].classList.remove('show')
+            for (const account of this.state.move_line || []) {
+                if (this.state.account_meta[account]) {
+                    this.state.account_meta[account].expanded = false;
+                }
             }
             ev.target.classList.remove("selected-filter");
         }
