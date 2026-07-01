@@ -96,6 +96,12 @@
                                         
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="text-success font-weight-bold"><t t-esc="line.price_subtotal"/></span>
+                                            <button t-attf-class="btn btn-link p-0 border-0 ms-1 shadow-none #{line.is_locked ? 'text-warning' : 'text-secondary'}" 
+                                                    t-att-disabled="state.loading"
+                                                    t-on-click="() => this.toggleLock(line.id)"
+                                                    title="Lock for Checkout">
+                                                <i t-attf-class="fa #{line.is_locked ? 'fa-lock' : 'fa-unlock'} fs-5"/>
+                                            </button>
                                             <button class="btn btn-link text-danger p-0 border-0 ms-1 shadow-none" 
                                                     t-att-disabled="state.loading"
                                                     t-on-click="() => this.removeFromCart(line.id)"

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Top-level menu under Purchase -->
+    <menuitem id="menu_po_bulk_import_root"
+              name="Bulk Import"
+              parent="purchase.menu_purchase_root"
+              sequence="99"/>
+
+    <menuitem id="menu_po_bulk_import_wizard"
+              name="Import Purchase Orders"
+              parent="menu_po_bulk_import_root"
+              action="action_po_bulk_import_wizard"
+              sequence="10"
+              groups="purchase.group_purchase_manager,group_po_bulk_import_manager"/>
+
+    <menuitem id="menu_po_import_jobs"
+              name="Import History"
+              parent="menu_po_bulk_import_root"
+              action="action_po_import_job_list"
+              sequence="20"
+              groups="purchase.group_purchase_manager,group_po_bulk_import_manager"/>
+
+</odoo>

@@ -215,8 +215,23 @@ export class SalesmanCartDashboard extends Component {
         this.state.cartLines = await this.orm.searchRead(
             "salesman.cart.line",
             [["cart_id", "=", cartId]],
-            ["id", "product_id", "qty", "weight", "price_subtotal", "label_id"]
+            ["id", "product_id", "qty", "weight", "price_subtotal", "label_id", "is_locked"]
         );
+    }
+
+    async toggleLock(lineId) {
+        this.state.loading = true;
+        try {
+            const line = this.state.cartLines.find(l => l.id === lineId);
+            if (line) {
+                await this.orm.write("salesman.cart.line", [lineId], { is_locked: !line.is_locked });
+                await this.loadCartLines(this.state.activeCart.id);
+            }
+        } catch (error) {
+            this.notification.add("Failed to toggle lock.", { type: "danger" });
+        } finally {
+            this.state.loading = false;
+        }
     }
 
     async addToCart(uniqueId) {

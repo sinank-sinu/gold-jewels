@@ -1,0 +1,803 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="purchase_order_bulk_import.POBulkImportWizard">
+  <div class="po-bulk-import">
+
+    <!-- ── Step indicator ── -->
+    <div class="po-import-steps">
+      <t t-foreach="steps" t-as="s" t-key="s.key">
+        <div t-attf-class="po-import-step #{state.step === s.key ? 'active' : (stepIndex(s.key) &lt; stepIndex(state.step) ? 'done' : '')}">
+          <div class="po-import-step-num">
+            <t t-if="stepIndex(s.key) &lt; stepIndex(state.step)">✓</t>
+            <t t-else=""><t t-esc="s_index + 1"/></t>
+          </div>
+          <span><t t-esc="s.label"/></span>
+        </div>
+        <t t-if="!s_last">
+          <div t-attf-class="po-import-step-sep #{stepIndex(s.key) &lt; stepIndex(state.step) ? 'done' : ''}"/>
+        </t>
+      </t>
+    </div>
+
+    <!-- ── Error banner ── -->
+    <div t-if="state.globalError" class="po-alert po-alert-error">
+      <strong>Error:</strong> <t t-esc="state.globalError"/>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         STEP 1: Upload
+    ═══════════════════════════════════════════════════════════ -->
+    <t t-if="state.step === 'upload'">
+      <div class="po-import-card">
+        <h2>Step 1 – Upload File</h2>
+
+        <div class="po-upload-zone" t-on-click="triggerFileInput"
+             t-on-dragover.prevent="onDragOver" t-on-dragleave="onDragLeave"
+             t-on-drop.prevent="onDrop" t-ref="dropzone">
+          <div class="upload-icon">📂</div>
+          <div>Drag &amp; drop a <strong>CSV</strong> or <strong>XLSX</strong> file here, or <u>click to browse</u></div>
+          <input type="file" accept=".csv,.xlsx,.xls" t-ref="fileInput" t-on-change="onFileChange"/>
+          <div t-if="state.fileName" class="file-name">✓ <t t-esc="state.fileName"/></div>
+        </div>
+
+        <!-- ── Sheet selector (only shown when XLSX has multiple sheets) ── -->
+        <t t-if="state.sheetNames.length > 1">
+          <div class="alert alert-info py-2 mt-2">
+            <strong>Multiple sheets detected.</strong> Select which sheet to import:
+            <select class="form-select form-select-sm mt-1"
+                    t-on-change="(e) => state.selectedSheet = e.target.value">
+              <t t-foreach="state.sheetNames" t-as="sn" t-key="sn">
+                <option t-att-value="sn" t-att-selected="state.selectedSheet === sn">
+                  <t t-esc="sn"/>
+                </option>
+              </t>
+            </select>
+          </div>
+        </t>
+
+        <div class="row g-3">
+
+          <!-- Target Model -->
+          <div class="col-md-5">
+            <label class="form-label fw-semibold">Target Model</label>
+            <t t-if="state.loadingModels">
+              <div class="form-control text-muted" style="background:#f8f9fa">
+                <span class="po-spinner"/>Loading models…
+              </div>
+            </t>
+            <t t-else="">
+              <div class="model-search-wrap">
+                <input type="text" class="form-control" autocomplete="off"
+                       placeholder="Search model…"
+                       t-att-value="state.modelSearchQuery"
+                       t-on-input="onModelSearch"
+                       t-on-focus="() => state.modelDropdownOpen = true"
+                       t-on-blur="onModelSearchBlur"/>
+                <t t-if="state.selectedModel">
+                  <span class="model-selected-clear"
+                        t-on-mousedown.prevent="() => clearModel()"
+                        title="Clear selection">✕</span>
+                </t>
+                <div t-if="state.modelDropdownOpen and filteredModels.length"
+                     class="model-search-dropdown">
+                  <t t-foreach="filteredModels" t-as="m" t-key="m.model">
+                    <div t-attf-class="model-search-item #{state.selectedModel === m.model ? 'selected' : ''}"
+                         t-on-mousedown.prevent="() => selectModelItem(m)">
+                      <span class="model-item-name"><t t-esc="m.name"/></span>
+                      <span class="model-item-tech">(<t t-esc="m.model"/>)</span>
+                    </div>
+                  </t>
+                </div>
+              </div>
+            </t>
+            <small class="text-muted">Choose which Odoo model to import into</small>
+          </div>
+
+          <!-- Unique / match field — populated once model is chosen -->
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Unique Key Field</label>
+            <t t-if="state.loadingFields">
+              <div class="form-control text-muted" style="background:#f8f9fa">
+                <span class="po-spinner"/>Loading fields…
+              </div>
+            </t>
+            <t t-elif="!state.selectedModel">
+              <div class="form-control text-muted" style="background:#f8f9fa; color:#aaa">
+                Select a model first
+              </div>
+            </t>
+            <t t-else="">
+              <select class="form-select" t-on-change="(e) => state.uniqueField = e.target.value">
+                <option value="">— Select unique field —</option>
+                <t t-foreach="state.modelFields" t-as="f" t-key="f.name">
+                  <option t-att-value="f.name"
+                          t-att-selected="state.uniqueField === f.name">
+                    <t t-esc="f.label"/> (<t t-esc="f.name"/>)
+                    <t t-if="f.required"> *</t>
+                  </option>
+                </t>
+              </select>
+            </t>
+            <small class="text-muted">Field used to detect existing records (create vs update)</small>
+          </div>
+
+          <!-- Batch size -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Batch Size</label>
+            <input type="number" class="form-control" min="100" max="100000"
+                   t-att-value="state.batchSize"
+                   t-on-change="(e) => state.batchSize = (~~e.target.value) || 10000"/>
+            <small class="text-muted">Rows per batch (default 10 000)</small>
+          </div>
+
+        </div>
+
+        <!-- ── Header + Lines mode ── -->
+        <div class="lines-config-box mt-3">
+          <div class="lines-toggle-row">
+            <label class="form-check-label fw-semibold">
+              <input type="checkbox" class="form-check-input me-2"
+                     t-att-checked="state.hasLines"
+                     t-on-change="(e) => state.hasLines = e.target.checked"/>
+              Has Line Items &#160;<small class="text-muted">(one parent record + multiple child rows per group)</small>
+            </label>
+          </div>
+          <t t-if="state.hasLines">
+            <div class="row g-3 mt-1">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Line / Child Model</label>
+                <div class="model-search-wrap">
+                  <input type="text" class="form-control" autocomplete="off"
+                         placeholder="Search line model…"
+                         t-att-value="state.lineModelSearchQuery"
+                         t-on-input="onLineModelSearch"
+                         t-on-focus="() => state.lineModelDropdownOpen = true"
+                         t-on-blur="onLineModelSearchBlur"/>
+                  <t t-if="state.lineModel">
+                    <span class="model-selected-clear"
+                          t-on-mousedown.prevent="() => { state.lineModel = ''; state.lineModelName = ''; state.lineModelSearchQuery = ''; state.lineModelFields = []; state.lineLinkField = ''; }"
+                          title="Clear selection">✕</span>
+                  </t>
+                  <div t-if="state.lineModelDropdownOpen and filteredLineModels.length"
+                       class="model-search-dropdown">
+                    <t t-foreach="filteredLineModels" t-as="m" t-key="m.model">
+                      <div t-attf-class="model-search-item #{state.lineModel === m.model ? 'selected' : ''}"
+                           t-on-mousedown.prevent="() => selectLineModelItem(m)">
+                        <span class="model-item-name"><t t-esc="m.name"/></span>
+                        <span class="model-item-tech">(<t t-esc="m.model"/>)</span>
+                      </div>
+                    </t>
+                  </div>
+                </div>
+                <small class="text-muted">e.g. purchase.order.line</small>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Link Field on Line</label>
+                <select class="form-select" t-on-change="(e) => state.lineLinkField = e.target.value">
+                  <option value="">— Select —</option>
+                  <t t-foreach="state.lineModelFields" t-as="f" t-key="f.name">
+                    <option t-att-value="f.name" t-att-selected="state.lineLinkField === f.name">
+                      <t t-esc="f.label"/> (<t t-esc="f.name"/>)
+                    </option>
+                  </t>
+                </select>
+                <small class="text-muted">Field linking line to parent (e.g. order_id)</small>
+              </div>
+              <div class="col-md-3" t-if="!state.targetPoId">
+                <label class="form-label fw-semibold">Group Rows By</label>
+                <select class="form-select" t-on-change="(e) => state.groupByField = e.target.value">
+                  <option value="">— Same as Unique Key —</option>
+                  <t t-foreach="state.modelFields" t-as="f" t-key="f.name">
+                    <option t-att-value="f.name" t-att-selected="state.groupByField === f.name">
+                      <t t-esc="f.label"/> (<t t-esc="f.name"/>)
+                    </option>
+                  </t>
+                </select>
+                <small class="text-muted">Column that identifies the same parent (e.g. name)</small>
+              </div>
+            </div>
+
+            <!-- ── Add all lines to an existing Purchase Order ── -->
+            <div class="po-target-box mt-3">
+              <label class="form-label fw-semibold">
+                Add All Lines to an Existing Purchase Order
+                <small class="text-muted fw-normal"> (optional — leave blank to auto-group by vendor)</small>
+              </label>
+
+              <!-- Selected PO badge -->
+              <t t-if="state.targetPoId">
+                <div class="po-target-selected">
+                  <span class="po-target-badge">
+                    <strong><t t-esc="state.targetPoName"/></strong>
+                    <span class="text-muted ms-1">— <t t-esc="state.targetPoVendor"/></span>
+                  </span>
+                  <button class="btn btn-sm btn-outline-danger ms-2" t-on-click="clearTargetPo">✕ Clear</button>
+                </div>
+                <small class="text-success">All imported rows will be added as lines to this PO.</small>
+              </t>
+
+              <!-- Search input -->
+              <t t-if="!state.targetPoId">
+                <div class="input-group" style="max-width:480px">
+                  <input type="text" class="form-control" placeholder="Search by PO number or vendor…"
+                         t-att-value="state.poSearchQuery"
+                         t-on-input="(e) => state.poSearchQuery = e.target.value"
+                         t-on-keydown="(e) => e.key === 'Enter' &amp;&amp; searchPo()"/>
+                  <button class="btn btn-outline-secondary" t-on-click="searchPo"
+                          t-att-disabled="state.poSearchLoading">
+                    <span t-if="state.poSearchLoading" class="po-spinner"/>
+                    <t t-else="">Search</t>
+                  </button>
+                </div>
+                <t t-if="state.poSearchResults.length">
+                  <div class="po-search-results">
+                    <t t-foreach="state.poSearchResults" t-as="po" t-key="po.id">
+                      <div class="po-search-row" t-on-click="() => selectPo(po)">
+                        <strong><t t-esc="po.name"/></strong>
+                        <span class="text-muted ms-2"><t t-esc="po.vendor"/></span>
+                        <span t-attf-class="badge ms-2 bg-#{po.state === 'purchase' ? 'success' : 'warning'}">
+                          <t t-esc="po.state"/>
+                        </span>
+                      </div>
+                    </t>
+                  </div>
+                </t>
+                <t t-elif="state.poSearchQuery and !state.poSearchLoading and state.poSearchResults.length === 0">
+                  <small class="text-muted">No open POs found. Try a different search.</small>
+                </t>
+              </t>
+            </div>
+          </t>
+        </div>
+
+        <!-- ── Auto-create toggle ── -->
+        <div class="lines-toggle-row mt-2">
+          <label class="form-check-label">
+            <input type="checkbox" class="form-check-input me-2"
+                   t-att-checked="state.autoCreateM2o"
+                   t-on-change="(e) => state.autoCreateM2o = e.target.checked"/>
+            Auto-Create Missing Records &#160;<small class="text-muted">(create vendor / product if not found)</small>
+          </label>
+        </div>
+
+        <!-- ── Auto-confirm & receive toggle ── -->
+        <div class="lines-toggle-row mt-2">
+          <label class="form-check-label">
+            <input type="checkbox" class="form-check-input me-2"
+                   t-att-checked="state.autoConfirmReceive"
+                   t-on-change="(e) => state.autoConfirmReceive = e.target.checked"/>
+            Auto-Confirm &amp; Receive &#160;<small class="text-muted">(confirm order → receive products → validate after import)</small>
+          </label>
+        </div>
+
+        <!-- ── Auto-create & post bill toggle ── -->
+        <div class="lines-toggle-row mt-2">
+          <label class="form-check-label">
+            <input type="checkbox" class="form-check-input me-2"
+                   t-att-checked="state.autoCreateBill"
+                   t-on-change="(e) => state.autoCreateBill = e.target.checked"/>
+            Auto-Create &amp; Post Bill &#160;<small class="text-muted">(create vendor bill → set Opening Balance account → approve after import)</small>
+          </label>
+        </div>
+      </div>
+      <div class="po-import-footer">
+        <button class="btn btn-primary" t-on-click="goToMapping"
+                t-att-disabled="!state.fileName || !state.selectedModel || !state.uniqueField || state.loading">
+          <span t-if="state.loading" class="po-spinner"/>
+          Preview Headers →
+        </button>
+        <t t-if="state.fileName and !state.selectedModel">
+          <small class="text-warning ms-2">⚠ Please select a Target Model</small>
+        </t>
+        <t t-elif="state.fileName and state.selectedModel and !state.uniqueField">
+          <small class="text-warning ms-2">⚠ Please select a Unique Key Field</small>
+        </t>
+      </div>
+    </t>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         STEP 2: Field Mapping
+    ═══════════════════════════════════════════════════════════ -->
+    <t t-if="state.step === 'mapping'">
+      <div class="po-import-card">
+        <h2>Step 2 – Map Columns to Odoo Fields</h2>
+        <div class="mapping-model-badge">
+          Model: <strong><t t-esc="state.selectedModelName"/></strong>
+          <span class="mapping-model-tech">(<t t-esc="state.selectedModel"/>)</span>
+          — <t t-esc="state.modelFields.length"/> fields available
+        </div>
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <p class="text-muted small mb-0">
+            For each Excel column, choose the corresponding Odoo field.
+            Leave as <em>— Skip —</em> to ignore.
+            Fields marked <strong>*</strong> are required by Odoo.
+          </p>
+          <button class="btn btn-sm btn-outline-secondary ms-3" t-on-click="reAutoMap"
+                  title="Re-run auto-detection for all unmapped columns">
+            ⟳ Auto-Map
+          </button>
+        </div>
+        <div class="mapping-table-wrapper">
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th style="width:38%">Excel Column</th>
+              <th style="width:4%" class="col-arrow"/>
+              <th>Odoo Field — <t t-esc="state.selectedModelName"/></th>
+            </tr>
+          </thead>
+          <tbody>
+            <t t-foreach="state.headers" t-as="col" t-key="col_index">
+              <tr t-attf-class="#{state.mapping[col] ? 'mapped-row' : ''}">
+                <td><strong><t t-esc="col"/></strong></td>
+                <td class="col-arrow">
+                  <t t-if="state.mapping[col]">✓</t>
+                  <t t-else="">→</t>
+                </td>
+                <td>
+                  <select t-on-change="(e) => this.setMapping(col, e.target.value)"
+                          t-attf-class="field-select #{state.mapping[col] ? 'is-mapped' : ''}">
+                    <option value="">— Skip —</option>
+                    <t t-if="state.hasLines">
+                      <!-- Header + Lines mode: two optgroups -->
+                      <optgroup t-att-label="'Header: ' + state.selectedModelName">
+                        <t t-foreach="state.modelFields" t-as="f" t-key="'h_' + f.name">
+                          <option t-att-value="'h:' + f.name"
+                                  t-att-selected="state.mapping[col] === 'h:' + f.name">
+                            <t t-esc="f.label"/>&#160;(<t t-esc="f.name"/>)<t t-if="f.required">&#160;*</t>
+                          </option>
+                        </t>
+                      </optgroup>
+                      <optgroup t-att-label="'Line: ' + state.lineModelName">
+                        <t t-foreach="state.lineModelFields" t-as="f" t-key="'l_' + f.name">
+                          <option t-att-value="'l:' + f.name"
+                                  t-att-selected="state.mapping[col] === 'l:' + f.name">
+                            <t t-esc="f.label"/>&#160;(<t t-esc="f.name"/>)<t t-if="f.required">&#160;*</t>
+                          </option>
+                        </t>
+                      </optgroup>
+                    </t>
+                    <t t-else="">
+                      <!-- Single model mode -->
+                      <t t-foreach="state.modelFields" t-as="f" t-key="f.name">
+                        <option t-att-value="f.name"
+                                t-att-selected="state.mapping[col] === f.name">
+                          <t t-esc="f.label"/>&#160;(<t t-esc="f.name"/>)<t t-if="f.required">&#160;*</t>
+                        </option>
+                      </t>
+                    </t>
+                  </select>
+                </td>
+              </tr>
+            </t>
+          </tbody>
+        </table>
+        </div><!-- /mapping-table-wrapper -->
+      </div><!-- /po-import-card -->
+      <div class="po-import-footer">
+        <button class="btn btn-secondary" t-on-click="() => state.step = 'upload'">← Back</button>
+        <button class="btn btn-primary" t-on-click="goToPreview"
+                t-att-disabled="state.loading">
+          <span t-if="state.loading" class="po-spinner"/>
+          Preview Data →
+        </button>
+      </div>
+    </t>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         STEP 3: Preview
+    ═══════════════════════════════════════════════════════════ -->
+    <t t-if="state.step === 'preview'">
+      <div class="po-import-card">
+        <h2>Step 3 – Preview (First 20 Rows)</h2>
+        <t t-if="state.previewRows.length">
+          <div class="preview-wrapper">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <t t-foreach="previewColumns()" t-as="col" t-key="col_index">
+                    <th><t t-esc="col"/></th>
+                  </t>
+                </tr>
+              </thead>
+              <tbody>
+                <t t-foreach="state.previewRows" t-as="row" t-key="row_index">
+                  <tr>
+                    <t t-foreach="previewColumns()" t-as="col" t-key="col_index">
+                      <td><t t-esc="row[col] != null ? ('' + row[col]) : ''"/></td>
+                    </t>
+                  </tr>
+                </t>
+              </tbody>
+            </table>
+          </div>
+        </t>
+        <t t-else="">
+          <div class="po-alert po-alert-info">No data rows found in file.</div>
+        </t>
+      </div>
+      <div class="po-import-footer">
+        <button class="btn btn-secondary" t-on-click="() => state.step = 'mapping'">← Back</button>
+        <button class="btn btn-success" t-on-click="startImport"
+                t-att-disabled="state.loading">
+          <span t-if="state.loading" class="po-spinner"/>
+          Start Import
+        </button>
+      </div>
+    </t>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         STEP 4: Importing (batch-by-batch with user confirm)
+    ═══════════════════════════════════════════════════════════ -->
+    <t t-if="state.step === 'importing'">
+      <div class="po-import-card">
+        <h2>Step 4 – Import Progress</h2>
+
+        <!-- Batch info bar -->
+        <div class="batch-info-bar">
+          <span>Batch <strong><t t-esc="state.currentBatch"/> / <t t-esc="state.totalBatches"/></strong></span>
+          <span>Offset <strong><t t-esc="state.currentOffset"/></strong></span>
+          <span>Processed <strong><t t-esc="state.processedRows"/> / <t t-esc="state.totalRows"/></strong></span>
+          <span>Remaining <strong><t t-esc="state.totalRows - state.processedRows > 0 ? state.totalRows - state.processedRows : 0"/></strong></span>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" t-attf-style="width:#{progressPct()}%">
+            <t t-if="progressPct() > 8"><t t-esc="progressPct()"/>%</t>
+          </div>
+        </div>
+        <div class="text-end small text-muted mb-3"><t t-esc="progressPct()"/>% complete</div>
+
+        <!-- Loading indicator while batch runs -->
+        <t t-if="state.batchRunning">
+          <div class="po-alert po-alert-info">
+            <span class="po-spinner"/>
+            Processing batch <t t-esc="state.currentBatch"/>… please wait.
+          </div>
+        </t>
+
+        <!-- Batch complete – show stats + action buttons -->
+        <t t-if="state.batchComplete and !state.allDone">
+          <div class="po-alert po-alert-success">
+            ✓ Batch <strong><t t-esc="state.currentBatch"/></strong> complete.
+            Current progress: <strong><t t-esc="state.processedRows"/> / <t t-esc="state.totalRows"/></strong> rows.
+          </div>
+
+          <h4 class="mt-3" style="font-size:14px; font-weight:600;">This Batch</h4>
+          <div class="stats-grid">
+            <div class="stat-card created">
+              <div class="stat-val"><t t-esc="state.batchStats.created"/></div>
+              <div class="stat-lbl">Created</div>
+            </div>
+            <div class="stat-card updated">
+              <div class="stat-val"><t t-esc="state.batchStats.updated"/></div>
+              <div class="stat-lbl">Updated</div>
+            </div>
+            <div class="stat-card dupes">
+              <div class="stat-val"><t t-esc="state.batchStats.duplicates"/></div>
+              <div class="stat-lbl">Duplicates</div>
+            </div>
+            <div class="stat-card skipped">
+              <div class="stat-val"><t t-esc="state.batchStats.skipped"/></div>
+              <div class="stat-lbl">Skipped</div>
+            </div>
+            <div class="stat-card errors">
+              <div class="stat-val"><t t-esc="state.batchStats.errors"/></div>
+              <div class="stat-lbl">Errors</div>
+            </div>
+          </div>
+
+          <h4 class="mt-3" style="font-size:14px; font-weight:600;">Cumulative Totals</h4>
+          <div class="stats-grid">
+            <div class="stat-card created">
+              <div class="stat-val"><t t-esc="state.totalStats.created"/></div>
+              <div class="stat-lbl">Created</div>
+            </div>
+            <div class="stat-card updated">
+              <div class="stat-val"><t t-esc="state.totalStats.updated"/></div>
+              <div class="stat-lbl">Updated</div>
+            </div>
+            <div class="stat-card dupes">
+              <div class="stat-val"><t t-esc="state.totalStats.duplicates"/></div>
+              <div class="stat-lbl">Duplicates</div>
+            </div>
+            <div class="stat-card skipped">
+              <div class="stat-val"><t t-esc="state.totalStats.skipped"/></div>
+              <div class="stat-lbl">Skipped</div>
+            </div>
+            <div class="stat-card errors">
+              <div class="stat-val"><t t-esc="state.totalStats.errors"/></div>
+              <div class="stat-lbl">Errors</div>
+            </div>
+          </div>
+
+          <!-- Inline reason summaries -->
+          <t t-if="state.skippedReasons.length">
+            <div class="reason-summary skipped-reasons">
+              <strong>Skipped – Top Reasons:</strong>
+              <ul class="reason-list">
+                <t t-foreach="state.skippedReasons" t-as="r" t-key="r.reason">
+                  <li><span class="reason-count"><t t-esc="r.count"/></span> <t t-esc="r.reason"/></li>
+                </t>
+              </ul>
+            </div>
+          </t>
+          <t t-if="state.errorReasons.length">
+            <div class="reason-summary error-reasons">
+              <strong>Errors – Top Reasons:</strong>
+              <ul class="reason-list">
+                <t t-foreach="state.errorReasons" t-as="r" t-key="r.reason">
+                  <li><span class="reason-count"><t t-esc="r.count"/></span> <t t-esc="r.reason"/></li>
+                </t>
+              </ul>
+            </div>
+          </t>
+          <div class="download-btns mt-2">
+            <a t-attf-href="/purchase/import/download/#{state.jobId}/updated"
+               class="dl-updated" target="_blank">⬇ Download Updated</a>
+            <a t-attf-href="/purchase/import/download/#{state.jobId}/duplicate"
+               class="dl-duplicate" target="_blank">⬇ Download Duplicates</a>
+            <a t-attf-href="/purchase/import/download/#{state.jobId}/skipped"
+               class="dl-skipped" target="_blank">⬇ Download Skipped</a>
+            <a t-attf-href="/purchase/import/download/#{state.jobId}/error"
+               class="dl-error" target="_blank">⬇ Download Errors</a>
+          </div>
+        </t>
+      </div>
+
+      <t t-if="!state.allDone">
+        <div class="po-import-footer">
+          <button class="btn btn-danger" t-on-click="cancelImport"
+                  t-att-disabled="state.batchRunning">Cancel Import</button>
+          <button class="btn btn-warning" t-on-click="backToMapping"
+                  t-att-disabled="state.batchRunning"
+                  title="Stop and go back to re-configure the field mapping">
+            ↩ Back to Mapping
+          </button>
+          <button class="btn btn-primary" t-on-click="continueImport"
+                  t-att-disabled="state.batchRunning or !state.batchComplete"
+                  invisible="state.allDone">
+            Continue →
+          </button>
+        </div>
+      </t>
+    </t>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         STEP 5: Done
+    ═══════════════════════════════════════════════════════════ -->
+    <t t-if="state.step === 'done'">
+      <div class="po-done-banner">
+        <h2>🎉 Import Completed!</h2>
+        <p>All <strong><t t-esc="state.totalRows"/></strong> rows have been processed.</p>
+      </div>
+
+      <div class="po-import-card">
+        <h2>Final Statistics</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val" style="color:#212529"><t t-esc="state.totalRows"/></div>
+            <div class="stat-lbl">Total Rows</div>
+          </div>
+          <div class="stat-card created">
+            <div class="stat-val"><t t-esc="state.totalStats.created"/></div>
+            <div class="stat-lbl">POs Created</div>
+          </div>
+          <div class="stat-card updated">
+            <div class="stat-val"><t t-esc="state.totalStats.updated"/></div>
+            <div class="stat-lbl">POs Updated</div>
+          </div>
+          <div class="stat-card created" t-if="state.totalStats.lines_created">
+            <div class="stat-val"><t t-esc="state.totalStats.lines_created"/></div>
+            <div class="stat-lbl">Lines Created</div>
+          </div>
+          <div class="stat-card dupes">
+            <div class="stat-val"><t t-esc="state.totalStats.duplicates"/></div>
+            <div class="stat-lbl">Duplicates</div>
+          </div>
+          <div class="stat-card skipped">
+            <div class="stat-val"><t t-esc="state.totalStats.skipped"/></div>
+            <div class="stat-lbl">Skipped</div>
+          </div>
+          <div class="stat-card errors">
+            <div class="stat-val"><t t-esc="state.totalStats.errors"/></div>
+            <div class="stat-lbl">Errors</div>
+          </div>
+        </div>
+
+        <t t-if="state.skippedReasons.length or state.errorReasons.length">
+          <div class="row g-2 mt-2">
+            <t t-if="state.skippedReasons.length">
+              <div class="col-md-6">
+                <div class="reason-summary skipped-reasons">
+                  <strong>Skipped – Top Reasons:</strong>
+                  <ul class="reason-list">
+                    <t t-foreach="state.skippedReasons" t-as="r" t-key="r.reason">
+                      <li><span class="reason-count"><t t-esc="r.count"/></span> <t t-esc="r.reason"/></li>
+                    </t>
+                  </ul>
+                </div>
+              </div>
+            </t>
+            <t t-if="state.errorReasons.length">
+              <div class="col-md-6">
+                <div class="reason-summary error-reasons">
+                  <strong>Errors – Top Reasons:</strong>
+                  <ul class="reason-list">
+                    <t t-foreach="state.errorReasons" t-as="r" t-key="r.reason">
+                      <li><span class="reason-count"><t t-esc="r.count"/></span> <t t-esc="r.reason"/></li>
+                    </t>
+                  </ul>
+                </div>
+              </div>
+            </t>
+          </div>
+        </t>
+        <div class="download-btns mt-3">
+          <a t-attf-href="/purchase/import/download/#{state.jobId}/updated"
+             class="dl-updated" target="_blank">⬇ Download Updated</a>
+          <a t-attf-href="/purchase/import/download/#{state.jobId}/duplicate"
+             class="dl-duplicate" target="_blank">⬇ Download Duplicates</a>
+          <a t-attf-href="/purchase/import/download/#{state.jobId}/skipped"
+             class="dl-skipped" target="_blank">⬇ Download Skipped</a>
+          <a t-attf-href="/purchase/import/download/#{state.jobId}/error"
+             class="dl-error" target="_blank">⬇ Download Errors</a>
+        </div>
+      </div>
+
+      <!-- PO Summary Panel -->
+      <div class="po-import-card" style="margin-top:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <h2 style="margin:0;padding:0;border:none;font-size:15px;">PO &amp; Bill Summary</h2>
+          <button class="btn btn-outline-primary btn-sm" t-on-click="loadPoSummary"
+                  t-att-disabled="state.summaryLoading">
+            <t t-if="state.summaryLoading">⏳ Loading…</t>
+            <t t-else="">🔄 Refresh Summary</t>
+          </button>
+        </div>
+        <t t-if="state.summaryVisible and !state.summaryLoading and state.summaryData">
+          <div class="stats-grid" style="margin-top:16px;">
+            <div class="stat-card created" t-on-click="openVendorModal"
+                 style="cursor:pointer" title="Click to see vendor breakdown">
+              <div class="stat-val"><t t-esc="state.summaryData.po_count"/></div>
+              <div class="stat-lbl">Vendors / POs</div>
+            </div>
+            <div class="stat-card dupes" t-on-click="approvePendingBills"
+                 style="cursor:pointer" title="Click to approve all pending bills">
+              <div class="stat-val">
+                <t t-if="state.approveLoading"><span class="po-spinner"/></t>
+                <t t-else=""><t t-esc="state.summaryData.pending_approve"/></t>
+              </div>
+              <div class="stat-lbl">Bills Pending Approve</div>
+            </div>
+            <div class="stat-card errors" t-on-click="confirmPendingBills"
+                 style="cursor:pointer" title="Click to confirm all approved bills">
+              <div class="stat-val">
+                <t t-if="state.confirmLoading"><span class="po-spinner"/></t>
+                <t t-else=""><t t-esc="state.summaryData.pending_confirm"/></t>
+              </div>
+              <div class="stat-lbl">Bills Pending Confirm</div>
+            </div>
+          </div>
+        </t>
+        <t t-elif="!state.summaryVisible">
+          <p style="color:#888;font-size:13px;margin:12px 0 0;">
+            Click <strong>Refresh Summary</strong> to see vendor and bill counts.
+          </p>
+        </t>
+      </div>
+
+      <!-- Transfer Result Panel -->
+      <t t-if="state.selectedModel === 'product.label' and state.transferResult">
+        <div class="po-import-card" style="margin-top:8px;">
+          <h2 style="font-size:15px;margin:0 0 12px;">Transfer Results</h2>
+          <div class="stats-grid" style="margin-bottom:12px;">
+            <div class="stat-card created">
+              <div class="stat-val"><t t-esc="state.transferResult.success"/></div>
+              <div class="stat-lbl">Transferred</div>
+            </div>
+            <div class="stat-card errors">
+              <div class="stat-val"><t t-esc="state.transferResult.failed"/></div>
+              <div class="stat-lbl">Failed</div>
+            </div>
+          </div>
+          <t t-if="state.transferResult.errors and state.transferResult.errors.length">
+            <div class="reason-summary error-reasons" style="margin-bottom:8px;">
+              <strong>Failure Reasons:</strong>
+              <ul class="reason-list">
+                <t t-foreach="state.transferResult.errors" t-as="e" t-key="e">
+                  <li><t t-esc="e"/></li>
+                </t>
+              </ul>
+            </div>
+          </t>
+          <t t-if="state.transferResult.failed_labels and state.transferResult.failed_labels.length">
+            <div class="reason-summary" style="background:#fff3cd;border-color:#ffc107;">
+              <strong>Failed Labels:</strong>
+              <p style="margin:4px 0 0;font-size:12px;word-break:break-all;">
+                <t t-esc="state.transferResult.failed_labels.join(', ')"/>
+                <t t-if="state.transferResult.failed > state.transferResult.failed_labels.length">
+                  … and <t t-esc="state.transferResult.failed - state.transferResult.failed_labels.length"/> more
+                </t>
+              </p>
+            </div>
+          </t>
+        </div>
+      </t>
+
+      <div class="po-import-footer">
+        <button class="btn btn-secondary" t-on-click="startNewImport">← New Import</button>
+        <button class="btn btn-warning" t-on-click="backToMapping"
+                title="Keep the same file and model, but re-configure the field mapping">
+          ↩ Back to Mapping
+        </button>
+        <t t-if="state.selectedModel === 'product.label'">
+          <button class="btn btn-success" t-on-click="triggerLabelTransfers"
+                  t-att-disabled="state.transferLoading">
+            <t t-if="state.transferLoading">
+              <span class="spinner-border spinner-border-sm me-1"/>Transferring...
+            </t>
+            <t t-else="">
+              ⇄ Transfer Imported Labels
+            </t>
+          </button>
+        </t>
+        <button class="btn btn-primary" t-on-click="viewHistory">View Import History</button>
+      </div>
+    </t>
+
+  </div>
+
+  <!-- ── Vendor Breakdown Modal ── -->
+  <t t-if="state.vendorModalOpen">
+    <div class="po-vendor-overlay" t-on-click="closeVendorModal">
+      <div class="po-vendor-modal" t-on-click.stop="">
+        <div class="po-vendor-modal-header">
+          <span class="po-vendor-modal-title">Vendor / PO Breakdown — This Import</span>
+          <button class="po-vendor-modal-close" t-on-click="closeVendorModal">✕</button>
+        </div>
+        <div class="po-vendor-modal-body">
+          <t t-if="state.vendorLoading">
+            <div class="text-center py-4">
+              <span class="po-spinner"/> Loading…
+            </div>
+          </t>
+          <t t-elif="state.vendorBreakdown.length">
+            <table class="po-vendor-table">
+              <thead>
+                <tr>
+                  <th>Vendor</th>
+                  <th>PO Number</th>
+                  <th>Lines Imported</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <t t-foreach="state.vendorBreakdown" t-as="v" t-key="v.po_name">
+                  <tr>
+                    <td><t t-esc="v.vendor"/></td>
+                    <td><strong><t t-esc="v.po_name"/></strong></td>
+                    <td class="text-center"><strong><t t-esc="v.line_count"/></strong></td>
+                    <td>
+                      <span t-attf-class="po-state-badge po-state-#{v.state}">
+                        <t t-esc="v.state"/>
+                      </span>
+                    </td>
+                  </tr>
+                </t>
+              </tbody>
+            </table>
+          </t>
+          <t t-else="">
+            <p class="text-muted text-center py-3">No PO data found for this import.</p>
+          </t>
+        </div>
+      </div>
+    </div>
+  </t>
+
+</t>
+
+</templates>

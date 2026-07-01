@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ── Job List ── -->
+    <record id="view_po_import_job_list" model="ir.ui.view">
+        <field name="name">po.import.job.list</field>
+        <field name="model">po.import.job</field>
+        <field name="arch" type="xml">
+            <tree string="Import Jobs" decoration-success="state=='done'"
+                  decoration-warning="state=='paused'" decoration-danger="state=='cancelled'">
+                <field name="name"/>
+                <field name="file_name"/>
+                <field name="total_rows"/>
+                <field name="processed_rows"/>
+                <field name="created_count"/>
+                <field name="updated_count"/>
+                <field name="lines_created_count"/>
+                <field name="error_count"/>
+                <field name="state" widget="badge"
+                       decoration-success="state=='done'"
+                       decoration-warning="state in ('paused','draft')"
+                       decoration-danger="state=='cancelled'"
+                       decoration-info="state=='processing'"/>
+                <field name="create_date" string="Started"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ── Job Form ── -->
+    <record id="view_po_import_job_form" model="ir.ui.view">
+        <field name="name">po.import.job.form</field>
+        <field name="model">po.import.job</field>
+        <field name="arch" type="xml">
+            <form string="Import Job">
+                <header>
+                    <button name="action_cancel" string="Cancel Import" type="object"
+                            class="btn-danger"
+                            invisible="state in ('done','cancelled')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,processing,paused,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group string="File">
+                            <field name="file_name"/>
+                            <field name="file_type"/>
+                            <field name="match_field"/>
+                            <field name="batch_size"/>
+                        </group>
+                        <group string="Progress">
+                            <field name="total_rows"/>
+                            <field name="processed_rows"/>
+                            <field name="progress_pct" widget="percentage"/>
+                            <field name="current_batch_number" string="Current Batch"/>
+                            <field name="total_batches"/>
+                        </group>
+                    </group>
+                    <group string="Statistics">
+                        <group>
+                            <field name="created_count" string="POs Created"/>
+                            <field name="updated_count" string="POs Updated"/>
+                            <field name="lines_created_count" string="Lines Created"/>
+                        </group>
+                        <group>
+                            <field name="duplicate_count" string="Duplicates"/>
+                            <field name="skipped_count" string="Skipped"/>
+                            <field name="error_count" string="Errors"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Batches" name="batches">
+                            <field name="batch_ids">
+                                <tree>
+                                    <field name="batch_number" string="Batch #"/>
+                                    <field name="start_row" string="From Row"/>
+                                    <field name="end_row" string="To Row"/>
+                                    <field name="created_count" string="POs Created"/>
+                                    <field name="updated_count" string="POs Updated"/>
+                                    <field name="lines_created_count" string="Lines Created"/>
+                                    <field name="duplicate_count" string="Duplicates"/>
+                                    <field name="skipped_count" string="Skipped"/>
+                                    <field name="error_count" string="Errors"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── Batch Form ── -->
+    <record id="view_po_import_batch_form" model="ir.ui.view">
+        <field name="name">po.import.batch.form</field>
+        <field name="model">po.import.batch</field>
+        <field name="arch" type="xml">
+            <form string="Import Batch">
+                <sheet>
+                    <group>
+                        <field name="job_id"/>
+                        <field name="batch_number"/>
+                        <field name="start_row"/>
+                        <field name="end_row"/>
+                        <field name="created_count"/>
+                        <field name="updated_count"/>
+                        <field name="lines_created_count"/>
+                        <field name="duplicate_count"/>
+                        <field name="skipped_count"/>
+                        <field name="error_count"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── Action: client wizard ── -->
+    <record id="action_po_bulk_import_wizard" model="ir.actions.client">
+        <field name="name">Purchase Order Bulk Import</field>
+        <field name="tag">po_bulk_import_wizard</field>
+        <field name="target">fullscreen</field>
+    </record>
+
+    <!-- ── Action: job list ── -->
+    <record id="action_po_import_job_list" model="ir.actions.act_window">
+        <field name="name">Import Jobs</field>
+        <field name="res_model">po.import.job</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+</odoo>

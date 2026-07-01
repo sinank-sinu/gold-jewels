@@ -172,6 +172,12 @@ class SalesmanCart(models.Model):
                     active_model='stock.picking'
                 ).create({})
                 
+                original_move = picking.move_ids.filtered(lambda m: m.product_id.id == line.product_id.id)
+                if original_move:
+                    return_wizard_obj.location_id = original_move[0].location_id.id
+                else:
+                    return_wizard_obj.location_id = picking.location_id.id
+                
                 # 2. FIXED FOR ODOO 17: Explicitly locate the specific move line to return inside the wizard
                 # matching it precisely to avoid empty quantity validation exceptions
                 wizard_move_line = return_wizard_obj.product_return_moves.filtered(
@@ -263,7 +269,16 @@ class SalesmanCart(models.Model):
         # 5. Create the Sales Order
         sale_order = sale_order_model.create(so_vals)
 
-        for line in self.cart_line_ids:
+        # 6. Filter locked lines
+        locked_lines = self.cart_line_ids.filtered(lambda l: l.is_locked)
+        if not locked_lines:
+            raise UserError(_("Please lock at least one item before sending to the billing counter."))
+            
+        lines_to_checkout = locked_lines
+        lines_to_trash = self.cart_line_ids - locked_lines
+
+
+        for line in lines_to_checkout:
             # Locate the exact label so we can link it
             sale_label_id = False
             label_rec = False
@@ -282,6 +297,7 @@ class SalesmanCart(models.Model):
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
                 'label_id': sale_label_id,
+                'price_unit': 0.0,
             }
 
             if label_rec:
@@ -313,6 +329,9 @@ class SalesmanCart(models.Model):
 
             self.env['sale.order.line'].with_company(target_company).create(sol_vals)
 
+        for trash_line in lines_to_trash:
+            self.action_remove_line(trash_line.id)
+
         self.write({'state': 'checked_out'})
         return sale_order.id
    
@@ -334,6 +353,12 @@ class SalesmanCart(models.Model):
                 if line.picking_id and line.picking_id.state == 'done':
                     # Create a reverse picking return
                     return_wizard = self.env['stock.return.picking'].with_context(active_id=line.picking_id.id).create({})
+                    
+                    original_move = line.picking_id.move_ids.filtered(lambda m: m.product_id.id == line.product_id.id)
+                    if original_move:
+                        return_wizard.location_id = original_move[0].location_id.id
+                    else:
+                        return_wizard.location_id = line.picking_id.location_id.id
                     return_wizard._create_returns()
             cart.write({'state': 'cancelled'})
 
