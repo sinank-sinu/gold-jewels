@@ -108,7 +108,7 @@
                                     <field name="fine_verified" sum="Total"/>
 
                                     <field name="transferred_weight" sum="Total" readonly="1" column_invisible="parent.state not in ['done', 'ho_verified'] or not parent.is_smith_transfer"/>
-
+                                    <field name="diamond_amount" sum="Total"/>
                                     <field name="rate"/>
                                     <field name="amount" readonly="1"/>
                                 </tree>
