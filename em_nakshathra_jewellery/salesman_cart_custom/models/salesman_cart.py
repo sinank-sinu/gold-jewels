@@ -297,13 +297,13 @@ class SalesmanCart(models.Model):
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
                 'label_id': sale_label_id,
-                'price_unit': 0.0,
             }
 
             if label_rec:
                 sol_vals.update({
                     'purity_id': label_rec.purity_id.id,
                     'mc_percent': label_rec.sale_making_charge_value,
+                    'mc_percent_actual': label_rec.sale_making_charge_value,
                     'sale_making_charge_min': label_rec.sale_making_charge_min,
                     'product_uom_qty': label_rec.sale_gross_weight or line.qty,
                     'sale_stone_weight': label_rec.sale_stone_weight,
@@ -327,12 +327,15 @@ class SalesmanCart(models.Model):
                 if gold_rate_rec:
                     sol_vals['gold_rate'] = gold_rate_rec.rate_per_gram
 
-            self.env['sale.order.line'].with_company(target_company).create(sol_vals)
+            sol = self.env['sale.order.line'].with_company(target_company).create(sol_vals)
+            if sol.label_id:
+                sol._onchange_label_id()
 
         for trash_line in lines_to_trash:
             self.action_remove_line(trash_line.id)
 
         self.write({'state': 'checked_out'})
+        sale_order._compute_amounts()
         return sale_order.id
    
 

@@ -43,7 +43,7 @@
                                 groups="cr_material_purchase_requisitions.user_access"
                                 invisible="state not in ('new','waiting_department_approval','waiting_ir_approval')"/>
 
-                        <button name="action_create_picking_and_po" string="Create Picking/PO/WorkOrder" type="object"
+                        <button name="action_create_picking_and_po" string="Create PO/WorkOrder" type="object"
                                 class="oe_highlight"
                                 groups="cr_material_purchase_requisitions.user_access"
                                 invisible="state not in 'approved'"/>
