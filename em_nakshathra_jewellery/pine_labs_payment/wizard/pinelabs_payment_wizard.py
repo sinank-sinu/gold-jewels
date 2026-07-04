@@ -7,9 +7,12 @@ from dateutil.relativedelta import relativedelta  # Added for safe month arithme
 
 
 # Maps wizard payment_method_type to Pine Labs AllowedPaymentMode codes
+# Pine Labs AllowedPaymentMode reference:
+#   0=All modes, 1=Card, 2=Cash, 3=Points, 4=Wallets,
+#   6=Brand EMI, 7=Sodexo, 8=PhonePe, 10=UPI Sale
 PINE_LABS_MODE_MAP = {
     'card': '1',
-    'upi': '3',
+    'upi': '10',
 }
 
 

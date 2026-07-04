@@ -232,27 +232,46 @@ class SalesmanCart(models.Model):
         if not partner:
             raise UserError(_("Please assign a customer to this cart or ensure at least one contact exists."))
 
-        # 2. Dynamic Branch Detection
-        target_company = partner.company_id if partner.company_id else self.env.company
+        # 2. Branch Detection — always use the SALESMAN's branch for the SO.
+        # The customer may have a branch_id set on their record, but the billing
+        # counter belongs to the salesman's branch. The _check_partner_branch_id
+        # constraint is bypassed via context key skip_partner_branch_check.
+        salesman_branch = self.salesman_id.branch_id
+        branch = salesman_branch
 
-        # 3. Locate a warehouse that belongs strictly to the target company branch
-        warehouse = self.env['stock.warehouse'].search([('company_id', '=', target_company.id)], limit=1)
-        
+        if not branch:
+            branch = self.env['res.branch'].search([], limit=1)
+
+        if not branch:
+            raise UserError(_("No branch could be determined. Please configure a branch on the customer or your user profile."))
+
+        if not branch.branch_code:
+            raise UserError(_("The selected branch does not have a Branch Code configured. Please configure it in branch settings."))
+
+        # Derive the company from the resolved branch
+        target_company = branch.company_id if branch.company_id else self.env.company
+
+        # 3. Locate a warehouse matching the resolved branch + company
+        warehouse = self.env['stock.warehouse'].search(
+            [('branch_id', '=', branch.id), ('company_id', '=', target_company.id)],
+            limit=1
+        )
+        if not warehouse:
+            warehouse = self.env['stock.warehouse'].search(
+                [('company_id', '=', target_company.id)], limit=1
+            )
+
         salesman_tray_loc = self.salesman_id.salesman_location_id
         if not salesman_tray_loc:
             raise UserError(_("No Salesman Tray location configured for your user profile."))
 
         # 4. Fetch defaults matching target company context
-        sale_order_model = self.env['sale.order'].with_company(target_company)
-        default_vals = sale_order_model.default_get(['pricelist_id','team_id'])
-
-        branch = self.salesman_id.branch_id
-        if not branch:
-            # Fallback if the user profile somehow misses a branch, try the partner's branch or first available
-            branch = partner.branch_id if partner.branch_id else self.env['res.branch'].search([], limit=1)
-
-        if not branch.branch_code:
-            raise UserError(_("The selected branch does not have a Branch Code configured. Please configure it in branch settings."))
+        # Use skip_partner_branch_check=True so the branch constraint does NOT
+        # fire when the customer's branch_id differs from the salesman's branch.
+        sale_order_model = self.env['sale.order'].with_company(target_company).with_context(
+            skip_partner_branch_check=True
+        )
+        default_vals = sale_order_model.default_get(['pricelist_id', 'team_id'])
 
         so_vals = {
             'partner_id': partner.id,
@@ -297,6 +316,7 @@ class SalesmanCart(models.Model):
                 'product_uom_qty': line.qty,
                 'product_uom': line.product_id.uom_id.id,
                 'label_id': sale_label_id,
+                'price_unit': 0.0,  # Required field; _onchange_label_id will recompute the actual price
             }
 
             if label_rec:
@@ -328,6 +348,7 @@ class SalesmanCart(models.Model):
                     sol_vals['gold_rate'] = gold_rate_rec.rate_per_gram
 
             sol = self.env['sale.order.line'].with_company(target_company).create(sol_vals)
+            # Trigger onchange to compute the actual price from the label
             if sol.label_id:
                 sol._onchange_label_id()
 

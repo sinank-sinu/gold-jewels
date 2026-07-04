@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import requests
+from datetime import timezone
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -116,6 +117,41 @@ class PineLabsTransaction(models.Model):
         except ValueError:
             return {'error': _('Invalid response from Pine Labs server.')}
 
+    def _build_gst_breakdown(self, invoice):
+        """
+        Build the GstBrkUp string from invoice tax lines.
+        Format: 'CGST:08.45|SGST:08.45' or 'IGST:18.00'
+        Reads from account.move.line tax_ids grouped by CGST/SGST/IGST/CESS.
+        """
+        if not invoice:
+            return ''
+
+        gst_parts = {}
+        # Iterate tax group lines on the invoice
+        for line in invoice.line_ids.filtered(lambda l: l.tax_line_id):
+            tax = line.tax_line_id
+            tax_name_upper = (tax.name or '').upper()
+            amount_type = tax.amount_type  # 'percent', 'fixed', etc.
+            tax_rate = tax.amount if amount_type == 'percent' else 0.0
+
+            # Detect GST component type by name
+            if 'CGST' in tax_name_upper:
+                gst_parts['CGST'] = gst_parts.get('CGST', 0.0) + tax_rate
+            elif 'SGST' in tax_name_upper or 'UTGST' in tax_name_upper:
+                key = 'SGST'
+                gst_parts[key] = gst_parts.get(key, 0.0) + tax_rate
+            elif 'IGST' in tax_name_upper:
+                gst_parts['IGST'] = gst_parts.get('IGST', 0.0) + tax_rate
+            elif 'CESS' in tax_name_upper:
+                gst_parts['CESS'] = gst_parts.get('CESS', 0.0) + tax_rate
+
+        if not gst_parts:
+            return ''
+
+        return '|'.join(
+            '%s:%.2f' % (k, v) for k, v in gst_parts.items()
+        )
+
     def pinelabs_create_payment(self, amount, allowed_mode='1'):
         """
         Initiate a payment on the Pine Labs terminal using UploadBilledTransaction.
@@ -136,6 +172,34 @@ class PineLabsTransaction(models.Model):
 
         url = f"{config['base_url']}/UploadBilledTransaction"
 
+        # ── GST & Invoice fields ──────────────────────────────────────
+        company = self.env.company
+        gst_in = company.vat or ''
+
+        # Resolve linked invoice for GST breakdown, date, and number
+        invoice = self.invoice_id
+        invoice_number = ''
+        invoice_date_str = ''
+        gst_brkup = ''
+
+        if invoice:
+            invoice_number = (invoice.name or '').strip()
+            if invoice.invoice_date:
+                # Format as ISO 8601 with IST offset (+05:30) as expected by Pine Labs
+                inv_date = invoice.invoice_date
+                invoice_date_str = '%d-%02d-%02dT00:00:00+05:30' % (
+                    inv_date.year, inv_date.month, inv_date.day
+                )
+            gst_brkup = self._build_gst_breakdown(invoice)
+        elif self.sale_order_id:
+            invoice_number = self.sale_order_id.name or ''
+
+        # Current user login name
+        user_id = self.env.user.login or self.env.user.name or ''
+
+        # AutoCancel from terminal config (default 120 min for UPI)
+        auto_cancel = config.get('auto_cancel_minutes', 5)
+
         payload = {
             "TransactionNumber": self.name,
             "SequenceNumber": 1,
@@ -143,11 +207,21 @@ class PineLabsTransaction(models.Model):
             "Amount": int(round(amount * 100)),  # Pine Labs expects paise (rupees × 100)
             "ClientID": config['client_id'],
             "StoreID": config['store_id'],
-            "UserID": "",
+            "UserID": user_id,
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "AutoCancelDurationInMinutes": 5,
+            "AutoCancelDurationInMinutes": auto_cancel,
         }
+
+        # Append GST and Invoice fields only when available
+        if gst_in:
+            payload['GstIn'] = gst_in
+        if gst_brkup:
+            payload['GstBrkUp'] = gst_brkup
+        if invoice_number:
+            payload['invoicenumber'] = invoice_number
+        if invoice_date_str:
+            payload['InvoiceDate'] = invoice_date_str
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs UploadBilledTransaction response: %s', response)

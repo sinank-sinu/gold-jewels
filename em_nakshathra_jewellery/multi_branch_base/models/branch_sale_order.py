@@ -75,6 +75,8 @@ class SaleOrder(models.Model):
     @api.constrains('branch_id', 'partner_id')
     def _check_partner_branch_id(self):
         """methode to check branch of partner and sale order"""
+        if self.env.context.get('skip_partner_branch_check'):
+            return
         for order in self:
             branch = order.partner_id.branch_id
             if branch and branch != order.branch_id:
