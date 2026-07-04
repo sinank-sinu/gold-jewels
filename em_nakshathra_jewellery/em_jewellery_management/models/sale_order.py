@@ -395,34 +395,23 @@ class SaleOrder(models.Model):
 
     def action_remove_scheme(self):
         for order in self:
-
             if not order.scheme_line_id:
                 continue
 
-            consumed_amount = abs(order.scheme_line_id.price_unit)
+            # 🔎 Find scheme redemptions linked to this sale order
+            redemptions = self.env['scheme.redemption'].search([
+                ('sale_order_id', '=', order.id)
+            ])
 
-            # 🔎 Get schemes even if inactive (because we disabled them on apply)
-            schemes = self.env['jewellery.scheme.enrollment'].search([
-                ('partner_id', '=', order.partner_id.id),
-                ('active', '=', False),  # 👈 previously used schemes
-            ], order='id desc')
-
-            remaining = consumed_amount
-
-            for scheme in schemes:
-                if remaining <= 0:
-                    break
-
-                restoreable = scheme.scheme_amount - scheme.remaining_amount
-                restore = min(restoreable, remaining)
-
-                scheme.remaining_amount += restore
-                remaining -= restore
-
-                # ✅ Reactivate scheme
-                scheme.active = True
-                # OR if using state:
-                # scheme.state = 'running'
+            for redemption in redemptions:
+                scheme = redemption.scheme_id
+                # Restore the scheme's state
+                scheme.write({
+                    'state': 'completed',
+                    'is_redeemed': False,
+                })
+                # Delete the redemption record
+                redemption.unlink()
 
             # 🧹 Remove discount line
             order.scheme_line_id.unlink()
