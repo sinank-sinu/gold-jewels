@@ -223,6 +223,7 @@ class SalesmanCart(models.Model):
 
         # 1. Resolve partner assignment
         partner = self.partner_id
+        print(partner,'partners'),
         if not partner:
             try:
                 partner = self.env.ref('base.public_partner')
@@ -271,6 +272,7 @@ class SalesmanCart(models.Model):
         sale_order_model = self.env['sale.order'].with_company(target_company).with_context(
             skip_partner_branch_check=True
         )
+        print(sale_order_model,'salesman_tray_loc'),
         default_vals = sale_order_model.default_get(['pricelist_id', 'team_id'])
 
         so_vals = {
@@ -287,6 +289,7 @@ class SalesmanCart(models.Model):
         
         # 5. Create the Sales Order
         sale_order = sale_order_model.create(so_vals)
+        print(sale_order,'sale_order'),
 
         # 6. Filter locked lines
         locked_lines = self.cart_line_ids.filtered(lambda l: l.is_locked)
@@ -298,17 +301,10 @@ class SalesmanCart(models.Model):
 
 
         for line in lines_to_checkout:
-            # Locate the exact label so we can link it
-            sale_label_id = False
-            label_rec = False
-            if line.label_id:
-                label_rec = line.label_id
-                sale_label_id = label_rec.id
-            elif line.active_label_name:
-                label = self.env['product.label'].search([('name', '=', line.active_label_name)], limit=1)
-                if label:
-                    label_rec = label
-                    sale_label_id = label.id
+            # Use the label directly from the salesman cart line only.
+            # Do NOT fall back to searching product.label by name.
+            label_rec = line.label_id if line.label_id else False
+            sale_label_id = label_rec.id if label_rec else False
 
             sol_vals = {
                 'order_id': sale_order.id,
@@ -346,6 +342,9 @@ class SalesmanCart(models.Model):
                 ], order='date desc', limit=1)
                 if gold_rate_rec:
                     sol_vals['gold_rate'] = gold_rate_rec.rate_per_gram
+            else:
+                if line.product_id.purity_id:
+                    sol_vals['purity_id'] = line.product_id.purity_id.id
 
             sol = self.env['sale.order.line'].with_company(target_company).create(sol_vals)
             # Trigger onchange to compute the actual price from the label
