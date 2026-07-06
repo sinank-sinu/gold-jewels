@@ -266,7 +266,7 @@
                     </div>
                 </div>
             </div>
-            <div class="table_style" style="height: 650px; overflow-y: scroll;">
+            <div class="table_style" style="height: calc(100vh - 220px); overflow-y: auto; padding-bottom: 100px;">
                 <!-- Table View -->
                 <div class="table_view_gl" style="right:20px;width:100%;"
                      t-ref="table_view_gl">
@@ -316,9 +316,8 @@
                                            t-as="move_line"
                                            t-key="move_line_index">
                                             <t t-set="i" t-value="i + 1"/>
-                                            <tr class="border-bottom"
-                                                style="border-spacing: 0 10px;">
-                                                <th colspan="6">
+                                            <tr class="border-bottom border-dark border-gainsboro">
+                                                <th colspan="6" style="padding: 6px 8px;">
                                                     <span class="dropdown">
                                                         <a class="dropdown-toggle"
                                                            data-bs-toggle="dropdown"
@@ -344,11 +343,11 @@
                                                         </span>
                                                     </span>
                                                 </th>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['initial_total_debit']"
                                                        t-esc="move_line['initial_total_debit']"/>
                                                 </th>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['initial_total_credit']"
                                                        t-esc="move_line['initial_total_credit']"/>
                                                 </th>
@@ -357,41 +356,41 @@
                                                        t-value="comparison_number_range"/>
                                                     <t t-foreach="number_of_periods"
                                                        t-as="num" t-key="num">
-                                                        <th style="text-align:center;">
+                                                        <th style="text-align:center; padding: 6px 8px;">
                                                             <t t-if="move_line['dynamic_total_debit_' + num]"
                                                                t-esc="move_line['dynamic_total_debit_' + num]"/>
                                                         </th>
-                                                        <th style="text-align:center;">
+                                                        <th style="text-align:center; padding: 6px 8px;">
                                                             <t t-if="move_line['dynamic_total_credit_' + num]"
                                                                t-esc="move_line['dynamic_total_credit_' + num]"/>
                                                         </th>
                                                     </t>
                                                 </t>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['total_debit']"
                                                        t-esc="move_line['total_debit'].toFixed(2)"/>
                                                 </th>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['total_credit']"
                                                        t-esc="move_line['total_credit'].toFixed(2)"/>
                                                 </th>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['end_total_debit']"
                                                        t-esc="move_line['end_total_debit'].toFixed(2)"/>
                                                 </th>
-                                                <th style="text-align:center;">
+                                                <th style="text-align:center; padding: 6px 8px;">
                                                     <t t-if="move_line['end_total_credit']"
                                                        t-esc="move_line['end_total_credit'].toFixed(2)"/>
                                                 </th>
                                             </tr>
                                         </t>
-                                        <tr class="border-bottom"
-                                            style="border-spacing: 0 10px;color:#000">
-                                            <th colspan="6">Total</th>
-                                            <th style="text-align:center;">
+                                        <tr class="border-bottom border-dark border-gainsboro"
+                                            style="color:#000;">
+                                            <th colspan="6" style="padding: 6px 8px;">Total</th>
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'initial_total_debit').toFixed(2)"/>
                                             </th>
-                                            <th style="text-align:center;">
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'initial_total_credit').toFixed(2)"/>
                                             </th>
                                             <t t-if="state.apply_comparison == true">
@@ -399,24 +398,24 @@
                                                    t-value="comparison_number_range"/>
                                                 <t t-foreach="number_of_periods"
                                                    t-as="nb" t-key="nb">
-                                                    <th style="text-align:center;">
+                                                    <th style="text-align:center; padding: 6px 8px;">
                                                         <t t-esc="sumByKey(state.data, 'dynamic_total_debit_' + nb).toFixed(2)"/>
                                                     </th>
-                                                    <th style="text-align:center;">
+                                                    <th style="text-align:center; padding: 6px 8px;">
                                                         <t t-esc="sumByKey(state.data, 'dynamic_total_credit_' + nb).toFixed(2)"/>
                                                     </th>
                                                 </t>
                                             </t>
-                                            <th style="text-align:center;">
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'total_debit').toFixed(2)"/>
                                             </th>
-                                            <th style="text-align:center;">
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'total_credit').toFixed(2)"/>
                                             </th>
-                                            <th style="text-align:center;">
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'end_total_debit').toFixed(2)"/>
                                             </th>
-                                            <th style="text-align:center;">
+                                            <th style="text-align:center; padding: 6px 8px;">
                                                 <t t-esc="sumByKey(state.data, 'end_total_credit').toFixed(2)"/>
                                             </th>
                                         </tr>
