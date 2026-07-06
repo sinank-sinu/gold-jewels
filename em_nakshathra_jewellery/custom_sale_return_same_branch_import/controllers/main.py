@@ -63,16 +63,10 @@ class SaleReturnMigrationController(http.Controller):
             sales_sheet_name = next((s for s in wb.sheetnames if 'SALES' in s.strip().upper()), None)
             
             if sales_sheet_name:
-                last_vou_no = None
                 for row_idx, row in enumerate(wb[sales_sheet_name].iter_rows(min_row=2, values_only=True), start=2):
                     if not any(row): continue
                     vou_no = _str(row[1]) # Vou No
-                    
-                    if not vou_no and last_vou_no:
-                        vou_no = last_vou_no
-                        
                     if vou_no:
-                        last_vou_no = vou_no
                         if vou_no not in sales_data:
                             sales_data[vou_no] = []
                         
@@ -118,14 +112,12 @@ class SaleReturnMigrationController(http.Controller):
 
             # Pre-parse SR sheet
             sr_rows = []
-            seen_source_docs = set()
             if 'SR' in wb.sheetnames:
                 for row_idx, row in enumerate(wb['SR'].iter_rows(min_row=2, values_only=True), start=2):
                     if not any(row): continue
                     source_doc = _str(row[0]) # Source document
-                    if not source_doc or source_doc in seen_source_docs: continue
+                    if not source_doc: continue
                     
-                    seen_source_docs.add(source_doc)
                     reason = _str(row[38]) if len(row) > 38 else ''
                     rev_date = row[39] if len(row) > 39 else False
                     if isinstance(rev_date, (datetime.datetime, datetime.date)):
@@ -578,27 +570,13 @@ class SaleReturnMigrationController(http.Controller):
                     except Exception:
                         pass
             
-            # We pay using the sum of SALES sheet rows' payment data
-            upi_amt1 = sum(s.get('upi_amt1', 0) for s in s_data_list)
-            upi_ref1 = next((s.get('upi_ref1', '') for s in s_data_list if s.get('upi_ref1', '')), '')
-
-            upi_amt2 = sum(s.get('upi_amt2', 0) for s in s_data_list)
-            upi_ref2 = next((s.get('upi_ref2', '') for s in s_data_list if s.get('upi_ref2', '')), '')
-
-            card_amt1 = sum(s.get('card_amt1', 0) for s in s_data_list)
-            card_ref1 = next((s.get('card_ref1', '') for s in s_data_list if s.get('card_ref1', '')), '')
-
-            card_amt2 = sum(s.get('card_amt2', 0) for s in s_data_list)
-            card_ref2 = next((s.get('card_ref2', '') for s in s_data_list if s.get('card_ref2', '')), '')
-
-            cash_amt = sum(s.get('cash_amt', 0) for s in s_data_list)
-
+            # We pay using the first SALES sheet row's payment data
             try:
-                _pay(upi_amt1,  'bank', 'upi',  upi_ref1)
-                _pay(upi_amt2,  'bank', 'upi',  upi_ref2)
-                _pay(card_amt1, 'bank', 'card', card_ref1)
-                _pay(card_amt2, 'bank', 'card', card_ref2)
-                _pay(cash_amt,  'cash', '')
+                _pay(s_data.get('upi_amt1', 0),  'bank', 'upi',  s_data.get('upi_ref1', ''))
+                _pay(s_data.get('upi_amt2', 0),  'bank', 'upi',  s_data.get('upi_ref2', ''))
+                _pay(s_data.get('card_amt1', 0), 'bank', 'card', s_data.get('card_ref1', ''))
+                _pay(s_data.get('card_amt2', 0), 'bank', 'card', s_data.get('card_ref2', ''))
+                _pay(s_data.get('cash_amt', 0),  'cash', '')
             except Exception as e:
                 _logger.warning("Payment registration failed: %s", e)
 

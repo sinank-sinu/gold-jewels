@@ -153,6 +153,7 @@
                             <field name="stone_weight"/>
                             <field name="net_weight" readonly="1"/>
                             <field name="rate"/>
+                            <field name="diamond_amount"/>
                             <field name="amount" readonly="1"/>
                         </tree>
                     </field>

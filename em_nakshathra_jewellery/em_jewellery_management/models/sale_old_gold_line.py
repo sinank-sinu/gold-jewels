@@ -250,6 +250,7 @@ class SaleOldGoldLine(models.Model):
 
 
     rate = fields.Float()
+    diamond_amount = fields.Float(string="Diamond Amount")
 
     amount = fields.Float(string="Amount", compute='_compute_amount', store=True, readonly=False)
 
@@ -298,13 +299,13 @@ class SaleOldGoldLine(models.Model):
             r.net_weight = r.gross_weight - r.stone_weight
 
 
-    @api.depends('net_weight', 'rate')
+    @api.depends('net_weight', 'rate', 'diamond_amount')
     def _compute_amount(self):
         for rec in self:
             if not self.env.context.get('skip_old_gold_amount_compute'):
-                rec.amount = rec.net_weight * rec.rate
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
             elif not rec.amount:
-                rec.amount = rec.net_weight * rec.rate
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
 
     @api.onchange('purity_id')
     def _onchange_purity(self):

@@ -7,9 +7,12 @@ from dateutil.relativedelta import relativedelta  # Added for safe month arithme
 
 
 # Maps wizard payment_method_type to Pine Labs AllowedPaymentMode codes
+# Pine Labs AllowedPaymentMode reference:
+#   0=All modes, 1=Card, 2=Cash, 3=Points, 4=Wallets,
+#   6=Brand EMI, 7=Sodexo, 8=PhonePe, 10=UPI Sale
 PINE_LABS_MODE_MAP = {
     'card': '1',
-    'upi': '3',
+    'upi': '10',
 }
 
 
@@ -612,11 +615,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         status = result.get('status', 'pending')
 
         if status == 'success':
+            # result['data'] is the flat Tag/Value dict built by _process_status_response
+            data = result.get('data', {})
             self.write({
                 'state': 'success',
-                'approval_code': result.get('data', {}).get('ApprovalCode', '') if 'data' in result else '',
-                'card_type': result.get('data', {}).get('CardType', '') if 'data' in result else '',
-                'payment_mode': result.get('data', {}).get('TxnModeName', '') if 'data' in result else '',
+                'approval_code': data.get('ApprovalCode', ''),
+                'card_type': data.get('Card Type') or data.get('CardType', ''),
+                'payment_mode': data.get('PaymentMode') or data.get('Payment Mode', ''),
             })
             self._post_payment_success()
         elif status == 'failed':

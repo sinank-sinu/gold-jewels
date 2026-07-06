@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import requests
+from datetime import timezone
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -41,6 +42,16 @@ class PineLabsTransaction(models.Model):
     card_number_masked = fields.Char(string='Card No. (Masked)', copy=False)
     issuer_bank = fields.Char(string='Issuer Bank', copy=False)
     payment_date = fields.Datetime(string='Payment Date', copy=False)
+
+    # Extended Pine Labs response fields
+    customer_vpa = fields.Char(string='Customer VPA (UPI ID)', copy=False)
+    acquirer_name = fields.Char(string='Acquirer Name', copy=False)
+    acquirer_id = fields.Char(string='Acquirer ID', copy=False)
+    transaction_log_id = fields.Char(string='Transaction Log ID', copy=False)
+    host_txn_id = fields.Char(string='Host Transaction ID', copy=False)
+    transaction_date_raw = fields.Char(string='Transaction Date (Terminal)', copy=False)
+    transaction_time_raw = fields.Char(string='Transaction Time (Terminal)', copy=False)
+    amount_in_paisa = fields.Char(string='Amount in Paisa', copy=False)
 
     # Linked records
     sale_order_id = fields.Many2one('sale.order', string='Sale Order', copy=False)
@@ -116,6 +127,41 @@ class PineLabsTransaction(models.Model):
         except ValueError:
             return {'error': _('Invalid response from Pine Labs server.')}
 
+    def _build_gst_breakdown(self, invoice):
+        """
+        Build the GstBrkUp string from invoice tax lines.
+        Format: 'CGST:08.45|SGST:08.45' or 'IGST:18.00'
+        Reads from account.move.line tax_ids grouped by CGST/SGST/IGST/CESS.
+        """
+        if not invoice:
+            return ''
+
+        gst_parts = {}
+        # Iterate tax group lines on the invoice
+        for line in invoice.line_ids.filtered(lambda l: l.tax_line_id):
+            tax = line.tax_line_id
+            tax_name_upper = (tax.name or '').upper()
+            amount_type = tax.amount_type  # 'percent', 'fixed', etc.
+            tax_rate = tax.amount if amount_type == 'percent' else 0.0
+
+            # Detect GST component type by name
+            if 'CGST' in tax_name_upper:
+                gst_parts['CGST'] = gst_parts.get('CGST', 0.0) + tax_rate
+            elif 'SGST' in tax_name_upper or 'UTGST' in tax_name_upper:
+                key = 'SGST'
+                gst_parts[key] = gst_parts.get(key, 0.0) + tax_rate
+            elif 'IGST' in tax_name_upper:
+                gst_parts['IGST'] = gst_parts.get('IGST', 0.0) + tax_rate
+            elif 'CESS' in tax_name_upper:
+                gst_parts['CESS'] = gst_parts.get('CESS', 0.0) + tax_rate
+
+        if not gst_parts:
+            return ''
+
+        return '|'.join(
+            '%s:%.2f' % (k, v) for k, v in gst_parts.items()
+        )
+
     def pinelabs_create_payment(self, amount, allowed_mode='1'):
         """
         Initiate a payment on the Pine Labs terminal using UploadBilledTransaction.
@@ -136,6 +182,34 @@ class PineLabsTransaction(models.Model):
 
         url = f"{config['base_url']}/UploadBilledTransaction"
 
+        # ── GST & Invoice fields ──────────────────────────────────────
+        company = self.env.company
+        gst_in = company.vat or ''
+
+        # Resolve linked invoice for GST breakdown, date, and number
+        invoice = self.invoice_id
+        invoice_number = ''
+        invoice_date_str = ''
+        gst_brkup = ''
+
+        if invoice:
+            invoice_number = (invoice.name or '').strip()
+            if invoice.invoice_date:
+                # Format as ISO 8601 with IST offset (+05:30) as expected by Pine Labs
+                inv_date = invoice.invoice_date
+                invoice_date_str = '%d-%02d-%02dT00:00:00+05:30' % (
+                    inv_date.year, inv_date.month, inv_date.day
+                )
+            gst_brkup = self._build_gst_breakdown(invoice)
+        elif self.sale_order_id:
+            invoice_number = self.sale_order_id.name or ''
+
+        # Current user login name
+        user_id = self.env.user.login or self.env.user.name or ''
+
+        # AutoCancel from terminal config (default 120 min for UPI)
+        auto_cancel = config.get('auto_cancel_minutes', 5)
+
         payload = {
             "TransactionNumber": self.name,
             "SequenceNumber": 1,
@@ -143,11 +217,21 @@ class PineLabsTransaction(models.Model):
             "Amount": int(round(amount * 100)),  # Pine Labs expects paise (rupees × 100)
             "ClientID": config['client_id'],
             "StoreID": config['store_id'],
-            "UserID": "",
+            "UserID": user_id,
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "AutoCancelDurationInMinutes": 5,
+            "AutoCancelDurationInMinutes": auto_cancel,
         }
+
+        # Append GST and Invoice fields only when available
+        if gst_in:
+            payload['GstIn'] = gst_in
+        if gst_brkup:
+            payload['GstBrkUp'] = gst_brkup
+        if invoice_number:
+            payload['invoicenumber'] = invoice_number
+        if invoice_date_str:
+            payload['InvoiceDate'] = invoice_date_str
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs UploadBilledTransaction response: %s', response)
@@ -207,32 +291,88 @@ class PineLabsTransaction(models.Model):
         return self._process_status_response(response)
 
     def _process_status_response(self, response):
-        """Parse a Pine Labs status response and update the transaction record."""
+        """
+        Parse a Pine Labs GetCloudBasedTxnStatus response and update the transaction record.
+
+        Pine Labs returns TransactionData as a Tag/Value array:
+          [{"Tag": "ApprovalCode", "Value": "849035"}, {"Tag": "PaymentMode", "Value": "CARD"}, ...]
+
+        Success is indicated by ResponseCode == 0 at the root level.
+        A pending (still processing) state has ResponseCode != 0 and no TransactionData.
+        """
         if response.get('error'):
             return response
+
+        response_code = response.get('ResponseCode')
+        response_message = str(response.get('ResponseMessage', ''))
         transaction_data = response.get('TransactionData')
-        if not transaction_data:
+
+        # ── Convert Tag/Value array to a flat dict ──────────────────────
+        txn_dict = {}
+        if isinstance(transaction_data, list):
+            for item in transaction_data:
+                if isinstance(item, dict) and 'Tag' in item and 'Value' in item:
+                    txn_dict[item['Tag']] = item.get('Value', '')
+        elif isinstance(transaction_data, dict):
+            # Some responses wrap it in a dict; handle both formats
+            txn_dict = transaction_data
+
+        _logger.info('Pine Labs status parsed txn_dict: %s', txn_dict)
+
+        # ── Determine outcome based on ResponseCode ──────────────────────
+        # ResponseCode 0 = TXN APPROVED
+        # ResponseCode 1008 = TXN VOIDED
+        # None / missing TransactionData = still pending
+        if response_code is None or (not txn_dict and response_code not in (0, 1008)):
             return {'status': 'pending'}
-        detail = transaction_data[0] if isinstance(transaction_data, list) else transaction_data
-        txn_status = str(detail.get('TxnStatus', ''))
-        if txn_status in ('0000', '0'):  # Success
+
+        if response_code == 0 or str(response_code) == '0':  # Success / Approved
+            # Map known Tag keys to Odoo fields
+            # Pine Labs uses slightly different key names per payment mode
+            # ("Card Type", "Card Type", "CardType", etc.) — check both variants
+            def _tag(*names):
+                """Return first non-empty value from txn_dict for any of the given keys."""
+                for k in names:
+                    v = txn_dict.get(k, '')
+                    if v:
+                        return str(v)
+                return ''
+
             self.write({
                 'state': 'success',
-                'approval_code': detail.get('ApprovalCode', ''),
-                'card_type': detail.get('CardType', ''),
-                'payment_mode': detail.get('TxnModeName', ''),
-                'card_number_masked': detail.get('CardNumberMasked', ''),
-                'issuer_bank': detail.get('IssuingBankName', ''),
-                'retrieval_reference_number': detail.get('RRN', ''),
-                'batch_number': detail.get('BatchNumber', ''),
+                'approval_code': _tag('ApprovalCode'),
+                'card_type': _tag('Card Type', 'CardType'),
+                'payment_mode': _tag('PaymentMode', 'Payment Mode'),
+                'card_number_masked': _tag('Card Number', 'CardNumber'),
+                'issuer_bank': _tag('Acquirer Name', 'AcquirerName'),
+                'retrieval_reference_number': _tag('RRN'),
+                'batch_number': _tag('BatchNumber', 'Batch Number', 'Batch Number'),
                 'payment_date': fields.Datetime.now(),
+                # Extended UPI / generic fields
+                'customer_vpa': _tag('CustomerVPA', 'Customer VPA', 'Masked Moblie Number'),
+                'acquirer_name': _tag('AcquirerName', 'Acquirer Name'),
+                'acquirer_id': _tag('AcquirerId', 'Acquirer Id'),
+                'transaction_log_id': _tag('TransactionLogId', 'Trnasaction Log ID', 'Transaction Log ID'),
+                'host_txn_id': _tag('HostTxnId', 'HOST_TID'),
+                'transaction_date_raw': _tag('TransactionDate', 'Transaction Date'),
+                'transaction_time_raw': _tag('Transaction Time', 'TransactionTime'),
+                'amount_in_paisa': _tag('AmountInPaisa'),
             })
-            return {'status': 'success', 'data': detail}
-        elif txn_status in ('', 'None'):
-            return {'status': 'pending'}
+            return {
+                'status': 'success',
+                'data': txn_dict,
+                'response_message': response_message,
+            }
+
+        elif response_code == 1008:  # Voided
+            self.state = 'cancelled'
+            return {'status': 'cancelled', 'message': response_message}
+
         else:
+            # Non-zero, non-1008 with data present = failed
             self.state = 'failed'
-            return {'status': 'failed', 'message': detail.get('TxnStatusMsg', 'Transaction failed')}
+            return {'status': 'failed', 'message': response_message}
+
 
     def pinelabs_cancel_payment(self):
         """Cancel a pending Pine Labs transaction using CancelTransaction."""
