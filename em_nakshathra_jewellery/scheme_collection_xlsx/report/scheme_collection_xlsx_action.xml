@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="action_report_scheme_collection_xlsx" model="ir.actions.report">
+        <field name="name">Scheme Collection XLSX Report</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">scheme_collection_xlsx.scheme_collection_xlsx</field>
+        <field name="report_file">scheme_collection_xlsx_report</field>
+    </record>
+</odoo>

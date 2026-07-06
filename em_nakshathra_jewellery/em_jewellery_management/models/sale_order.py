@@ -425,7 +425,6 @@ class SaleOrder(models.Model):
                 for line in order.order_line
                 if line.sale_making_charge_min
             )
-
             if need_approval and not self.env.user.has_group('em_jewellery_management.group_mc_approval_manager'):
                 raise UserError(_("Manager approval required for low making charge."))
 
