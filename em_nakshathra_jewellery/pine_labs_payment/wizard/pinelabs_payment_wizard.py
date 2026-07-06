@@ -615,11 +615,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         status = result.get('status', 'pending')
 
         if status == 'success':
+            # result['data'] is the flat Tag/Value dict built by _process_status_response
+            data = result.get('data', {})
             self.write({
                 'state': 'success',
-                'approval_code': result.get('data', {}).get('ApprovalCode', '') if 'data' in result else '',
-                'card_type': result.get('data', {}).get('CardType', '') if 'data' in result else '',
-                'payment_mode': result.get('data', {}).get('TxnModeName', '') if 'data' in result else '',
+                'approval_code': data.get('ApprovalCode', ''),
+                'card_type': data.get('Card Type') or data.get('CardType', ''),
+                'payment_mode': data.get('PaymentMode') or data.get('Payment Mode', ''),
             })
             self._post_payment_success()
         elif status == 'failed':
