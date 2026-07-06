@@ -254,12 +254,12 @@ class SalesmanCart(models.Model):
         target_company = branch.company_id if branch.company_id else self.env.company
 
         # 3. Locate a warehouse matching the resolved branch + company
-        warehouse = self.env['stock.warehouse'].search(
+        warehouse = self.env['stock.warehouse'].sudo().search(
             [('branch_id', '=', branch.id), ('company_id', '=', target_company.id)],
             limit=1
         )
         if not warehouse:
-            warehouse = self.env['stock.warehouse'].search(
+            warehouse = self.env['stock.warehouse'].sudo().search(
                 [('company_id', '=', target_company.id)], limit=1
             )
 
