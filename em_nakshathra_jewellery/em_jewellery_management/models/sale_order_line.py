@@ -131,6 +131,9 @@ class SaleOrderLine(models.Model):
     @api.depends('gold_rate', 'product_uom_qty')
     def _compute_metal_amount(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.metal_amount = 0.0
+                continue
             rec.metal_amount = rec.gold_rate * rec.product_uom_qty
 
     @api.depends(
@@ -140,6 +143,9 @@ class SaleOrderLine(models.Model):
     )
     def _compute_net_weight(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.net_weight = 0.0
+                continue
             rec.net_weight = (
                     rec.product_uom_qty
                     - rec.sale_stone_weight
@@ -149,28 +155,44 @@ class SaleOrderLine(models.Model):
     @api.depends('gold_rate', 'net_weight')
     def _compute_metal_amounts(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.metal_amount = 0.0
+                continue
             rec.metal_amount = rec.gold_rate * rec.net_weight
 
 
     @api.depends('metal_amount', 'mc_amount', 'sale_diamond_rate', 'sale_stone_rate','mc_amount_actual', 'other_weight_amount')
     def _compute_subtotal(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.price_subtotal_actual = rec.price_subtotal_actual or 0.0
+                rec.price_subtotal = rec.price_subtotal or 0.0
+                continue
             rec.price_subtotal_actual = rec.metal_amount + rec.mc_amount + rec.sale_stone_rate + rec.sale_diamond_rate + rec.other_weight_amount
             rec.price_subtotal = rec.metal_amount + rec.mc_amount_actual + rec.sale_stone_rate + rec.sale_diamond_rate + rec.other_weight_amount
 
     @api.depends('price_subtotal', 'product_uom_qty')
     def _compute_price_unit(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.price_unit = rec.price_unit or 0.0
+                continue
             rec.price_unit = (rec.price_subtotal / rec.product_uom_qty) if rec.product_uom_qty else 0.0
 
     @api.depends('gold_rate', 'fine_weight')
     def _compute_metal_amount(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.metal_amount = 0.0
+                continue
             rec.metal_amount = rec.gold_rate * rec.fine_weight
 
     @api.depends('fine_weight', 'purity_id', 'order_id.purchase_order_id')
     def _compute_product_uom_qty(self):
         for rec in self:
+            if getattr(rec, 'is_scheme_line', False):
+                rec.product_uom_qty = rec.product_uom_qty or 1.0
+                continue
             if (
                 rec.order_id.purchase_order_id
                 and rec.purity_id
