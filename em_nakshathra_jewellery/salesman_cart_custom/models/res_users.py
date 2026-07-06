@@ -10,3 +10,9 @@ class ResUsers(models.Model):
         string='Salesman Tray/Location',
         domain=[('usage', '=', 'internal')]
     )
+
+    @api.constrains('salesman_location_id', 'groups_id')
+    def _check_salesman_location(self):
+        for user in self:
+            if user.has_group('em_jewellery_management.group_jewellery_salesman') and not user.salesman_location_id:
+                raise UserError(_("Salesman Tray/Location is mandatory for Salesman users."))
