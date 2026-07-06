@@ -103,6 +103,7 @@ class SalesmanCart(models.Model):
             'company_id': company_id.id,
             'location_id': src_location.id,
             'location_dest_id': salesman_loc.id,
+            'user_id': self.salesman_id.id,
         })
 
         # 2. Create the stock move
@@ -267,7 +268,7 @@ class SalesmanCart(models.Model):
         }
         
         # 5. Create the Sales Order
-        sale_order = sale_order_model.create(so_vals)
+        sale_order = sale_order_model.with_context(skip_partner_branch_check=True).create(so_vals)
 
         # 6. Filter locked lines
         locked_lines = self.cart_line_ids.filtered(lambda l: l.is_locked)
