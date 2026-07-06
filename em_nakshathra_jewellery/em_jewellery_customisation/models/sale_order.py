@@ -75,6 +75,9 @@ class SaleOrder(models.Model):
                 if quotation_total <= 0:
                     raise UserError(_("Quotation total is zero."))
 
+                if quotation_total < scheme_amount:
+                    raise UserError(_("Cannot apply scheme. The purchase amount (%.2f) must be equal to or greater than the scheme amount (%.2f).") % (quotation_total, scheme_amount))
+
                 redeem_amount = min(quotation_total, scheme_amount)
 
                 product_code = f"SCHEME-{scheme.id}"
