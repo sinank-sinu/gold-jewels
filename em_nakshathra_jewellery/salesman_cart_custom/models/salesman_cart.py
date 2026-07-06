@@ -224,7 +224,6 @@ class SalesmanCart(models.Model):
 
         # 1. Resolve partner assignment
         partner = self.partner_id
-        print(partner,'partners'),
         if not partner:
             try:
                 partner = self.env.ref('base.public_partner')
@@ -273,7 +272,7 @@ class SalesmanCart(models.Model):
         sale_order_model = self.env['sale.order'].with_company(target_company).with_context(
             skip_partner_branch_check=True
         )
-        print(sale_order_model,'salesman_tray_loc'),
+
         default_vals = sale_order_model.default_get(['pricelist_id', 'team_id'])
 
         so_vals = {
