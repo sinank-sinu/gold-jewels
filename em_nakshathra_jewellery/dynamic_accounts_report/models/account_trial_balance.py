@@ -45,26 +45,71 @@ class AccountTrialBalance(models.TransientModel):
         :return: List of dictionaries representing the trial balance report.
         :rtype: list
         """
-        account_ids = self.env['account.move.line'].search([]).mapped(
-            'account_id')
         today = fields.Date.today()
+        month_start, month_end = get_month(today)
+
+        # 1. Initial balances: sum debit and credit where date < month_start
+        init_domain = [
+            ('date', '<', month_start),
+            ('parent_state', '=', 'posted'),
+        ]
+        init_groups = self.env['account.move.line'].read_group(
+            init_domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id']
+        )
+        init_balances = {}
+        for g in init_groups:
+            if g['account_id']:
+                acc_id = g['account_id'][0]
+                init_balances[acc_id] = {
+                    'debit': round(g['debit'] or 0.0, 2),
+                    'credit': round(g['credit'] or 0.0, 2)
+                }
+
+        # 2. Current period balances: sum debit and credit where date >= month_start and date <= month_end
+        curr_domain = [
+            ('date', '>=', month_start),
+            ('date', '<=', month_end),
+            ('parent_state', '=', 'posted'),
+        ]
+        curr_groups = self.env['account.move.line'].read_group(
+            curr_domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id']
+        )
+        curr_balances = {}
+        for g in curr_groups:
+            if g['account_id']:
+                acc_id = g['account_id'][0]
+                curr_balances[acc_id] = {
+                    'debit': round(g['debit'] or 0.0, 2),
+                    'credit': round(g['credit'] or 0.0, 2)
+                }
+
+        # 3. Get all active account IDs that have any posted move lines
+        all_groups = self.env['account.move.line'].read_group(
+            [], ['account_id'], ['account_id']
+        )
+        account_ids = self.env['account.account'].browse([
+            g['account_id'][0] for g in all_groups if g['account_id']
+        ])
+
+        if not account_ids:
+            return []
+
+        journal_ids = self.env['account.journal'].search_read([], ['name'])
         move_line_list = []
-        for account_id in account_ids:
-            initial_move_line_ids = self.env['account.move.line'].search(
-                [('date', '<', get_month(today)[0]),
-                 ('account_id', '=', account_id.id),
-                 ('parent_state', '=', 'posted')])
-            initial_total_debit = round(
-                sum(initial_move_line_ids.mapped('debit')), 2)
-            initial_total_credit = round(
-                sum(initial_move_line_ids.mapped('credit')), 2)
-            move_line_ids = self.env['account.move.line'].search(
-                [('date', '>=', get_month(today)[0]),
-                 ('account_id', '=', account_id.id),
-                 ('date', '<=', get_month(today)[1]),
-                 ('parent_state', '=', 'posted')])
-            total_debit = round(sum(move_line_ids.mapped('debit')), 2)
-            total_credit = round(sum(move_line_ids.mapped('credit')), 2)
+        sorted_accounts = sorted(account_ids, key=lambda a: a.code or '')
+        account_names = {acc.id: acc.display_name for acc in sorted_accounts}
+
+        for account_id in sorted_accounts:
+            acc_id = account_id.id
+            initial_total_debit = init_balances.get(acc_id, {}).get('debit', 0.0)
+            initial_total_credit = init_balances.get(acc_id, {}).get('credit', 0.0)
+            total_debit = curr_balances.get(acc_id, {}).get('debit', 0.0)
+            total_credit = curr_balances.get(acc_id, {}).get('credit', 0.0)
+
             sum_debit = initial_total_debit + total_debit
             sum_credit = initial_total_credit + total_credit
             diff_credit_debit = sum_debit - sum_credit
@@ -74,11 +119,11 @@ class AccountTrialBalance(models.TransientModel):
             else:
                 end_total_debit = 0.0
                 end_total_credit = abs(diff_credit_debit)
+
             data = {
-                'account': account_id.display_name,
-                'account_id': account_id.id,
-                'journal_ids': self.env['account.journal'].search_read([], [
-                    'name']),
+                'account': account_names.get(acc_id, account_id.display_name),
+                'account_id': acc_id,
+                'journal_ids': journal_ids,
                 'initial_total_debit': initial_total_debit,
                 'initial_total_credit': initial_total_credit,
                 'total_debit': total_debit,
@@ -120,12 +165,7 @@ class AccountTrialBalance(models.TransientModel):
             option_domain = ['posted', 'draft']
         if method == {}:
             method = None
-        dynamic_total_debit = {}
-        dynamic_date_num = {}
-        dynamic_total_credit = {}
-        account_ids = self.env['account.move.line'].search([]).mapped(
-            'account_id')
-        move_line_list = []
+
         start_date_first = \
             get_fiscal_year(datetime.strptime(start_date, "%Y-%m-%d").date())[
                 0] if comparison_type == 'year' else datetime.strptime(
@@ -134,151 +174,160 @@ class AccountTrialBalance(models.TransientModel):
             get_fiscal_year(datetime.strptime(end_date, "%Y-%m-%d").date())[
                 1] if comparison_type == 'year' else datetime.strptime(end_date,
                                                                        "%Y-%m-%d").date()
-        for account_id in account_ids:
-            start_date = start_date_first
-            end_date = end_date_first
-            if comparison_number:
-                if comparison_type == 'month':
-                    initial_start_date = subtract(start_date, months=eval(
-                        comparison_number))
-                elif comparison_type == 'year':
-                    initial_start_date = subtract(start_date, years=eval(
-                        comparison_number))
-                else:
-                    initial_start_date = subtract(start_date, months=eval(
-                        comparison_number) * 3)
+
+        if comparison_number:
+            comp_num = int(comparison_number)
+            if comparison_type == 'month':
+                initial_start_date = subtract(start_date_first, months=comp_num)
+            elif comparison_type == 'year':
+                initial_start_date = subtract(start_date_first, years=comp_num)
             else:
-                initial_start_date = start_date
-            domain = [('date', '<', initial_start_date),
-                      ('account_id', '=', account_id.id),
-                      ('parent_state', 'in', option_domain), ]
-            if journal_list:
-                domain.append(
-                    ('journal_id', 'in', journal_list), )
-            if analytic:
-                domain.append(
-                    ('analytic_line_ids', 'in', analytic))
-            if method is not None and 'cash' in method:
-                domain.append(('journal_id', 'in',
-                               self.env.company.tax_cash_basis_journal_id.ids))
-            initial_move_line_ids = self.env['account.move.line'].search(
-                domain)
-            initial_total_debit = round(
-                sum(initial_move_line_ids.mapped('debit')), 2)
-            initial_total_credit = round(
-                sum(initial_move_line_ids.mapped('credit')), 2)
-            if comparison_number:
+                initial_start_date = subtract(start_date_first, months=comp_num * 3)
+        else:
+            comp_num = 0
+            initial_start_date = start_date_first
+
+        # 1. Initial balances domain & read_group
+        init_domain = [
+            ('date', '<', initial_start_date),
+            ('parent_state', 'in', option_domain)
+        ]
+        if journal_list:
+            init_domain.append(('journal_id', 'in', journal_list))
+        if analytic:
+            init_domain.append(('analytic_line_ids', 'in', analytic))
+        if method is not None and 'cash' in method:
+            init_domain.append(('journal_id', 'in', self.env.company.tax_cash_basis_journal_id.ids))
+
+        init_groups = self.env['account.move.line'].read_group(
+            init_domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id']
+        )
+        init_balances = {}
+        for g in init_groups:
+            if g['account_id']:
+                acc_id = g['account_id'][0]
+                init_balances[acc_id] = {
+                    'debit': round(g['debit'] or 0.0, 2),
+                    'credit': round(g['credit'] or 0.0, 2)
+                }
+
+        # 2. Comparison periods domains & read_groups
+        comparison_balances = {}  # key: i (1..comp_num), value: {acc_id: {'debit': X, 'credit': Y}}
+        dynamic_date_num = {}
+
+        if comp_num > 0:
+            if comparison_type == 'month':
+                dynamic_date_num[f"dynamic_date_num{0}"] = self.get_month_name(start_date_first) + ' ' + str(start_date_first.year)
+            elif comparison_type == 'quarter':
+                dynamic_date_num[f"dynamic_date_num{0}"] = 'Q' + ' ' + str(get_quarter_number(start_date_first)) + ' ' + str(start_date_first.year)
+
+            for i in range(1, comp_num + 1):
                 if comparison_type == 'year':
-                    for i in range(1, eval(comparison_number) + 1):
-                        com_start_date = subtract(start_date, years=i)
-                        com_end_date = subtract(end_date, years=i)
-                        domain = [('date', '>=', com_start_date),
-                                  ('account_id', '=', account_id.id),
-                                  ('date', '<=', com_end_date),
-                                  ('parent_state', 'in', option_domain), ]
-                        if journal_list:
-                            domain.append(
-                                ('journal_id', 'in', journal_list), )
-                        if analytic:
-                            domain.append(
-                                ('analytic_line_ids', 'in', analytic))
-                        if method is not None and 'cash' in method:
-                            domain.append(('journal_id', 'in',
-                                           self.env.company.tax_cash_basis_journal_id.ids))
-                        move_lines = self.env['account.move.line'].search(
-                            domain)
-                        dynamic_total_debit[
-                            f"dynamic_total_debit_{i}"] = round(
-                            sum(move_lines.mapped('debit')), 2)
-                        dynamic_total_credit[
-                            f"dynamic_total_credit_{i}"] = round(
-                            sum(move_lines.mapped('credit')), 2)
-                if comparison_type == 'month':
-                    dynamic_date_num[
-                        f"dynamic_date_num{0}"] = self.get_month_name(
-                        start_date) + ' ' + str(
-                        start_date.year)
-                    for i in range(1, eval(comparison_number) + 1):
-                        com_start_date = subtract(start_date, months=i)
-                        com_end_date = subtract(end_date, months=i)
-                        domain = [('date', '>=', com_start_date),
-                                  ('account_id', '=', account_id.id),
-                                  ('date', '<=', com_end_date),
-                                  ('parent_state', 'in', option_domain), ]
-                        if journal_list:
-                            domain.append(
-                                ('journal_id', 'in', journal_list), )
-                        if analytic:
-                            domain.append(
-                                ('analytic_line_ids', 'in', analytic))
-                        if method is not None and 'cash' in method:
-                            domain.append(('journal_id', 'in',
-                                           self.env.company.tax_cash_basis_journal_id.ids), )
-                        move_lines = self.env['account.move.line'].search(
-                            domain)
-                        dynamic_date_num[
-                            f"dynamic_date_num{i}"] = self.get_month_name(
-                            com_start_date) + ' ' + str(
-                            com_start_date.year)
-                        dynamic_total_debit[
-                            f"dynamic_total_debit_{i}"] = round(
-                            sum(move_lines.mapped('debit')), 2)
-                        dynamic_total_credit[
-                            f"dynamic_total_credit_{i}"] = round(
-                            sum(move_lines.mapped('credit')), 2)
-                if comparison_type == 'quarter':
-                    dynamic_date_num[
-                        f"dynamic_date_num{0}"] = 'Q' + ' ' + str(
-                        get_quarter_number(start_date)) + ' ' + str(
-                        start_date.year)
-                    for i in range(1, eval(comparison_number) + 1):
-                        com_start_date = subtract(start_date, months=i * 3)
-                        com_end_date = subtract(end_date, months=i * 3)
-                        domain = [('date', '>=', com_start_date),
-                                  ('account_id', '=', account_id.id),
-                                  ('date', '<=', com_end_date),
-                                  ('parent_state', 'in', option_domain), ]
-                        if journal_list:
-                            domain.append(
-                                ('journal_id', 'in', journal_list), )
-                        if analytic:
-                            domain.append(
-                                ('analytic_line_ids', 'in', analytic))
-                        if method is not None and 'cash' in method:
-                            domain.append(('journal_id', 'in',
-                                           self.env.company.tax_cash_basis_journal_id.ids))
-                        move_lines = self.env['account.move.line'].search(
-                            domain)
-                        dynamic_date_num[
-                            f"dynamic_date_num{i}"] = 'Q' + ' ' + str(
-                            get_quarter_number(com_start_date)) + ' ' + str(
-                            com_start_date.year)
-                        dynamic_total_debit[
-                            f"dynamic_total_debit_{i}"] = round(
-                            sum(move_lines.mapped('debit')), 2)
-                        dynamic_total_credit[
-                            f"dynamic_total_credit_{i}"] = round(
-                            sum(move_lines.mapped('credit')), 2)
-            domain = [('date', '>=', start_date),
-                      ('account_id', '=', account_id.id),
-                      ('date', '<=', end_date),
-                      ('parent_state', 'in', option_domain), ]
-            if journal_list:
-                domain.append(
-                    ('journal_id', 'in', journal_list), )
-            if analytic:
-                domain.append(
-                    ('analytic_line_ids', 'in', analytic))
-            if method is not None and 'cash' in method:
-                domain.append(('journal_id', 'in',
-                               self.env.company.tax_cash_basis_journal_id.ids))
-            move_line_ids = self.env['account.move.line'].search(domain)
-            total_debit = round(sum(move_line_ids.mapped('debit')), 2)
-            total_credit = round(sum(move_line_ids.mapped('credit')), 2)
-            sum_debit = initial_total_debit + sum(
-                dynamic_total_debit.values()) + total_debit
-            sum_credit = initial_total_credit + sum(
-                dynamic_total_credit.values()) + total_credit
+                    com_start_date = subtract(start_date_first, years=i)
+                    com_end_date = subtract(end_date_first, years=i)
+                elif comparison_type == 'month':
+                    com_start_date = subtract(start_date_first, months=i)
+                    com_end_date = subtract(end_date_first, months=i)
+                    dynamic_date_num[f"dynamic_date_num{i}"] = self.get_month_name(com_start_date) + ' ' + str(com_start_date.year)
+                else:  # quarter
+                    com_start_date = subtract(start_date_first, months=i * 3)
+                    com_end_date = subtract(end_date_first, months=i * 3)
+                    dynamic_date_num[f"dynamic_date_num{i}"] = 'Q' + ' ' + str(get_quarter_number(com_start_date)) + ' ' + str(com_start_date.year)
+
+                comp_domain = [
+                    ('date', '>=', com_start_date),
+                    ('date', '<=', com_end_date),
+                    ('parent_state', 'in', option_domain)
+                ]
+                if journal_list:
+                    comp_domain.append(('journal_id', 'in', journal_list))
+                if analytic:
+                    comp_domain.append(('analytic_line_ids', 'in', analytic))
+                if method is not None and 'cash' in method:
+                    comp_domain.append(('journal_id', 'in', self.env.company.tax_cash_basis_journal_id.ids))
+
+                comp_groups = self.env['account.move.line'].read_group(
+                    comp_domain,
+                    ['account_id', 'debit:sum', 'credit:sum'],
+                    ['account_id']
+                )
+                period_balances = {}
+                for g in comp_groups:
+                    if g['account_id']:
+                        acc_id = g['account_id'][0]
+                        period_balances[acc_id] = {
+                            'debit': round(g['debit'] or 0.0, 2),
+                            'credit': round(g['credit'] or 0.0, 2)
+                        }
+                comparison_balances[i] = period_balances
+
+        # 3. Current period domain & read_group
+        curr_domain = [
+            ('date', '>=', start_date_first),
+            ('date', '<=', end_date_first),
+            ('parent_state', 'in', option_domain)
+        ]
+        if journal_list:
+            curr_domain.append(('journal_id', 'in', journal_list))
+        if analytic:
+            curr_domain.append(('analytic_line_ids', 'in', analytic))
+        if method is not None and 'cash' in method:
+            curr_domain.append(('journal_id', 'in', self.env.company.tax_cash_basis_journal_id.ids))
+
+        curr_groups = self.env['account.move.line'].read_group(
+            curr_domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id']
+        )
+        curr_balances = {}
+        for g in curr_groups:
+            if g['account_id']:
+                acc_id = g['account_id'][0]
+                curr_balances[acc_id] = {
+                    'debit': round(g['debit'] or 0.0, 2),
+                    'credit': round(g['credit'] or 0.0, 2)
+                }
+
+        # 4. Get all active account IDs that have any posted move lines
+        all_groups = self.env['account.move.line'].read_group(
+            [], ['account_id'], ['account_id']
+        )
+        account_ids = self.env['account.account'].browse([
+            g['account_id'][0] for g in all_groups if g['account_id']
+        ])
+
+        if not account_ids:
+            return []
+
+        journal_ids = self.env['account.journal'].search_read([], ['name'])
+        move_line_list = []
+        sorted_accounts = sorted(account_ids, key=lambda a: a.code or '')
+        account_names = {acc.id: acc.display_name for acc in sorted_accounts}
+
+        for account_id in sorted_accounts:
+            acc_id = account_id.id
+            initial_total_debit = init_balances.get(acc_id, {}).get('debit', 0.0)
+            initial_total_credit = init_balances.get(acc_id, {}).get('credit', 0.0)
+            total_debit = curr_balances.get(acc_id, {}).get('debit', 0.0)
+            total_credit = curr_balances.get(acc_id, {}).get('credit', 0.0)
+
+            sum_debit = initial_total_debit + total_debit
+            sum_credit = initial_total_credit + total_credit
+
+            # Add comparison balances
+            dynamic_vals_debit = []
+            dynamic_vals_credit = []
+            if comp_num > 0:
+                for i in range(1, comp_num + 1):
+                    p_bal = comparison_balances.get(i, {}).get(acc_id, {})
+                    dynamic_vals_debit.append(p_bal.get('debit', 0.0))
+                    dynamic_vals_credit.append(p_bal.get('credit', 0.0))
+
+            sum_debit += sum(dynamic_vals_debit)
+            sum_credit += sum(dynamic_vals_credit)
+
             diff_credit_debit = sum_debit - sum_credit
             if diff_credit_debit > 0:
                 end_total_debit = diff_credit_debit
@@ -286,11 +335,11 @@ class AccountTrialBalance(models.TransientModel):
             else:
                 end_total_debit = 0.0
                 end_total_credit = abs(diff_credit_debit)
+
             data = {
-                'account': account_id.display_name,
-                'account_id': account_id.id,
-                'journal_ids': self.env['account.journal'].search_read([], [
-                    'name']),
+                'account': account_names.get(acc_id, account_id.display_name),
+                'account_id': acc_id,
+                'journal_ids': journal_ids,
                 'initial_total_debit': initial_total_debit,
                 'initial_total_credit': initial_total_credit,
                 'total_debit': total_debit,
@@ -298,17 +347,17 @@ class AccountTrialBalance(models.TransientModel):
                 'end_total_debit': end_total_debit,
                 'end_total_credit': end_total_credit
             }
-            if comparison_number:
+
+            if comp_num > 0:
                 if dynamic_date_num:
                     data['dynamic_date_num'] = dynamic_date_num
-                for i in range(1, eval(comparison_number) + 1):
-                    data[f'dynamic_total_debit_{i}'] = dynamic_total_debit.get(
-                        f"dynamic_total_debit_{eval(comparison_number) + 1 - i}",
-                        0.0)
-                    data[
-                        f'dynamic_total_credit_{i}'] = dynamic_total_credit.get(
-                        f"dynamic_total_credit_{eval(comparison_number) + 1 - i}",
-                        0.0)
+                for i in range(1, comp_num + 1):
+                    # We reverse the order for the columns
+                    p_idx = comp_num + 1 - i
+                    p_bal = comparison_balances.get(p_idx, {}).get(acc_id, {})
+                    data[f'dynamic_total_debit_{i}'] = p_bal.get('debit', 0.0)
+                    data[f'dynamic_total_credit_{i}'] = p_bal.get('credit', 0.0)
+
             move_line_list.append(data)
         return move_line_list
 

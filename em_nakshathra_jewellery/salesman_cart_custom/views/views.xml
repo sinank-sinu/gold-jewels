@@ -31,7 +31,7 @@
             <xpath expr="//page[@name='preferences']" position="after">
                 <page string="Jewellery Showroom Setup" name="jewellery_setup">
                     <group>
-                        <field name="salesman_location_id" required="1"/>
+                        <field name="salesman_location_id"/>
                     </group>
                 </page>
             </xpath>
