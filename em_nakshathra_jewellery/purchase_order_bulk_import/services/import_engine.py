@@ -853,19 +853,20 @@ class ImportEngine:
                 if self.line_model and self.line_link_field:
                     for row_num, row in group_rows:
                         try:
-                            line_vals = {self.line_link_field: parent.id}
-                            for field, col in self.line_col.items():
-                                raw = str(row.get(col, '') or '').strip()
-                                if not raw:
-                                    continue
-                                resolved = self._resolve_field_value(
-                                    self.line_model, field, raw
-                                )
-                                if resolved is not None:
-                                    line_vals[field] = resolved
+                            with self.env.cr.savepoint():
+                                line_vals = {self.line_link_field: parent.id}
+                                for field, col in self.line_col.items():
+                                    raw = str(row.get(col, '') or '').strip()
+                                    if not raw:
+                                        continue
+                                    resolved = self._resolve_field_value(
+                                        self.line_model, field, raw
+                                    )
+                                    if resolved is not None:
+                                        line_vals[field] = resolved
 
-                            self.env[self.line_model].sudo().create(line_vals)
-                            result['lines_created'] += 1
+                                self.env[self.line_model].sudo().create(line_vals)
+                                result['lines_created'] += 1
                         except Exception as exc:
                             result['errors'] += 1
                             result['error_rows'].append({

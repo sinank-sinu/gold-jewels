@@ -423,13 +423,11 @@ class SaleImportController(http.Controller):
                 ('state', '=', 'completed'),
                 ('is_redeemed', '=', False),
             ], limit=1)
-            print(existing_scheme,'existing_scheme')
             if not existing_scheme and ticket_no:
                 existing_scheme = env['jewellery.scheme.enrollment'].search([
                     ('partner_id', '=', partner.id),
                     ('ticket_number', '=', ticket_no),
                 ], limit=1)
-                print(existing_scheme, 'existing_scheme4')
 
             if existing_scheme:
                 order.apply_scheme = True
