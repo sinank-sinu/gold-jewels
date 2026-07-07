@@ -4,7 +4,6 @@ from odoo import models, fields
 class HrPayslip(models.Model):
     _inherit = 'hr.payslip'
 
-    
     def action_payslip_done(self):
 
         res = super().action_payslip_done()

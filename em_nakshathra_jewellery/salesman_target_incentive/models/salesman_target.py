@@ -43,12 +43,10 @@ class SalesmanTarget(models.Model):
     target_amount = fields.Monetary(
         string='Target Amount',
         currency_field='currency_id',
-        required=True,
     )
     target_gms_22k = fields.Float(
         string='Target GMS (grams) 22K',
         digits=(16, 3),
-        required=True,
     )
     target_gms_18ct = fields.Float(
         string='Target GMS (grams) 18CT',
@@ -61,7 +59,7 @@ class SalesmanTarget(models.Model):
         required=True,
     )
     target_diamond_ct = fields.Float(
-        string='Target Diamond (CT)',
+        string='Target 18 KTD (grams)',
         digits=(16, 3),
         required=True,
     )
@@ -69,7 +67,6 @@ class SalesmanTarget(models.Model):
     incentive_amount = fields.Monetary(
         string='Fixed Incentive Amount',
         currency_field='currency_id',
-        required=True,
     )
 
     # BRANCH TARGETS
@@ -92,7 +89,7 @@ class SalesmanTarget(models.Model):
         digits=(16, 3),
     )
     branch_target_diamond_ct = fields.Float(
-        string='Branch Target Diamond (CT)',
+        string='Branch Target 18 KTD (grams)',
         digits=(16, 3),
     )
 
@@ -129,7 +126,7 @@ class SalesmanTarget(models.Model):
     )
 
     achieved_diamond_ct = fields.Float(
-        string='Achieved Diamond (CT)',
+        string='Achieved 18 KTD (grams',
         compute='_compute_achievements',
         store=True,
         digits=(16, 3),
@@ -165,7 +162,7 @@ class SalesmanTarget(models.Model):
     )
 
     branch_achieved_diamond_ct = fields.Float(
-        string='Branch Achieved Diamond (CT)',
+        string='Branch Achieved 18 KTD (grams)',
         compute='_compute_achievements',
         store=True,
         digits=(16, 3),
@@ -216,6 +213,21 @@ class SalesmanTarget(models.Model):
 
     payment_date = fields.Date(readonly=True)
     notes = fields.Text()
+    inc_18ct = fields.Float(
+        string='18CT',
+        default=5.0,
+    )
+
+    dmd_inc = fields.Float(
+        string='18KTD %',
+        default=8.0,
+    )
+
+    gold_inc = fields.Float(
+        string='22KT',
+        default=2.0,
+    )
+    incentive_add = fields.Float(string='Computed Incentive ',compute='_incentive_add')
 
     # EMPLOYEE
     # @api.depends('salesman_id')
@@ -268,7 +280,6 @@ class SalesmanTarget(models.Model):
                     rec.target_diamond_ct = existing.target_diamond_ct
                     rec.date_from = existing.date_from
                     rec.date_to = existing.date_to
-                    rec.incentive_amount = existing.incentive_amount
 
     def action_view_branch_salesmen(self):
         self.ensure_one()
@@ -371,8 +382,12 @@ class SalesmanTarget(models.Model):
                 elif purity == '22KT':
                     achieved_22kt += grams
                     achieved_amount += amount
+                elif purity == '18KTD':
+                    achieved_diamond_ct += grams
+                    achieved_amount += amount
 
-                achieved_diamond_ct += line.sale_diamond_weight_ct or 0.0
+
+                # achieved_diamond_ct += line.sale_diamond_weight_ct or 0.0
 
             # =====================================================
             # BRANCH SALES
@@ -413,7 +428,10 @@ class SalesmanTarget(models.Model):
                 elif purity == '22KT':
                     branch_22kt += grams
 
-                branch_diamond_ct += line.sale_diamond_weight_ct or 0.0
+                elif purity == '18KTD':
+                    branch_diamond_ct += grams
+
+                # branch_diamond_ct += line.sale_diamond_weight_ct or 0.0
 
             # =====================================================
             # PROGRESS
@@ -449,9 +467,9 @@ class SalesmanTarget(models.Model):
             # =====================================================
 
             personal_target_hit = (
-                achieved_amount >= rec.target_amount
-                and achieved_22k >= rec.target_gms_22k
-                and achieved_18ct >= rec.target_gms_18ct
+                # achieved_amount >= rec.target_amount
+                # achieved_22k >= rec.target_gms_22k
+                achieved_18ct >= rec.target_gms_18ct
                 and achieved_22kt >= rec.target_gms_22kt
                 and achieved_diamond_ct >= rec.target_diamond_ct
             )
@@ -462,13 +480,13 @@ class SalesmanTarget(models.Model):
             rec.is_achieved = personal_target_hit
 
             rec.earned_incentive = (
-                rec.incentive_amount
+                rec.incentive_add
                 if personal_target_hit
                 else 0.0
             )
 
             # WRITE
-            rec.achieved_amount = achieved_amount
+            # rec.achieved_amount = achieved_amount
 
             rec.achieved_gms_22k = achieved_22k
             rec.achieved_gms_18ct = achieved_18ct
@@ -545,11 +563,10 @@ class SalesmanTarget(models.Model):
                     total_diamond_ct
                 ))
 
-    @api.constrains('target_amount', 'target_gms_22k', 'target_gms_18ct', 'target_gms_22kt', 'incentive_amount')
+    @api.constrains('target_amount', 'target_gms_22k', 'target_gms_18ct', 'target_gms_22kt')
     def _check_positive_targets(self):
         for rec in self:
-            if rec.target_amount <= 0:
-                raise ValidationError(_('Target Amount must be greater than zero.'))
+
 
             if rec.target_gms_22k < 0:
                 raise ValidationError(_('22K Target GMS must be positive.'))
@@ -560,10 +577,8 @@ class SalesmanTarget(models.Model):
             if rec.target_gms_22kt < 0:
                 raise ValidationError(_('22KT Target GMS must be positive.'))
 
-            if rec.incentive_amount <= 0:
-                raise ValidationError(_('Incentive Amount must be greater than zero.'))
-            if rec.branch_target_amount < 0:
-                raise ValidationError(_('Branch Target Amount must be positive.'))
+
+
             if rec.branch_target_gms_22k < 0:
                 raise ValidationError(_('Branch 22K Target must be positive.'))
 
@@ -619,3 +634,34 @@ class SalesmanTarget(models.Model):
         """Manual refresh button to recompute achievements."""
         self._compute_achievements()
         return True
+
+    def _incentive_add(self):
+        for rec in self:
+            rec.incentive_add = 0.0
+
+            if not (rec.is_achieved and rec.salesman_id and rec.date_from and rec.date_to):
+                continue
+
+            order_lines = self.env['sale.order.line'].search([
+                ('order_id.user_id', '=', rec.salesman_id.id),
+                ('order_id.date_order', '>=', rec.date_from),
+                ('order_id.date_order', '<=', rec.date_to),
+                ('order_id.state', 'in', ['sale', 'done']),
+                ('purity_id.name', 'in', ['18CT', '18KTD','22KT', '18ct', '18ktd','22kt']),
+            ])
+
+            total_additional = 0.0
+
+            for line in order_lines:
+                purity = line.purity_id.name.upper().strip() if line.purity_id.name else ''
+                mc_amount = line.mc_amount_actual or 0.0
+
+                if purity == '18CT':
+                    total_additional += mc_amount * (self.inc_18ct/100)
+                elif purity == '18KTD':
+                    total_additional += mc_amount * (self.dmd_inc/100)
+                elif purity == '22KT':
+                    total_additional += mc_amount * (self.gold_inc/100)
+
+            rec.incentive_add = total_additional
+

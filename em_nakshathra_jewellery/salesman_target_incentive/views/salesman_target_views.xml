@@ -34,6 +34,12 @@
                                 <span class="o_stat_text text-success">✓ Achieved!</span>
                             </div>
                         </button>
+                        <button name="action_view_branch_salesmen" type="object"
+                                class="oe_stat_button" icon="fa-users">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Salesman</span>
+                            </div>
+                        </button>
                         <button name="action_refresh_achievements" type="object"
                                 class="oe_stat_button" icon="fa-money"
                                 invisible="earned_incentive == 0">
@@ -53,45 +59,64 @@
 
                     <group>
                         <group string="Salesperson">
-                            <field name="salesman_id"/>
-                            <field name="employee_id" readonly="1"/>
+                            <field name="branch_id"/>
+                            <field name="salesman_id" domain="[('branch_ids', 'in', branch_id), ('share', '=', False)]"/>                            <field name="employee_id" readonly="1"/>
                             <field name="currency_id" invisible="1"/>
                         </group>
                         <group string="Period">
                             <field name="date_from"/>
                             <field name="date_to"/>
+                            <field name="target_amount"/>
+
                         </group>
                     </group>
 
-                    <group string="Targets &amp; Incentive">
+                    <group string="Incentive Computation">
                         <group>
-                            <field name="target_amount"/>
-                            <field name="target_gms_22k"/>
-                            <field name="target_gms_18ct"/>
-                            <field name="target_gms_22kt"/>
-                            <field name="target_diamond_ct"/>
-                            <field name="branch_id"/>
-                            <field name="branch_target_gms_22k"/>
-                            <field name="branch_target_gms_18ct"/>
-                            <field name="branch_target_gms_22kt"/>
-                            <field name="branch_target_diamond_ct"/>
 
-                            <field name="incentive_amount"/>
+                            <field name="inc_18ct" readonly="1"/>
+                            <field name="dmd_inc" readonly="1"/>
+                            <field name="gold_inc" readonly="1"/>
                             <field name="payslip_id"/>
+                            <field name="earned_incentive" readonly="1"/>
+
 
                         </group>
-                        <group>
-                            <field name="achieved_amount"/>
-                            <field name="achieved_gms_22k"/>
-                            <field name="achieved_gms_18ct"/>
-                            <field name="achieved_gms_22kt"/>
-                            <field name="achieved_diamond_ct"/>
-                            <field name="branch_achieved_gms_22k"/>
-                            <field name="branch_achieved_gms_18ct"/>
-                            <field name="branch_achieved_gms_22kt"/>
-                            <field name="branch_achieved_diamond_ct"/>
-                            <field name="earned_incentive" readonly="1"/>
-                        </group>
+                        <notebook>
+                        <page string="Individual Metrics">
+                            <group>
+                                <group string="Target Weights">
+                                    <field name="target_gms_22k"/>
+                                    <field name="target_gms_18ct"/>
+                                    <field name="target_gms_22kt"/>
+                                    <field name="target_diamond_ct"/>
+                                </group>
+                                <group string="Achieved Weights">
+                                    <field name="achieved_gms_22k"/>
+                                    <field name="achieved_gms_18ct"/>
+                                    <field name="achieved_gms_22kt"/>
+                                    <field name="achieved_diamond_ct"/>
+                                </group>
+                            </group>
+
+                        </page>
+                        <page string="Branch Overall" groups="base.group_erp_manager">
+                            <group>
+                                <group string="Branch Targets">
+                                    <field name="branch_target_gms_22k"/>
+                                    <field name="branch_target_gms_18ct"/>
+                                    <field name="branch_target_gms_22kt"/>
+                                    <field name="branch_target_diamond_ct"/>
+                                </group>
+                                <group string="Branch Achieved">
+                                    <field name="branch_achieved_gms_22k"/>
+                                    <field name="branch_achieved_gms_18ct"/>
+                                    <field name="branch_achieved_gms_22kt"/>
+                                    <field name="branch_achieved_diamond_ct"/>
+                                </group>
+                            </group>
+                        </page>
+                    </notebook>
                     </group>
 
                     <group string="Progress">
