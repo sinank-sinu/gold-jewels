@@ -128,16 +128,19 @@ class SaleImportController(http.Controller):
                         continue
                     vou = _str(row[2])   # col C = Sales Voucher No (matches SALES col B)
                     if vou:
-                        og_data[vou] = {
+                        if vou not in og_data:
+                            og_data[vou] = []
+                        og_data[vou].append({
                             'item_name':     _str(row[4]),
                             'carat':         _str(row[5]),
                             'gross_wt':      _flt(row[6]),
                             'net_wt':        _flt(row[7]),
                             'di_wt':         _flt(row[8]),
-                            'metal_rate':    _flt(row[9]),
-                            'amount':        _flt(row[10]),
-                            'branch_location': _str(row[11]) if len(row) > 11 else '',
-                        }
+                            'di_amt':        _flt(row[9]),
+                            'metal_rate':    _flt(row[10]),
+                            'amount':        _flt(row[11]),
+                            'branch_location': _str(row[12]) if len(row) > 12 else '',
+                        })
 
             # ── Pre-parse GOLD SCHEME sheet ─────────────────────────────────
             # SCHEME columns: [0]=Date [1]=Customer [2]=Voucher No [3]=Ticket No [4]=Amount
@@ -156,20 +159,30 @@ class SaleImportController(http.Controller):
                             }
                     break
 
-            # ── Process each SALES row ──────────────────────────────────────
+            # ── Group SALES rows by Vou No ───────────────────────────────────
+            sales_data = {}
             for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
                 if not any(row):
                     continue
+                vou_no = _str(row[1])
+                if not vou_no:
+                    continue
+                if vou_no not in sales_data:
+                    sales_data[vou_no] = []
+                sales_data[vou_no].append((row_idx, row))
+                
+            # ── Process each Vou No ──────────────────────────────────────────
+            for vou_no, rows in sales_data.items():
                 try:
                     with request.env.cr.savepoint():
-                        self._process_sale_row(
-                            row, row_idx, og_data, scheme_data,
+                        self._process_sale_voucher(
+                            vou_no, rows, og_data, scheme_data,
                             skipped_list, error_log
                         )
                     success_count += 1
                 except Exception as e:
-                    error_log.append(f"Row {row_idx}: {e}")
-                    _logger.exception("Row %s failed", row_idx)
+                    error_log.append(f"Voucher {vou_no}: {e}")
+                    _logger.exception("Voucher %s failed", vou_no)
 
             request.env.cr.commit()
             return self._build_result_html(success_count, skipped_list, error_log)
@@ -178,58 +191,24 @@ class SaleImportController(http.Controller):
             return f"<h1 style='color:red'>Fatal Error</h1><p>{e}</p>"
 
     # ─────────────────────────────────────────────────────────────────────────
-    def _process_sale_row(self, row, row_idx, og_data, scheme_data, skipped_list, error_log):
+    def _process_sale_voucher(self, vou_no, rows, og_data, scheme_data, skipped_list, error_log):
         env = request.env
 
-        # ── 1. Parse columns (verified against DUMMY SALES(1).xlsx) ──────────
-        # [0]=Branch [1]=Vou No [2]=Party Name [3]=Vou Date [4]=Source Location
-        # [5]=Product Variant [6]=Label No [7]=Barcode [8]=Salesman [9]=Carat
-        # [10]=Pcs [11]=Gross Wt [12]=Net Wt [13]=Di.Wt [14]=St.Wt [15]=Metal Rate
-        # [16]=Metal Amt [17]=MC [18]=Di Amt [19]=St Amt [20]=Other [21]=Taxable
-        # [22]=Taxes [23]=Bill Amt [24]=Bill Ref [25]=UPI Amt [26]=UPI Ref
-        # [27]=UPI-2 Amt [28]=UPI Ref-2 [29]=Card Amt1 [30]=Card Ref1
-        # [31]=Card Amt2 [32]=Card Ref2 [33]=Cash [34]=Gold Scheme [35]=Old Gold
-        branch_name       = _str(row[0])
-        vou_no            = _str(row[1])
-        cust_name         = _str(row[2]) or 'Unknown'
-        date_val          = row[3]
-        source_loc_name   = _str(row[4])
-        product_var_name  = _str(row[5])   # Product Variant
-        label_ref         = _str(row[6])   # Label No
-        # row[7] = Barcode (unused)
-        salesman_name     = _str(row[8])
-        purity_name       = _str(row[9])
-        # row[10] = Pcs
-        gross_wt          = _flt(row[11])
-        # row[12] = Net Wt (computed)
-        diamond_wt        = _flt(row[13])  # Di. Wt
-        stone_wt          = _flt(row[14])  # St. Wt
-        metal_rate        = _flt(row[15])
-        metal_amt         = _flt(row[16]) if len(row) > 16 else 0.0  # Metal Amt
-        mc_amt            = _flt(row[17]) if len(row) > 17 else 0.0  # MC
-        diamond_amt       = _flt(row[18]) if len(row) > 18 else 0.0  # Di Amt
-        stone_amt         = _flt(row[19]) if len(row) > 19 else 0.0  # St Amt
-        other_charge      = _flt(row[20]) if len(row) > 20 else 0.0  # Other
-        # [21]=Taxable [22]=Taxes
-        # row[23]=Bill Amt  [24]=Bill Ref
-        upi_amt1          = _flt(row[25]) if len(row) > 25 else 0.0
-        upi_ref1          = _str(row[26]) if len(row) > 26 else ''
-        upi_amt2          = _flt(row[27]) if len(row) > 27 else 0.0
-        upi_ref2          = _str(row[28]) if len(row) > 28 else ''
-        card_amt1         = _flt(row[29]) if len(row) > 29 else 0.0
-        card_ref1         = _str(row[30]) if len(row) > 30 else ''
-        card_amt2         = _flt(row[31]) if len(row) > 31 else 0.0
-        card_ref2         = _str(row[32]) if len(row) > 32 else ''
-        cash_amt          = _flt(row[33]) if len(row) > 33 else 0.0
-        scheme_amt        = _flt(row[34]) if len(row) > 34 else 0.0
-        og_amt            = _flt(row[35]) if len(row) > 35 else 0.0
+        # ── 1. Parse Header from first row ───────────────────────────────────
+        first_row_idx, hdr_row = rows[0]
+        
+        branch_name       = _str(hdr_row[0])
+        cust_name         = _str(hdr_row[2]) or 'Unknown'
+        date_val          = hdr_row[3]
+        source_loc_name   = _str(hdr_row[4])
+        salesman_name     = _str(hdr_row[8])
 
         if isinstance(date_val, (datetime.datetime, datetime.date)):
             order_date = date_val
         else:
             order_date = fields.Datetime.now()
 
-        # ── 2. Lookups ────────────────────────────────────────────────────────
+        # ── 2. Header Lookups ─────────────────────────────────────────────────
         branch = env['res.branch'].search([('name', 'ilike', branch_name)], limit=1) if branch_name else env['res.branch']
 
         partner = env['res.partner'].search([('name', '=', cust_name)], limit=1)
@@ -239,15 +218,13 @@ class SaleImportController(http.Controller):
         salesman = env['res.users'].search([('name', 'ilike', salesman_name)], limit=1) if salesman_name else env['res.users']
         if salesman_name and not salesman:
             try:
-                # Fallback: create the salesperson if missing so it links to the SO
                 salesman = env['res.users'].sudo().create({
                     'name': salesman_name,
                     'login': salesman_name.strip().lower().replace(' ', '_') + '@generated.local',
                 })
             except Exception as e:
-                _logger.warning("Row %s: Could not create salesman %s: %s", row_idx, salesman_name, e)
+                _logger.warning("Voucher %s: Could not create salesman %s: %s", vou_no, salesman_name, e)
 
-        # Source location
         source_loc = env['stock.location']
         if source_loc_name:
             source_loc = env['stock.location'].search([('complete_name', 'ilike', source_loc_name), ('usage', '=', 'internal')], limit=1)
@@ -256,27 +233,11 @@ class SaleImportController(http.Controller):
         if not source_loc and branch:
             source_loc = branch.branch_location_id
 
-        # Label
-        label = env['product.label']
-        if label_ref:
-            label = env['product.label'].search([('name', '=', label_ref)], limit=1)
-            if not label:
-                label = env['product.label'].search([('barcode', '=', label_ref)], limit=1)
-
-        if label_ref and not label:
-            skipped_list.append({'row': row_idx, 'customer': cust_name, 'label': label_ref, 'reason': 'Label not found'})
-
-        # Purity
-        purity = env['gold.purity']
-        if purity_name:
-            purity = env['gold.purity'].search([('name', 'ilike', purity_name)], limit=1)
-        if not purity and label:
-            purity = label.purity_id
-
         # ── 3. Build Sale Order ───────────────────────────────────────────────
         order_vals = {
             'partner_id': partner.id,
             'date_order': order_date,
+            'origin': vou_no,
         }
         if branch:
             order_vals['branch_id'] = branch.id
@@ -285,7 +246,6 @@ class SaleImportController(http.Controller):
                 ('company_id', '=', env.company.id),
             ], limit=1)
             if not warehouse:
-                # fallback: any warehouse for this company
                 warehouse = env['stock.warehouse'].sudo().search([
                     ('company_id', '=', env.company.id),
                 ], limit=1)
@@ -296,97 +256,164 @@ class SaleImportController(http.Controller):
         if source_loc:
             order_vals['branch_location_id'] = source_loc.id
 
-        # SO line
-        # ── Resolve line product (multiple fallbacks) ─────────────────────────
-        line_product = env['product.product']
-        product_variant_name = product_var_name  # from col 5
-
-        if label:
-            # 1st choice: label.product_id (product variant directly linked)
-            if label.product_id:
-                line_product = label.product_id
-            # 2nd choice: derive variant from product template
-            elif label.product_tmpl_id:
-                variant = label.product_tmpl_id.product_variant_id
-                if variant:
-                    line_product = variant
-
-        # 3rd choice: look up by product variant name from Excel col H
-        if not line_product and product_variant_name:
-            line_product = env['product.product'].search(
-                [('name', 'ilike', product_variant_name)], limit=1)
-            if not line_product:
-                line_product = env['product.product'].search(
-                    [('display_name', 'ilike', product_variant_name)], limit=1)
-
-        if line_product:
-            # Link product back to label if missing
-            if label and not label.product_id and line_product:
-                try:
-                    label.sudo().write({'product_id': line_product.id})
-                except Exception:
-                    pass
-
-            taxes = line_product.taxes_id.filtered(lambda t: t.company_id == env.company)
-            line_vals = {
-                'product_id': line_product.id,
-                'label_id': label.id if label else False,
-                'purity_id': purity.id if purity else False,
-                'product_uom_qty': gross_wt or (label.sale_gross_weight if label else 0) or 1.0,
-                'product_uom': line_product.uom_id.id,
-                'sale_stone_weight': stone_wt or (label.sale_stone_weight if label else 0),
-                'sale_stone_weight_ct': label.sale_stone_weight_ct if label else 0,
-                'sale_diamond_weight_gm': diamond_wt or (label.sale_diamond_weight_gm if label else 0),
-                'sale_diamond_weight_ct': label.sale_diamond_weight_ct if label else 0,
-                'sale_stone_rate': stone_amt or (label.sale_stone_rate if label else 0),
-                'sale_diamond_rate': diamond_amt or (label.sale_diamond_rate if label else 0),
-                'other_weight_amount': other_charge,
-                'mc_amount': mc_amt,
-                'mc_amount_actual': mc_amt,
-                'mc_percent': label.sale_making_charge_value if label else 0,
-                'mc_percent_actual': label.sale_making_charge_value if label else 0,
-                'sale_making_charge_min': label.sale_making_charge_min if label else 0,
-                'gold_rate': metal_rate if metal_rate > 0 else (label.sale_price_per_gram if label else 0),
-                'tax_id': [(6, 0, taxes.ids)] if taxes else [],
-            }
-
-            order_vals['order_line'] = [(0, 0, line_vals)]
-        elif label_ref:
-            # label reference given but not found – SO will have no lines; skip invoice
-            pass
-
+        # Find max header-level amounts across all rows
+        og_amt = max([_flt(r[35]) if len(r) > 35 else 0.0 for idx, r in rows])
+        scheme_amt = max([_flt(r[34]) if len(r) > 34 else 0.0 for idx, r in rows])
+        
+        # Override with amounts from OG/Scheme sheets if present
+        og_infos = og_data.get(vou_no, [])
+        if og_infos:
+            og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
+            if og_amt_from_sheet > 0:
+                og_amt = og_amt_from_sheet
+            
+        sch_info = scheme_data.get(vou_no, {})
+        if sch_info and sch_info.get('amount', 0.0) > 0:
+            scheme_amt = sch_info.get('amount', 0.0)
+        
         if og_amt > 0:
             order_vals['has_old_gold'] = True
 
         order = env['sale.order'].create(order_vals)
 
-        # ── 4. Apply Old Gold ────────────────────────────────────────────────
+        # ── 4. Process Order Lines ────────────────────────────────────────────
+        for row_idx, row in rows:
+            product_var_name  = _str(row[5])
+            label_ref         = _str(row[6])
+            purity_name       = _str(row[9])
+            gross_wt          = _flt(row[11])
+            diamond_wt        = _flt(row[13])
+            stone_wt          = _flt(row[14])
+            metal_rate        = _flt(row[15])
+            metal_amt         = _flt(row[16]) if len(row) > 16 else 0.0
+            mc_amt            = _flt(row[17]) if len(row) > 17 else 0.0
+            diamond_amt       = _flt(row[18]) if len(row) > 18 else 0.0
+            stone_amt         = _flt(row[19]) if len(row) > 19 else 0.0
+            other_charge      = _flt(row[20]) if len(row) > 20 else 0.0
+
+            label = env['product.label']
+            if label_ref:
+                label = env['product.label'].search([('name', '=', label_ref)], limit=1)
+                if not label:
+                    label = env['product.label'].search([('barcode', '=', label_ref)], limit=1)
+            if label_ref and not label:
+                skipped_list.append({'row': row_idx, 'customer': cust_name, 'label': label_ref, 'reason': 'Label not found'})
+
+            purity = env['gold.purity']
+            if purity_name:
+                purity = env['gold.purity'].search([('name', 'ilike', purity_name)], limit=1)
+            if not purity and label:
+                purity = label.purity_id
+
+            line_product = env['product.product']
+            if label:
+                if label.product_id:
+                    line_product = label.product_id
+                elif label.product_tmpl_id:
+                    variant = label.product_tmpl_id.product_variant_id
+                    if variant:
+                        line_product = variant
+
+            if not line_product and product_var_name:
+                line_product = env['product.product'].search([('name', 'ilike', product_var_name)], limit=1)
+                if not line_product:
+                    line_product = env['product.product'].search([('display_name', 'ilike', product_var_name)], limit=1)
+
+            if line_product:
+                if label and not label.product_id and line_product:
+                    try:
+                        label.sudo().write({'product_id': line_product.id})
+                    except Exception:
+                        pass
+
+                taxes = line_product.taxes_id.filtered(lambda t: t.company_id == env.company)
+                line_vals = {
+                    'order_id': order.id,
+                    'product_id': line_product.id,
+                    'label_id': label.id if label else False,
+                    'purity_id': purity.id if purity else False,
+                    'product_uom_qty': gross_wt or (label.sale_gross_weight if label else 0) or 1.0,
+                    'product_uom': line_product.uom_id.id,
+                    'price_unit': 0.0,
+                    'sale_stone_weight': stone_wt or (label.sale_stone_weight if label else 0),
+                    'sale_stone_weight_ct': label.sale_stone_weight_ct if label else 0,
+                    'sale_diamond_weight_gm': diamond_wt or (label.sale_diamond_weight_gm if label else 0),
+                    'sale_diamond_weight_ct': label.sale_diamond_weight_ct if label else 0,
+                    'sale_stone_rate': stone_amt or (label.sale_stone_rate if label else 0),
+                    'sale_diamond_rate': diamond_amt or (label.sale_diamond_rate if label else 0),
+                    'other_weight_amount': other_charge,
+                    'tax_id': [(6, 0, taxes.ids)] if taxes else [],
+                }
+                
+                line = env['sale.order.line'].sudo().create(line_vals)
+                
+                if hasattr(line, '_onchange_label_id'):
+                    line._onchange_label_id()
+                
+                line_updates = {}
+                if metal_rate > 0:
+                    line_updates['gold_rate'] = metal_rate
+                    
+                target_metal = metal_amt if (len(row) > 16 and row[16] is not None) else (metal_rate * gross_wt if metal_rate else 0)
+                
+                if len(row) > 17 and row[17] is not None:
+                    # we must set mc_percent_actual because mc_amount_actual is a non-stored compute
+                    if target_metal > 0:
+                        pct = (mc_amt / target_metal) * 100.0
+                        line_updates['mc_percent_actual'] = pct
+                
+                if line_updates:
+                    line.sudo().write(line_updates)
+                    
+                # Force metal_amount via SQL if provided in excel, as it's a stored compute field without inverse
+                if len(row) > 16 and row[16] is not None:
+                    env.cr.execute("UPDATE sale_order_line SET metal_amount = %s WHERE id = %s", (metal_amt, line.id))
+                    line.invalidate_recordset(['metal_amount'])
+
+                if hasattr(line, '_compute_subtotal'):
+                    try: line._compute_subtotal()
+                    except Exception: pass
+                if hasattr(line, '_compute_price_unit'):
+                    try: line._compute_price_unit()
+                    except Exception: pass
+                try:
+                    line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
+                except Exception: pass
+            
+        # ── 5. Apply Old Gold ────────────────────────────────────────────────
+        og_branch_loc_final = source_loc
         if og_amt > 0:
-            og_info = og_data.get(vou_no, {})
-            og_purity_name = og_info.get('carat', '') or purity_name
-
-            # Purity lookup with multiple fallbacks
-            og_purity = env['gold.purity']
-            if og_purity_name:
-                og_purity = env['gold.purity'].search([('name', 'ilike', og_purity_name)], limit=1)
-            if not og_purity:
-                og_purity = purity  # from sale line
-            if not og_purity:
-                # last resort: first available purity in the system
-                og_purity = env['gold.purity'].search([], limit=1)
-
-            if not og_purity:
-                _logger.warning("Row %s: No purity found for OG – skipping OG", row_idx)
-            else:
+            og_infos = og_data.get(vou_no, [])
+            if not og_infos:
+                og_infos = [{'amount': og_amt}]
+            
+            for og_info in og_infos:
+                amt = og_info.get('amount', 0.0)
+                if amt <= 0:
+                    continue
+                first_purity_name = _str(hdr_row[9])
+                og_purity_name = og_info.get('carat', '') or first_purity_name
+    
+                og_purity = env['gold.purity']
+                if og_purity_name:
+                    og_purity = env['gold.purity'].search([('name', 'ilike', og_purity_name)], limit=1)
+                if not og_purity and order.order_line:
+                    og_purity = order.order_line[0].purity_id
+                if not og_purity:
+                    og_purity = env['gold.purity'].search([], limit=1)
+    
+                if not og_purity:
+                    _logger.warning("Voucher %s: No purity found for OG – skipping OG line", vou_no)
+                    continue
+                
                 og_gross = og_info.get('gross_wt', 0.0)
                 og_net   = og_info.get('net_wt', 0.0)
                 og_stone = og_info.get('stone_wt', 0.0)
                 og_rate  = og_info.get('metal_rate', 0.0)
 
                 if og_rate <= 0:
-                    og_rate = og_amt / og_net if og_net > 0 else 0.0
+                    og_rate = amt / og_net if og_net > 0 else 0.0
 
-                # Resolve branch_location for OG
                 og_branch_loc_name = og_info.get('branch_location', '')
                 og_branch_loc = env['stock.location']
                 if og_branch_loc_name:
@@ -397,26 +424,27 @@ class SaleImportController(http.Controller):
                 if not og_branch_loc and source_loc:
                     og_branch_loc = source_loc
                 if og_branch_loc:
+                    og_branch_loc_final = og_branch_loc
                     order.branch_location_id = og_branch_loc.id
 
                 env['sale.old.gold.line'].create({
                     'sale_id': order.id,
                     'purity_id': og_purity.id,
-                    'gross_weight': og_gross or (og_amt / og_rate if og_rate else 0.0),
+                    'gross_weight': og_gross or (amt / og_rate if og_rate else 0.0),
                     'stone_weight': og_stone,
                     'rate': og_rate,
-                    'amount': og_amt,
+                    'amount': amt,
                 })
-                try:
-                    order.with_context(skip_old_gold_amount_compute=True).action_apply_old_gold()
-                except Exception as e:
-                    _logger.warning("Row %s: Old Gold apply failed: %s", row_idx, e)
+                
+            try:
+                order.with_context(skip_old_gold_amount_compute=True).action_apply_old_gold()
+            except Exception as e:
+                _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
 
-        # ── 5. Apply Scheme ───────────────────────────────────────────────────
+        # ── 6. Apply Scheme ───────────────────────────────────────────────────
         if scheme_amt > 0:
             sch_info = scheme_data.get(vou_no, {})
             ticket_no = sch_info.get('ticket_no', '')
-            # Search for existing completed scheme for this customer with this ticket
             existing_scheme = env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', partner.id),
                 ('ticket_number', '=', ticket_no),
@@ -435,14 +463,14 @@ class SaleImportController(http.Controller):
                 try:
                     order.action_apply_scheme()
                 except Exception as e:
-                    _logger.warning("Row %s: Scheme apply failed: %s", row_idx, e)
+                    _logger.warning("Voucher %s: Scheme apply failed: %s", vou_no, e)
 
-        # ── 6. Confirm Order ──────────────────────────────────────────────────
+        # ── 7. Confirm Order ──────────────────────────────────────────────────
         order.with_context(mail_notrack=True).action_confirm()
 
-        # ── 7. Validate Delivery ──────────────────────────────────────────────
+        # ── 8. Validate Delivery ──────────────────────────────────────────────
         for picking in order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-            if source_loc:
+            if picking.picking_type_code == 'outgoing' and source_loc:
                 picking.location_id = source_loc.id
                 for move in picking.move_ids:
                     move.location_id = source_loc.id
@@ -462,18 +490,53 @@ class SaleImportController(http.Controller):
                         wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                         wiz.process()
             except Exception as e:
-                _logger.warning("Row %s: Delivery validate failed: %s", row_idx, e)
+                _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
 
-        # ── 8. Invoice ────────────────────────────────────────────────────────
+        # ── Validate Old Gold Delivery ────────────────────────────────────────
+        if order.purchase_order_id:
+            for picking in order.purchase_order_id.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+                if og_branch_loc_final:
+                    picking.location_dest_id = og_branch_loc_final.id
+                    for move in picking.move_ids:
+                        move.location_dest_id = og_branch_loc_final.id
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+                    if hasattr(move, 'picked'):
+                        move.picked = True
+                try:
+                    res = picking.with_context(skip_backorder=True, cancel_backorder=True).button_validate()
+                    if isinstance(res, dict):
+                        model = res.get('res_model', '')
+                        ctx = res.get('context', {})
+                        if model == 'stock.immediate.transfer':
+                            wiz = env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz.process()
+                        elif model == 'stock.backorder.confirmation':
+                            wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz.process()
+                except Exception as e:
+                    _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
+
+        # ── 9. Invoice ────────────────────────────────────────────────────────
         if not order.order_line:
-            return  # nothing to invoice
+            return
 
         invoice = order._create_invoices()
         if not invoice:
             return
+            
+        inv_vals = {}
+        if order_date:
+            inv_vals['invoice_date'] = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
+        if vou_no:
+            inv_vals['ref'] = vou_no
+            
+        if inv_vals:
+            invoice.write(inv_vals)
+            
         invoice.action_post()
 
-        # ── 9. Payments ───────────────────────────────────────────────────────
+        # ── 10. Payments ───────────────────────────────────────────────────────
         def _find_branch_journal(jtype, name_hint=''):
             domain = [('type', '=', jtype), ('company_id', '=', env.company.id)]
             if branch:
@@ -484,7 +547,6 @@ class SaleImportController(http.Controller):
                     return j
             j = env['account.journal'].search(domain, limit=1)
             if not j:
-                # fallback without branch
                 j = env['account.journal'].search([('type', '=', jtype), ('company_id', '=', env.company.id)], limit=1)
             return j
 
@@ -493,7 +555,7 @@ class SaleImportController(http.Controller):
                 return
             journal = _find_branch_journal(jtype, name_hint)
             if not journal:
-                _logger.warning("Row %s: Journal not found type=%s hint=%s", row_idx, jtype, name_hint)
+                _logger.warning("Voucher %s: Journal not found type=%s hint=%s", vou_no, jtype, name_hint)
                 return
             wiz_ctx = {'active_model': 'account.move', 'active_ids': invoice.ids}
             create_vals = {
@@ -505,7 +567,6 @@ class SaleImportController(http.Controller):
                 create_vals['communication'] = ref
             wiz = env['account.payment.register'].with_context(**wiz_ctx).create(create_vals)
             payments = wiz.action_create_payments()
-            # Set bank_reference if field exists
             if ref:
                 try:
                     pay_domain = [('reconciled_invoice_ids', 'in', invoice.ids), ('journal_id', '=', journal.id)]
@@ -516,16 +577,23 @@ class SaleImportController(http.Controller):
                     pass
 
         try:
+            upi_amt1  = max([_flt(r[25]) if len(r) > 25 else 0.0 for idx, r in rows])
+            upi_ref1  = next((_str(r[26]) for idx, r in rows if len(r) > 26 and _str(r[26])), '')
+            upi_amt2  = max([_flt(r[27]) if len(r) > 27 else 0.0 for idx, r in rows])
+            upi_ref2  = next((_str(r[28]) for idx, r in rows if len(r) > 28 and _str(r[28])), '')
+            card_amt1 = max([_flt(r[29]) if len(r) > 29 else 0.0 for idx, r in rows])
+            card_ref1 = next((_str(r[30]) for idx, r in rows if len(r) > 30 and _str(r[30])), '')
+            card_amt2 = max([_flt(r[31]) if len(r) > 31 else 0.0 for idx, r in rows])
+            card_ref2 = next((_str(r[32]) for idx, r in rows if len(r) > 32 and _str(r[32])), '')
+            cash_amt  = max([_flt(r[33]) if len(r) > 33 else 0.0 for idx, r in rows])
+
             _pay(upi_amt1,  'bank', 'upi',  upi_ref1)
             _pay(upi_amt2,  'bank', 'upi',  upi_ref2)
             _pay(card_amt1, 'bank', 'card', card_ref1)
             _pay(card_amt2, 'bank', 'card', card_ref2)
             _pay(cash_amt,  'cash', '')
         except Exception as e:
-            _logger.warning("Row %s: Payment failed: %s", row_idx, e)
-
-
-    # ─────────────────────────────────────────────────────────────────────────
+            _logger.warning("Voucher %s: Payment failed: %s", vou_no, e)
     def _build_result_html(self, success_count, skipped_list, error_log):
         download_html = ''
         if skipped_list:
