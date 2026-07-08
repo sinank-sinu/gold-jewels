@@ -60,7 +60,11 @@ class POImportController(http.Controller):
         fields_data = env_model.fields_get(attributes=['string', 'type', 'required', 'store'])
         result = []
         for fname, finfo in sorted(fields_data.items(), key=lambda x: x[1]['string']):
-            if finfo['type'] not in skip_types and finfo.get('store', True):
+            stored = finfo.get('store', True)
+            # Include all stored fields, plus non-stored many2one fields (e.g.
+            # product_template_id on purchase.order.line which is a related field
+            # but can be handled by the import engine via product_id resolution).
+            if finfo['type'] not in skip_types and (stored or finfo['type'] == 'many2one'):
                 result.append({
                     'name': fname,
                     'label': finfo['string'],
@@ -98,6 +102,7 @@ class POImportController(http.Controller):
             'product_var':          'product_id',
             'variant':              'product_id',
             'variant_name':         'product_id',
+            'product':              'product_tmpl_id',
             'product_template':     'product_tmpl_id',
             'purchase_order':       'purchase_id',
             'purchase_order_no':    'purchase_id',
@@ -112,6 +117,8 @@ class POImportController(http.Controller):
             'sale_purity':          'sale_purity_id',
             'label_reference':      'name',
             'label_ref':            'name',
+            'bill_reference':       'name',
+            'bill_ref':             'name',
             'age':                  'age_import',
             'age_days':             'age_import',
             'days':                 'age_import',

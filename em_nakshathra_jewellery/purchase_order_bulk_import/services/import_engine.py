@@ -54,7 +54,7 @@ LABEL_TEMPLATE_FIELDS = [
     ('active',            'Active',                          'core',     'boolean: True / False'),
     # ── Links ────────────────────────────────────────────────────────────────
     ('product_id',        'Product (Variant)',                'link',     'many2one → product.product (name)'),
-    ('product_tmpl_id',   'Product Template',                'link',     'many2one → product.template (name)'),
+    ('product_tmpl_id',   'Product Template (product_tmpl_id)', 'link',  'many2one → product.template (name)'),
     ('purchase_id',       'Purchase Order',                  'link',     'many2one → purchase.order (e.g. P00123)'),
     ('age_import',        'Age (Import)',                     'core',     'integer'),
     ('branch_id',         'Branch',                          'link',     'many2one → res.branch (name)'),
@@ -173,6 +173,29 @@ class ImportEngine:
         self._company_cache = {}
         self._tax_cache = {}
 
+    # ── Val pre-processing ────────────────────────────────────────────────────
+
+    def _coerce_line_vals(self, vals):
+        """
+        Convert product_template_id → product_id before writing to a line model.
+
+        product_template_id on purchase.order.line is a related readonly field
+        (derived from product_id). Writing to it directly raises a ValueError.
+        When the user maps a column to product_template_id we resolve the template
+        to its first available variant and write product_id instead.
+        """
+        if 'product_template_id' not in vals or 'product_id' in vals:
+            return vals
+        tmpl_id = vals.pop('product_template_id')
+        if not tmpl_id:
+            return vals
+        variant = self.env['product.product'].search(
+            [('product_tmpl_id', '=', tmpl_id)], limit=1
+        )
+        if variant:
+            vals['product_id'] = variant.id
+        return vals
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def process_rows(self, rows):
@@ -225,6 +248,8 @@ class ImportEngine:
                     resolved = self._resolve_field_value(self.line_model, field, raw)
                     if resolved is not None:
                         line_vals[field] = resolved
+
+                line_vals = self._coerce_line_vals(line_vals)
 
                 # Skip rows that have no useful data beyond the link field
                 if len(line_vals) <= 1:
@@ -865,6 +890,7 @@ class ImportEngine:
                                     if resolved is not None:
                                         line_vals[field] = resolved
 
+                                line_vals = self._coerce_line_vals(line_vals)
                                 self.env[self.line_model].sudo().create(line_vals)
                                 result['lines_created'] += 1
                         except Exception as exc:
@@ -1152,6 +1178,15 @@ class ImportEngine:
                     )
                     if first:
                         update['product_id'] = first.id
+
+            # ── Auto-set Product Template from Product Variant ────────────────
+            # When product_id is set but product_tmpl_id is not (e.g. the user
+            # only mapped the variant column), derive the template automatically
+            # so the "Product" field always shows the base template name (e.g. "Ring").
+            if label.product_id and not label.product_tmpl_id:
+                tmpl = label.product_id.product_tmpl_id
+                if tmpl:
+                    update['product_tmpl_id'] = tmpl.id
 
             # Determine effective product_id after the above step
             effective_product_id = update.get('product_id') or (label.product_id.id if label.product_id else None)

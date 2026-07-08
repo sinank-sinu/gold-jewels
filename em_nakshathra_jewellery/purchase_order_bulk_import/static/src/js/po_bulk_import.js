@@ -521,15 +521,17 @@ class POBulkImportWizard extends Component {
 
         // ── product.label aliases ─────────────────────────────────────────────
         const labelAliases = {
-            name:                        ['label_reference', 'label_ref', 'label_no', 'reference'],
+            name:                        ['label_reference', 'label_ref', 'label_no', 'reference',
+                                          'bill_reference', 'bill_ref'],
             label_number:                ['label_number', 'label_num', 'tag_no', 'tag_number'],
             label_name:                  ['label_name', 'tag_name'],
             age_import:                  ['age', 'age_days', 'days', 'label_age', 'age_day',
                                           'age__days_', 'age_days_', 'age__days'],
             product_id:                  ['product_variant', 'variant', 'product_var', 'product_variant_name',
-                                          'variant_name', 'item_variant', 'product', 'product_code',
-                                          'item', 'sku', 'product_name'],
-            product_tmpl_id:             ['product_template', 'template', 'product_tmpl', 'product_template_name'],
+                                          'variant_name', 'item_variant', 'product_code',
+                                          'item', 'sku'],
+            product_tmpl_id:             ['product', 'product_template', 'template', 'product_tmpl',
+                                          'product_template_name', 'product_name'],
             purchase_id:                 ['purchase_order', 'purchase_order_no', 'po', 'po_number',
                                           'po_no', 'po_ref', 'po_name'],
             branch_id:                   ['branch', 'branch_name'],
