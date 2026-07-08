@@ -44,7 +44,7 @@ class StockCheckReportController(http.Controller):
         worksheet.write('A1', f'Weekly Stock Check ({report_type.capitalize()})', title_format)
         worksheet.write('A2', f'Reference: {report.name}')
         worksheet.write('A3', f'Branch: {report.branch_id.name}')
-        worksheet.write('A4', f'Location: {report.location_id.name}')
+        worksheet.write('A4', f'Location: {", ".join(report.location_ids.mapped("name"))}')
         worksheet.write('A5', f'Date: {report.date}')
 
         # Table Headers

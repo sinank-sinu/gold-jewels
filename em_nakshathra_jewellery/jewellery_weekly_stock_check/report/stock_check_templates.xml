@@ -11,7 +11,7 @@
                                 <strong>Branch:</strong> <span t-field="o.branch_id.name"/>
                             </div>
                             <div class="col-3">
-                                <strong>Location:</strong> <span t-field="o.location_id.name"/>
+                                <strong>Location:</strong> <span t-esc="', '.join(o.location_ids.mapped('name'))"/>
                             </div>
                             <div class="col-3">
                                 <strong>Date:</strong> <span t-field="o.date"/>
@@ -77,7 +77,7 @@
                                 <strong>Branch:</strong> <span t-field="o.branch_id.name"/>
                             </div>
                             <div class="col-3">
-                                <strong>Location:</strong> <span t-field="o.location_id.name"/>
+                                <strong>Location:</strong> <span t-esc="', '.join(o.location_ids.mapped('name'))"/>
                             </div>
                             <div class="col-3">
                                 <strong>Date:</strong> <span t-field="o.date"/>
