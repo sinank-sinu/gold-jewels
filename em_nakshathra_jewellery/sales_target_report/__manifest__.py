@@ -5,6 +5,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/sales_target_report_views.xml',
+        'views/salesman_incentive_report_views.xml',
     ],
     'installable': True,
 }

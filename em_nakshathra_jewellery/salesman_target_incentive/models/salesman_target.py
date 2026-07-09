@@ -227,7 +227,28 @@ class SalesmanTarget(models.Model):
         string='22KT',
         default=2.0,
     )
-    incentive_add = fields.Float(string='Computed Incentive ',compute='_incentive_add')
+    
+    # Hidden tracking fields for the report
+    mc_amount_18ct = fields.Monetary(
+        string='MC Amount 18CT',
+        currency_field='currency_id',
+        compute='_incentive_add',
+        store=True,
+    )
+    mc_amount_18ktd = fields.Monetary(
+        string='MC Amount 18KTD',
+        currency_field='currency_id',
+        compute='_incentive_add',
+        store=True,
+    )
+    mc_amount_22kt = fields.Monetary(
+        string='MC Amount 22KT',
+        currency_field='currency_id',
+        compute='_incentive_add',
+        store=True,
+    )
+
+    incentive_add = fields.Float(string='Computed Incentive ',compute='_incentive_add', store=True)
 
     # EMPLOYEE
     # @api.depends('salesman_id')
@@ -635,9 +656,13 @@ class SalesmanTarget(models.Model):
         self._compute_achievements()
         return True
 
+    @api.depends('is_achieved', 'salesman_id', 'date_from', 'date_to', 'inc_18ct', 'dmd_inc', 'gold_inc')
     def _incentive_add(self):
         for rec in self:
             rec.incentive_add = 0.0
+            rec.mc_amount_18ct = 0.0
+            rec.mc_amount_18ktd = 0.0
+            rec.mc_amount_22kt = 0.0
 
             if not (rec.is_achieved and rec.salesman_id and rec.date_from and rec.date_to):
                 continue
@@ -651,17 +676,26 @@ class SalesmanTarget(models.Model):
             ])
 
             total_additional = 0.0
+            mc_18ct = 0.0
+            mc_18ktd = 0.0
+            mc_22kt = 0.0
 
             for line in order_lines:
                 purity = line.purity_id.name.upper().strip() if line.purity_id.name else ''
                 mc_amount = line.mc_amount_actual or 0.0
 
                 if purity == '18CT':
-                    total_additional += mc_amount * (self.inc_18ct/100)
+                    total_additional += mc_amount * (rec.inc_18ct/100)
+                    mc_18ct += mc_amount
                 elif purity == '18KTD':
-                    total_additional += mc_amount * (self.dmd_inc/100)
+                    total_additional += mc_amount * (rec.dmd_inc/100)
+                    mc_18ktd += mc_amount
                 elif purity == '22KT':
-                    total_additional += mc_amount * (self.gold_inc/100)
+                    total_additional += mc_amount * (rec.gold_inc/100)
+                    mc_22kt += mc_amount
 
             rec.incentive_add = total_additional
+            rec.mc_amount_18ct = mc_18ct
+            rec.mc_amount_18ktd = mc_18ktd
+            rec.mc_amount_22kt = mc_22kt
 

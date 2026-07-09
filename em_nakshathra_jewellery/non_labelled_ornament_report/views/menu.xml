@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Menu -->
+    <menuitem
+        id="menu_non_labelled_ornament_report"
+        name="Non Labelled Ornament Report"
+        parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
+        action="action_non_labelled_report_wizard"
+        sequence="100"/>
+
+</odoo>
