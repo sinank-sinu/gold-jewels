@@ -45,29 +45,73 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
             wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
             sales_data = {}
             sales_sn = next((s for s in wb.sheetnames if 'SALES' in s.upper() and 'RETURN' not in s.upper()), wb.sheetnames[0])
+            
+            header_row = next(wb[sales_sn].iter_rows(min_row=1, max_row=1, values_only=True))
+            headers = [_str(h).lower().strip().replace(' ', '') for h in header_row]
+            
+            c_m = {} # column map
+            for i, h in enumerate(headers):
+                if 'source' in h and 'loc' in h: c_m['src_loc'] = i
+                elif ('dest' in h and 'loc' in h) or 'returnloc' in h: c_m['dest_loc'] = i
+                elif 'branch' in h: c_m['branch'] = i
+                elif 'vou' in h and 'no' in h: c_m['vou_no'] = i
+                elif 'party' in h: c_m['party'] = i
+                elif 'date' in h: c_m['vou_date'] = i
+                elif 'label' in h: c_m['label'] = i
+                elif 'barcode' in h: c_m['barcode'] = i
+                elif 'item' in h: c_m['item'] = i
+                elif 'salesman' in h: c_m['salesman'] = i
+                elif 'purity' in h or 'carat' in h: c_m['purity'] = i
+                elif 'gross' in h: c_m['gross'] = i
+                elif 'net' in h: c_m['net'] = i
+                elif 'diamond' in h and 'wt' in h: c_m['dia_wt'] = i
+                elif 'stone' in h and 'wt' in h: c_m['st_wt'] = i
+                elif 'metal' in h and 'rate' in h: c_m['m_rate'] = i
+                elif 'metal' in h and 'amt' in h: c_m['m_amt'] = i
+                elif 'mc' in h and 'amt' in h: c_m['mc'] = i
+                elif 'diamond' in h and 'amt' in h: c_m['dia_amt'] = i
+                elif 'stone' in h and 'amt' in h: c_m['st_amt'] = i
+                elif 'other' in h: c_m['other'] = i
+                elif 'tax' in h: c_m['tax'] = i
+                
             for row in wb[sales_sn].iter_rows(min_row=2, values_only=True):
                 if not any(row): continue
-                vou = _str(row[1])
+                vou = _str(row[c_m.get('vou_no', 1)])
                 if not vou: continue
-                vou_date = row[3]
+                vou_date = row[c_m.get('vou_date', 3)]
                 if isinstance(vou_date, (datetime.datetime, datetime.date)):
                     vou_date = vou_date.date().isoformat() if isinstance(vou_date, datetime.datetime) else vou_date.isoformat()
                 r = list(row) + [None]*50
                 entry = {
-                    'branch_name':_str(r[0]),'party_name':_str(r[2]),'vou_date':vou_date,
-                    'label_no':_str(r[4]),'barcode_no':_str(r[5]),'item_name':_str(r[6]),
-                    'salesman':_str(r[7]),'purity':_str(r[8]),
-                    'gross_wt':_flt(r[10]),'net_wt':_flt(r[11]),'diamond_wt':_flt(r[12]),'stone_wt':_flt(r[13]),
-                    'metal_rate':_flt(r[14]),'metal_amt':_flt(r[15]),'mc_amt':_flt(r[16]),'diamond_amt':_flt(r[17]),
-                    'stone_amt':_flt(r[18]),'other_charge':_flt(r[19]),'taxes':_str(r[21]),
-                    'bill_amount':_flt(r[24]),
-                    'bank_amt':_flt(r[26]),'bank_ref':_str(r[27]),
-                    'upi_amt1':_flt(r[28]),'upi_ref1':_str(r[29]),
-                    'upi_amt2':_flt(r[30]),'upi_ref2':_str(r[31]),
-                    'card_amt1':_flt(r[32]),'card_ref1':_str(r[33]),
-                    'card_amt2':_flt(r[34]),'card_ref2':_str(r[35]),
-                    'card_amt3':_flt(r[36]),'card_ref3':_str(r[37]),
-                    'cash_amt':_flt(r[38]),'gold_scheme':_flt(r[39]),'sales_return':_flt(r[42]),
+                    'branch_name': _str(r[c_m.get('branch', 0)]),
+                    'party_name':  _str(r[c_m.get('party', 2)]),
+                    'vou_date':    vou_date,
+                    'label_no':    _str(r[c_m.get('label', 4)]),
+                    'barcode_no':  _str(r[c_m.get('barcode', 5)]),
+                    'item_name':   _str(r[c_m.get('item', 6)]),
+                    'salesman':    _str(r[c_m.get('salesman', 7)]),
+                    'purity':      _str(r[c_m.get('purity', 8)]),
+                    'gross_wt':    _flt(r[c_m.get('gross', 10)]),
+                    'net_wt':      _flt(r[c_m.get('net', 11)]),
+                    'diamond_wt':  _flt(r[c_m.get('dia_wt', 12)]),
+                    'stone_wt':    _flt(r[c_m.get('st_wt', 13)]),
+                    'metal_rate':  _flt(r[c_m.get('m_rate', 14)]),
+                    'metal_amt':   _flt(r[c_m.get('m_amt', 15)]),
+                    'mc_amt':      _flt(r[c_m.get('mc', 16)]),
+                    'diamond_amt': _flt(r[c_m.get('dia_amt', 17)]),
+                    'stone_amt':   _flt(r[c_m.get('st_amt', 18)]),
+                    'other_charge':_flt(r[c_m.get('other', 19)]),
+                    'taxes':       _str(r[c_m.get('tax', 21)]),
+                    'bill_amount': _flt(r[24]),
+                    'bank_amt':    _flt(r[26]),'bank_ref':_str(r[27]),
+                    'upi_amt1':    _flt(r[28]),'upi_ref1':_str(r[29]),
+                    'upi_amt2':    _flt(r[30]),'upi_ref2':_str(r[31]),
+                    'card_amt1':   _flt(r[32]),'card_ref1':_str(r[33]),
+                    'card_amt2':   _flt(r[34]),'card_ref2':_str(r[35]),
+                    'card_amt3':   _flt(r[36]),'card_ref3':_str(r[37]),
+                    'cash_amt':    _flt(r[38]),'gold_scheme':_flt(r[39]),'sales_return':_flt(r[42]),
+                    'src_loc_name': _str(r[c_m.get('src_loc', -1)]) if c_m.get('src_loc', -1) >= 0 else '',
+                    'dest_loc_name': _str(r[c_m.get('dest_loc', -1)]) if c_m.get('dest_loc', -1) >= 0 else '',
                 }
                 sales_data.setdefault(vou, []).append(entry)
             sr_data = {}
@@ -75,6 +119,12 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
             if not sr_sn and len(wb.sheetnames) > 1:
                 sr_sn = wb.sheetnames[1]
             if sr_sn:
+                sr_header_row = next(wb[sr_sn].iter_rows(min_row=1, max_row=1, values_only=True))
+                sr_headers = [_str(h).lower().strip().replace(' ', '') for h in sr_header_row]
+                sr_dest_loc_idx = -1
+                for i, h in enumerate(sr_headers):
+                    if ('dest' in h and 'loc' in h) or 'returnloc' in h: sr_dest_loc_idx = i
+                    
                 for row in wb[sr_sn].iter_rows(min_row=2, values_only=True):
                     if not any(row): continue
                     r = list(row) + [None]*10
@@ -89,6 +139,7 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                         'gross_weight':_flt(r[2]),'stone_weight':_flt(r[3]),
                         'net_weight':_flt(r[4]),'rate':_flt(r[5]),'amount':_flt(r[6]),
                         'date':sr_date,'customer':_str(r[9]),
+                        'dest_loc_name': _str(r[sr_dest_loc_idx]) if sr_dest_loc_idx >= 0 else '',
                     })
             wb.close()
             all_vous = list(sales_data.keys())
@@ -318,6 +369,32 @@ if(tot>0)run(); else log('No records found.');
                 })
             cache['salesmen'][salesman_name] = salesman
 
+        # 3b. Locations
+        src_loc_name = hdr.get('src_loc_name', '')
+        dest_loc_name = hdr.get('dest_loc_name', '')
+        if not dest_loc_name and sr_rows:
+            dest_loc_name = sr_rows[0].get('dest_loc_name', '')
+        
+        src_loc = None
+        if src_loc_name:
+            src_loc = self._find(cache.setdefault('locations', {}), src_loc_name, None, None)
+            if not src_loc:
+                src_loc = env['stock.location'].search([
+                    '|', ('complete_name', 'ilike', src_loc_name), ('name', 'ilike', src_loc_name), 
+                    ('usage', '=', 'internal')
+                ], limit=1)
+                if src_loc: cache['locations'][src_loc_name] = src_loc
+                
+        dest_loc = None
+        if dest_loc_name:
+            dest_loc = self._find(cache.setdefault('locations', {}), dest_loc_name, None, None)
+            if not dest_loc:
+                dest_loc = env['stock.location'].search([
+                    '|', ('complete_name', 'ilike', dest_loc_name), ('name', 'ilike', dest_loc_name), 
+                    ('usage', '=', 'internal')
+                ], limit=1)
+                if dest_loc: cache['locations'][dest_loc_name] = dest_loc
+
         # Check for missing labels in sales_rows BEFORE creating the order
         missing = []
         for row in sales_rows:
@@ -348,6 +425,8 @@ if(tot>0)run(); else log('No records found.');
         }
         if branch:   so_vals['branch_id'] = branch.id
         if salesman: so_vals['user_id']    = salesman.id
+        if src_loc:  so_vals['branch_location_id'] = src_loc.id
+        if dest_loc: so_vals['sale_return_branch_location_id'] = dest_loc.id
         order = env['sale.order'].sudo().create(so_vals)
 
         # 5. Sale Return Lines (SR sheet) – product create if missing
@@ -438,16 +517,28 @@ if(tot>0)run(); else log('No records found.');
             excel_metal_rate = _flt(row.get('metal_rate')) or line.gold_rate
             excel_metal_amt  = _flt(row.get('metal_amt')) or line.metal_amount
             
-            line.sudo().write({
-                'gold_rate':        excel_metal_rate,
-                'metal_amount':     excel_metal_amt,
-                'mc_amount_actual': mc_amt,   # use Excel MC directly
-            })
+            line_updates = {'gold_rate': excel_metal_rate}
+            
+            if excel_metal_amt > 0:
+                pct = (mc_amt / excel_metal_amt) * 100.0
+                line_updates['mc_percent_actual'] = pct
+                
+            line.sudo().write(line_updates)
 
+            if excel_metal_amt > 0:
+                env.cr.execute("UPDATE sale_order_line SET metal_amount = %s WHERE id = %s", (excel_metal_amt, line.id))
+                line.invalidate_recordset(['metal_amount'])
+            
             # ── Step 4: flush stored computes (price_subtotal, price_unit) ───
-            line._compute_subtotal()
-            line._compute_price_unit()
-            line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
+            if hasattr(line, '_compute_subtotal'):
+                try: line._compute_subtotal()
+                except Exception: pass
+            if hasattr(line, '_compute_price_unit'):
+                try: line._compute_price_unit()
+                except Exception: pass
+            try:
+                line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
+            except Exception: pass
 
         # 7. Gold Scheme
         gold_scheme_amt = _flt(hdr.get('gold_scheme', 0.0))
@@ -480,11 +571,17 @@ if(tot>0)run(); else log('No records found.');
                     _logger.warning("Scheme apply failed %s: %s", vou_no, e)
 
         # 8. Confirm
+        original_date = order.date_order
         order.with_context(tracking_disable=True, mail_notrack=True).action_confirm()
+        if original_date:
+            order.sudo().write({'date_order': original_date})
+            env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (original_date, order.id))
 
         # 9. Validate stock delivery
         for picking in order.picking_ids.filtered(
                 lambda p: p.state not in ('done', 'cancel') and p.picking_type_code == 'outgoing'):
+            if vou_date:
+                picking.sudo().write({'scheduled_date': vou_date})
             for move in picking.move_ids:
                 move.quantity = move.product_uom_qty
                 if hasattr(move, 'picked'): move.picked = True
@@ -496,10 +593,33 @@ if(tot>0)run(); else log('No records found.');
             except Exception as e:
                 _logger.warning("Stock validate %s: %s", vou_no, e)
 
+            if vou_date:
+                env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (vou_date, vou_date, picking.id))
+                env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+                env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+
         # 10. Apply Sale Return
         if order.sale_return_line_ids:
             try:
                 order.action_apply_sale_return()
+                if vou_date:
+                    date_only = vou_date.date() if isinstance(vou_date, datetime.datetime) else vou_date
+                    if hasattr(order, 'sale_return_po_id') and order.sale_return_po_id:
+                        order.sale_return_po_id.sudo().write({
+                            'date_order': vou_date,
+                            'date_approve': vou_date,
+                        })
+                        for picking in order.sale_return_po_id.picking_ids:
+                            env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (vou_date, vou_date, picking.id))
+                            env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+                            env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+                    
+                    if hasattr(order, 'sale_return_bill_id') and order.sale_return_bill_id:
+                        env.cr.execute("""
+                            UPDATE account_move 
+                            SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
+                            WHERE id = %s
+                        """, (date_only, date_only, date_only, date_only, order.sale_return_bill_id.id))
             except Exception as e:
                 _logger.warning("Sale return apply %s: %s", vou_no, e)
 
@@ -509,7 +629,14 @@ if(tot>0)run(); else log('No records found.');
             invoices = order._create_invoices()
             if invoices:
                 invoice = invoices[0]
-                invoice.invoice_date = vou_date
+                if vou_date:
+                    date_only = vou_date.date() if isinstance(vou_date, datetime.datetime) else vou_date
+                    invoice.write({
+                        'invoice_date': date_only,
+                        'date': date_only,
+                        'invoice_date_due': date_only,
+                        'delivery_date': date_only
+                    })
                 invoice.action_post()
         except Exception as e:
             _logger.warning("Invoice %s: %s", vou_no, e)

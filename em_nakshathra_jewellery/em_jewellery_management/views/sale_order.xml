@@ -105,6 +105,7 @@
                 </group>
                  <group>
                     <field name="branch_location_id" readonly="old_gold_bill_id != False" required="has_old_gold"/>
+                    <field name="sale_return_branch_location_id" readonly="sale_return_bill_id != False" required="is_sale_return"/>
                 </group>
 <!--                <group>-->
                      <button name="action_apply_old_gold"

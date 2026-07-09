@@ -1,6 +1,6 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_gold_purity,gold.purity,model_gold_purity,base.group_user,1,1,1,1
-access_product_label,product.label,model_product_label,em_jewellery_management.group_jewellery_salesman,1,1,1,1
+access_product_label,product.label,model_product_label,em_jewellery_management.group_jewellery_salesman,1,0,0,0
 access_jewellery_job_work,jewellery.job.work,model_jewellery_job_work,em_jewellery_management.group_jewellery_manager,1,1,1,1
 access_jewellery_receive_voucher,jewellery.receive.voucher,model_jewellery_receive_voucher,em_jewellery_management.group_jewellery_manager,1,1,1,1
 access_jewellery_issue_voucher,jewellery.issue.voucher,model_jewellery_issue_voucher,em_jewellery_management.group_jewellery_manager,1,1,1,1

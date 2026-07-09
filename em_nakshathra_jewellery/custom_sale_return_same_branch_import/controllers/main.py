@@ -63,51 +63,94 @@ class SaleReturnMigrationController(http.Controller):
             sales_sheet_name = next((s for s in wb.sheetnames if 'SALES' in s.strip().upper()), None)
             
             if sales_sheet_name:
+                header_row = next(wb[sales_sheet_name].iter_rows(min_row=1, max_row=1, values_only=True))
+                headers = [_str(h).lower().strip().replace(' ', '') for h in header_row]
+                
+                c_m = {} # column map
+                for i, h in enumerate(headers):
+                    if 'source' in h and 'loc' in h: c_m['src_loc'] = i
+                    elif ('dest' in h and 'loc' in h) or 'returnloc' in h: c_m['dest_loc'] = i
+                    elif 'branch' in h: c_m['branch'] = i
+                    elif 'vou' in h and 'no' in h: c_m['vou_no'] = i
+                    elif 'party' in h: c_m['party'] = i
+                    elif 'date' in h: c_m['vou_date'] = i
+                    elif 'label' in h: c_m['label'] = i
+                    elif 'barcode' in h: c_m['barcode'] = i
+                    elif 'item' in h: c_m['item'] = i
+                    elif 'salesman' in h: c_m['salesman'] = i
+                    elif 'purity' in h or 'carat' in h: c_m['purity'] = i
+                    elif 'gross' in h: c_m['gross'] = i
+                    elif 'net' in h: c_m['net'] = i
+                    elif 'diamond' in h and 'wt' in h: c_m['dia_wt'] = i
+                    elif 'stone' in h and 'wt' in h: c_m['st_wt'] = i
+                    elif 'metal' in h and 'rate' in h: c_m['m_rate'] = i
+                    elif 'metal' in h and 'amt' in h: c_m['m_amt'] = i
+                    elif 'mc' in h and 'amt' in h: c_m['mc'] = i
+                    elif 'diamond' in h and 'amt' in h: c_m['dia_amt'] = i
+                    elif 'stone' in h and 'amt' in h: c_m['st_amt'] = i
+                    elif 'other' in h: c_m['other'] = i
+                    elif 'tax' in h: c_m['tax'] = i
+                    elif 'upi1' in h or 'upi_amt1' in h: c_m['upi_amt1'] = i
+                    elif 'upi1' in h and 'ref' in h: c_m['upi_ref1'] = i
+                    elif 'upi2' in h or 'upi_amt2' in h: c_m['upi_amt2'] = i
+                    elif 'upi2' in h and 'ref' in h: c_m['upi_ref2'] = i
+                    elif 'card1' in h or 'card_amt1' in h: c_m['card_amt1'] = i
+                    elif 'card1' in h and 'ref' in h: c_m['card_ref1'] = i
+                    elif 'card2' in h or 'card_amt2' in h: c_m['card_amt2'] = i
+                    elif 'card2' in h and 'ref' in h: c_m['card_ref2'] = i
+                    elif 'cash' in h and 'amt' in h: c_m['cash_amt'] = i
+                    elif 'scheme' in h: c_m['gold_scheme_amt'] = i
+                
                 for row_idx, row in enumerate(wb[sales_sheet_name].iter_rows(min_row=2, values_only=True), start=2):
                     if not any(row): continue
-                    vou_no = _str(row[1]) # Vou No
+                    vou_no = _str(row[c_m.get('vou_no', 1)]) # Vou No
                     if vou_no:
                         if vou_no not in sales_data:
                             sales_data[vou_no] = []
                         
-                        vou_date = row[3]
+                        vou_date = row[c_m.get('vou_date', 3)]
                         if isinstance(vou_date, (datetime.datetime, datetime.date)):
                             vou_date = vou_date.isoformat()
                             
-                        rev_date = row[36] if len(row) > 36 else False
+                        # Optional revision date at the end
+                        rev_date = row[-1] if len(row) > 36 else False
                         if isinstance(rev_date, (datetime.datetime, datetime.date)):
                             rev_date = rev_date.isoformat()
+                            
+                        r = list(row) + [None]*50
                         
                         sales_data[vou_no].append({
-                            'branch_name': _str(row[0]),
-                            'party_name': _str(row[2]),
+                            'branch_name': _str(r[c_m.get('branch', 0)]),
+                            'party_name': _str(r[c_m.get('party', 2)]),
                             'vou_date': vou_date,
-                            'source_loc': _str(row[4]),
-                            'label_no': _str(row[5]),
-                            'barcode_no': _str(row[6]),
-                            'item_name': _str(row[7]),
-                            'salesman': _str(row[8]),
-                            'purity': _str(row[9]),
-                            'gross_wt': _flt(row[11]),
-                            'diamond_wt': _flt(row[13]),
-                            'stone_wt': _flt(row[14]),
-                            'metal_rate': _flt(row[15]),
-                            'metal_amt': _flt(row[16]) if len(row) > 16 else 0.0,
-                            'mc_amt': _flt(row[17]) if len(row) > 17 else 0.0,
-                            'diamond_amt': _flt(row[18]) if len(row) > 18 else 0.0,
-                            'stone_amt': _flt(row[19]) if len(row) > 19 else 0.0,
-                            'other_charge': _flt(row[20]) if len(row) > 20 else 0.0,
-                            'taxes': _str(row[22]) if len(row) > 22 else '',
-                            'upi_amt1': _flt(row[25]) if len(row) > 25 else 0.0,
-                            'upi_ref1': _str(row[26]) if len(row) > 26 else '',
-                            'upi_amt2': _flt(row[27]) if len(row) > 27 else 0.0,
-                            'upi_ref2': _str(row[28]) if len(row) > 28 else '',
-                            'card_amt1': _flt(row[29]) if len(row) > 29 else 0.0,
-                            'card_ref1': _str(row[30]) if len(row) > 30 else '',
-                            'card_amt2': _flt(row[31]) if len(row) > 31 else 0.0,
-                            'card_ref2': _str(row[32]) if len(row) > 32 else '',
-                            'cash_amt': _flt(row[33]) if len(row) > 33 else 0.0,
-                            'gold_scheme_amt': _flt(row[35]) if len(row) > 35 and row[35] else 0.0,
+                            'source_loc': _str(r[c_m.get('src_loc', 4)]),
+                            'dest_loc': _str(r[c_m.get('dest_loc', 5)]),
+                            'label_no': _str(r[c_m.get('label', 6)]),
+                            'barcode_no': _str(r[c_m.get('barcode', 7)]),
+                            'item_name': _str(r[c_m.get('item', 8)]),
+                            'salesman': _str(r[c_m.get('salesman', 9)]),
+                            'purity': _str(r[c_m.get('purity', 10)]),
+                            'gross_wt': _flt(r[c_m.get('gross', 11)]),
+                            'diamond_wt': _flt(r[c_m.get('dia_wt', 13)]),
+                            'stone_wt': _flt(r[c_m.get('st_wt', 14)]),
+                            'metal_rate': _flt(r[c_m.get('m_rate', 15)]),
+                            'metal_amt': _flt(r[c_m.get('m_amt', 16)]),
+                            'mc_amt': _flt(r[c_m.get('mc', 17)]),
+                            'diamond_amt': _flt(r[c_m.get('dia_amt', 18)]),
+                            'stone_amt': _flt(r[c_m.get('st_amt', 19)]),
+                            'other_charge': _flt(r[c_m.get('other', 20)]),
+                            'taxes': _str(r[c_m.get('tax', 22)]),
+                            'upi_amt1': _flt(r[c_m.get('upi_amt1', 25)]),
+                            'upi_ref1': _str(r[c_m.get('upi_ref1', 26)]),
+                            'upi_amt2': _flt(r[c_m.get('upi_amt2', 27)]),
+                            'upi_ref2': _str(r[c_m.get('upi_ref2', 28)]),
+                            'card_amt1': _flt(r[c_m.get('card_amt1', 29)]),
+                            'card_ref1': _str(r[c_m.get('card_ref1', 30)]),
+                            'card_amt2': _flt(r[c_m.get('card_amt2', 31)]),
+                            'card_ref2': _str(r[c_m.get('card_ref2', 32)]),
+                            'cash_amt': _flt(r[c_m.get('cash_amt', 33)]),
+                            'gold_scheme_amt': _flt(r[c_m.get('gold_scheme_amt', 35)]),
+                            'reversal_date': rev_date,
                         })
 
             # Pre-parse SR sheet
@@ -421,12 +464,42 @@ class SaleReturnMigrationController(http.Controller):
                 'sale_stone_rate': new_s.get('stone_amt') or (label.sale_stone_rate if label else 0),
                 'sale_diamond_rate': new_s.get('diamond_amt') or (label.sale_diamond_rate if label else 0),
                 'other_weight_amount': new_s.get('other_charge', 0.0),
-                'mc_amount': new_s.get('mc_amt', 0.0),
-                'mc_amount_actual': new_s.get('mc_amt', 0.0),
                 'gold_rate': new_s.get('metal_rate') or (label.sale_price_per_gram if label else 0),
                 'tax_id': [(6, 0, taxes.ids)] if taxes else [],
             }
             line = env['sale.order.line'].create(line_vals)
+            
+            # --- Call Onchange ---
+            if hasattr(line, '_onchange_label_id'):
+                line._onchange_label_id()
+                
+            # --- Override Math ---
+            excel_metal_rate = new_s.get('metal_rate') or line.gold_rate
+            excel_metal_amt = new_s.get('metal_amt', 0.0)
+            mc_amt = new_s.get('mc_amt', 0.0)
+            
+            line_updates = {'gold_rate': excel_metal_rate}
+            
+            if excel_metal_amt > 0:
+                pct = (mc_amt / excel_metal_amt) * 100.0
+                line_updates['mc_percent_actual'] = pct
+                
+            line.write(line_updates)
+            
+            if excel_metal_amt > 0:
+                env.cr.execute("UPDATE sale_order_line SET metal_amount = %s WHERE id = %s", (excel_metal_amt, line.id))
+                line.invalidate_recordset(['metal_amount'])
+                
+            if hasattr(line, '_compute_subtotal'):
+                try: line._compute_subtotal()
+                except Exception: pass
+            if hasattr(line, '_compute_price_unit'):
+                try: line._compute_price_unit()
+                except Exception: pass
+            try:
+                line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
+            except Exception: pass
+
             
             # Apply Source Location from Excel to the generated stock moves
             loc_name = new_s.get('source_loc')
@@ -506,6 +579,8 @@ class SaleReturnMigrationController(http.Controller):
         # Refresh order pickings to find the newly generated delivery
         new_pickings = order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel') and p.picking_type_code == 'outgoing')
         for picking in new_pickings:
+            if s_data.get('vou_date'):
+                picking.write({'scheduled_date': s_data.get('vou_date')})
             for move in picking.move_ids:
                 move.quantity = move.product_uom_qty
                 if hasattr(move, 'picked'): move.picked = True
@@ -520,9 +595,24 @@ class SaleReturnMigrationController(http.Controller):
             except Exception as e:
                 _logger.warning("New Delivery validate failed: %s", e)
 
+            # SQL Date Override
+            if s_data.get('vou_date'):
+                vou_date = s_data.get('vou_date')
+                env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (vou_date, vou_date, picking.id))
+                env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+                env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
+
         # 5. Create New Invoice
         new_invoice = order._create_invoices()
         if new_invoice:
+            if s_data.get('vou_date'):
+                date_only = datetime.datetime.fromisoformat(s_data.get('vou_date')).date() if isinstance(s_data.get('vou_date'), str) else s_data.get('vou_date')
+                new_invoice.write({
+                    'invoice_date': date_only,
+                    'date': date_only,
+                    'invoice_date_due': date_only,
+                    'delivery_date': date_only
+                })
             new_invoice.action_post()
 
             # 6. Apply Credit Note as Outstanding

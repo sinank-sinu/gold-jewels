@@ -101,11 +101,9 @@ class ProductLabel(models.Model):
     
     @api.onchange('purchase_id')
     def _onchange_purchase_id(self):
-        if self.purchase_id:
-            first_line = self.purchase_id.order_line[:1]  # safely take first line
-            if first_line and first_line.purity_id:
-                self.purity_id = first_line.purity_id.id
-                
+        if self.product_id:
+            self.purity_id = self.product_id.purity_id
+
     @api.onchange('product_template_id')
     def _onchange_product_template(self):
         if self.product_template_id:

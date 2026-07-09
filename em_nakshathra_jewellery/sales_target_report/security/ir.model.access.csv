@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_salesman_target_report_wizard,salesman.target.report.wizard,model_salesman_target_report_wizard,base.group_user,1,1,1,1
+access_salesman_incentive_report_wizard,salesman.incentive.report.wizard,model_salesman_incentive_report_wizard,base.group_user,1,1,1,1

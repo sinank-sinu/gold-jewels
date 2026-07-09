@@ -7,6 +7,7 @@
     'depends': ['sale', 'hr', 'em_jewellery_management'],
     'data': [
         'security/ir.model.access.csv',
+        'security/security.xml',
         'data/sequence.xml',
         'views/salesman_target_views.xml',
         'views/hr_employee_inherit.xml',

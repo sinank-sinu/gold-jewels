@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_salesman_incentive_report_wizard" model="ir.ui.view">
+        <field name="name">salesman.incentive.report.wizard.form</field>
+        <field name="model">salesman.incentive.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Salesman Incentive Report">
+                <group>
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+                    <group>
+                        <field name="branch_id"/>
+                        <field name="salesman_ids" widget="many2many_tags"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_generate_report" type="object" string="Generate XLSX" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_salesman_incentive_report_wizard" model="ir.actions.act_window">
+        <field name="name">Salesman Incentive Report</field>
+        <field name="res_model">salesman.incentive.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_salesman_incentive_report"
+              name="Incentive Report"
+              parent="salesman_target_incentive.menu_salesman_target_root"
+              action="action_salesman_incentive_report_wizard"
+              sequence="1000"/>
+</odoo>

@@ -121,7 +121,7 @@ class SalesmanTargetReportWizard(models.TransientModel):
             ws.cell(row, 10).value = rec.target_gms_22kt
             ws.cell(row, 11).value = rec.target_diamond_ct
 
-            ws.cell(row, 12).value = rec.incentive_amount
+            ws.cell(row, 12).value = rec.earned_incentive
 
             ws.cell(row, 13).value = rec.branch_target_amount
             ws.cell(row, 14).value = rec.branch_target_gms_22k
