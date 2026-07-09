@@ -199,12 +199,23 @@ class SaleImportController(http.Controller):
         
         branch_name       = _str(hdr_row[0])
         cust_name         = _str(hdr_row[2]) or 'Unknown'
-        date_val          = hdr_row[3]
+        date_val          = next((r[3] for idx, r in rows if len(r) > 3 and r[3] is not None and str(r[3]).strip()), None)
         source_loc_name   = _str(hdr_row[4])
         salesman_name     = _str(hdr_row[8])
 
         if isinstance(date_val, (datetime.datetime, datetime.date)):
             order_date = date_val
+        elif isinstance(date_val, (int, float)):
+            try:
+                order_date = datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(date_val))
+            except Exception:
+                order_date = fields.Datetime.now()
+        elif isinstance(date_val, str) and date_val.strip():
+            try:
+                from dateutil import parser
+                order_date = parser.parse(date_val.strip(), dayfirst=True)
+            except Exception:
+                order_date = fields.Datetime.now()
         else:
             order_date = fields.Datetime.now()
 
@@ -438,6 +449,26 @@ class SaleImportController(http.Controller):
                 
             try:
                 order.with_context(skip_old_gold_amount_compute=True).action_apply_old_gold()
+                if order_date:
+                    date_only = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
+                    if order.purchase_order_id:
+                        order.purchase_order_id.sudo().write({
+                            'date_order': order_date,
+                            'date_approve': order_date,
+                        })
+                    if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
+                        env.cr.execute("""
+                            UPDATE account_move 
+                            SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
+                            WHERE id = %s
+                        """, (date_only, date_only, date_only, date_only, order.old_gold_bill_id.id))
+                    elif order.purchase_order_id and order.purchase_order_id.invoice_ids:
+                        for bill in order.purchase_order_id.invoice_ids:
+                            env.cr.execute("""
+                                UPDATE account_move 
+                                SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
+                                WHERE id = %s
+                            """, (date_only, date_only, date_only, date_only, bill.id))
             except Exception as e:
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
 
@@ -466,10 +497,17 @@ class SaleImportController(http.Controller):
                     _logger.warning("Voucher %s: Scheme apply failed: %s", vou_no, e)
 
         # ── 7. Confirm Order ──────────────────────────────────────────────────
+        original_date = order.date_order
         order.with_context(mail_notrack=True).action_confirm()
+        if original_date:
+            order.sudo().write({'date_order': original_date})
+            env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (original_date, order.id))
 
         # ── 8. Validate Delivery ──────────────────────────────────────────────
         for picking in order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+            if order_date:
+                picking.sudo().write({'scheduled_date': order_date})
+                
             if picking.picking_type_code == 'outgoing' and source_loc:
                 picking.location_id = source_loc.id
                 for move in picking.move_ids:
@@ -492,9 +530,16 @@ class SaleImportController(http.Controller):
             except Exception as e:
                 _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
 
+            if order_date:
+                env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                
         # ── Validate Old Gold Delivery ────────────────────────────────────────
         if order.purchase_order_id:
             for picking in order.purchase_order_id.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+                if order_date:
+                    picking.sudo().write({'scheduled_date': order_date})
                 if og_branch_loc_final:
                     picking.location_dest_id = og_branch_loc_final.id
                     for move in picking.move_ids:
@@ -517,6 +562,11 @@ class SaleImportController(http.Controller):
                 except Exception as e:
                     _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
 
+                if order_date:
+                    env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                    env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                    env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+
         # ── 9. Invoice ────────────────────────────────────────────────────────
         if not order.order_line:
             return
@@ -527,7 +577,11 @@ class SaleImportController(http.Controller):
             
         inv_vals = {}
         if order_date:
-            inv_vals['invoice_date'] = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
+            date_only = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
+            inv_vals['invoice_date'] = date_only
+            inv_vals['invoice_date_due'] = date_only
+            inv_vals['date'] = date_only
+            inv_vals['delivery_date'] = date_only
         if vou_no:
             inv_vals['ref'] = vou_no
             
