@@ -536,6 +536,12 @@ class SaleImportController(http.Controller):
             
         invoice.action_post()
 
+        if invoice.custom_total < 0:
+            try:
+                invoice.action_create_old_gold_vendor_payment()
+            except Exception as e:
+                _logger.warning("Voucher %s: Customer Payment creation failed: %s", vou_no, e)
+
         # ── 10. Payments ───────────────────────────────────────────────────────
         def _find_branch_journal(jtype, name_hint=''):
             domain = [('type', '=', jtype), ('company_id', '=', env.company.id)]

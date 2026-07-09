@@ -214,6 +214,13 @@ class SaleOrderLine(models.Model):
 
         return res
 
+    @api.depends('product_id', 'company_id')
+    def _compute_tax_id(self):
+        super(SaleOrderLine, self)._compute_tax_id()
+        for line in self:
+            if getattr(line, 'is_scheme_line', False):
+                line.tax_id = False
+
     def _prepare_procurement_values(self,group_id=False):
         values = super()._prepare_procurement_values(group_id)
         values['label_id'] = self.label_id.id if self.label_id else False

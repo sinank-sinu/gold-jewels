@@ -236,6 +236,10 @@ class SaleOrder(models.Model):
             self.purchase_order_id = po.id
 
             for picking in po.picking_ids:
+                picking.location_dest_id = order.branch_location_id.id
+                for move in picking.move_ids:
+                    move.location_dest_id = order.branch_location_id.id
+
                 picking.action_confirm()
                 picking.action_assign()
 
@@ -333,6 +337,13 @@ class SaleOrder(models.Model):
                         'default_code': product_code,
                         'type': 'service',
                         'list_price': 0.0,
+                        'taxes_id': [(5, 0, 0)],
+                        'supplier_taxes_id': [(5, 0, 0)],
+                    })
+                else:
+                    product.write({
+                        'taxes_id': [(5, 0, 0)],
+                        'supplier_taxes_id': [(5, 0, 0)],
                     })
 
                 line = self.env['sale.order.line'].create({
@@ -343,8 +354,9 @@ class SaleOrder(models.Model):
                     'name': f"{product.name} (Scheme Redemption)",
                     'is_scheme_line': True,
                     'price_unit': -redeem_amount,
-                    'price_subtotal': -redeem_amount,
+                    'tax_id': [(5, 0, 0)],
                 })
+                line.write({'tax_id': [(5, 0, 0)]})
                 order.scheme_line_id = line
                 scheme.write({
                     'state': 'redeemed',
@@ -643,7 +655,11 @@ class SaleOrder(models.Model):
                     'is_old_gold': True,
                     'sale_old_id': self.id,
                     'branch_id': self.branch_id.id,
+                    'location_dest_id': self.branch_location_id.id,
                 })
+                for move in picking.move_ids:
+                    move.location_dest_id = self.branch_location_id.id
+                    
                 picking.action_confirm()
                 picking.action_assign()
                 for move in picking.move_ids:

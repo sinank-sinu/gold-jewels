@@ -73,14 +73,11 @@
 
                     <group string="Incentive Computation">
                         <group>
-
                             <field name="inc_18ct" readonly="state != 'draft'"/>
                             <field name="dmd_inc" readonly="state != 'draft'"/>
                             <field name="gold_inc" readonly="state != 'draft'"/>
                             <field name="payslip_id"/>
                             <field name="earned_incentive" readonly="1" widget="monetary"/>
-
-
                         </group>
                         <notebook>
                         <page string="Individual Metrics">
