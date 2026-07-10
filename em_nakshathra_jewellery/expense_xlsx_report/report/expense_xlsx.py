@@ -31,12 +31,37 @@ class ExpenseXlsx(models.AbstractModel):
             # O(1) memory complexity in Python using fetchmany() 
             # and the fastest possible SQL execution time.
             # =========================================================
-            query = """
+            # Check for hr_payslip schema to ensure cross-environment compatibility
+            self.env.cr.execute("SELECT table_name FROM information_schema.tables WHERE table_name='hr_payslip'")
+            has_payslip_table = bool(self.env.cr.fetchone())
+            
+            has_move_id = False
+            if has_payslip_table:
+                self.env.cr.execute("SELECT column_name FROM information_schema.columns WHERE table_name='hr_payslip' AND column_name='move_id'")
+                has_move_id = bool(self.env.cr.fetchone())
+
+            partner_coalesce_parts = ["p.name", "exp_emp.name"]
+            payslip_joins = ""
+
+            if has_payslip_table:
+                partner_coalesce_parts.insert(1, "e.name")
+                if has_move_id:
+                    payslip_joins = """
+                    LEFT JOIN hr_payslip hs ON hs.move_id = m.id
+                    LEFT JOIN hr_employee e ON hs.employee_id = e.id"""
+                else:
+                    payslip_joins = """
+                    LEFT JOIN hr_payslip hs ON hs.number = m.ref
+                    LEFT JOIN hr_employee e ON hs.employee_id = e.id"""
+                    
+            partner_coalesce = f"COALESCE({', '.join(partner_coalesce_parts)}) as partner_name"
+
+            query = f"""
                 SELECT 
                     b.name as branch_name,
                     l.date as date,
                     m.name as move_name,
-                    COALESCE(p.name, e.name, exp_emp.name) as partner_name,
+                    {partner_coalesce},
                     m.ref as reference,
                     l.name as label,
                     a.name as account_name,
@@ -45,9 +70,7 @@ class ExpenseXlsx(models.AbstractModel):
                 JOIN account_move m ON l.move_id = m.id
                 JOIN account_account a ON l.account_id = a.id
                 LEFT JOIN res_branch b ON l.branch_id = b.id
-                LEFT JOIN res_partner p ON l.partner_id = p.id
-                LEFT JOIN hr_payslip hs ON hs.move_id = m.id
-                LEFT JOIN hr_employee e ON hs.employee_id = e.id
+                LEFT JOIN res_partner p ON l.partner_id = p.id{payslip_joins}
                 LEFT JOIN hr_expense he ON he.id = l.expense_id
                 LEFT JOIN hr_employee exp_emp ON he.employee_id = exp_emp.id
                 WHERE m.state = 'posted'

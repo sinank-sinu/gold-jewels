@@ -13,6 +13,7 @@ from dateutil.relativedelta import relativedelta  # Added for safe month arithme
 PINE_LABS_MODE_MAP = {
     'card': '1',
     'upi': '10',
+    'points': '3',   # Points / Reward Redemption (State Bank Rewardz, etc.)
 }
 
 
@@ -615,14 +616,44 @@ class PineLabsPaymentWizard(models.TransientModel):
         status = result.get('status', 'pending')
 
         if status == 'success':
-            # result['data'] is the flat Tag/Value dict built by _process_status_response
+            # result['data'] is the flat Tag/Value dict (Tag→Value) from _process_status_response
             data = result.get('data', {})
-            self.write({
+
+            def _d(*keys):
+                """Return first non-empty value from the flat tag dict."""
+                for k in keys:
+                    v = data.get(k, '')
+                    if v:
+                        return str(v)
+                return ''
+
+            # PaymentMode: 'UPISALE' for UPI, 'CARD' for card, 'POINTS REDEMPTION' for points
+            payment_mode_val = _d('PaymentMode', 'Payment Mode')
+            # Card Type: 'CREDIT'/'DEBIT' for card, 'REWARD' for points, absent for UPI
+            card_type_val = _d('CardType', 'Card Type')
+            # Approval code (common to all modes)
+            approval_code_val = _d('ApprovalCode')
+            # UPI: Customer VPA
+            customer_vpa_val = _d('CustomerVPA', 'Customer VPA')
+            # Points/Card: Cardholder name
+            card_holder_val = _d('Card Holder Name', 'CardHolderName')
+            # Points: Reward Txn ID
+            reward_txn_val = _d('Reward Txn ID', 'RewardTxnId')
+
+            wizard_vals = {
                 'state': 'success',
-                'approval_code': data.get('ApprovalCode', ''),
-                'card_type': data.get('Card Type') or data.get('CardType', ''),
-                'payment_mode': data.get('PaymentMode') or data.get('Payment Mode', ''),
-            })
+                'approval_code': approval_code_val,
+                'payment_mode': payment_mode_val,
+            }
+
+            # card_type field: show Card Type for card/points, VPA for UPI
+            if card_type_val:
+                wizard_vals['card_type'] = card_type_val
+            elif customer_vpa_val:
+                # UPI: display VPA in card_type for convenience
+                wizard_vals['card_type'] = customer_vpa_val
+
+            self.write(wizard_vals)
             self._post_payment_success()
         elif status == 'failed':
             self.state = 'failed'

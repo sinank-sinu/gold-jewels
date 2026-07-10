@@ -4,6 +4,210 @@
   "base_url": "/api/ecommerce",
   "endpoints": [
     {
+      "endpoint": "/register",
+      "method": "POST",
+      "description": "Register a new customer and receive authentication token",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Customer Registration",
+          "description": "Register a new customer and receive authentication token",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer details",
+              "request": {
+                "first_name": "John",
+                "last_name": "Doe",
+                "phone": "1234567890",
+                "city": "Calicut",
+                "email": "customer@example.com",
+                "password": "password123",
+                "confirm_password": "password123"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates input, checks for duplicate email, hashes password, creates customer, and generates authentication token"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get customer details and authentication token",
+              "response": {
+                "status": "success",
+                "message": "Registration successful",
+                "data": {
+                  "customer_id": 1,
+                  "name": "John Doe",
+                  "email": "customer@example.com",
+                  "phone": "1234567890",
+                  "city": "Calicut",
+                  "auth_token": "abc123xyz456...",
+                  "token_expiry": "2026-08-09 10:30:00"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Error - Duplicate Email",
+          "description": "Error handling when email already exists",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with existing email",
+              "request": {
+                "first_name": "Jane",
+                "last_name": "Smith",
+                "phone": "9876543210",
+                "city": "Kochi",
+                "email": "customer@example.com",
+                "password": "password456",
+                "confirm_password": "password456"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects duplicate email and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating email already exists",
+              "response": {
+                "status": "error",
+                "message": "An account with this email already exists"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 3,
+          "flow_name": "Error - Password Mismatch",
+          "description": "Error handling when passwords do not match",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with mismatched passwords",
+              "request": {
+                "first_name": "Jane",
+                "last_name": "Smith",
+                "phone": "9876543210",
+                "city": "Kochi",
+                "email": "jane@example.com",
+                "password": "password456",
+                "confirm_password": "password789"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects password mismatch and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating passwords do not match",
+              "response": {
+                "status": "error",
+                "message": "Passwords do not match"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 4,
+          "flow_name": "Error - Missing Fields",
+          "description": "Error handling when required fields are missing",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request without required fields",
+              "request": {
+                "first_name": "Jane",
+                "last_name": "Smith"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects missing fields and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating missing fields",
+              "response": {
+                "status": "error",
+                "message": "Missing fields: phone, city, email, password, confirm_password"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "first_name",
+            "type": "string",
+            "description": "Customer first name"
+          },
+          {
+            "name": "last_name",
+            "type": "string",
+            "description": "Customer last name"
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "description": "Customer phone number"
+          },
+          {
+            "name": "city",
+            "type": "string",
+            "description": "Customer city"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "description": "Customer email address"
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "description": "Customer password (minimum 6 characters)"
+          },
+          {
+            "name": "confirm_password",
+            "type": "string",
+            "description": "Confirm password (must match password)"
+          }
+        ]
+      },
+      "response_fields": {
+        "registration_data": {
+          "customer_id": "Customer ID",
+          "name": "Customer full name",
+          "email": "Customer email",
+          "phone": "Customer phone number",
+          "city": "Customer city",
+          "auth_token": "Authentication token (use this for subsequent API calls)",
+          "token_expiry": "Token expiration date (30 days from registration)"
+        }
+      }
+    },
+    {
       "endpoint": "/branch_products",
       "method": "POST",
       "description": "Get products for a specific branch with location-wise stock information",
@@ -385,9 +589,9 @@
             {
               "step": 1,
               "action": "Prepare Request",
-              "description": "Create POST request with customer ID, product ID, and quantity",
+              "description": "Create POST request with authentication token, product ID, and quantity",
               "request": {
-                "customer_id": 1,
+                "auth_token": "abc123xyz456...",
                 "product_id": 123,
                 "quantity": 2
               }
@@ -395,7 +599,7 @@
             {
               "step": 2,
               "action": "API Processing",
-              "description": "API validates customer and product, gets or creates cart, adds item to cart"
+              "description": "API validates token and customer, gets or creates cart, adds item to cart"
             },
             {
               "step": 3,
@@ -426,44 +630,47 @@
         },
         {
           "flow_id": 2,
-          "flow_name": "Add Existing Product to Cart (Quantity Update)",
-          "description": "Add a product that already exists in cart, which updates the quantity",
+          "flow_name": "Add Product to Cart with Location",
+          "description": "Add a product to cart from a specific location",
           "steps": [
             {
               "step": 1,
               "action": "Prepare Request",
-              "description": "Create POST request with customer ID and existing product ID",
+              "description": "Create POST request with customer ID, product ID, and location name",
               "request": {
                 "customer_id": 1,
-                "product_id": 123,
-                "quantity": 3
+                "product_id": 113,
+                "location_name": "wh/stock",
+                "quantity": 2
               }
             },
             {
               "step": 2,
               "action": "API Processing",
-              "description": "API finds existing cart item and updates quantity"
+              "description": "API validates customer, product, and location, checks stock at that location, adds item to cart"
             },
             {
               "step": 3,
               "action": "Receive Response",
-              "description": "Get success response with updated cart showing increased quantity",
+              "description": "Get success response with cart showing product from specific location",
               "response": {
                 "status": "success",
                 "message": "Item added to cart",
                 "cart": {
                   "cart_id": 1,
                   "customer_id": 1,
-                  "total_amount": 75000.0,
+                  "total_amount": 30000.0,
                   "items": [
                     {
                       "cart_line_id": 1,
-                      "product_id": 123,
+                      "product_id": 113,
                       "product_name": "Gold Ring",
-                      "image_url": "/web/image/product.template/123/image_1920",
-                      "quantity": 5,
+                      "image_url": "/web/image/product.template/113/image_1920",
+                      "location_id": 5,
+                      "location_name": "wh/stock",
+                      "quantity": 2,
                       "unit_price": 15000.0,
-                      "subtotal": 75000.0
+                      "subtotal": 30000.0
                     }
                   ]
                 }
@@ -473,13 +680,117 @@
         },
         {
           "flow_id": 3,
+          "flow_name": "Add Same Product from Different Locations",
+          "description": "Add same product from different locations creates separate cart lines",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Add product from first location",
+              "request": {
+                "customer_id": 1,
+                "product_id": 113,
+                "location_name": "wh/stock",
+                "quantity": 2
+              }
+            },
+            {
+              "step": 2,
+              "action": "Prepare Request",
+              "description": "Add same product from second location",
+              "request": {
+                "customer_id": 1,
+                "product_id": 113,
+                "location_name": "Rifan/stock",
+                "quantity": 1
+              }
+            },
+            {
+              "step": 3,
+              "action": "API Processing",
+              "description": "API creates separate cart lines for each location"
+            },
+            {
+              "step": 4,
+              "action": "Receive Response",
+              "description": "Get cart with two lines for same product from different locations",
+              "response": {
+                "status": "success",
+                "message": "Item added to cart",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 45000.0,
+                  "items": [
+                    {
+                      "cart_line_id": 1,
+                      "product_id": 113,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/113/image_1920",
+                      "location_id": 5,
+                      "location_name": "wh/stock",
+                      "quantity": 2,
+                      "unit_price": 15000.0,
+                      "subtotal": 30000.0
+                    },
+                    {
+                      "cart_line_id": 2,
+                      "product_id": 113,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/113/image_1920",
+                      "location_id": 6,
+                      "location_name": "Rifan/stock",
+                      "quantity": 1,
+                      "unit_price": 15000.0,
+                      "subtotal": 15000.0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 4,
+          "flow_name": "Error - Insufficient Stock at Location",
+          "description": "Error handling when requested quantity exceeds stock at specific location",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with quantity exceeding stock at location",
+              "request": {
+                "customer_id": 1,
+                "product_id": 113,
+                "location_name": "wh/stock",
+                "quantity": 20
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API checks stock at specific location and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating insufficient stock at location",
+              "response": {
+                "status": "error",
+                "message": "Only 10 units available at wh/stock"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 5,
           "flow_name": "Error - Missing Required Parameters",
           "description": "Error handling when required parameters are missing",
           "steps": [
             {
               "step": 1,
               "action": "Prepare Request",
-              "description": "Create POST request without customer_id or product_id",
+              "description": "Create POST request without auth_token or product_id",
               "request": {
                 "quantity": 2
               }
@@ -495,13 +806,13 @@
               "description": "Get error message indicating missing parameters",
               "response": {
                 "status": "error",
-                "message": "customer_id and product_id are required"
+                "message": "auth_token and product_id are required"
               }
             }
           ]
         },
         {
-          "flow_id": 4,
+          "flow_id": 6,
           "flow_name": "Error - Invalid Quantity",
           "description": "Error handling when quantity is zero or negative",
           "steps": [
@@ -527,6 +838,68 @@
               "response": {
                 "status": "error",
                 "message": "Quantity must be greater than 0"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 7,
+          "flow_name": "Error - Product Out of Stock",
+          "description": "Error handling when product has no stock available",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request for product with zero stock",
+              "request": {
+                "auth_token": "abc123xyz456...",
+                "product_id": 999,
+                "quantity": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API checks stock availability and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating product is out of stock",
+              "response": {
+                "status": "error",
+                "message": "Product is out of stock"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 8,
+          "flow_name": "Error - Insufficient Stock",
+          "description": "Error handling when requested quantity exceeds available stock",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with quantity exceeding available stock",
+              "request": {
+                "auth_token": "abc123xyz456...",
+                "product_id": 123,
+                "quantity": 20
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API checks stock availability and returns error with available quantity"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating insufficient stock",
+              "response": {
+                "status": "error",
+                "message": "Only 10 units available"
               }
             }
           ]
@@ -597,9 +970,9 @@
       "request_parameters": {
         "required": [
           {
-            "name": "customer_id",
-            "type": "integer",
-            "description": "ID of the customer"
+            "name": "auth_token",
+            "type": "string",
+            "description": "Authentication token received from login"
           },
           {
             "name": "product_id",
@@ -627,9 +1000,144 @@
           "product_id": "Product ID",
           "product_name": "Product name",
           "image_url": "Product image URL",
+          "location_id": "Location ID (null if no specific location)",
+          "location_name": "Location name (null if no specific location)",
           "quantity": "Item quantity",
           "unit_price": "Unit price",
           "subtotal": "Line subtotal (quantity × unit_price)"
+        }
+      }
+    },
+    {
+      "endpoint": "/login",
+      "method": "POST",
+      "description": "Authenticate customer (token is only provided at registration)",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Customer Login",
+          "description": "Login with email and password to verify credentials",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with email and password",
+              "request": {
+                "email": "customer@example.com",
+                "password": "password123"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates credentials and returns customer details"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get customer details (use token from registration for API calls)",
+              "response": {
+                "status": "success",
+                "message": "Login successful",
+                "data": {
+                  "customer_id": 1,
+                  "name": "John Doe",
+                  "first_name": "John",
+                  "last_name": "Doe",
+                  "email": "customer@example.com",
+                  "phone": "1234567890",
+                  "city": "Calicut"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Error - Invalid Credentials",
+          "description": "Error handling when email or password is incorrect",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with incorrect credentials",
+              "request": {
+                "email": "customer@example.com",
+                "password": "wrongpassword"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates credentials and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating invalid credentials",
+              "response": {
+                "status": "error",
+                "message": "Invalid email or password"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 3,
+          "flow_name": "Error - Missing Parameters",
+          "description": "Error handling when email or password is missing",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request without email or password",
+              "request": {
+                "email": "customer@example.com"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects missing parameters and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating missing parameters",
+              "response": {
+                "status": "error",
+                "message": "Email and password are required"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "email",
+            "type": "string",
+            "description": "Customer email address"
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "description": "Customer password"
+          }
+        ]
+      },
+      "response_fields": {
+        "login_data": {
+          "customer_id": "Customer ID",
+          "name": "Customer full name",
+          "first_name": "Customer first name",
+          "last_name": "Customer last name",
+          "email": "Customer email",
+          "phone": "Customer phone number",
+          "city": "Customer city"
         }
       }
     }

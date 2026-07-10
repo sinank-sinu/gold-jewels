@@ -53,6 +53,14 @@ class PineLabsTransaction(models.Model):
     transaction_time_raw = fields.Char(string='Transaction Time (Terminal)', copy=False)
     amount_in_paisa = fields.Char(string='Amount in Paisa', copy=False)
 
+    # Card / Points Redemption specific fields
+    card_holder_name = fields.Char(string='Card Holder Name', copy=False)
+    expiry_date = fields.Char(string='Card Expiry Date', copy=False)
+    reward_txn_id = fields.Char(string='Reward / Points Txn ID', copy=False)
+    original_amount_paisa = fields.Char(string='Original Amount (Paisa)', copy=False)
+    final_amount_paisa = fields.Char(string='Final Amount (Paisa)', copy=False)
+    invoice_number_terminal = fields.Char(string='Terminal Invoice Number', copy=False)
+
     # Linked records
     sale_order_id = fields.Many2one('sale.order', string='Sale Order', copy=False)
     invoice_id = fields.Many2one('account.move', string='Invoice', copy=False)
@@ -277,12 +285,18 @@ class PineLabsTransaction(models.Model):
 
         url = f"{config['base_url']}/GetCloudBasedTxnStatus"
 
+        # Pine Labs expects PlutusTransactionReferenceID as an integer
+        try:
+            plutus_ref_id = int(self.pinelabs_transaction_id)
+        except (TypeError, ValueError):
+            plutus_ref_id = self.pinelabs_transaction_id
+
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
             "ClientID": config['client_id'],
             "StoreID": config['store_id'],
-            "PlutusTransactionReferenceID": self.pinelabs_transaction_id,
+            "PlutusTransactionReferenceID": plutus_ref_id,
         }
 
         response = self._pinelabs_make_request(url, payload)
@@ -338,26 +352,72 @@ class PineLabsTransaction(models.Model):
                         return str(v)
                 return ''
 
-            self.write({
+            # ── Build write_vals covering all Pine Labs payment modes ──────────
+            # Tag names vary by mode:
+            #   UPI:    CamelCase  → "AcquirerName", "CustomerVPA", "TransactionDate"…
+            #   Card:   Spaced     → "Card Type", "Card Number", "Acquirer Name"…
+            #   Points: Spaced     → "Card Type"=REWARD, "Card Holder Name", "Reward Txn ID"…
+            write_vals = {
                 'state': 'success',
-                'approval_code': _tag('ApprovalCode'),
-                'card_type': _tag('Card Type', 'CardType'),
-                'payment_mode': _tag('PaymentMode', 'Payment Mode'),
-                'card_number_masked': _tag('Card Number', 'CardNumber'),
-                'issuer_bank': _tag('Acquirer Name', 'AcquirerName'),
-                'retrieval_reference_number': _tag('RRN'),
-                'batch_number': _tag('BatchNumber', 'Batch Number', 'Batch Number'),
                 'payment_date': fields.Datetime.now(),
-                # Extended UPI / generic fields
-                'customer_vpa': _tag('CustomerVPA', 'Customer VPA', 'Masked Moblie Number'),
+                # ── Common fields ──────────────────────────────────────────
+                'approval_code':              _tag('ApprovalCode'),
+                'payment_mode':               _tag('PaymentMode', 'Payment Mode'),
+                'retrieval_reference_number': _tag('RRN'),
+                'batch_number':               _tag('BatchNumber', 'Batch Number'),
+                'amount_in_paisa':            _tag('AmountInPaisa', 'Amount In Paisa'),
+                'transaction_date_raw':       _tag('TransactionDate', 'Transaction Date'),
+                'transaction_time_raw':       _tag('Transaction Time', 'TransactionTime'),
+                # ── Card / Points fields ───────────────────────────────────
+                # "Card Type" → CREDIT / DEBIT / REWARD (Points) / PREPAID
+                'card_type':          _tag('CardType', 'Card Type'),
+                # "Card Number" present for Card/Points; absent for UPI
+                'card_number_masked': _tag('CardNumber', 'Card Number', 'Masked Card Number'),
+                # Card holder name (Points / Debit / Credit responses)
+                'card_holder_name':   _tag('Card Holder Name', 'CardHolderName', 'CardHolder Name'),
+                # Expiry date tag
+                'expiry_date':        _tag('Expiry Date', 'ExpiryDate'),
+                # Reward / Points specific txn ID
+                'reward_txn_id':      _tag('Reward Txn ID', 'RewardTxnId', 'Reward Txn Id'),
+                # Original and Final amounts (in paisa); useful for reward discount tracking
+                'original_amount_paisa': _tag('OriginalAmount', 'Original Amount'),
+                'final_amount_paisa':    _tag('FinalAmount', 'Final Amount'),
+                # Terminal invoice number (different from Odoo invoice number)
+                'invoice_number_terminal': _tag('Invoice Number', 'InvoiceNumber'),
+                # ── Acquirer / Issuer ──────────────────────────────────────
+                # UPI response: "AcquirerName" | Card/Points: "Acquirer Name"
+                'issuer_bank':   _tag('AcquirerName', 'Acquirer Name', 'IssuerBankName', 'Issuer Bank Name'),
                 'acquirer_name': _tag('AcquirerName', 'Acquirer Name'),
-                'acquirer_id': _tag('AcquirerId', 'Acquirer Id'),
-                'transaction_log_id': _tag('TransactionLogId', 'Trnasaction Log ID', 'Transaction Log ID'),
-                'host_txn_id': _tag('HostTxnId', 'HOST_TID'),
-                'transaction_date_raw': _tag('TransactionDate', 'Transaction Date'),
-                'transaction_time_raw': _tag('Transaction Time', 'TransactionTime'),
-                'amount_in_paisa': _tag('AmountInPaisa'),
-            })
+                'acquirer_id':   _tag('AcquirerId', 'Acquirer Id', 'AcquirerID'),
+                # ── UPI-specific ───────────────────────────────────────────
+                'customer_vpa': _tag('CustomerVPA', 'Customer VPA', 'MaskedMobileNumber', 'Masked Moblie Number'),
+                # ── Log / host IDs ─────────────────────────────────────────
+                'transaction_log_id': _tag('TransactionLogId', 'Transaction Log ID', 'TransactionLog Id'),
+                'host_txn_id':        _tag('HostTxnId', 'HostTID', 'HOST_TID'),
+            }
+
+            # Capture TID / MID from response (useful for reconciliation)
+            tid_val = _tag('TID')
+            mid_val = _tag('MID')
+            if tid_val and not self.terminal_id:
+                write_vals['terminal_id'] = tid_val
+            if mid_val and not self.merchant_id:
+                write_vals['merchant_id'] = mid_val
+
+            self.write(write_vals)
+            _logger.info(
+                'Pine Labs txn %s → SUCCESS | mode=%s | cardType=%s | approval=%s | '
+                'RRN=%s | VPA=%s | cardHolder=%s | origAmt=%s | finalAmt=%s',
+                self.name,
+                write_vals.get('payment_mode'),
+                write_vals.get('card_type'),
+                write_vals.get('approval_code'),
+                write_vals.get('retrieval_reference_number'),
+                write_vals.get('customer_vpa'),
+                write_vals.get('card_holder_name'),
+                write_vals.get('original_amount_paisa'),
+                write_vals.get('final_amount_paisa'),
+            )
             return {
                 'status': 'success',
                 'data': txn_dict,

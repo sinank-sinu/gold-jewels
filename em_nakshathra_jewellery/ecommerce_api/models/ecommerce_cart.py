@@ -25,6 +25,7 @@ class EcommerceCartLine(models.Model):
 
     cart_id = fields.Many2one('ecommerce.cart', string='Cart', required=True, ondelete='cascade')
     product_id = fields.Many2one('product.template', string='Product', required=True)
+    location_id = fields.Many2one('stock.location', string='Location')
     quantity = fields.Float(string='Quantity', default=1.0)
     price = fields.Float(string='Unit Price', compute='_compute_price', store=True)
     subtotal = fields.Float(string='Subtotal', compute='_compute_subtotal', store=True)

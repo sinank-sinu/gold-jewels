@@ -177,6 +177,9 @@ class EcommerceBranchAPI(http.Controller):
                 'password_salt': salt,
             })
 
+            # ── Generate authentication token ──
+            token = customer._generate_token()
+
             return {
                 "status": "success",
                 "message": "Registration successful",
@@ -186,6 +189,8 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "auth_token": token,
+                    "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
             }
 

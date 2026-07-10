@@ -1,5 +1,7 @@
 import hashlib
 import os
+import secrets
+import datetime
 
 from odoo import models, fields, api
 
@@ -18,6 +20,8 @@ class EcommerceCustomer(models.Model):
     city = fields.Char(string='City')
     password_hash = fields.Char(string='Password Hash')
     password_salt = fields.Char(string='Password Salt')
+    auth_token = fields.Char(string='Authentication Token')
+    token_expiry = fields.Datetime(string='Token Expiry')
     active = fields.Boolean(default=True)
     created_at = fields.Datetime(string='Registered On', default=fields.Datetime.now)
 
@@ -43,3 +47,31 @@ class EcommerceCustomer(models.Model):
             return False
         hashed, _ = self._hash_password(password, self.password_salt)
         return hashed == self.password_hash
+
+    def _generate_token(self):
+        """Generate a secure authentication token."""
+        token = secrets.token_urlsafe(32)
+        # Set token expiry to 30 days from now
+        expiry = datetime.datetime.now() + datetime.timedelta(days=30)
+        self.write({
+            'auth_token': token,
+            'token_expiry': expiry
+        })
+        return token
+
+    def _verify_token(self, token):
+        """Verify an authentication token."""
+        if not self.auth_token:
+            return False
+        if self.auth_token != token:
+            return False
+        if self.token_expiry and self.token_expiry < datetime.datetime.now():
+            return False
+        return True
+
+    def _revoke_token(self):
+        """Revoke the current authentication token."""
+        self.write({
+            'auth_token': None,
+            'token_expiry': None
+        })

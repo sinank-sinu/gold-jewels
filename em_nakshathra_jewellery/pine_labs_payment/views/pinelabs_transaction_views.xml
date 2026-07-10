@@ -51,20 +51,34 @@
                             <field name="amount"/>
                             <field name="currency_id"/>
                             <field name="payment_date"/>
+                            <field name="invoice_number_terminal"/>
                         </group>
                         <group string="Terminal Response">
                             <field name="pinelabs_transaction_id"/>
                             <field name="approval_code"/>
-                            <field name="card_type"/>
                             <field name="payment_mode"/>
-                            <field name="card_number_masked"/>
-                            <field name="issuer_bank"/>
                             <field name="retrieval_reference_number"/>
                             <field name="batch_number"/>
-                            <field name="amount_in_paisa"/>
                             <field name="transaction_date_raw"/>
                             <field name="transaction_time_raw"/>
                         </group>
+                    </group>
+                    <group>
+                        <group string="Card / Points Details">
+                            <field name="card_type"/>
+                            <field name="card_number_masked"/>
+                            <field name="card_holder_name"/>
+                            <field name="expiry_date"/>
+                            <field name="issuer_bank"/>
+                            <field name="reward_txn_id"/>
+                        </group>
+                        <group string="Amounts (Paisa)">
+                            <field name="amount_in_paisa"/>
+                            <field name="original_amount_paisa"/>
+                            <field name="final_amount_paisa"/>
+                        </group>
+                    </group>
+                    <group>
                         <group string="UPI / Acquirer Details">
                             <field name="customer_vpa"/>
                             <field name="acquirer_name"/>
