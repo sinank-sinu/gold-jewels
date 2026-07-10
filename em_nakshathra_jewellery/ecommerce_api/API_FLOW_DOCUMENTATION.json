@@ -1,0 +1,738 @@
+{
+  "api_name": "E-commerce API",
+  "version": "1.0",
+  "base_url": "/api/ecommerce",
+  "endpoints": [
+    {
+      "endpoint": "/branch_products",
+      "method": "POST",
+      "description": "Get products for a specific branch with location-wise stock information",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Get All Branch Products with Location Stocks",
+          "description": "Retrieve all products for a branch showing stock across all locations",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with branch name",
+              "request": {
+                "branch_name": "Calicut"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API resolves branch name to branch ID, gets all branch locations, and queries products"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get products with stock information across all locations",
+              "response": {
+                "status": "success",
+                "branch": "Calicut",
+                "count": 10,
+                "data": [
+                  {
+                    "id": 123,
+                    "name": "Gold Ring",
+                    "price": 15000.0,
+                    "description": "22K Gold Ring with diamonds",
+                    "image_url": "/web/image/product.template/123/image_1920",
+                    "branch_id": 1,
+                    "branch_name": "Calicut",
+                    "total_stock": 15,
+                    "available_locations": ["wh/stock", "Rifan/stock"],
+                    "location_stocks": [
+                      {
+                        "location_id": 5,
+                        "location_name": "wh/stock",
+                        "location_complete_name": "Calicut/wh/stock",
+                        "product_name": "Gold Ring",
+                        "price": 15000.0,
+                        "description": "22K Gold Ring with diamonds",
+                        "image_url": "/web/image/product.template/123/image_1920",
+                        "quantity": 10
+                      },
+                      {
+                        "location_id": 6,
+                        "location_name": "Rifan/stock",
+                        "location_complete_name": "Calicut/Rifan/stock",
+                        "product_name": "Gold Ring",
+                        "price": 15000.0,
+                        "description": "22K Gold Ring with diamonds",
+                        "image_url": "/web/image/product.template/123/image_1920",
+                        "quantity": 5
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Filter Products by Location ID",
+          "description": "Get products for a branch filtered by specific location ID",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with branch name and location ID",
+              "request": {
+                "branch_name": "Calicut",
+                "location_id": 5
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API resolves branch, filters by specific location ID, and queries products with stock at that location"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get products filtered by specific location with location filter info",
+              "response": {
+                "status": "success",
+                "branch": "Calicut",
+                "count": 5,
+                "location_filter": {
+                  "location_id": 5,
+                  "location_name": "wh/stock",
+                  "location_complete_name": "Calicut/wh/stock"
+                },
+                "data": [
+                  {
+                    "id": 123,
+                    "name": "Gold Ring",
+                    "price": 15000.0,
+                    "description": "22K Gold Ring with diamonds",
+                    "image_url": "/web/image/product.template/123/image_1920",
+                    "branch_id": 1,
+                    "branch_name": "Calicut",
+                    "total_stock": 10,
+                    "available_locations": ["wh/stock"],
+                    "location_stocks": [
+                      {
+                        "location_id": 5,
+                        "location_name": "wh/stock",
+                        "location_complete_name": "Calicut/wh/stock",
+                        "product_name": "Gold Ring",
+                        "price": 15000.0,
+                        "description": "22K Gold Ring with diamonds",
+                        "image_url": "/web/image/product.template/123/image_1920",
+                        "quantity": 10
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 3,
+          "flow_name": "Filter Products by Location Name",
+          "description": "Get products for a branch filtered by location name",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with branch name and location name",
+              "request": {
+                "branch_name": "Calicut",
+                "location_name": "Rifan/stock"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API resolves branch, filters by location name using case-insensitive search, and queries products"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get products filtered by location name with location filter info",
+              "response": {
+                "status": "success",
+                "branch": "Calicut",
+                "count": 3,
+                "location_filter": {
+                  "location_name": "Rifan/stock"
+                },
+                "data": [
+                  {
+                    "id": 124,
+                    "name": "Gold Necklace",
+                    "price": 25000.0,
+                    "description": "24K Gold Necklace",
+                    "image_url": "/web/image/product.template/124/image_1920",
+                    "branch_id": 1,
+                    "branch_name": "Calicut",
+                    "total_stock": 8,
+                    "available_locations": ["Rifan/stock"],
+                    "location_stocks": [
+                      {
+                        "location_id": 6,
+                        "location_name": "Rifan/stock",
+                        "location_complete_name": "Calicut/Rifan/stock",
+                        "product_name": "Gold Necklace",
+                        "price": 25000.0,
+                        "description": "24K Gold Necklace",
+                        "image_url": "/web/image/product.template/124/image_1920",
+                        "quantity": 8
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 4,
+          "flow_name": "Using Branch ID Instead of Name",
+          "description": "Get products using branch ID instead of branch name",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with branch ID instead of name",
+              "request": {
+                "branch_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API uses branch ID directly, gets all branch locations, and queries products"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get products with stock information across all locations",
+              "response": {
+                "status": "success",
+                "branch": "Calicut",
+                "count": 10,
+                "data": [
+                  {
+                    "id": 123,
+                    "name": "Gold Ring",
+                    "price": 15000.0,
+                    "description": "22K Gold Ring with diamonds",
+                    "image_url": "/web/image/product.template/123/image_1920",
+                    "branch_id": 1,
+                    "branch_name": "Calicut",
+                    "total_stock": 15,
+                    "available_locations": ["wh/stock", "Rifan/stock"],
+                    "location_stocks": [
+                      {
+                        "location_id": 5,
+                        "location_name": "wh/stock",
+                        "location_complete_name": "Calicut/wh/stock",
+                        "product_name": "Gold Ring",
+                        "price": 15000.0,
+                        "description": "22K Gold Ring with diamonds",
+                        "image_url": "/web/image/product.template/123/image_1920",
+                        "quantity": 10
+                      },
+                      {
+                        "location_id": 6,
+                        "location_name": "Rifan/stock",
+                        "location_complete_name": "Calicut/Rifan/stock",
+                        "product_name": "Gold Ring",
+                        "price": 15000.0,
+                        "description": "22K Gold Ring with diamonds",
+                        "image_url": "/web/image/product.template/123/image_1920",
+                        "quantity": 5
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 5,
+          "flow_name": "Error - Missing Branch Information",
+          "description": "Error handling when neither branch_id nor branch_name is provided",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request without branch information",
+              "request": {}
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects missing required parameters and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating missing branch information",
+              "response": {
+                "status": "error",
+                "message": "branch_id or branch_name is required"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 6,
+          "flow_name": "Error - Branch Not Found",
+          "description": "Error handling when branch name doesn't exist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with non-existent branch name",
+              "request": {
+                "branch_name": "NonExistentBranch"
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API searches for branch but finds no match, returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating branch not found",
+              "response": {
+                "status": "error",
+                "message": "Branch 'NonExistentBranch' not found"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "branch_id",
+            "type": "integer",
+            "description": "ID of the branch (required if branch_name not provided)"
+          },
+          {
+            "name": "branch_name", 
+            "type": "string",
+            "description": "Name of the branch (required if branch_id not provided)"
+          }
+        ],
+        "optional": [
+          {
+            "name": "location_id",
+            "type": "integer", 
+            "description": "Filter products by specific location ID"
+          },
+          {
+            "name": "location_name",
+            "type": "string",
+            "description": "Filter products by location name (e.g., 'wh/stock', 'Rifan/stock')"
+          }
+        ]
+      },
+      "response_fields": {
+        "product_data": {
+          "id": "Product template ID",
+          "name": "Product name",
+          "price": "List price of the product",
+          "description": "Product description (sale description or general description)",
+          "image_url": "URL to product image",
+          "branch_id": "Branch ID (null if shared across all branches)",
+          "branch_name": "Branch name (or 'All Branches' if shared)",
+          "total_stock": "Total stock quantity across all locations in the branch",
+          "available_locations": "Array of location names where product has stock",
+          "location_stocks": "Array of detailed stock information per location"
+        },
+        "location_stock": {
+          "location_id": "Location ID",
+          "location_name": "Location name (e.g., 'wh/stock')",
+          "location_complete_name": "Full location path (e.g., 'Calicut/wh/stock')",
+          "product_name": "Product name at this location",
+          "price": "Product price",
+          "description": "Product description",
+          "image_url": "Product image URL",
+          "quantity": "Stock quantity at this specific location"
+        }
+      }
+    },
+    {
+      "endpoint": "/cart/add",
+      "method": "POST",
+      "description": "Add a product to the customer's shopping cart",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Add Product to Cart",
+          "description": "Add a product to customer's cart with specified quantity",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID, product ID, and quantity",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123,
+                "quantity": 2
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and product, gets or creates cart, adds item to cart"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get success response with updated cart information",
+              "response": {
+                "status": "success",
+                "message": "Item added to cart",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 30000.0,
+                  "items": [
+                    {
+                      "cart_line_id": 1,
+                      "product_id": 123,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/123/image_1920",
+                      "quantity": 2,
+                      "unit_price": 15000.0,
+                      "subtotal": 30000.0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Add Existing Product to Cart (Quantity Update)",
+          "description": "Add a product that already exists in cart, which updates the quantity",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID and existing product ID",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123,
+                "quantity": 3
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API finds existing cart item and updates quantity"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get success response with updated cart showing increased quantity",
+              "response": {
+                "status": "success",
+                "message": "Item added to cart",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 75000.0,
+                  "items": [
+                    {
+                      "cart_line_id": 1,
+                      "product_id": 123,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/123/image_1920",
+                      "quantity": 5,
+                      "unit_price": 15000.0,
+                      "subtotal": 75000.0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 3,
+          "flow_name": "Error - Missing Required Parameters",
+          "description": "Error handling when required parameters are missing",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request without customer_id or product_id",
+              "request": {
+                "quantity": 2
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects missing required parameters and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating missing parameters",
+              "response": {
+                "status": "error",
+                "message": "customer_id and product_id are required"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 4,
+          "flow_name": "Error - Invalid Quantity",
+          "description": "Error handling when quantity is zero or negative",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with invalid quantity",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123,
+                "quantity": 0
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects invalid quantity and returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating invalid quantity",
+              "response": {
+                "status": "error",
+                "message": "Quantity must be greater than 0"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 5,
+          "flow_name": "Error - Customer Not Found",
+          "description": "Error handling when customer ID doesn't exist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with non-existent customer ID",
+              "request": {
+                "customer_id": 999,
+                "product_id": 123,
+                "quantity": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API searches for customer but finds no match, returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating customer not found",
+              "response": {
+                "status": "error",
+                "message": "Customer not found"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 6,
+          "flow_name": "Error - Product Not Found",
+          "description": "Error handling when product ID doesn't exist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with non-existent product ID",
+              "request": {
+                "customer_id": 1,
+                "product_id": 999,
+                "quantity": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API searches for product but finds no match, returns error"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message indicating product not found",
+              "response": {
+                "status": "error",
+                "message": "Product not found"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "ID of the customer"
+          },
+          {
+            "name": "product_id",
+            "type": "integer",
+            "description": "ID of the product to add to cart"
+          }
+        ],
+        "optional": [
+          {
+            "name": "quantity",
+            "type": "float",
+            "description": "Quantity to add (default: 1)"
+          }
+        ]
+      },
+      "response_fields": {
+        "cart": {
+          "cart_id": "Cart ID",
+          "customer_id": "Customer ID",
+          "total_amount": "Total cart amount",
+          "items": "Array of cart items"
+        },
+        "cart_item": {
+          "cart_line_id": "Cart line item ID",
+          "product_id": "Product ID",
+          "product_name": "Product name",
+          "image_url": "Product image URL",
+          "quantity": "Item quantity",
+          "unit_price": "Unit price",
+          "subtotal": "Line subtotal (quantity × unit_price)"
+        }
+      }
+    }
+  ],
+  "data_models": {
+    "res_branch": {
+      "description": "Branch model representing company branches",
+      "fields": {
+        "name": "Branch name",
+        "company_id": "Associated company",
+        "branch_location_id": "Main stock location for the branch",
+        "old_gold_location_id": "Old gold location for the branch"
+      }
+    },
+    "stock_location": {
+      "description": "Stock location model for inventory locations",
+      "fields": {
+        "name": "Location name",
+        "complete_name": "Full location path",
+        "branch_id": "Associated branch",
+        "allowed_branch_ids": "Branches that can access this location"
+      }
+    },
+    "stock_quant": {
+      "description": "Stock quantity model for inventory quantities",
+      "fields": {
+        "product_id": "Associated product variant",
+        "location_id": "Associated location",
+        "quantity": "On-hand quantity",
+        "reserved_quantity": "Reserved quantity"
+      }
+    },
+    "product_template": {
+      "description": "Product template model",
+      "fields": {
+        "name": "Product name",
+        "list_price": "Sale price",
+        "description_sale": "Sale description",
+        "description": "General description",
+        "sale_ok": "Can be sold flag",
+        "branch_id": "Associated branch"
+      }
+    },
+    "ecommerce_customer": {
+      "description": "E-commerce customer model",
+      "fields": {
+        "first_name": "Customer first name",
+        "last_name": "Customer last name",
+        "email": "Customer email",
+        "phone": "Customer phone",
+        "city": "Customer city",
+        "password_hash": "Hashed password",
+        "password_salt": "Password salt"
+      }
+    },
+    "ecommerce_cart": {
+      "description": "Shopping cart model",
+      "fields": {
+        "customer_id": "Associated customer",
+        "line_ids": "Cart line items",
+        "total_amount": "Total cart amount",
+        "created_at": "Cart creation timestamp"
+      }
+    },
+    "ecommerce_cart_line": {
+      "description": "Cart line item model",
+      "fields": {
+        "cart_id": "Associated cart",
+        "product_id": "Associated product",
+        "quantity": "Item quantity",
+        "price": "Unit price",
+        "subtotal": "Line subtotal"
+      }
+    }
+  },
+  "business_logic": {
+    "branch_resolution": "If branch_name is provided, it's resolved to branch_id using case-insensitive search. If branch_id is provided directly, it's used as-is.",
+    "product_filtering": "Products are filtered by sale_ok=True and either belong to the specified branch or have no branch (shared across all branches).",
+    "location_filtering": "If location_id or location_name is provided, only locations matching the filter are considered for stock calculations.",
+    "stock_calculation": "Stock quantities are calculated by summing stock.quant records for each product-location combination where quantity > 0.",
+    "location_hierarchy": "Locations are filtered by branch_id to ensure only locations belonging to the specified branch are included.",
+    "cart_management": "Cart is automatically created for customer if it doesn't exist. Adding existing product updates quantity instead of creating duplicate line."
+  },
+  "use_cases": [
+    {
+      "use_case": "E-commerce Product Catalog",
+      "description": "Display all available products for a specific branch with stock availability across different locations"
+    },
+    {
+      "use_case": "Location-Specific Inventory",
+      "description": "Show products available in a specific location (e.g., 'wh/stock' or 'Rifan/stock') within a branch"
+    },
+    {
+      "use_case": "Multi-Location Stock Check",
+      "description": "Check stock availability of products across multiple locations within a branch for inventory management"
+    },
+    {
+      "use_case": "Branch-Based Product Filtering",
+      "description": "Filter products by branch for multi-branch e-commerce operations"
+    },
+    {
+      "use_case": "Shopping Cart Management",
+      "description": "Add products to cart, update quantities, and manage customer shopping experience"
+    }
+  ]
+}

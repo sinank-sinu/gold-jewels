@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_ecommerce_customer_user,ecommerce.customer user,model_ecommerce_customer,base.group_user,1,1,1,1
+access_ecommerce_customer_public,ecommerce.customer public,model_ecommerce_customer,base.group_public,0,0,0,0
+access_ecommerce_cart_user,ecommerce.cart user,model_ecommerce_cart,base.group_user,1,1,1,1
+access_ecommerce_cart_line_user,ecommerce.cart.line user,model_ecommerce_cart_line,base.group_user,1,1,1,1
+access_ecommerce_wishlist_user,ecommerce.wishlist user,model_ecommerce_wishlist,base.group_user,1,1,1,1
