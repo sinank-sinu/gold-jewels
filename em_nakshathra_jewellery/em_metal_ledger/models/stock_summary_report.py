@@ -14,11 +14,6 @@ class StockSummaryReportWizard(models.TransientModel):
         # Clear previous report lines for this user
         self.env['stock.summary.report.line'].search([('create_uid', '=', self.env.user.id)]).unlink()
 
-        # Get all products and variants
-        products = self.env['product.product'].search([('active', '=', True)])
-        
-        report_lines = []
-        
         # Internal Locations Domain
         internal_loc_domain = [('usage', '=', 'internal')]
         if self.branch_ids:
@@ -29,86 +24,117 @@ class StockSummaryReportWizard(models.TransientModel):
         # Number of days in the period
         no_of_days = (self.end_date - self.start_date).days + 1
 
-        for product in products:
-            # Domain for opening stock (before start_date)
-            opening_domain = [
-                ('product_id', '=', product.id),
-                ('state', '=', 'done'),
-                ('date', '<', self.start_date)
-            ]
-            
-            # Domain for period movements
-            period_domain = [
-                ('product_id', '=', product.id),
-                ('state', '=', 'done'),
-                ('date', '>=', self.start_date),
-                ('date', '<=', datetime.combine(self.end_date, datetime.max.time()))
-            ]
+        # 1. Fetch relevant stock moves in bulk
+        moves_domain = [
+            ('state', '=', 'done'),
+            ('date', '<=', datetime.combine(self.end_date, datetime.max.time())),
+            '|',
+            ('location_id', 'in', internal_loc_ids),
+            ('location_dest_id', 'in', internal_loc_ids)
+        ]
+        all_moves = self.env['stock.move'].search(moves_domain)
+        
+        moves_by_product = {}
+        for move in all_moves:
+            moves_by_product.setdefault(move.product_id.id, []).append(move)
 
-            # Helper to calculate weights/pieces from moves
-            def get_stats(moves, loc_ids, mode='in'):
-                pcs = 0.0
-                gross = 0.0
-                net = 0.0
-                for move in moves:
-                    is_in = move.location_dest_id.id in loc_ids and move.location_id.id not in loc_ids
-                    is_out = move.location_id.id in loc_ids and move.location_dest_id.id not in loc_ids
-                    
-                    # For opening, we look at the net effect
-                    if mode == 'opening':
-                        coef = 0
-                        if move.location_dest_id.id in loc_ids: coef += 1
-                        if move.location_id.id in loc_ids: coef -= 1
-                    elif mode == 'in':
-                        coef = 1 if is_in else 0
-                    elif mode == 'out':
-                        coef = 1 if is_out else 0
-                    else:
-                        coef = 0
+        # 2. Fetch reordering rules in bulk
+        rules_domain = [('location_id', 'in', internal_loc_ids)]
+        all_rules = self.env['stock.warehouse.orderpoint'].search(rules_domain)
+        
+        rules_by_product = {}
+        for rule in all_rules:
+            rules_by_product.setdefault(rule.product_id.id, []).append(rule)
 
-                    if coef == 0:
-                        continue
+        # Relevant product IDs are those that have moves or rules
+        relevant_product_ids = set(moves_by_product.keys()) | set(rules_by_product.keys())
 
-                    # Pieces
-                    m_pcs = 0.0
-                    if move.label_id:
-                        m_pcs = 1.0
-                    elif move.product_uom.category_id.name in ['Unit', 'Working Time']:
-                        m_pcs = move.product_uom_qty
-                    
-                    # Gross Weight
-                    m_gross = 0.0
-                    if move.label_id:
-                        m_gross = move.label_id.purchase_gross_weight
-                    elif 'grams' in move._fields and move.grams:
-                        m_gross = move.grams
-                    elif move.product_uom.category_id.name == 'Weight':
-                        m_gross = move.product_uom_qty
-                    
-                    # Net Weight
-                    m_net = 0.0
-                    if move.label_id:
-                        m_net = move.label_id.purchase_net_weight
-                    else:
-                        # Fallback for net weight
-                        purity_percent = move.purity_id.percentage if move.purity_id else product.purity_id.percentage
-                        if purity_percent:
-                            m_net = m_gross * (purity_percent / 100.0)
-                        else:
-                            m_net = m_gross
+        # 3. Fetch product labels in bulk only for relevant products
+        all_labels = self.env['product.label'].search([('product_id', 'in', list(relevant_product_ids))])
+        labels_by_product = {}
+        for label in all_labels:
+            if label.product_id.id not in labels_by_product:
+                labels_by_product[label.product_id.id] = label
 
-                    pcs += m_pcs * coef
-                    gross += m_gross * coef
-                    net += m_net * coef
+        # Fetch products in bulk
+        products = self.env['product.product'].browse(list(relevant_product_ids)).filtered(lambda p: p.active)
+
+        report_lines = []
+
+        # Helper to calculate weights/pieces from moves
+        def get_stats(moves, loc_ids, mode='in'):
+            pcs = 0.0
+            gross = 0.0
+            net = 0.0
+            for move in moves:
+                is_in = move.location_dest_id.id in loc_ids and move.location_id.id not in loc_ids
+                is_out = move.location_id.id in loc_ids and move.location_dest_id.id not in loc_ids
                 
-                return pcs, gross, net
+                # For opening, we look at the net effect
+                if mode == 'opening':
+                    coef = 0
+                    if move.location_dest_id.id in loc_ids: coef += 1
+                    if move.location_id.id in loc_ids: coef -= 1
+                elif mode == 'in':
+                    coef = 1 if is_in else 0
+                elif mode == 'out':
+                    coef = 1 if is_out else 0
+                else:
+                    coef = 0
+
+                if coef == 0:
+                    continue
+
+                # Pieces
+                m_pcs = 0.0
+                if move.label_id:
+                    m_pcs = 1.0
+                elif move.product_uom.category_id.name in ['Unit', 'Working Time']:
+                    m_pcs = move.product_uom_qty
+                
+                # Gross Weight
+                m_gross = 0.0
+                if move.label_id:
+                    m_gross = move.label_id.purchase_gross_weight
+                elif 'grams' in move._fields and move.grams:
+                    m_gross = move.grams
+                elif move.product_uom.category_id.name == 'Weight':
+                    m_gross = move.product_uom_qty
+                
+                # Net Weight
+                m_net = 0.0
+                if move.label_id:
+                    m_net = move.label_id.purchase_net_weight
+                else:
+                    # Fallback for net weight
+                    purity_percent = move.purity_id.percentage if move.purity_id else move.product_id.purity_id.percentage
+                    if purity_percent:
+                        m_net = m_gross * (purity_percent / 100.0)
+                    else:
+                        m_net = m_gross
+
+                pcs += m_pcs * coef
+                gross += m_gross * coef
+                net += m_net * coef
+            
+            return pcs, gross, net
+
+        for product in products:
+            product_moves = moves_by_product.get(product.id, [])
+            
+            # Split moves in memory
+            opening_moves = []
+            period_moves = []
+            for move in product_moves:
+                if move.date.date() < self.start_date:
+                    opening_moves.append(move)
+                else:
+                    period_moves.append(move)
 
             # Calculate Opening
-            opening_moves = self.env['stock.move'].search(opening_domain)
             o_pcs, o_gross, o_net = get_stats(opening_moves, internal_loc_ids, mode='opening')
 
             # Calculate Period In/Out
-            period_moves = self.env['stock.move'].search(period_domain)
             in_pcs, in_gross, in_net = get_stats(period_moves, internal_loc_ids, mode='in')
             out_pcs, out_gross, out_net = get_stats(period_moves, internal_loc_ids, mode='out')
 
@@ -123,21 +149,16 @@ class StockSummaryReportWizard(models.TransientModel):
             dio = round(no_of_days / turnover_ratio) if turnover_ratio > 0 else 0.0
             
             # Minimum stock level from reordering rules
-            reordering_rule = self.env['stock.warehouse.orderpoint'].search([
-                ('product_id', '=', product.id),
-                ('location_id', 'in', internal_loc_ids)
-            ], limit=1)
-            min_stock = reordering_rule.product_min_qty if reordering_rule else 0.0
+            product_rules = rules_by_product.get(product.id, [])
+            min_stock = product_rules[0].product_min_qty if product_rules else 0.0
             stock_gap = c_gross - min_stock
+
             # Fetch ageing from product.label
-            label = self.env['product.label'].search([
-                ('product_id', '=', product.id)
-            ], limit=1)
+            label = labels_by_product.get(product.id, False)
             purity_id = label.purity_id.id if label and label.purity_id else False
             ageing = label.age if label else 0
 
-            #Attribute values
- 
+            # Attribute values
             attribute_map = {}
             for ptav in product.product_template_attribute_value_ids:
                 attribute_map[
@@ -151,7 +172,6 @@ class StockSummaryReportWizard(models.TransientModel):
             stone_colour_value = attribute_map.get('stone colour', '')
             metal_colour_value = attribute_map.get('metal colour', '')
 
-            
             # Only add to report if there is any activity or stock
             if any([o_pcs, o_gross, o_net, in_pcs, in_gross, in_net, out_pcs, out_gross, out_net, c_pcs, c_gross, c_net, min_stock]):
                 report_lines.append({
