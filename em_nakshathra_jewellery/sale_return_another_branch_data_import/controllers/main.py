@@ -18,7 +18,7 @@ class SaleReturnAnotherBranchController(http.Controller):
     @http.route('/import/sale_return_another_branch/form', type='http', auth='user')
     def import_form(self, **kwargs):
         csrf = request.csrf_token()
-        return f"""<!DOCTYPE html><html><head><title>Import Another Branch Sale Return</title>
+        return f"""<!DOCTYPE html><html><head><title>Import Another Branch Sale Return</title>  
 <style>
 body{{font-family:sans-serif;margin:40px;background:#f4f6f9;}}
 .box{{max-width:820px;margin:auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.12);}}
@@ -66,13 +66,30 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                 elif 'net' in h: c_m['net'] = i
                 elif 'diamond' in h and 'wt' in h: c_m['dia_wt'] = i
                 elif 'stone' in h and 'wt' in h: c_m['st_wt'] = i
-                elif 'metal' in h and 'rate' in h: c_m['m_rate'] = i
-                elif 'metal' in h and 'amt' in h: c_m['m_amt'] = i
-                elif 'mc' in h and 'amt' in h: c_m['mc'] = i
+                elif ('metal' in h and 'rate' in h) or ('gold' in h and 'rate' in h): c_m['m_rate'] = i
+                elif ('metal' in h and 'amt' in h) or ('metal' in h and 'amount' in h) or ('gold' in h and 'amt' in h): c_m['m_amt'] = i
+                elif h == 'mc' or ('mc' in h and 'amt' in h) or ('mc' in h and 'amount' in h) or 'making' in h:
+                    # Ignore MC% column if it exists
+                    if '%' not in h:
+                        c_m['mc'] = i
                 elif 'diamond' in h and 'amt' in h: c_m['dia_amt'] = i
                 elif 'stone' in h and 'amt' in h: c_m['st_amt'] = i
                 elif 'other' in h: c_m['other'] = i
                 elif 'tax' in h: c_m['tax'] = i
+                elif 'bank' in h and ('amt' in h or 'amount' in h): c_m['bank_amt'] = i
+                elif 'bank' in h and 'ref' in h: c_m['bank_ref'] = i
+                elif 'upi' in h and '2' in h and ('amt' in h or 'amount' in h): c_m['upi_amt2'] = i
+                elif 'upi' in h and '2' in h and 'ref' in h: c_m['upi_ref2'] = i
+                elif 'upi' in h and ('amt' in h or 'amount' in h): c_m['upi_amt1'] = i
+                elif 'upi' in h and 'ref' in h: c_m['upi_ref1'] = i
+                elif 'card' in h and '3' in h and ('amt' in h or 'amount' in h): c_m['card_amt3'] = i
+                elif 'card' in h and '3' in h and 'ref' in h: c_m['card_ref3'] = i
+                elif 'card' in h and '2' in h and ('amt' in h or 'amount' in h): c_m['card_amt2'] = i
+                elif 'card' in h and '2' in h and 'ref' in h: c_m['card_ref2'] = i
+                elif 'card' in h and ('amt' in h or 'amount' in h): c_m['card_amt1'] = i
+                elif 'card' in h and 'ref' in h: c_m['card_ref1'] = i
+                elif 'cash' in h and ('amt' in h or 'amount' in h): c_m['cash_amt'] = i
+                elif 'scheme' in h: c_m['gold_scheme_amt'] = i
                 
             for row in wb[sales_sn].iter_rows(min_row=2, values_only=True):
                 if not any(row): continue
@@ -103,13 +120,13 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                     'other_charge':_flt(r[c_m.get('other', 19)]),
                     'taxes':       _str(r[c_m.get('tax', 21)]),
                     'bill_amount': _flt(r[24]),
-                    'bank_amt':    _flt(r[26]),'bank_ref':_str(r[27]),
-                    'upi_amt1':    _flt(r[28]),'upi_ref1':_str(r[29]),
-                    'upi_amt2':    _flt(r[30]),'upi_ref2':_str(r[31]),
-                    'card_amt1':   _flt(r[32]),'card_ref1':_str(r[33]),
-                    'card_amt2':   _flt(r[34]),'card_ref2':_str(r[35]),
-                    'card_amt3':   _flt(r[36]),'card_ref3':_str(r[37]),
-                    'cash_amt':    _flt(r[38]),'gold_scheme':_flt(r[39]),'sales_return':_flt(r[42]),
+                    'bank_amt':    _flt(r[c_m.get('bank_amt', 49)]), 'bank_ref': _str(r[c_m.get('bank_ref', 49)]),
+                    'upi_amt1':    _flt(r[c_m.get('upi_amt1', 49)]), 'upi_ref1': _str(r[c_m.get('upi_ref1', 49)]),
+                    'upi_amt2':    _flt(r[c_m.get('upi_amt2', 49)]), 'upi_ref2': _str(r[c_m.get('upi_ref2', 49)]),
+                    'card_amt1':   _flt(r[c_m.get('card_amt1', 49)]), 'card_ref1': _str(r[c_m.get('card_ref1', 49)]),
+                    'card_amt2':   _flt(r[c_m.get('card_amt2', 49)]), 'card_ref2': _str(r[c_m.get('card_ref2', 49)]),
+                    'card_amt3':   _flt(r[c_m.get('card_amt3', 49)]), 'card_ref3': _str(r[c_m.get('card_ref3', 49)]),
+                    'cash_amt':    _flt(r[c_m.get('cash_amt', 49)]), 'gold_scheme': _flt(r[c_m.get('gold_scheme_amt', 49)]), 'sales_return': _flt(r[42]),
                     'src_loc_name': _str(r[c_m.get('src_loc', -1)]) if c_m.get('src_loc', -1) >= 0 else '',
                     'dest_loc_name': _str(r[c_m.get('dest_loc', -1)]) if c_m.get('dest_loc', -1) >= 0 else '',
                 }
@@ -482,7 +499,13 @@ if(tot>0)run(); else log('No records found.');
             purity_key = row.get('purity', '').strip()
             purity = (cache['purities'].get(purity_key)
                       or (label.purity_id if label else None))
-            taxes = line_prod.taxes_id.filtered(lambda t: t.company_id == env.company)
+            excel_tax_str = _str(row.get('taxes'))
+            taxes = env['account.tax']
+            if excel_tax_str:
+                taxes = env['account.tax'].search([('name', 'ilike', excel_tax_str), ('type_tax_use', '=', 'sale'), ('company_id', '=', env.company.id)], limit=1)
+            
+            if not taxes:
+                taxes = line_prod.taxes_id.filtered(lambda t: t.company_id == env.company)
 
             # ── Step 1: create with price_unit=0.0 to satisfy NOT NULL ───────
             gross_wt    = _flt(row.get('gross_wt'))    or (label.sale_gross_weight      if label else 1.0) or 1.0
@@ -599,6 +622,7 @@ if(tot>0)run(); else log('No records found.');
                 env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (vou_date, picking.id))
 
         # 10. Apply Sale Return
+        order.invalidate_recordset(['sale_return_line_ids'])
         if order.sale_return_line_ids:
             try:
                 order.action_apply_sale_return()
@@ -638,6 +662,12 @@ if(tot>0)run(); else log('No records found.');
                         'delivery_date': date_only
                     })
                 invoice.action_post()
+                
+                try:
+                    if hasattr(invoice, 'custom_total') and invoice.custom_total < 0:
+                        invoice.action_create_old_gold_vendor_payment()
+                except Exception as e:
+                    _logger.warning("Auto-create customer payment failed for %s: %s", vou_no, e)
         except Exception as e:
             _logger.warning("Invoice %s: %s", vou_no, e)
 
@@ -685,9 +715,11 @@ if(tot>0)run(); else log('No records found.');
             if not journal: return
             try:
                 wiz_vals = {'amount': amount, 'journal_id': journal.id,
-                            'payment_date': pay_date, 'communication': ref or ''}
-                if 'bank_reference' in env['account.payment.register']._fields:
-                    wiz_vals['bank_reference'] = ref or ''
+                            'payment_date': pay_date}
+                if ref:
+                    wiz_vals['communication'] = ref
+                if 'bank_reference' in env['account.payment.register']._fields and ref:
+                    wiz_vals['bank_reference'] = ref
                 wiz = env['account.payment.register'].with_context(
                     active_model='account.move', active_ids=invoice.ids
                 ).create(wiz_vals)
