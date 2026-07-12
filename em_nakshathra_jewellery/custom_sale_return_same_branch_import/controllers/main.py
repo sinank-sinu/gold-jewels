@@ -110,12 +110,12 @@ class SaleReturnMigrationController(http.Controller):
                         
                         vou_date = row[c_m.get('vou_date', 3)]
                         if isinstance(vou_date, (datetime.datetime, datetime.date)):
-                            vou_date = vou_date.isoformat()
+                            vou_date = vou_date.strftime('%Y-%m-%d %H:%M:%S')
                             
                         # Optional revision date at the end
                         rev_date = row[-1] if len(row) > 36 else False
                         if isinstance(rev_date, (datetime.datetime, datetime.date)):
-                            rev_date = rev_date.isoformat()
+                            rev_date = rev_date.strftime('%Y-%m-%d %H:%M:%S')
                             
                         r = list(row) + [None]*50
                         
@@ -155,22 +155,38 @@ class SaleReturnMigrationController(http.Controller):
 
             # Pre-parse SR sheet
             sr_rows = []
+            seen_docs = set()
             if 'SR' in wb.sheetnames:
-                for row_idx, row in enumerate(wb['SR'].iter_rows(min_row=2, values_only=True), start=2):
+                sr_sheet = wb['SR']
+                sr_header_row = next(sr_sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+                sr_headers = [_str(h).lower().strip().replace(' ', '') for h in sr_header_row]
+                sr_cm = {}
+                for i, h in enumerate(sr_headers):
+                    if 'source' in h and 'loc' in h: sr_cm['src_loc'] = i
+                    
+                for row_idx, row in enumerate(sr_sheet.iter_rows(min_row=2, values_only=True), start=2):
                     if not any(row): continue
                     source_doc = _str(row[0]) # Source document
                     if not source_doc: continue
                     
+                    # Deduplicate by source document to avoid processing the same order multiple times
+                    if source_doc in seen_docs:
+                        continue
+                    seen_docs.add(source_doc)
+                    
                     reason = _str(row[38]) if len(row) > 38 else ''
                     rev_date = row[39] if len(row) > 39 else False
                     if isinstance(rev_date, (datetime.datetime, datetime.date)):
-                        rev_date = rev_date.isoformat()
+                        rev_date = rev_date.strftime('%Y-%m-%d %H:%M:%S')
+                        
+                    sr_loc = _str(row[sr_cm['src_loc']]) if 'src_loc' in sr_cm and len(row) > sr_cm['src_loc'] else ''
                         
                     sr_rows.append({
                         'source_doc': source_doc,
                         'sr_row': [source_doc, _str(row[1]) if len(row) > 1 else ''],
                         'reason': reason,
                         'reversal_date': rev_date,
+                        'sr_loc': sr_loc,
                         'row_idx': row_idx
                     })
 
@@ -296,11 +312,12 @@ class SaleReturnMigrationController(http.Controller):
                 sr_row = row['sr_row']
                 reason = row.get('reason', '')
                 rev_date = row.get('reversal_date', False)
+                sr_loc = row.get('sr_loc', '')
                 row_idx = row['row_idx']
                 
                 try:
                     with request.env.cr.savepoint():
-                        self._process_return_row(source_doc, sr_row, sales_data, row_idx, error_log, reason=reason, rev_date=rev_date)
+                        self._process_return_row(source_doc, sr_row, sales_data, row_idx, error_log, reason=reason, rev_date=rev_date, sr_loc=sr_loc)
                     success_count += 1
                 except Exception as e:
                     error_log.append(f"SR Row {row_idx} ({source_doc}): {str(e)}")
@@ -313,7 +330,7 @@ class SaleReturnMigrationController(http.Controller):
         except Exception as e:
             return {'error': str(e)}
 
-    def _process_return_row(self, source_doc, sr_row, sales_data, row_idx, error_log, reason='', rev_date=False):
+    def _process_return_row(self, source_doc, sr_row, sales_data, row_idx, error_log, reason='', rev_date=False, sr_loc=''):
         env = request.env
 
         # SR sheet: [0]=Source document (=origin), [1]=Customer name
@@ -376,6 +393,13 @@ class SaleReturnMigrationController(http.Controller):
                 cn.action_post()
                 credit_notes |= cn
 
+        # Resolve sr_loc if provided in SR sheet
+        excel_return_loc = False
+        if sr_loc:
+            import re
+            loc_pattern = '%' + '%'.join(re.split(r'[^a-zA-Z0-9]', sr_loc)) + '%'
+            excel_return_loc = env['stock.location'].search(['|', ('complete_name', 'ilike', loc_pattern), ('name', 'ilike', loc_pattern)], limit=1)
+
         # 2. Return Stock
         done_pickings = order.picking_ids.filtered(lambda p: p.state == 'done' and p.picking_type_code == 'outgoing')
         for picking in done_pickings:
@@ -388,11 +412,56 @@ class SaleReturnMigrationController(http.Controller):
             default_vals = env['stock.return.picking'].with_context(**wiz_context).default_get(
                 ['picking_id', 'product_return_moves', 'location_id', 'original_location_id']
             )
+            
+            # Use Excel return location, fallback to original product source location
+            target_loc_id = excel_return_loc.id if excel_return_loc else (picking.location_id.id if picking.location_id else False)
+            if target_loc_id:
+                default_vals['location_id'] = target_loc_id
+                
+            # Explicitly build product return moves based on delivered quantity
+            return_moves = []
+            for move in picking.move_ids:
+                if move.state == 'cancel' or move.scrapped: continue
+                # In Odoo 17, the delivered quantity is 'quantity'.
+                delivered_qty = getattr(move, 'quantity', getattr(move, 'product_qty', 0))
+                if delivered_qty > 0:
+                    # check if already returned
+                    returned_qty = sum(move.move_dest_ids.filtered(
+                        lambda m: m.state in ['partially_available', 'assigned', 'done'] and not m.scrapped
+                    ).mapped(lambda m: getattr(m, 'quantity', getattr(m, 'product_qty', 0))))
+                    
+                    qty_to_return = delivered_qty - returned_qty
+                    if qty_to_return > 0:
+                        return_moves.append((0, 0, {
+                            'product_id': move.product_id.id,
+                            'quantity': qty_to_return,
+                            'move_id': move.id,
+                            'uom_id': move.product_id.uom_id.id,
+                        }))
+            
+            if not return_moves:
+                _logger.warning("No quantity to return for picking %s (already returned?)", picking.name)
+                continue
+                
+            default_vals['product_return_moves'] = return_moves
+                
             return_wiz = env['stock.return.picking'].with_context(**wiz_context).create(default_vals)
+            
             res = return_wiz.create_returns()
             if res and 'res_id' in res:
                 return_picking = env['stock.picking'].browse(res['res_id'])
+                
+                # Double-check and force destination location on the returned moves and picking
+                if target_loc_id:
+                    return_picking.location_dest_id = target_loc_id
+                    for m in return_picking.move_ids:
+                        m.location_dest_id = target_loc_id
+                        for ml in m.move_line_ids:
+                            ml.location_dest_id = target_loc_id
+                            
                 # validate return picking
+                return_picking.action_confirm()
+                return_picking.action_assign()
                 for move in return_picking.move_ids:
                     move.quantity = move.product_uom_qty
                     if hasattr(move, 'picked'): move.picked = True
@@ -405,6 +474,9 @@ class SaleReturnMigrationController(http.Controller):
                         if model == 'stock.immediate.transfer':
                             wiz = env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, return_picking.id)]})
                             wiz.process()
+                        elif model == 'stock.backorder.confirmation':
+                            wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, return_picking.id)]})
+                            wiz.process_cancel_backorder()
                 except Exception as e:
                     _logger.warning("Return Delivery validate failed: %s", e)
 
@@ -510,21 +582,40 @@ class SaleReturnMigrationController(http.Controller):
                 if loc:
                     for move in line.move_ids:
                         move.location_id = loc.id
+                        for ml in move.move_line_ids:
+                            ml.location_id = loc.id
                         if move.picking_id:
                             move.picking_id.location_id = loc.id
-        # 3b. Apply Gold Scheme if specified in SALES sheet
-        gold_scheme_amt = _flt(s_data.get('gold_scheme_amt', 0.0))
-        if gold_scheme_amt > 0:
-            partner = order.partner_id
-            excel_party_name = s_data.get('party_name')
-            scheme_partner = partner
-            if excel_party_name:
-                excel_party = env['res.partner'].search([('name', '=', excel_party_name)], limit=1)
-                if not excel_party:
-                    excel_party = env['res.partner'].search([('name', 'ilike', excel_party_name)], limit=1)
-                if excel_party:
-                    scheme_partner = excel_party
+        # 3b. Try to apply scheme natively (triggers the button logic)
+        partner = order.partner_id
+        excel_party_name = s_data.get('party_name')
+        scheme_partner = partner
+        if excel_party_name:
+            excel_party = env['res.partner'].search([('name', '=', excel_party_name)], limit=1)
+            if not excel_party:
+                excel_party = env['res.partner'].search([('name', 'ilike', excel_party_name)], limit=1)
+            if excel_party:
+                scheme_partner = excel_party
 
+        # Temporarily use scheme_partner so action_apply_scheme can find it
+        old_partner = order.partner_id
+        if old_partner.id != scheme_partner.id:
+            order.partner_id = scheme_partner.id
+            
+        try:
+            if not order.scheme_line_id:
+                order.apply_scheme = True
+                order.action_apply_scheme()
+        except Exception as e:
+            _logger.info("Native scheme application failed for %s: %s", order.name, e)
+            
+        # Restore partner if changed
+        if old_partner.id != order.partner_id.id:
+            order.partner_id = old_partner.id
+
+        # Fallback: Apply Gold Scheme manually if specified in SALES sheet but native failed
+        gold_scheme_amt = _flt(s_data.get('gold_scheme_amt', 0.0))
+        if gold_scheme_amt > 0 and not order.scheme_line_id:
             # Search for ANY scheme enrollment for this customer to force application during migration
             existing_scheme = env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', scheme_partner.id),
@@ -579,6 +670,8 @@ class SaleReturnMigrationController(http.Controller):
         # Refresh order pickings to find the newly generated delivery
         new_pickings = order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel') and p.picking_type_code == 'outgoing')
         for picking in new_pickings:
+            picking.action_confirm()
+            picking.action_assign()
             if s_data.get('vou_date'):
                 picking.write({'scheduled_date': s_data.get('vou_date')})
             for move in picking.move_ids:
@@ -592,8 +685,11 @@ class SaleReturnMigrationController(http.Controller):
                     if model == 'stock.immediate.transfer':
                         wiz = env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                         wiz.process()
+                    elif model == 'stock.backorder.confirmation':
+                        wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                        wiz.process_cancel_backorder()
             except Exception as e:
-                _logger.warning("New Delivery validate failed: %s", e)
+                _logger.warning("New Delivery validate failed for order %s: %s", order.name, str(e))
 
             # SQL Date Override
             if s_data.get('vou_date'):
@@ -606,7 +702,11 @@ class SaleReturnMigrationController(http.Controller):
         new_invoice = order._create_invoices()
         if new_invoice:
             if s_data.get('vou_date'):
-                date_only = datetime.datetime.fromisoformat(s_data.get('vou_date')).date() if isinstance(s_data.get('vou_date'), str) else s_data.get('vou_date')
+                v_date = s_data.get('vou_date')
+                if isinstance(v_date, str):
+                    date_only = datetime.datetime.strptime(v_date[:10], '%Y-%m-%d').date()
+                else:
+                    date_only = v_date.date() if isinstance(v_date, datetime.datetime) else v_date
                 new_invoice.write({
                     'invoice_date': date_only,
                     'date': date_only,
@@ -669,6 +769,15 @@ class SaleReturnMigrationController(http.Controller):
                 _pay(s_data.get('cash_amt', 0),  'cash', '')
             except Exception as e:
                 _logger.warning("Payment registration failed: %s", e)
+
+            # 7b. Trigger 'Create Customer Payment' if applicable (e.g. for Scheme/OG refunds)
+            try:
+                if hasattr(new_invoice, 'custom_total') and getattr(new_invoice, 'custom_total', 0) < 0:
+                    if hasattr(new_invoice, 'action_create_old_gold_vendor_payment'):
+                        new_invoice.action_create_old_gold_vendor_payment()
+                        _logger.info("Triggered action_create_old_gold_vendor_payment for %s", new_invoice.name)
+            except Exception as e:
+                _logger.warning("Auto-create customer payment failed for %s: %s", new_invoice.name, e)
 
         # 8. Deactivate Labels
         if labels_to_deactivate:

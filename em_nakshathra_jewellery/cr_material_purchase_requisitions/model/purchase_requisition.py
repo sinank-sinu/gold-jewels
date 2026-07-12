@@ -6,6 +6,7 @@ from odoo import api, fields, models
 
 class PurchaseRequisition(models.Model):
     _name = "material.purchase.requisition"
+    _inherit = ["mail.thread", "mail.activity.mixin"]
     _description = "material purchase requisition"
 
     name = fields.Char(
@@ -39,6 +40,7 @@ class PurchaseRequisition(models.Model):
         ],
         string="Status",
         default="new",
+        tracking=True,
     )
     requisition_lines = fields.One2many(
         "material.purchase.requisition.line",

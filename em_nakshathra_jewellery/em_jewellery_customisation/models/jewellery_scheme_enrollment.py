@@ -45,10 +45,11 @@ class JewellerySchemeEnrollment(models.Model):
 
             # NOTE: If state is not a computed field, setting it here 
             # might only update the UI temporarily until the next refresh.
-            if total >= expected_total and expected_total > 0:
-                rec.state = 'completed'
-            else:
-                rec.state = 'running'
+            if rec.state != 'redeemed':
+                if total >= expected_total and expected_total > 0:
+                    rec.state = 'completed'
+                else:
+                    rec.state = 'running'
 
 
 # from odoo import models, fields, api

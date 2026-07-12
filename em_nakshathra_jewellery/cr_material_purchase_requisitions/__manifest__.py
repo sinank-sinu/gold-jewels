@@ -38,7 +38,7 @@
     Material Requisition Request by Employee in odoo,
     Material Requisition Request by User in odoo
 """,
-    "depends": ["base", "hr", "stock", "purchase","multi_branch_base"],
+    "depends": ["base", "hr", "stock", "purchase","multi_branch_base", "mail"],
     "data": [
         "security/ir.model.access.csv",
         "security/res_groups.xml",
