@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_attendance_tree_inherit_essl" model="ir.ui.view">
+        <field name="name">hr.attendance.tree.inherit.essl</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='check_out']" position="after">
+                <field name="essl_location_id"/>
+                <field name="essl_checkout_location_id"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="hr_attendance_view_form_inherit_essl" model="ir.ui.view">
+        <field name="name">hr.attendance.form.inherit.essl</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='check_out']" position="after">
+                <field name="essl_location_id"/>
+                <field name="essl_checkout_location_id"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Clear direct action from the parent Reporting menu so it acts as a dropdown container -->
+    <record id="hr_attendance.menu_hr_attendance_reporting" model="ir.ui.menu">
+        <field name="action" eval="False"/>
+    </record>
+
+    <!-- Weekly Report action -->
+    <record id="action_hr_attendance_report_weekly" model="ir.actions.act_window">
+        <field name="name">Weekly Attendance Report</field>
+        <field name="res_model">hr.attendance</field>
+        <field name="view_mode">pivot,graph</field>
+        <field name="search_view_id" ref="hr_attendance.hr_attendance_view_filter"/>
+        <field name="context">{
+            'search_default_employee': 1,
+            'search_default_last_week': 1,
+            'pivot_row_groupby': ['employee_id'],
+            'pivot_column_groupby': ['check_in:week'],
+            'pivot_measures': ['worked_hours', 'overtime_hours']
+        }</field>
+    </record>
+
+    <!-- Monthly Report action -->
+    <record id="action_hr_attendance_report_monthly" model="ir.actions.act_window">
+        <field name="name">Monthly Attendance Report</field>
+        <field name="res_model">hr.attendance</field>
+        <field name="view_mode">pivot,graph</field>
+        <field name="search_view_id" ref="hr_attendance.hr_attendance_view_filter"/>
+        <field name="context">{
+            'search_default_employee': 1,
+            'pivot_row_groupby': ['employee_id'],
+            'pivot_column_groupby': ['check_in:month'],
+            'pivot_measures': ['worked_hours', 'overtime_hours']
+        }</field>
+    </record>
+
+    <!-- Weekly Report menu item -->
+    <menuitem id="menu_hr_attendance_report_weekly"
+              name="Weekly Report"
+              parent="hr_attendance.menu_hr_attendance_reporting"
+              sequence="10"
+              action="action_hr_attendance_report_weekly"
+              groups="hr_attendance.group_hr_attendance_officer"/>
+
+    <!-- Monthly Report menu item -->
+    <menuitem id="menu_hr_attendance_report_monthly"
+              name="Monthly Report"
+              parent="hr_attendance.menu_hr_attendance_reporting"
+              sequence="20"
+              action="action_hr_attendance_report_monthly"
+              groups="hr_attendance.group_hr_attendance_officer"/>
+</odoo>

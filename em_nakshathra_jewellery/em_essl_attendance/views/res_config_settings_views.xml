@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.essl.attendance</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="hr_attendance.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='hr_attendance']" position="inside">
+                <block title="eSSL Integration" name="essl_setting_container">
+                    <setting string="eSSL API Configuration" help="Configure the connection to the eSSL API.">
+                        <div class="content-group">
+                            <div class="row mt16">
+                                <label for="essl_api_url" class="col-lg-3 o_light_label"/>
+                                <field name="essl_api_url" placeholder="http://etime.esslsecurity.com:3366"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="essl_api_key" class="col-lg-3 o_light_label"/>
+                                <field name="essl_api_key" password="True" placeholder="API Key"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="essl_username" class="col-lg-3 o_light_label"/>
+                                <field name="essl_username" placeholder="Username"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="essl_password" class="col-lg-3 o_light_label"/>
+                                <field name="essl_password" password="True" placeholder="Password"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="essl_serial_number" class="col-lg-3 o_light_label"/>
+                                <field name="essl_serial_number" placeholder="Device Serial Number (Optional)"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="essl_timezone" class="col-lg-3 o_light_label"/>
+                                <field name="essl_timezone"/>
+                            </div>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Inherit Payslip Form to add is_incentive_slip field -->
+        <record id="view_hr_payslip_form_inherit_incentive" model="ir.ui.view">
+            <field name="name">hr.payslip.form.inherit.incentive</field>
+            <field name="model">hr.payslip</field>
+            <field name="inherit_id" ref="hr_payroll_community.hr_payslip_view_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='employee_id']" position="after">
+                    <field name="is_incentive_slip" invisible="1"/>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- Action for Salary Payslips (Regular) -->
+        <record id="hr_payroll_community.hr_payslip_action" model="ir.actions.act_window">
+            <field name="name">Salary Payslips</field>
+            <field name="res_model">hr.payslip</field>
+            <field name="view_mode">tree,kanban,form</field>
+            <field name="domain">[('is_incentive_slip', '=', False)]</field>
+            <field name="context">{'default_is_incentive_slip': False}</field>
+        </record>
+
+        <!-- Action for Incentive Payslips -->
+        <record id="action_incentive_payslips" model="ir.actions.act_window">
+            <field name="name">Incentive Payslips</field>
+            <field name="res_model">hr.payslip</field>
+            <field name="view_mode">tree,kanban,form</field>
+            <field name="domain">[('is_incentive_slip', '=', True)]</field>
+            <field name="context">{'default_is_incentive_slip': True}</field>
+        </record>
+
+        <!-- Override existing menu to change name -->
+        <menuitem id="hr_payroll_community.menu_department_tree" 
+                  name="Salary Payslips" 
+                  action="hr_payroll_community.hr_payslip_action" 
+                  parent="hr_payroll_community.menu_hr_payroll_community_root" 
+                  sequence="10"/>
+
+        <!-- Add new menu for Incentive Payslips -->
+        <menuitem id="menu_incentive_payslips" 
+                  name="Incentive Payslips" 
+                  action="action_incentive_payslips" 
+                  parent="hr_payroll_community.menu_hr_payroll_community_root" 
+                  sequence="15"/>
+
+    </data>
+</odoo>

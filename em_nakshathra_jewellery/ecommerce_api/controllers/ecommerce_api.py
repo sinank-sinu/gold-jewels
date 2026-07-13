@@ -54,6 +54,10 @@ class EcommerceBranchAPI(http.Controller):
             for prod in products:
                 description = prod.description_sale or prod.description or ""
                 
+                # ── Get product purity ──
+                purity_name = prod.purity_id.name if prod.purity_id else None
+                purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+                
                 # ── Get stock quantities for each location ──
                 location_stocks = []
                 total_stock = 0
@@ -70,6 +74,25 @@ class EcommerceBranchAPI(http.Controller):
                     if total_qty > 0:
                         total_stock += total_qty
                         available_locations.append(loc.name)
+                        
+                        # ── Get label information for this product at this location ──
+                        labels = request.env['product.label'].sudo().search([
+                            ('product_tmpl_id', '=', prod.id),
+                            ('branch_location_id', '=', loc.id),
+                            ('active', '=', True)
+                        ])
+                        
+                        label_data = []
+                        for label in labels:
+                            label_data.append({
+                                "label_number": label.label_number,
+                                "label_name": label.name,
+                                "tag_weight": label.tag_weight,
+                                "grams": label.sale_gross_weight,
+                                "purity": label.purity_id.name if label.purity_id else purity_name,
+                                "purity_percentage": label.purity_id.percentage if label.purity_id else purity_percentage
+                            })
+                        
                         location_stocks.append({
                             "location_id": loc.id,
                             "location_name": loc.name,
@@ -78,7 +101,10 @@ class EcommerceBranchAPI(http.Controller):
                             "price": prod.list_price,
                             "description": description,
                             "image_url": f"/web/image/product.template/{prod.id}/image_1920",
-                            "quantity": total_qty
+                            "quantity": total_qty,
+                            "purity": purity_name,
+                            "purity_percentage": purity_percentage,
+                            "labels": label_data
                         })
                 
                 # ── Only include products with stock ──
@@ -93,7 +119,9 @@ class EcommerceBranchAPI(http.Controller):
                         "branch_name": prod.branch_id.name if prod.branch_id else "All Branches",
                         "total_stock": total_stock,
                         "available_locations": available_locations,
-                        "location_stocks": location_stocks
+                        "location_stocks": location_stocks,
+                        "purity": purity_name,
+                        "purity_percentage": purity_percentage
                     })
 
             # ── Include location filter info in response ──

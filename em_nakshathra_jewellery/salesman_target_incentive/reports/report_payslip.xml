@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Report Action -->
+        <record id="action_report_nakshathra_payslip" model="ir.actions.report">
+            <field name="name">Payslip</field>
+            <field name="model">hr.payslip</field>
+            <field name="report_type">qweb-pdf</field>
+            <field name="report_name">salesman_target_incentive.report_nakshathra_payslip_template</field>
+            <field name="report_file">salesman_target_incentive.report_nakshathra_payslip_template</field>
+            <field name="print_report_name">'Payslip - %s' % (object.employee_id.name)</field>
+            <field name="binding_model_id" ref="hr_payroll_community.model_hr_payslip"/>
+            <field name="binding_type">report</field>
+        </record>
+
+        <!-- Report Template -->
+        <template id="report_nakshathra_payslip_template">
+            <t t-call="web.html_container">
+                <t t-foreach="docs" t-as="o">
+                    <t t-call="web.basic_layout">
+                        <div class="page" style="font-family: Arial, sans-serif; font-size: 12px; color: #000;">
+                            
+                            <style>
+                                .payslip-table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    margin-bottom: 10px;
+                                }
+                                .payslip-table th, .payslip-table td {
+                                    border: 1px solid #000;
+                                    padding: 5px;
+                                }
+                                .border-box {
+                                    border: 2px solid #000;
+                                    padding: 10px;
+                                    margin-top: 10px;
+                                }
+                                .header-text {
+                                    text-align: center;
+                                }
+                                .header-text h3 {
+                                    margin: 0;
+                                    font-weight: bold;
+                                    font-size: 18px;
+                                }
+                                .header-text p {
+                                    margin: 2px 0;
+                                    font-size: 12px;
+                                }
+                                .info-table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    margin-bottom: 10px;
+                                    font-size: 11px;
+                                }
+                                .info-table td {
+                                    padding: 3px;
+                                    vertical-align: top;
+                                }
+                                .info-label {
+                                    width: 100px;
+                                    display: inline-block;
+                                }
+                                .info-colon {
+                                    padding-right: 5px;
+                                }
+                                .bg-grey {
+                                    background-color: #d9d9d9;
+                                    font-weight: bold;
+                                    text-align: center;
+                                }
+                                .text-right {
+                                    text-align: right;
+                                }
+                                .text-center {
+                                    text-align: center;
+                                }
+                                .bold {
+                                    font-weight: bold;
+                                }
+                            </style>
+
+                            <div class="border-box">
+                                <!-- Header -->
+                                <table style="width: 100%; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
+                                    <tr>
+                                        <td style="width: 25%; text-align: left; vertical-align: top;">
+                                            <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)" style="width: 100%; max-height: 140px; object-fit: contain;" alt="Logo"/>
+                                        </td>
+                                        <td style="width: 75%; vertical-align: middle;" class="header-text">
+                                            <p>FORM XI-See Rule 26(2)</p>
+                                            <h3><t t-esc="o.company_id.name"/></h3>
+                                            <p style="margin-top: 5px;">Pay Slip For The Month of <span class="bold"><t t-esc="o.date_from.strftime('%b%Y')"/></span></p>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Employee Details -->
+                                <table class="info-table" style="border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
+                                    <tr>
+                                        <td style="width: 33%;">
+                                            <span class="info-label">ID</span><span class="info-colon">:</span> <t t-esc="o.employee_id.identification_id or o.employee_id.id"/><br/>
+                                            <span class="info-label">Name</span><span class="info-colon">:</span> <t t-esc="o.employee_id.name"/><br/>
+                                            <span class="info-label">DOJ</span><span class="info-colon">:</span> <t t-if="o.contract_id.date_start" t-esc="o.contract_id.date_start.strftime('%d/%m/%Y')"/><br/>
+                                            <span class="info-label">Department</span><span class="info-colon">:</span> <t t-esc="o.employee_id.department_id.name"/>
+                                        </td>
+                                        <td style="width: 33%;">
+                                            <span class="info-label">Designation</span><span class="info-colon">:</span> <t t-esc="o.employee_id.job_id.name"/><br/>
+                                            <span class="info-label">Location</span><span class="info-colon">:</span> <t t-esc="o.employee_id.work_location_id.name"/><br/>
+                                            <span class="info-label">Bank</span><span class="info-colon">:</span> <t t-esc="o.employee_id.bank_account_id.bank_id.name"/><br/>
+                                            <span class="info-label">PayMode</span><span class="info-colon">:</span> Bank
+                                        </td>
+                                        <td style="width: 34%;">
+                                            <span class="info-label">A/C NO</span><span class="info-colon">:</span> <t t-esc="o.employee_id.bank_account_id.acc_number"/><br/>
+                                            <span class="info-label">PF NO</span><span class="info-colon">:</span> <br/>
+                                            <span class="info-label">ESI NO</span><span class="info-colon">:</span> <br/>
+                                            <span class="info-label">UAN No</span><span class="info-colon">:</span> <br/>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Attendance Summary -->
+                                <t t-set="total_days" t-value="sum([line.number_of_days for line in o.worked_days_line_ids])"/>
+                                <t t-set="paid_days" t-value="sum([line.number_of_days for line in o.worked_days_line_ids if line.code == 'WORK100'])"/>
+                                <t t-set="lop_days" t-value="sum([line.number_of_days for line in o.worked_days_line_ids if line.code in ('LOP', 'Unpaid')])"/>
+                                
+                                <div style="margin-bottom: 10px; font-size: 11px;" class="bold">
+                                    <table style="width: 100%;">
+                                        <tr>
+                                            <td>Total Days: <t t-esc="'%.1f' % total_days"/></td>
+                                            <td>Lop Days: <t t-esc="'%.1f' % lop_days"/></td>
+                                            <td>Paid Days: <t t-esc="'%.1f' % paid_days"/></td>
+                                            <td>OT Hrs: 0.00</td>
+                                            <td>Holidays: 0.0</td>
+                                        </tr>
+                                    </table>
+                                    <table style="width: 100%; margin-top: 10px;">
+                                        <tr>
+                                            <td>AL Taken: 0.00</td>
+                                            <td>AL Balance: 0.00</td>
+                                            <td>CL Taken: 0.00</td>
+                                            <td>CL Balance: 0.00</td>
+                                            <td>EL Taken: 0.00</td>
+                                            <td>EL Balance: 0.00</td>
+                                        </tr>
+                                    </table>
+                                </div>
+
+                                <!-- Salary Computation Table -->
+                                <table class="payslip-table">
+                                    <tr class="bg-grey">
+                                        <td style="width: 40%; text-align: left;">Income Particulars</td>
+                                        <td style="width: 15%;">Actual(Rs)</td>
+                                        <td style="width: 15%;">Earning(Rs)</td>
+                                        <td style="width: 15%; text-align: left;">Deductions Particulars</td>
+                                        <td style="width: 15%;">Amount(Rs)</td>
+                                    </tr>
+                                    
+                                    <t t-set="incomes" t-value="[l for l in o.line_ids if l.category_id.code in ('BASIC', 'ALW') and l.total > 0]"/>
+                                    <t t-set="deductions" t-value="[l for l in o.line_ids if l.category_id.code == 'DED' and l.total > 0]"/>
+                                    
+                                    <t t-set="max_lines" t-value="max(len(incomes), len(deductions))"/>
+                                    <t t-set="gross_alw" t-value="sum([l.total for l in incomes])"/>
+                                    <t t-set="gross_ded" t-value="sum([l.total for l in deductions])"/>
+                                    
+                                    <t t-if="max_lines == 0">
+                                        <tr><td colspan="5" style="text-align:center;">No salary details found. Please compute sheet.</td></tr>
+                                    </t>
+                                    
+                                    <t t-foreach="range(max_lines)" t-as="i">
+                                        <tr>
+                                            <!-- Income Side -->
+                                            <td style="border-right: 1px solid #000;">
+                                                <t t-if="i &lt; len(incomes)"><t t-esc="incomes[i].name"/></t>
+                                            </td>
+                                            <td class="text-right" style="border-right: 1px solid #000;">
+                                                <t t-if="i &lt; len(incomes)"><t t-esc="'%.2f' % incomes[i].amount"/></t>
+                                            </td>
+                                            <td class="text-right" style="border-right: 2px solid #000;">
+                                                <t t-if="i &lt; len(incomes)"><t t-esc="'%.2f' % incomes[i].total"/></t>
+                                            </td>
+                                            
+                                            <!-- Deduction Side -->
+                                            <td style="border-right: 1px solid #000;">
+                                                <t t-if="i &lt; len(deductions)"><t t-esc="deductions[i].name"/></t>
+                                            </td>
+                                            <td class="text-right">
+                                                <t t-if="i &lt; len(deductions)"><t t-esc="'%.2f' % deductions[i].total"/></t>
+                                            </td>
+                                        </tr>
+                                    </t>
+
+                                    <!-- Totals Row -->
+                                    <tr class="bold" style="border-top: 2px solid #000;">
+                                        <td class="text-right">Gross Alw:</td>
+                                        <td class="text-right"><t t-esc="'%.2f' % sum([l.amount for l in incomes])"/></td>
+                                        <td class="text-right" style="border-right: 2px solid #000;"><t t-esc="'%.2f' % gross_alw"/></td>
+                                        <td class="text-right">Gross Ded.:</td>
+                                        <td class="text-right"><t t-esc="'%.2f' % gross_ded"/></td>
+                                    </tr>
+
+                                    <!-- Net Pay Row -->
+                                    <tr class="bold" style="border-top: 2px solid #000;">
+                                        <td colspan="3" style="border-right: 2px solid #000;"></td>
+                                        <td class="text-right">Net Pay Rs:</td>
+                                        <t t-set="net_pay" t-value="[l.total for l in o.line_ids if l.code == 'NET']"/>
+                                        <td class="text-right"><t t-esc="'%.2f' % net_pay[0] if net_pay else '0.00'"/></td>
+                                    </tr>
+
+                                    <!-- Amount In Words Row -->
+                                    <tr class="bold" style="border-top: 2px solid #000;">
+                                        <td colspan="5">
+                                            Amount In Words Rs :- <t t-esc="o.company_id.currency_id.amount_to_text(net_pay[0] if net_pay else 0.0)"/>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Footer Info -->
+                                <table style="width: 100%; margin-top: 10px; font-size: 11px;">
+                                    <tr>
+                                        <td style="width: 50%;">Management Contribution - PF : 0.00</td>
+                                        <td style="width: 50%;">ESI : 0.00</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="2" style="padding-top: 10px;">
+                                            Total CTC : <span style="margin-left: 20px;"><t t-esc="'%.2f' % gross_alw"/></span>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Disclaimer -->
+                                <div style="text-align: center; margin-top: 20px; border-top: 2px solid #000; padding-top: 5px; font-size: 10px; color: #555;">
+                                    This is computer generated payslip and does not require signature
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+            </t>
+        </template>
+    </data>
+</odoo>

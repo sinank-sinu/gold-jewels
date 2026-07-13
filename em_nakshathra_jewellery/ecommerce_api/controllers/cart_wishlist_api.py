@@ -73,13 +73,13 @@ class EcommerceCartWishlistAPI(http.Controller):
                 "product_name": line.product_id.name,
                 "image_url": f"/web/image/product.template/{line.product_id.id}/image_1920",
                 "quantity": line.quantity,
-                "price": line.product_id.list_price,
-                "subtotal": line.subtotal,
+                "price": round(line.price, 2) if line.price else 0.0,
+                "subtotal": round(line.subtotal, 2) if line.subtotal else 0.0,
             })
         return {
             "cart_id": cart.id,
             "customer_id": cart.customer_id.id,
-            "total_amount": cart.total_amount,
+            "total_amount": round(cart.total_amount, 2) if cart.total_amount else 0.0,
             "items": lines,
         }
 
@@ -132,10 +132,11 @@ class EcommerceCartWishlistAPI(http.Controller):
                     return {"status": "error", "message": f"Only {total_stock} units available (you have {existing_line.quantity} in cart)"}
                 existing_line.sudo().write({'quantity': new_quantity})
             else:
-                request.env['ecommerce.cart.line'].sudo().create({
+                new_line = request.env['ecommerce.cart.line'].sudo().create({
                     'cart_id': cart.id,
                     'product_id': int(product_id),
                     'quantity': quantity,
+                    'price': product.list_price,
                 })
 
             cart = self._get_or_create_cart(customer.id)  # refresh
@@ -202,6 +203,7 @@ class EcommerceCartWishlistAPI(http.Controller):
                     'cart_id': cart.id,
                     'product_id': int(product_id),
                     'quantity': quantity,
+                    'price': product.list_price,
                 })
 
             cart = self._get_or_create_cart(customer.id)
@@ -217,17 +219,16 @@ class EcommerceCartWishlistAPI(http.Controller):
     @http.route('/api/ecommerce/cart/view', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def cart_view(self, **kwargs):
         """
-        View cart via POST body or Authorization header token.
-
-        Authentication:
-          • Header:  Authorization: Token <auth_token>
-          • Body:    { "auth_token": "..." }
+        View cart via POST body with customer_id.
         """
         try:
-            token = self._get_token_from_request(kwargs)
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             cart = request.env['ecommerce.cart'].sudo().search(
                 [('customer_id', '=', customer.id)], limit=1
@@ -270,13 +271,16 @@ class EcommerceCartWishlistAPI(http.Controller):
     @http.route('/api/ecommerce/cart/update', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def cart_update(self, **kwargs):
         try:
-            token        = self._get_token_from_request(kwargs)
+            customer_id  = kwargs.get('customer_id')
             cart_line_id = kwargs.get('cart_line_id')
             quantity     = float(kwargs.get('quantity', 1))
 
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             if not cart_line_id:
                 return {"status": "error", "message": "cart_line_id is required"}
@@ -306,16 +310,67 @@ class EcommerceCartWishlistAPI(http.Controller):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    @http.route('/api/ecommerce/cart/update', type='http', auth='public', methods=['GET'], cors='*', csrf=False)
+    def cart_update_get(self, **kwargs):
+        """
+        GET: Update cart item quantity via query params + Authorization header.
+
+        Usage:
+          GET /api/ecommerce/cart/update?cart_line_id=1&quantity=3
+          Headers:
+            Authorization: Token <auth_token>
+            Content-Type: application/json
+        """
+        try:
+            token        = self._get_token_from_request(kwargs)
+            cart_line_id = kwargs.get('cart_line_id')
+            quantity     = float(kwargs.get('quantity', 1))
+
+            customer, error = self._authenticate_token(token)
+            if error:
+                return self._json_response(error, 401)
+
+            if not cart_line_id:
+                return self._json_response({"status": "error", "message": "cart_line_id is required"}, 400)
+
+            line = request.env['ecommerce.cart.line'].sudo().browse(int(cart_line_id))
+            if not line.exists() or line.cart_id.customer_id.id != customer.id:
+                return self._json_response({"status": "error", "message": "Cart item not found"}, 404)
+
+            if quantity <= 0:
+                line.unlink()
+                msg = "Item removed from cart"
+            else:
+                quants = request.env['stock.quant'].sudo().search([
+                    ('product_id.product_tmpl_id', '=', line.product_id.id),
+                    ('quantity', '>', 0)
+                ])
+                total_stock = sum(quants.mapped('quantity'))
+
+                if quantity > total_stock:
+                    return self._json_response({"status": "error", "message": f"Only {total_stock} units available"}, 400)
+
+                line.write({'quantity': quantity})
+                msg = "Cart updated"
+
+            cart = self._get_or_create_cart(customer.id)
+            return self._json_response({"status": "success", "message": msg, "cart": self._format_cart(cart)})
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
     # ─── Remove Item from Cart ────────────────────
     @http.route('/api/ecommerce/cart/remove', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def cart_remove(self, **kwargs):
         try:
-            token        = self._get_token_from_request(kwargs)
+            customer_id  = kwargs.get('customer_id')
             cart_line_id = kwargs.get('cart_line_id')
 
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             if not cart_line_id:
                 return {"status": "error", "message": "cart_line_id is required"}
@@ -330,14 +385,49 @@ class EcommerceCartWishlistAPI(http.Controller):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    @http.route('/api/ecommerce/cart/remove', type='http', auth='public', methods=['GET'], cors='*', csrf=False)
+    def cart_remove_get(self, **kwargs):
+        """
+        GET: Remove item from cart via query params + Authorization header.
+
+        Usage:
+          GET /api/ecommerce/cart/remove?cart_line_id=1
+          Headers:
+            Authorization: Token <auth_token>
+            Content-Type: application/json
+        """
+        try:
+            token        = self._get_token_from_request(kwargs)
+            cart_line_id = kwargs.get('cart_line_id')
+
+            customer, error = self._authenticate_token(token)
+            if error:
+                return self._json_response(error, 401)
+
+            if not cart_line_id:
+                return self._json_response({"status": "error", "message": "cart_line_id is required"}, 400)
+
+            line = request.env['ecommerce.cart.line'].sudo().browse(int(cart_line_id))
+            if not line.exists() or line.cart_id.customer_id.id != customer.id:
+                return self._json_response({"status": "error", "message": "Cart item not found"}, 404)
+
+            line.unlink()
+            cart = self._get_or_create_cart(customer.id)
+            return self._json_response({"status": "success", "message": "Item removed from cart", "cart": self._format_cart(cart)})
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
     # ─── Clear Entire Cart ────────────────────────
     @http.route('/api/ecommerce/cart/clear', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def cart_clear(self, **kwargs):
         try:
-            token = self._get_token_from_request(kwargs)
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             cart = request.env['ecommerce.cart'].sudo().search(
                 [('customer_id', '=', customer.id)], limit=1
@@ -347,6 +437,32 @@ class EcommerceCartWishlistAPI(http.Controller):
             return {"status": "success", "message": "Cart cleared"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    @http.route('/api/ecommerce/cart/clear', type='http', auth='public', methods=['GET'], cors='*', csrf=False)
+    def cart_clear_get(self, **kwargs):
+        """
+        GET: Clear entire cart via Authorization header.
+
+        Usage:
+          GET /api/ecommerce/cart/clear
+          Headers:
+            Authorization: Token <auth_token>
+            Content-Type: application/json
+        """
+        try:
+            token = self._get_token_from_request(kwargs)
+            customer, error = self._authenticate_token(token)
+            if error:
+                return self._json_response(error, 401)
+
+            cart = request.env['ecommerce.cart'].sudo().search(
+                [('customer_id', '=', customer.id)], limit=1
+            )
+            if cart:
+                cart.line_ids.unlink()
+            return self._json_response({"status": "success", "message": "Cart cleared"})
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
 
     # ══════════════════════════════════════════════
     #  WISHLIST APIs
@@ -368,19 +484,17 @@ class EcommerceCartWishlistAPI(http.Controller):
     def wishlist_add(self, **kwargs):
         """
         Add a product to the wishlist.
-
-        Authentication (choose one):
-          • Header:  Authorization: Token <auth_token>
-                     Content-Type: application/json
-          • Body:    { "auth_token": "...", "product_id": 1 }
         """
         try:
-            token      = self._get_token_from_request(kwargs)
+            customer_id = kwargs.get('customer_id')
             product_id = kwargs.get('product_id')
 
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             if not product_id:
                 return {"status": "error", "message": "product_id is required"}
@@ -455,17 +569,16 @@ class EcommerceCartWishlistAPI(http.Controller):
     @http.route('/api/ecommerce/wishlist/view', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def wishlist_view(self, **kwargs):
         """
-        View wishlist via POST body or Authorization header token.
-
-        Authentication:
-          • Header:  Authorization: Token <auth_token>
-          • Body:    { "auth_token": "..." }
+        View wishlist via POST body with customer_id.
         """
         try:
-            token = self._get_token_from_request(kwargs)
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             items = request.env['ecommerce.wishlist'].sudo().search(
                 [('customer_id', '=', customer.id)]
@@ -510,12 +623,15 @@ class EcommerceCartWishlistAPI(http.Controller):
     @http.route('/api/ecommerce/wishlist/remove', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def wishlist_remove(self, **kwargs):
         try:
-            token      = self._get_token_from_request(kwargs)
+            customer_id = kwargs.get('customer_id')
             product_id = kwargs.get('product_id')
 
-            customer, error = self._authenticate_token(token)
-            if error:
-                return error
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
 
             if not product_id:
                 return {"status": "error", "message": "product_id is required"}
@@ -532,3 +648,38 @@ class EcommerceCartWishlistAPI(http.Controller):
             return {"status": "success", "message": "Removed from wishlist"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    @http.route('/api/ecommerce/wishlist/remove', type='http', auth='public', methods=['GET'], cors='*', csrf=False)
+    def wishlist_remove_get(self, **kwargs):
+        """
+        GET: Remove product from wishlist via query params + Authorization header.
+
+        Usage:
+          GET /api/ecommerce/wishlist/remove?product_id=1
+          Headers:
+            Authorization: Token <auth_token>
+            Content-Type: application/json
+        """
+        try:
+            token      = self._get_token_from_request(kwargs)
+            product_id = kwargs.get('product_id')
+
+            customer, error = self._authenticate_token(token)
+            if error:
+                return self._json_response(error, 401)
+
+            if not product_id:
+                return self._json_response({"status": "error", "message": "product_id is required"}, 400)
+
+            item = request.env['ecommerce.wishlist'].sudo().search([
+                ('customer_id', '=', customer.id),
+                ('product_id',  '=', int(product_id)),
+            ], limit=1)
+
+            if not item:
+                return self._json_response({"status": "error", "message": "Item not found in wishlist"}, 404)
+
+            item.unlink()
+            return self._json_response({"status": "success", "message": "Removed from wishlist"})
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)

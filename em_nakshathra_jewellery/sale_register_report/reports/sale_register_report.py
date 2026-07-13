@@ -47,6 +47,17 @@ class SaleRegisterXlsx(models.AbstractModel):
         sheet.set_column('Z:Z', 15)
         sheet.set_column('AA:AA', 15)
         sheet.set_column('AB:AB', 15)
+        sheet.set_column('AC:AC', 15)
+        sheet.set_column('AD:AD', 15)
+        sheet.set_column('AE:AE', 15)
+        sheet.set_column('AF:AF', 15)
+        sheet.set_column('AG:AG', 15)
+        sheet.set_column('AH:AH', 15)
+        sheet.set_column('AI:AI', 15)
+        sheet.set_column('AJ:AJ', 15)
+        sheet.set_column('AK:AK', 15)
+        sheet.set_column('AL:AL', 15)
+        sheet.set_column('AM:AM', 20)
         
         # Write headers
         headers = [
@@ -59,7 +70,7 @@ class SaleRegisterXlsx(models.AbstractModel):
             'Total Amount',
             'Currency',
             'Product',
-            'Quantity',
+            'Gross Weight',
             'Delivered',
             'Unit Price',
             'Subtotal',
@@ -77,7 +88,20 @@ class SaleRegisterXlsx(models.AbstractModel):
             'Bank',
             'Cash',
             'Card',
-            'Upi'
+            'Upi',
+           
+            'Diamond Weight',
+            'Stone Weight',
+            'Other Weight',
+            'Diamond Amount',
+            'Stone Amount',
+            'Other Amount',
+            'Taxable Value (Sub Total)',
+            'CGST',
+            'SGST',
+            'Round Off',
+            'Bill Amount',
+            'Scheme'
         ]
         
         for col, header in enumerate(headers):
@@ -180,6 +204,35 @@ class SaleRegisterXlsx(models.AbstractModel):
                 sheet.write(row, 25, cash_amt if first_line else '', cell_format)
                 sheet.write(row, 26, card_amt if first_line else '', cell_format)
                 sheet.write(row, 27, upi_amt if first_line else '', cell_format)
+                
+                # New columns
+                gross_weight = line.product_uom_qty or 0 if hasattr(line, 'product_uom_qty') else 0
+                diamond_weight = line.sale_diamond_weight_gm or 0 if hasattr(line, 'sale_diamond_weight_gm') else 0
+                stone_weight = line.sale_stone_weight or 0 if hasattr(line, 'sale_stone_weight') else 0
+                other_weight = gross_weight - (line.net_weight or 0) - diamond_weight - stone_weight if hasattr(line, 'net_weight') else 0
+                diamond_amount = diamond_weight * (line.sale_diamond_rate or 0) if hasattr(line, 'sale_diamond_rate') else 0
+                stone_amount = stone_weight * (line.sale_stone_rate or 0) if hasattr(line, 'sale_stone_rate') else 0
+                other_amount = other_weight * (line.gold_rate or 0) if hasattr(line, 'gold_rate') else 0
+                taxable_value = line.price_subtotal or 0
+                cgst = line.price_tax / 2 if line.price_tax else 0
+                sgst = line.price_tax / 2 if line.price_tax else 0
+                round_off = order.amount_total - (order.amount_untaxed + order.amount_tax) if hasattr(order, 'amount_total') else 0
+                bill_amount = order.amount_total or 0
+                
+                sheet.write(row, 28, gross_weight, cell_format)
+                sheet.write(row, 29, diamond_weight, cell_format)
+                sheet.write(row, 30, stone_weight, cell_format)
+                sheet.write(row, 31, other_weight, cell_format)
+                sheet.write(row, 32, diamond_amount, cell_format)
+                sheet.write(row, 33, stone_amount, cell_format)
+                sheet.write(row, 34, other_amount, cell_format)
+                sheet.write(row, 35, taxable_value, cell_format)
+                sheet.write(row, 36, cgst, cell_format)
+                sheet.write(row, 37, sgst, cell_format)
+                sheet.write(row, 38, round_off, cell_format)
+                sheet.write(row, 39, bill_amount if first_line else '', cell_format)
+                sheet.write(row, 40, order.active_scheme_id.name if first_line and hasattr(order, 'active_scheme_id') and order.active_scheme_id else '', cell_format)
+                
                 first_line = False
                 row += 1
         

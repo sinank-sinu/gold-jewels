@@ -252,6 +252,8 @@
                     "branch_name": "Calicut",
                     "total_stock": 15,
                     "available_locations": ["wh/stock", "Rifan/stock"],
+                    "purity": "22K",
+                    "purity_percentage": 91.67,
                     "location_stocks": [
                       {
                         "location_id": 5,
@@ -261,7 +263,19 @@
                         "price": 15000.0,
                         "description": "22K Gold Ring with diamonds",
                         "image_url": "/web/image/product.template/123/image_1920",
-                        "quantity": 10
+                        "quantity": 10,
+                        "purity": "22K",
+                        "purity_percentage": 91.67,
+                        "labels": [
+                          {
+                            "label_number": "LBL001",
+                            "label_name": "Gold Ring Label 1",
+                            "tag_weight": 5.5,
+                            "grams": 5.2,
+                            "purity": "22K",
+                            "purity_percentage": 91.67
+                          }
+                        ]
                       },
                       {
                         "location_id": 6,
@@ -271,7 +285,10 @@
                         "price": 15000.0,
                         "description": "22K Gold Ring with diamonds",
                         "image_url": "/web/image/product.template/123/image_1920",
-                        "quantity": 5
+                        "quantity": 5,
+                        "purity": "22K",
+                        "purity_percentage": 91.67,
+                        "labels": []
                       }
                     ]
                   }
@@ -589,9 +606,9 @@
             {
               "step": 1,
               "action": "Prepare Request",
-              "description": "Create POST request with authentication token, product ID, and quantity",
+              "description": "Create POST request with customer ID, product ID, and quantity",
               "request": {
-                "auth_token": "abc123xyz456...",
+                "customer_id": 1,
                 "product_id": 123,
                 "quantity": 2
               }
@@ -599,7 +616,7 @@
             {
               "step": 2,
               "action": "API Processing",
-              "description": "API validates token and customer, gets or creates cart, adds item to cart"
+              "description": "API validates customer and product, gets or creates cart, adds item to cart with price from product.list_price"
             },
             {
               "step": 3,
@@ -619,7 +636,7 @@
                       "product_name": "Gold Ring",
                       "image_url": "/web/image/product.template/123/image_1920",
                       "quantity": 2,
-                      "unit_price": 15000.0,
+                      "price": 15000.0,
                       "subtotal": 30000.0
                     }
                   ]
@@ -669,7 +686,7 @@
                       "location_id": 5,
                       "location_name": "wh/stock",
                       "quantity": 2,
-                      "unit_price": 15000.0,
+                      "price": 15000.0,
                       "subtotal": 30000.0
                     }
                   ]
@@ -730,7 +747,7 @@
                       "location_id": 5,
                       "location_name": "wh/stock",
                       "quantity": 2,
-                      "unit_price": 15000.0,
+                      "price": 15000.0,
                       "subtotal": 30000.0
                     },
                     {
@@ -741,7 +758,7 @@
                       "location_id": 6,
                       "location_name": "Rifan/stock",
                       "quantity": 1,
-                      "unit_price": 15000.0,
+                      "price": 15000.0,
                       "subtotal": 15000.0
                     }
                   ]
@@ -790,7 +807,7 @@
             {
               "step": 1,
               "action": "Prepare Request",
-              "description": "Create POST request without auth_token or product_id",
+              "description": "Create POST request without customer_id or product_id",
               "request": {
                 "quantity": 2
               }
@@ -806,7 +823,7 @@
               "description": "Get error message indicating missing parameters",
               "response": {
                 "status": "error",
-                "message": "auth_token and product_id are required"
+                "message": "customer_id and product_id are required"
               }
             }
           ]
@@ -852,7 +869,7 @@
               "action": "Prepare Request",
               "description": "Create POST request for product with zero stock",
               "request": {
-                "auth_token": "abc123xyz456...",
+                "customer_id": 1,
                 "product_id": 999,
                 "quantity": 1
               }
@@ -883,7 +900,7 @@
               "action": "Prepare Request",
               "description": "Create POST request with quantity exceeding available stock",
               "request": {
-                "auth_token": "abc123xyz456...",
+                "customer_id": 1,
                 "product_id": 123,
                 "quantity": 20
               }
@@ -970,9 +987,9 @@
       "request_parameters": {
         "required": [
           {
-            "name": "auth_token",
-            "type": "string",
-            "description": "Authentication token received from login"
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
           },
           {
             "name": "product_id",
@@ -1003,8 +1020,8 @@
           "location_id": "Location ID (null if no specific location)",
           "location_name": "Location name (null if no specific location)",
           "quantity": "Item quantity",
-          "unit_price": "Unit price",
-          "subtotal": "Line subtotal (quantity × unit_price)"
+          "price": "Unit price",
+          "subtotal": "Line subtotal (quantity × price)"
         }
       }
     },
@@ -1140,6 +1157,603 @@
           "city": "Customer city"
         }
       }
+    },
+    {
+      "endpoint": "/cart/view",
+      "method": "POST",
+      "description": "View customer's shopping cart",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "View Cart",
+          "description": "View all items in customer's cart",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and retrieves cart"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get cart with all items",
+              "response": {
+                "status": "success",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 30000.0,
+                  "items": [
+                    {
+                      "cart_line_id": 1,
+                      "product_id": 123,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/123/image_1920",
+                      "quantity": 2,
+                      "price": 15000.0,
+                      "subtotal": 30000.0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "View Empty Cart",
+          "description": "View cart when cart is empty",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and finds no cart"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get empty cart response",
+              "response": {
+                "status": "success",
+                "message": "Cart is empty",
+                "cart": {
+                  "items": [],
+                  "total_amount": 0.0
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          }
+        ]
+      },
+      "response_fields": {
+        "cart": {
+          "cart_id": "Cart ID",
+          "customer_id": "Customer ID",
+          "total_amount": "Total cart amount",
+          "items": "Array of cart items"
+        }
+      }
+    },
+    {
+      "endpoint": "/cart/update",
+      "method": "POST",
+      "description": "Update quantity of an item in the cart",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Update Cart Item Quantity",
+          "description": "Update quantity of an existing cart item",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID, cart line ID, and new quantity",
+              "request": {
+                "customer_id": 1,
+                "cart_line_id": 1,
+                "quantity": 3
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer, cart line, and updates quantity"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get updated cart",
+              "response": {
+                "status": "success",
+                "message": "Cart updated",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 45000.0,
+                  "items": [
+                    {
+                      "cart_line_id": 1,
+                      "product_id": 123,
+                      "product_name": "Gold Ring",
+                      "image_url": "/web/image/product.template/123/image_1920",
+                      "quantity": 3,
+                      "price": 15000.0,
+                      "subtotal": 45000.0
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Remove Item by Setting Quantity to Zero",
+          "description": "Remove item from cart by setting quantity to 0",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with quantity 0",
+              "request": {
+                "customer_id": 1,
+                "cart_line_id": 1,
+                "quantity": 0
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects zero quantity and removes item"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get cart with item removed",
+              "response": {
+                "status": "success",
+                "message": "Item removed from cart",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 0.0,
+                  "items": []
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          {
+            "name": "cart_line_id",
+            "type": "integer",
+            "description": "Cart line item ID"
+          },
+          {
+            "name": "quantity",
+            "type": "float",
+            "description": "New quantity"
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "/cart/remove",
+      "method": "POST",
+      "description": "Remove an item from the cart",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Remove Cart Item",
+          "description": "Remove an item from cart by cart line ID",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID and cart line ID",
+              "request": {
+                "customer_id": 1,
+                "cart_line_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and removes cart line"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get updated cart",
+              "response": {
+                "status": "success",
+                "message": "Item removed from cart",
+                "cart": {
+                  "cart_id": 1,
+                  "customer_id": 1,
+                  "total_amount": 0.0,
+                  "items": []
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          {
+            "name": "cart_line_id",
+            "type": "integer",
+            "description": "Cart line item ID to remove"
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "/cart/clear",
+      "method": "POST",
+      "description": "Clear all items from the cart",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Clear Cart",
+          "description": "Remove all items from customer's cart",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and clears all cart items"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get success confirmation",
+              "response": {
+                "status": "success",
+                "message": "Cart cleared"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "/wishlist/add",
+      "method": "POST",
+      "description": "Add a product to the wishlist",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Add to Wishlist",
+          "description": "Add a product to customer's wishlist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID and product ID",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and product, adds to wishlist"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get success response with wishlist item",
+              "response": {
+                "status": "success",
+                "message": "Added to wishlist",
+                "item": {
+                  "wishlist_id": 1,
+                  "product_id": 123,
+                  "product_name": "Gold Ring",
+                  "price": 15000.0,
+                  "image_url": "/web/image/product.template/123/image_1920",
+                  "added_on": "2024-01-15 10:30:00"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Error - Product Already in Wishlist",
+          "description": "Error when adding duplicate product to wishlist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request for product already in wishlist",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API detects product already in wishlist"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message",
+              "response": {
+                "status": "error",
+                "message": "Product already in wishlist"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          {
+            "name": "product_id",
+            "type": "integer",
+            "description": "Product ID to add to wishlist"
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "/wishlist/view",
+      "method": "POST",
+      "description": "View customer's wishlist",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "View Wishlist",
+          "description": "View all items in customer's wishlist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and retrieves wishlist"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get wishlist with all items",
+              "response": {
+                "status": "success",
+                "count": 2,
+                "data": [
+                  {
+                    "wishlist_id": 1,
+                    "product_id": 123,
+                    "product_name": "Gold Ring",
+                    "price": 15000.0,
+                    "image_url": "/web/image/product.template/123/image_1920",
+                    "added_on": "2024-01-15 10:30:00"
+                  },
+                  {
+                    "wishlist_id": 2,
+                    "product_id": 124,
+                    "product_name": "Gold Necklace",
+                    "price": 25000.0,
+                    "image_url": "/web/image/product.template/124/image_1920",
+                    "added_on": "2024-01-16 14:20:00"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "View Empty Wishlist",
+          "description": "View wishlist when it's empty",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and finds no wishlist items"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get empty wishlist response",
+              "response": {
+                "status": "success",
+                "count": 0,
+                "data": []
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "/wishlist/remove",
+      "method": "POST",
+      "description": "Remove a product from the wishlist",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Remove from Wishlist",
+          "description": "Remove a product from customer's wishlist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request with customer ID and product ID",
+              "request": {
+                "customer_id": 1,
+                "product_id": 123
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API validates customer and removes product from wishlist"
+            },
+            {
+              "step": 3,
+              "action": "Receive Response",
+              "description": "Get success confirmation",
+              "response": {
+                "status": "success",
+                "message": "Removed from wishlist"
+              }
+            }
+          ]
+        },
+        {
+          "flow_id": 2,
+          "flow_name": "Error - Item Not in Wishlist",
+          "description": "Error when removing product not in wishlist",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Prepare Request",
+              "description": "Create POST request for product not in wishlist",
+              "request": {
+                "customer_id": 1,
+                "product_id": 999
+              }
+            },
+            {
+              "step": 2,
+              "action": "API Processing",
+              "description": "API searches for item but finds no match"
+            },
+            {
+              "step": 3,
+              "action": "Receive Error Response",
+              "description": "Get error message",
+              "response": {
+                "status": "error",
+                "message": "Item not found in wishlist"
+              }
+            }
+          ]
+        }
+      ],
+      "request_parameters": {
+        "required": [
+          {
+            "name": "customer_id",
+            "type": "integer",
+            "description": "Customer ID"
+          },
+          {
+            "name": "product_id",
+            "type": "integer",
+            "description": "Product ID to remove from wishlist"
+          }
+        ]
+      }
     }
   ],
   "data_models": {
@@ -1211,6 +1825,38 @@
         "price": "Unit price",
         "subtotal": "Line subtotal"
       }
+    },
+    "ecommerce_order": {
+      "description": "E-commerce order model",
+      "fields": {
+        "order_number": "Unique order number",
+        "customer_id": "Associated customer",
+        "line_ids": "Order line items",
+        "subtotal_amount": "Order subtotal",
+        "tax_amount": "Tax amount",
+        "total_amount": "Order total",
+        "payment_method": "Payment method (cash, bank, upi, card)",
+        "payment_status": "Payment status (pending, paid, failed)",
+        "state": "Order state (draft, confirmed, processing, shipped, delivered, cancelled)",
+        "shipping_address": "Shipping address",
+        "shipping_city": "Shipping city",
+        "shipping_phone": "Shipping phone",
+        "notes": "Order notes",
+        "created_at": "Order creation timestamp",
+        "confirmed_at": "Order confirmation timestamp",
+        "delivered_at": "Order delivery timestamp"
+      }
+    },
+    "ecommerce_order_line": {
+      "description": "Order line item model",
+      "fields": {
+        "order_id": "Associated order",
+        "product_id": "Associated product",
+        "product_name": "Product name",
+        "quantity": "Item quantity",
+        "price": "Unit price",
+        "subtotal": "Line subtotal"
+      }
     }
   },
   "business_logic": {
@@ -1219,7 +1865,8 @@
     "location_filtering": "If location_id or location_name is provided, only locations matching the filter are considered for stock calculations.",
     "stock_calculation": "Stock quantities are calculated by summing stock.quant records for each product-location combination where quantity > 0.",
     "location_hierarchy": "Locations are filtered by branch_id to ensure only locations belonging to the specified branch are included.",
-    "cart_management": "Cart is automatically created for customer if it doesn't exist. Adding existing product updates quantity instead of creating duplicate line."
+    "cart_management": "Cart is automatically created for customer if it doesn't exist. Adding existing product updates quantity instead of creating duplicate line.",
+    "order_management": "Orders are created from cart items. Stock is validated before checkout. Cart is cleared after successful order creation. Order number is auto-generated using sequence or timestamp."
   },
   "use_cases": [
     {

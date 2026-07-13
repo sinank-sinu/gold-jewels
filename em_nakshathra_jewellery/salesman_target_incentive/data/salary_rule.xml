@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <record id="hr_salary_rule_sales_incentive" model="hr.salary.rule">
+            <field name="name">Salesman Target Incentive</field>
+            <field name="sequence" eval="25"/>
+            <field name="code">INC_SALES</field>
+            <field name="category_id" ref="hr_payroll_community.ALW"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = inputs.INC_SALES and inputs.INC_SALES.amount > 0</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = inputs.INC_SALES.amount</field>
+        </record>
+
+        <record id="hr_rule_input_sales_incentive" model="hr.rule.input">
+            <field name="code">INC_SALES</field>
+            <field name="name">Salesman Target Incentive</field>
+            <field name="input_id" ref="hr_salary_rule_sales_incentive"/>
+        </record>
+
+        <!-- Automatically create the Salary Structure for Incentive Payslips -->
+        <record id="hr_salary_structure_sales_incentive" model="hr.payroll.structure">
+            <field name="name">Salesman Target Incentive Structure</field>
+            <field name="code">INC_STRUCT</field>
+            <!-- Explicitly set parent to False to sever the old link -->
+            <field name="parent_id" eval="False"/>
+            <!-- Use command 6 to REPLACE all rules with only this one, rather than appending it -->
+            <field name="rule_ids" eval="[(6, 0, [ref('hr_salary_rule_sales_incentive')])]"/>
+        </record>
+    </data>
+</odoo>

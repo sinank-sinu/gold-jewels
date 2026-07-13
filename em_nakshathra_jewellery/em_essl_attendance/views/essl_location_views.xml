@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_essl_location_tree" model="ir.ui.view">
+        <field name="name">essl.location.tree</field>
+        <field name="model">essl.location</field>
+        <field name="arch" type="xml">
+            <tree string="eSSL Locations">
+                <field name="name" string="Location"/>
+                <field name="serial_number"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_essl_location_form" model="ir.ui.view">
+        <field name="name">essl.location.form</field>
+        <field name="model">essl.location</field>
+        <field name="arch" type="xml">
+            <form string="eSSL Location">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" string="Location"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. Main Office Gate"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="serial_number" placeholder="e.g. CGKK212060817"/>
+                        </group>
+                        <group>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_essl_location" model="ir.actions.act_window">
+        <field name="name">eSSL Location</field>
+        <field name="res_model">essl.location</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Register a new eSSL Location
+            </p>
+            <p>
+                Configure the locations and serial numbers of biometric devices to pull attendance.
+            </p>
+        </field>
+    </record>
+
+    <!-- Clear direct action from the parent Configuration menu so it acts as a dropdown container -->
+    <record id="hr_attendance.menu_hr_attendance_settings" model="ir.ui.menu">
+        <field name="action" eval="False"/>
+    </record>
+
+    <!-- Create standard Settings menu item under Configuration -->
+    <menuitem id="menu_hr_attendance_settings_sub"
+              name="Settings"
+              parent="hr_attendance.menu_hr_attendance_settings"
+              sequence="10"
+              action="hr_attendance.action_hr_attendance_settings"
+              groups="hr_attendance.group_hr_attendance_manager"/>
+
+    <!-- Create eSSL Location menu item under Configuration -->
+    <menuitem id="menu_essl_location"
+              name="essl location"
+              parent="hr_attendance.menu_hr_attendance_settings"
+              sequence="20"
+              action="action_essl_location"
+              groups="hr_attendance.group_hr_attendance_manager"/>
+</odoo>
