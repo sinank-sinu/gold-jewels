@@ -100,6 +100,7 @@ class SaleReturnMigrationController(http.Controller):
                     elif 'card2' in h and 'ref' in h: c_m['card_ref2'] = i
                     elif 'cash' in h and 'amt' in h: c_m['cash_amt'] = i
                     elif 'scheme' in h: c_m['gold_scheme_amt'] = i
+                    elif 'ticket' in h: c_m['ticket_no'] = i
                 
                 for row_idx, row in enumerate(wb[sales_sheet_name].iter_rows(min_row=2, values_only=True), start=2):
                     if not any(row): continue
@@ -150,6 +151,7 @@ class SaleReturnMigrationController(http.Controller):
                             'card_ref2': _str(r[c_m.get('card_ref2', 32)]),
                             'cash_amt': _flt(r[c_m.get('cash_amt', 33)]),
                             'gold_scheme_amt': _flt(r[c_m.get('gold_scheme_amt', 35)]),
+                            'ticket_no': _str(r[c_m.get('ticket_no', -1)]) if 'ticket_no' in c_m else '',
                             'reversal_date': rev_date,
                         })
 
@@ -604,8 +606,21 @@ class SaleReturnMigrationController(http.Controller):
             
         try:
             if not order.scheme_line_id:
-                order.apply_scheme = True
-                order.action_apply_scheme()
+                ticket_no = s_data.get('ticket_no')
+                existing_scheme = env['jewellery.scheme.enrollment']
+                if ticket_no:
+                    existing_scheme = env['jewellery.scheme.enrollment'].search([
+                        ('ticket_number', '=', ticket_no)
+                    ], limit=1)
+                if not existing_scheme:
+                    existing_scheme = env['jewellery.scheme.enrollment'].search([
+                        ('partner_id', '=', scheme_partner.id),
+                    ], order='id desc', limit=1)
+                
+                if existing_scheme:
+                    order.apply_scheme = True
+                    order.active_scheme_id = existing_scheme.id
+                    order.action_apply_scheme()
         except Exception as e:
             _logger.info("Native scheme application failed for %s: %s", order.name, e)
             
@@ -617,9 +632,17 @@ class SaleReturnMigrationController(http.Controller):
         gold_scheme_amt = _flt(s_data.get('gold_scheme_amt', 0.0))
         if gold_scheme_amt > 0 and not order.scheme_line_id:
             # Search for ANY scheme enrollment for this customer to force application during migration
-            existing_scheme = env['jewellery.scheme.enrollment'].search([
-                ('partner_id', '=', scheme_partner.id),
-            ], order='id desc', limit=1)
+            ticket_no = s_data.get('ticket_no')
+            existing_scheme = env['jewellery.scheme.enrollment']
+            if ticket_no:
+                existing_scheme = env['jewellery.scheme.enrollment'].search([
+                    ('ticket_number', '=', ticket_no)
+                ], limit=1)
+            if not existing_scheme:
+                existing_scheme = env['jewellery.scheme.enrollment'].search([
+                    ('partner_id', '=', scheme_partner.id),
+                ], order='id desc', limit=1)
+                
             if existing_scheme:
                 order.apply_scheme = True
                 order.active_scheme_id = existing_scheme.id
