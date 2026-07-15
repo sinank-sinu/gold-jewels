@@ -57,26 +57,36 @@ class ProductLabelReportWizard(models.TransientModel):
         ])
         product_ids = quants.mapped('product_id').ids
 
+        import pytz
+        
+        # Calculate local start and end of the chosen day, then convert end to UTC
+        local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
+        local_end_dt = local_start_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+        utc_end_dt = local_end_dt.astimezone(pytz.utc).replace(tzinfo=None)
+
         # 3. Query active product labels in stock (locations & branches) matching start_datetime filter
         labels_domain = [
             ('active', '=', True),
             ('product_id', 'in', product_ids),
             ('branch_location_id', 'in', loc_ids),
-            ('create_date', '>=', self.start_datetime)
+            ('create_date', '>=', self.start_datetime),
+            ('create_date', '<=', utc_end_dt)
         ]
         if self.branch_ids:
             labels_domain.append(('branch_id', 'in', self.branch_ids.ids))
         labels = self.env['product.label'].search(labels_domain)
 
-        # 4. Filter out unlabeled quants (where product is not in the active labels list)
+        # Filter out unlabeled quants (where product is not in the active labels list)
         labeled_product_ids = labels.mapped('product_id').ids
         unlabeled_quants = quants.filtered(lambda q: q.product_id.id not in labeled_product_ids)
 
-        # Apply date filter on unlabeled quants using in_date or create_date
+        # Apply date filter and vault item filter on unlabeled quants
         unlabeled_quants = unlabeled_quants.filtered(lambda q:
-            (q.in_date and q.in_date >= self.start_datetime) or
-            (q.create_date and q.create_date >= self.start_datetime) or
-            (not q.in_date and not q.create_date)
+            q.product_id.is_vault_item and (
+                (q.in_date and self.start_datetime <= q.in_date <= utc_end_dt) or
+                (q.create_date and self.start_datetime <= q.create_date <= utc_end_dt) or
+                (not q.in_date and not q.create_date)
+            )
         )
 
         # Create Excel Workbook
@@ -124,9 +134,7 @@ class ProductLabelReportWizard(models.TransientModel):
 
         # Branch name header text
         branch_name_text = ", ".join(self.branch_ids.mapped('name')) if self.branch_ids else "All Branches"
-        local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
         start_date_str = local_start_dt.strftime('%d-%b-%y %I:%M:%S %p')
-        today_str = today.strftime('%d-%b-%y')
 
         def setup_sheet_headers(ws, title_text):
             # Row 1
@@ -134,10 +142,10 @@ class ProductLabelReportWizard(models.TransientModel):
             ws.cell(row=1, column=4, value=branch_name_text).font = font_total
 
             # Row 2
-            ws.cell(row=2, column=2, value="Period From").font = font_total
+            ws.cell(row=2, column=2, value="Date").font = font_total
             ws.cell(row=2, column=3, value=start_date_str).font = font_data
-            ws.cell(row=2, column=4, value="To").font = font_total
-            ws.cell(row=2, column=5, value=today_str).font = font_data
+            ws.cell(row=2, column=4, value="").font = font_total
+            ws.cell(row=2, column=5, value="").font = font_data
 
             # Row 3 - Table headers
             ws.row_dimensions[3].height = 25
@@ -176,13 +184,7 @@ class ProductLabelReportWizard(models.TransientModel):
                 days = 0
 
             # Variety Name
-            variety_name = ""
-            ptavs = label.product_template_attribute_value_ids or label.product_id.product_template_attribute_value_ids
-            for ptav in ptavs:
-                attr_name = ptav.attribute_id.name.strip().lower()
-                if attr_name in ('variety', 'verity'):
-                    variety_name = ptav.product_attribute_value_id.name
-                    break
+            variety_name = label.product_id.name or ""
 
             # Item Name resolution
             item_name = ""
@@ -288,10 +290,10 @@ class ProductLabelReportWizard(models.TransientModel):
             cell.border = border_total_row
 
         # ==========================================
-        # SHEET 2: Unlabeled Closing Stock
+        # SHEET 2: Vault Item Closing Stock
         # ==========================================
-        ws2 = wb.create_sheet(title="Unlabeled Closing Stock")
-        setup_sheet_headers(ws2, "Closing Stock Unlabeled Wise")
+        ws2 = wb.create_sheet(title="Vault Item Closing Stock")
+        setup_sheet_headers(ws2, "Closing Stock Vault Item Wise")
 
         row_idx2 = 4
         tot_pcs2 = 0
@@ -331,8 +333,12 @@ class ProductLabelReportWizard(models.TransientModel):
             # Write data row
             ws2.cell(row=row_idx2, column=1, value=receipt_date_str).alignment = align_center
             ws2.cell(row=row_idx2, column=2, value="").alignment = align_center  # Label No is blank
-            ws2.cell(row=row_idx2, column=3, value=quant.product_id.name or "").alignment = align_left
-            ws2.cell(row=row_idx2, column=4, value="").alignment = align_left  # Variety Name is blank
+            
+            ws2.cell(row=row_idx2, column=3, value=quant.product_id.product_tmpl_id.name or "").alignment = align_left
+            
+            variety_name2 = quant.product_id.name or ""
+            ws2.cell(row=row_idx2, column=4, value=variety_name2).alignment = align_left
+            
             ws2.cell(row=row_idx2, column=5, value=quant.product_id.purity_id.name or "").alignment = align_center
             ws2.cell(row=row_idx2, column=6, value=branch_name).alignment = align_center
             ws2.cell(row=row_idx2, column=7, value=quant.location_id.name or "").alignment = align_center

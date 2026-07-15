@@ -12,6 +12,7 @@
         "security/ir.model.access.csv",
         "wizard/product_label_report_wizard_view.xml",
         "views/menu.xml",
+        "views/product_template_views.xml",
     ],
     "installable": True,
     "application": False,

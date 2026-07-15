@@ -2,7 +2,7 @@
 <odoo>
     <menuitem
         id="menu_product_label_report"
-        name="Product Label Report"
+        name="Product Label Closing Stock Report"
         parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
         action="action_product_label_report_wizard"
         sequence="110"/>
