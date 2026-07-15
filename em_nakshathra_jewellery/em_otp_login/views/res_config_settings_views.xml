@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_inherit_otp" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.otp</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//setting[@id='sms']" position="after">
+                <div class="col-12 col-lg-6 o_setting_box" id="xpresssms_settings">
+                    <div class="o_setting_right_pane">
+                        <span class="o_form_label" style="font-weight: bold;">XpressSMS API Settings</span>
+                        <div class="text-muted">Configure credentials for XpressSMS Gateway</div>
+                        <div class="content-group mt16">
+                            <div class="row">
+                                <label for="xpresssms_api_url" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_api_url"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_api_key" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_api_key" password="True"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_client_id" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_client_id"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_sender_id" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_sender_id"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_message_template" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_message_template"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_peid" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_peid"/>
+                            </div>
+                            <div class="row mt8">
+                                <label for="xpresssms_otp_template_id" class="col-lg-4 o_light_label"/>
+                                <field name="xpresssms_otp_template_id"/>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

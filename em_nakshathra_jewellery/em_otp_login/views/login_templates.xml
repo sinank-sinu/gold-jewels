@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="auth_otp_form" name="OTP Authentication">
+        <t t-call="web.login_layout">
+            <t t-set="disable_footer">1</t>
+            <div class="oe_login_form">
+                <h5 class="card-title">OTP Verification</h5>
+                
+                <script t-if="error" type="text/javascript">
+                    alert("<t t-esc="error"/>");
+                    window.location.href = "/web/login";
+                </script>
+
+                <form method="POST" action="" class="" t-if="not error">
+                    <div class="mb-3 mt-2 text-muted" style="font-size: 0.9rem;">
+                        A verification code has been sent to your registered phone number ending in 
+                        <t t-if="user.partner_id.mobile">
+                            <strong><t t-esc="user.partner_id.mobile[-4:]"/></strong>
+                        </t>
+                        <t t-elif="user.partner_id.phone">
+                            <strong><t t-esc="user.partner_id.phone[-4:]"/></strong>
+                        </t>
+                        <t t-elif="user.employee_id and user.employee_id.mobile_phone">
+                            <strong><t t-esc="user.employee_id.mobile_phone[-4:]"/></strong>
+                        </t>
+                        <t t-elif="user.employee_id and user.employee_id.work_phone">
+                            <strong><t t-esc="user.employee_id.work_phone[-4:]"/></strong>
+                        </t>
+                        . Please enter the 6-digit code below to complete authentication.
+                    </div>
+                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                    <input type="hidden" name="redirect" t-att-value="redirect"/>
+                    <div class="mb-3">
+                        <label class="fw-bold" for="otp_token">OTP Code</label>
+                        <input id="otp_token" name="otp_token" class="form-control mb-2"
+                                autocomplete="off" inputmode="numeric" autofocus="autofocus" required="required" placeholder="e.g. 123456"/>
+                    </div>
+                    <div class="text-center py-2 border-top">
+                        <div t-attf-class="clearfix oe_login_buttons text-center d-grid mb-1">
+                            <button type="submit" class="btn btn-primary">
+                                Verify &amp; Login
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <form method="POST" action="/web/session/logout" t-if="not error">
+                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                    <div class="w-100 text-center">
+                        <button type="submit" class="btn btn-link btn-sm mb-2">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </t>
+    </template>
+</odoo>

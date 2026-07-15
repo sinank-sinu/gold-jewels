@@ -160,17 +160,25 @@ class StockSummaryReportWizard(models.TransientModel):
 
             # Attribute values
             attribute_map = {}
+            # Fetch attributes that create variants
             for ptav in product.product_template_attribute_value_ids:
                 attribute_map[
                     ptav.attribute_id.name.strip().lower()
                 ] = ptav.product_attribute_value_id.name
 
-            type_value = attribute_map.get('type', '')
-            variety_value = attribute_map.get('variety', '')
+            # Fetch attributes that are informational / no_variant / template-level
+            for line in product.product_tmpl_id.attribute_line_ids:
+                if line.value_ids:
+                    attr_name = line.attribute_id.name.strip().lower()
+                    if attr_name not in attribute_map:
+                        attribute_map[attr_name] = line.value_ids[0].name
+
+            type_value = attribute_map.get('type', attribute_map.get('item type', attribute_map.get('product type', '')))
+            variety_value = attribute_map.get('variety', attribute_map.get('verity', ''))
             design_value = attribute_map.get('design', '')
             size_value = attribute_map.get('size', '')
-            stone_colour_value = attribute_map.get('stone colour', '')
-            metal_colour_value = attribute_map.get('metal colour', '')
+            stone_colour_value = attribute_map.get('stone colour', attribute_map.get('stone color', ''))
+            metal_colour_value = attribute_map.get('metal colour', attribute_map.get('metal color', ''))
 
             # Only add to report if there is any activity or stock
             if any([o_pcs, o_gross, o_net, in_pcs, in_gross, in_net, out_pcs, out_gross, out_net, c_pcs, c_gross, c_net, min_stock]):

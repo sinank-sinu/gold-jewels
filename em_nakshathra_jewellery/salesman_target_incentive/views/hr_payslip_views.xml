@@ -11,6 +11,11 @@
                 <xpath expr="//field[@name='employee_id']" position="after">
                     <field name="is_incentive_slip" invisible="1"/>
                 </xpath>
+                <xpath expr="//field[@name='struct_id']" position="attributes">
+                    <attribute name="domain">[('code', '!=', 'INC_STRUCT')]</attribute>
+                    <attribute name="readonly">is_incentive_slip</attribute>
+                    <attribute name="force_save">1</attribute>
+                </xpath>
             </field>
         </record>
 
@@ -29,7 +34,7 @@
             <field name="res_model">hr.payslip</field>
             <field name="view_mode">tree,kanban,form</field>
             <field name="domain">[('is_incentive_slip', '=', True)]</field>
-            <field name="context">{'default_is_incentive_slip': True}</field>
+            <field name="context" eval="{'default_is_incentive_slip': True, 'default_struct_id': ref('salesman_target_incentive.hr_salary_structure_sales_incentive')}"/>
         </record>
 
         <!-- Override existing menu to change name -->

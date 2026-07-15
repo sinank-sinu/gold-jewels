@@ -11,6 +11,8 @@ class SalesmanTargetReportWizard(models.TransientModel):
 
     date_from = fields.Date(required=True)
     date_to = fields.Date(required=True)
+    
+    branch_ids = fields.Many2many('res.branch', string='Branches')
 
     salesman_ids = fields.Many2many(
         'res.users',
@@ -20,6 +22,16 @@ class SalesmanTargetReportWizard(models.TransientModel):
 
     file_data = fields.Binary(readonly=True)
     file_name = fields.Char(readonly=True)
+
+    @api.onchange('branch_ids')
+    def _onchange_branch_ids(self):
+        if self.branch_ids:
+            # Find users that have these branches as their default branch
+            users = self.env['res.users'].search([('branch_id', 'in', self.branch_ids.ids)])
+            self.salesman_ids = [(6, 0, users.ids)]
+        else:
+            # Optional: clear the salespersons if branches are cleared
+            self.salesman_ids = False
 
     def action_generate_report(self):
         self.ensure_one()
@@ -34,6 +46,11 @@ class SalesmanTargetReportWizard(models.TransientModel):
         if self.salesman_ids:
             domain.append(
                 ('salesman_id', 'in', self.salesman_ids.ids)
+            )
+            
+        if self.branch_ids:
+            domain.append(
+                ('branch_id', 'in', self.branch_ids.ids)
             )
 
         records = self.env['salesman.target'].search(
