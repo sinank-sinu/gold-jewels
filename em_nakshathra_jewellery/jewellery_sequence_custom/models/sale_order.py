@@ -16,42 +16,8 @@ class SaleOrder(models.Model):
                 if not branch or not branch.branch_code:
                     raise ValidationError("Branch code is missing for this Sale Order!")
                 
-                # Fetch target company
-                company_id = vals.get('company_id') or self.env.company.id
-                company = self.env['res.company'].browse(company_id)
-                
-                # Search for a sequence specifically for this company
-                sequence = self.env['ir.sequence'].search([
-                    ('code', '=', 'sale.order'),
-                    ('company_id', '=', company.id)
-                ], limit=1)
-                
-                if not sequence:
-                    # If it doesn't exist for the company, we copy the global fallback one (company_id = False)
-                    global_sequence = self.env['ir.sequence'].search([
-                        ('code', '=', 'sale.order'),
-                        ('company_id', '=', False)
-                    ], limit=1)
-                    
-                    if global_sequence:
-                        sequence = global_sequence.copy({
-                            'company_id': company.id,
-                            'name': f"Sales Order - {company.name}",
-                            'number_next': 1
-                        })
-                    else:
-                        sequence = self.env['ir.sequence'].create({
-                            'name': f"Sales Order - {company.name}",
-                            'code': 'sale.order',
-                            'company_id': company.id,
-                            'prefix': 'S',
-                            'padding': 5,
-                            'number_next': 1,
-                            'number_increment': 1
-                        })
-                
-                # Retrieve the next sequence from this company-specific record
-                standard_sequence = sequence.next_by_id() or _('New')
+                # Let Odoo generate the standard sequence (e.g., 'S00229')
+                standard_sequence = self.env['ir.sequence'].next_by_code('sale.order') or _('New')
                 
                 # Combine them to get 'KNR/S00229'
                 vals['name'] = f"{branch.branch_code}/{standard_sequence}"
