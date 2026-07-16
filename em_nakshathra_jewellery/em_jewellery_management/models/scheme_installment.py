@@ -23,6 +23,85 @@ class JewellerySchemeInstallment(models.Model):
         ('draft', 'Draft'),
         ('paid', 'Paid')
     ], default='draft')
+    remark = fields.Char(string="Remark")
+    is_transferred = fields.Boolean(string="Transferred", default=False, copy=False)
+
+    def action_transfer(self):
+        self.ensure_one()
+        
+        if self.is_transferred:
+            raise UserError(_("This installment has already been transferred!"))
+            
+        
+        if not self.amount or self.amount <= 0:
+            raise UserError(_("Installment amount must be greater than zero to transfer."))
+            
+        partner = self.enrollment_id.partner_id
+        if not partner:
+            raise UserError(_("No partner found on the scheme enrollment."))
+            
+        # 1. Find Suspense Journal
+        journal = self.env['account.journal'].search(['|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'suspence')], limit=1)
+        if not journal:
+            raise UserError(_("CRITICAL ERROR: No journal containing the name 'suspense' or 'suspence' was found in your accounting settings!"))
+            
+        # 2. Find Accounts
+        suspense_account = self.env['account.account'].search([('code', '=', '100202')], limit=1)
+        if not suspense_account:
+            suspense_account = self.env['account.account'].search([('name', 'ilike', 'Bank Suspense Account')], limit=1)
+            
+        if not suspense_account:
+            raise UserError(_("Bank Suspense Account (100202) not found in the chart of accounts."))
+            
+        debtors_account = self.env['account.account'].search([('code', '=', '100400')], limit=1)
+        if not debtors_account:
+            # Fallback to partner's receivable if '100400 Debtors' not found by code
+            debtors_account = partner.property_account_receivable_id
+            
+        if not debtors_account:
+            raise UserError(_("Debtors Account (100400) not found."))
+            
+        # 3. Create Draft Journal Entry
+        move_vals = {
+            'journal_id': journal.id,
+            'date': fields.Date.today(),
+            'ref': f"Scheme Transfer - {self.enrollment_id.name or partner.name}",
+            'branch_id': self.enrollment_id.branch_id.id if hasattr(self.env['account.move'], 'branch_id') and self.enrollment_id.branch_id else False,
+            'line_ids': [
+                (0, 0, {
+                    'account_id': suspense_account.id,
+                    'partner_id': partner.id,
+                    'name': f"Transfer from Suspense - {partner.name}",
+                    'debit': self.amount,
+                    'credit': 0.0,
+                }),
+                (0, 0, {
+                    'account_id': debtors_account.id,
+                    'partner_id': partner.id,
+                    'name': f"Transfer to Debtors - {partner.name}",
+                    'debit': 0.0,
+                    'credit': self.amount,
+                })
+            ]
+        }
+        
+        move = self.env['account.move'].create(move_vals)
+        
+        # Link the created transfer move to the installment so it shows in the 'Move' column
+        self.move_id = move.id
+        self.is_transferred = True
+        self.state = 'paid'
+        self.transaction_id = 'BANK-TRANSFER'
+        
+        # 4. Open the created move in a new window for the user to review
+        return {
+            'name': _('Draft Entry (Transfer)'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.move',
+            'res_id': move.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
 
     def action_confirm_payment(self):

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Wizard Form -->
+    <record id="view_job_work_import_wizard_form" model="ir.ui.view">
+        <field name="name">job.work.import.wizard.form</field>
+        <field name="model">job.work.import.wizard</field>
+        <field name="arch" type="xml">
+
+            <form string="Import Job Work">
+
+                <group>
+
+                    <field
+                            name="file"
+                            filename="filename"
+                            required="1"
+                    />
+
+                    <field
+                            name="filename"
+                            invisible="1"
+                    />
+
+                </group>
+
+                <footer>
+
+                    <button
+                            name="action_import"
+                            type="object"
+                            string="Import"
+                            class="btn-primary"
+                    />
+
+                    <button
+                            string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"
+                    />
+
+                </footer>
+
+            </form>
+
+        </field>
+    </record>
+    <record id="action_job_work_import" model="ir.actions.act_window">
+        <field name="name">Import Job Work</field>
+        <field name="res_model">job.work.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+    <!-- Menu -->
+
+    <menuitem
+
+            id="menu_job_work_import"
+
+            name="Import Job Work"
+
+            parent="em_jewellery_management.menu_jewellery_configuration_root"
+
+            action="action_job_work_import"
+
+            sequence="99"
+
+    />
+
+</odoo>
