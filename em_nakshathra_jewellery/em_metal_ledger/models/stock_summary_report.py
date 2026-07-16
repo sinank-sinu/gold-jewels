@@ -247,8 +247,10 @@ class StockSummaryReportWizard(models.TransientModel):
                 c_net = o_net + in_net - out_net
 
                 avg_inventory = (o_gross + c_gross) / 2.0
-                turnover_ratio = (out_gross / avg_inventory) if avg_inventory > 0 else 0.0
-                dio = round(no_of_days / turnover_ratio) if turnover_ratio > 0 else 0.0
+                if avg_inventory <= 0.0 and (in_gross > 0.0 or out_gross > 0.0):
+                    avg_inventory = (in_gross + out_gross) / 4.0
+                turnover_ratio = (out_gross / avg_inventory) if avg_inventory > 0.0001 else 0.0
+                dio = round(no_of_days / turnover_ratio) if turnover_ratio > 0.0001 else (no_of_days if avg_inventory > 0.0001 else 0.0)
                 
                 # Minimum stock level from reordering rules
                 product_rules = rules_by_product.get(product.id, [])

@@ -89,6 +89,7 @@ class JewellerySchemeInstallment(models.Model):
         
         # Link the created transfer move to the installment so it shows in the 'Move' column
         self.move_id = move.id
+        self.journal_id = journal.id
         self.is_transferred = True
         self.state = 'paid'
         self.transaction_id = 'BANK-TRANSFER'

@@ -69,8 +69,8 @@
                 <field name="average_inventory" sum="Total Avg Inventory"/>
                 <field name="no_of_days" avg="Average Days"/>
                 <field name="min_stock_level" sum="Total Min Stock"/>
-                <field name="turnover_ratio" sum="Total Turnover Ratio"/>
-                <field name="dio" avg="Average DIO"/>
+                <field name="turnover_ratio"/>
+                <field name="dio"/>
                 <field name="stock_gap" sum="Total Stock Gap"/>
             </tree>
         </field>

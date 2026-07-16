@@ -134,7 +134,12 @@ class PineLabsPaymentWizard(models.TransientModel):
         if not branch:
             branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
 
-        domain = [('type', '=', 'bank'), ('company_id', '=', self.env.company.id)]
+        domain = [
+            ('type', '=', 'bank'),
+            ('company_id', '=', self.env.company.id),
+            ('name', 'not ilike', 'suspense'),
+            ('name', 'not ilike', 'suspence')
+        ]
         if branch:
             domain.append(('branch_id', '=', branch.id))
 
