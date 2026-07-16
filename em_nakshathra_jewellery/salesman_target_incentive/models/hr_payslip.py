@@ -9,6 +9,26 @@ class HrPayslip(models.Model):
         default=False,
     )
 
+    @api.onchange('employee_id')
+    def onchange_employee(self):
+        res = super(HrPayslip, self).onchange_employee()
+        is_inc = self.is_incentive_slip or self.env.context.get('default_is_incentive_slip')
+        if is_inc:
+            incentive_struct = self.env['hr.payroll.structure'].search([('code', '=', 'INC_STRUCT')], limit=1)
+            if incentive_struct:
+                self.struct_id = incentive_struct.id
+        return res
+
+    @api.onchange('contract_id')
+    def onchange_contract_id(self):
+        res = super(HrPayslip, self).onchange_contract_id()
+        is_inc = self.is_incentive_slip or self.env.context.get('default_is_incentive_slip')
+        if is_inc:
+            incentive_struct = self.env['hr.payroll.structure'].search([('code', '=', 'INC_STRUCT')], limit=1)
+            if incentive_struct:
+                self.struct_id = incentive_struct.id
+        return res
+
     @api.model
     def get_inputs(self, contracts, date_from, date_to):
         res = super(HrPayslip, self).get_inputs(contracts, date_from, date_to)

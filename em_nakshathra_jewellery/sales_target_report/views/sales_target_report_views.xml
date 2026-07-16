@@ -8,7 +8,8 @@
                 <group>
                     <field name="date_from"/>
                     <field name="date_to"/>
-                    <field name="salesman_ids" widget="many2many_tags"/>
+                    <field name="branch_ids" widget="many2many_tags"/>
+                    <field name="salesman_ids" widget="many2many_tags" domain="[('branch_id', 'in', branch_ids)]" invisible="not branch_ids"/>
                 </group>
                 <footer>
                     <button name="action_generate_report" type="object" string="Generate XLSX" class="btn-primary"/>

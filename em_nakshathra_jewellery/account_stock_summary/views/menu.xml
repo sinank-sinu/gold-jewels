@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<odoo>
+    <menuitem
+    id="menu_account_stock_summary"
+    name="Account Stock Summary"
+    parent="account.menu_finance_reports"
+    action="action_account_stock_summary_wizard"
+    sequence="100"/>
+</odoo>
