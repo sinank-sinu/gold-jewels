@@ -4,7 +4,7 @@
     'summary': 'Import 100,000+ Purchase Orders from CSV/XLSX with batch processing',
     'category': 'Purchase',
     'author': 'Custom',
-    'depends': ['purchase', 'base_setup'],
+    'depends': ['purchase', 'base_setup', 'em_jewellery_management'],
     'external_dependencies': {
         'python': ['openpyxl', 'xlsxwriter'],
     },
@@ -12,6 +12,7 @@
         'security/security.xml',
         'security/ir.model.access.csv',
         'views/po_import_job_views.xml',
+        'views/purchase_order_ext_views.xml',
         'views/menu_views.xml',
     ],
     'assets': {
@@ -24,4 +25,5 @@
     'installable': True,
     'application': False,
     'license': 'LGPL-3',
+    'post_init_hook': '_cleanup_stale_views',
 }

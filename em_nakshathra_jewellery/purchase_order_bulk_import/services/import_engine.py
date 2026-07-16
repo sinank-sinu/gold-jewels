@@ -30,6 +30,8 @@ PO_FIELDS = [
     {'name': 'notes',           'label': 'Notes',               'type': 'text'},
     {'name': 'incoterm_id',     'label': 'Incoterm',            'type': 'many2one', 'model': 'account.incoterms'},
     {'name': 'company_id',      'label': 'Company',             'type': 'many2one', 'model': 'res.company'},
+    {'name': 'source_location_id', 'label': 'Source Location', 'type': 'many2one', 'model': 'stock.location'},
+    {'name': 'destination_location_id', 'label': 'Destination Location', 'type': 'many2one', 'model': 'stock.location'},
 ]
 
 POL_FIELDS = [
@@ -1270,17 +1272,66 @@ class ImportEngine:
         """Confirm PO → receive all products → validate picking → optionally create & post bill."""
         _logger.info('_auto_confirm_and_receive called for PO %s (state=%s)', po.name, po.state)
         try:
+            # Derive the target date from the PO's order date (the Excel 'Bill Date' column).
+            # All downstream documents (PO confirmation, picking, bill) will use this date.
+            po_order_date = None
+            if po.date_order:
+                try:
+                    po_order_date = po.date_order.date() if hasattr(po.date_order, 'date') else po.date_order
+                except Exception:
+                    po_order_date = None
+
             # Step 1: Confirm
             if po.state == 'draft':
                 po.button_confirm()
             if po.state not in ('purchase', 'done'):
                 return
 
+            # Step 1b: Back-date the PO confirmation date to match the order date.
+            if po_order_date:
+                try:
+                    po.sudo().write({'date_approve': po_order_date})
+                except Exception as date_exc:
+                    _logger.debug('Could not set date_approve on PO %s: %s', po.name, date_exc)
+
             # Steps 2 & 3: Receive + Validate each pending picking
+            # Use source_location from PO as the picking destination
             pending = po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel'))
             for picking in pending:
+                # Back-date the picking scheduled date and expected arrival
+                if po_order_date:
+                    try:
+                        picking.sudo().write({
+                            'scheduled_date': po_order_date,
+                            'date': po_order_date,
+                        })
+                    except Exception as date_exc:
+                        _logger.debug('Could not set date on picking %s: %s', picking.name, date_exc)
+
+                # Set picking destination location to PO's source location
+                if po.source_location_id:
+                    picking.location_dest_id = po.source_location_id.id
+                    _logger.info(
+                        'Updated picking %s destination to %s (from PO source location)',
+                        picking.name, po.source_location_id.name
+                    )
+
                 for move in picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
                     move.quantity = move.product_uom_qty
+                    # Also update move destination location to match PO source location
+                    if po.source_location_id:
+                        move.location_dest_id = po.source_location_id.id
+                        _logger.info(
+                            'Updated move %s destination to %s (from PO source location)',
+                            move.id, po.source_location_id.name
+                        )
+                    # Back-date move date
+                    if po_order_date:
+                        try:
+                            move.sudo().write({'date': po_order_date})
+                        except Exception:
+                            pass
+
                 try:
                     picking.with_context(
                         skip_immediate=True,
@@ -1289,6 +1340,16 @@ class ImportEngine:
                     ).button_validate()
                 except Exception:
                     picking._action_done()
+
+                # After validation, force date_done to the PO order date
+                if po_order_date:
+                    try:
+                        picking.sudo().write({'date_done': po_order_date})
+                        # Also fix move_line dates
+                        picking.move_line_ids.sudo().write({'date': po_order_date})
+                        picking.move_ids.sudo().write({'date': po_order_date})
+                    except Exception as date_exc:
+                        _logger.debug('Could not set date_done on picking %s: %s', picking.name, date_exc)
 
             # Steps 4-6: Create vendor bill, swap Creditors → Opening Balance, post
             if self.auto_create_bill:
@@ -1350,13 +1411,32 @@ class ImportEngine:
 
         today = odoo_fields.Date.context_today(self.env['account.move'])
 
+        # Use PO's date_order as the bill date (converted to date-only).
+        # po.date_order is a datetime; extract just the date part for invoice_date.
+        po_date = None
+        if po.date_order:
+            try:
+                po_date = po.date_order.date() if hasattr(po.date_order, 'date') else po.date_order
+            except Exception:
+                po_date = None
+        bill_date = po_date or today
+
         for invoice in invoices:
             try:
-                # Step 1: Ensure invoice_date is set — required before action_post()
-                if not invoice.invoice_date:
-                    invoice.sudo().write({'invoice_date': today})
-
-                due_date = invoice.invoice_date or today
+                # Step 1: Always force invoice_date, date (journal entry date), and
+                # invoice_date_due (Due Date) to the PO's order date.
+                # Odoo auto-fills invoice_date with today when action_create_invoice()
+                # runs, so a conditional "if not invoice_date" would never fire.
+                # We must unconditionally overwrite all date fields here.
+                invoice.sudo().write({
+                    'invoice_date': bill_date,
+                    'date': bill_date,
+                    'invoice_date_due': bill_date,
+                })
+                _logger.info(
+                    'Set bill %s invoice_date=%s date=%s due=%s',
+                    invoice.name, bill_date, bill_date, bill_date,
+                )
 
                 # Step 2: Optionally swap the payable account to Opening Balance.
                 # Use search() — not invoice.line_ids — because search() flushes
@@ -1376,17 +1456,18 @@ class ImportEngine:
                 if ob_account and payable_lines:
                     payable_lines.write({'account_id': ob_account.id})
 
-                # Step 3: Final safety pass — enforce the date_maturity constraint
-                # on ALL lines right before posting, using a fresh DB read (search
-                # flushes pending writes, so this always sees the current state).
+                # Step 3: Final safety pass — force date_maturity (Due Date) on every
+                # payable/receivable line to the PO's order date, regardless of what
+                # Odoo or payment terms computed as default. Clear it on non-payable lines.
                 all_lines = AML.search([('move_id', '=', invoice.id)])
                 for line in all_lines:
                     is_payable = line.account_id.account_type in (
                         'liability_payable', 'asset_receivable'
                     )
-                    if is_payable and not line.date_maturity:
-                        line.write({'date_maturity': due_date})
-                    elif not is_payable and line.date_maturity:
+                    if is_payable:
+                        # Always overwrite — Odoo sets this to today by default
+                        line.write({'date_maturity': bill_date})
+                    elif line.date_maturity:
                         line.write({'date_maturity': False})
 
                 # Step 4: Approve bill — equivalent to clicking "Approve Bill" in UI.
