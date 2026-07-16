@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Wizard Form View -->
+    <record id="view_jewellery_report_wizard_form" model="ir.ui.view">
+        <field name="name">jewellery.report.wizard.form</field>
+        <field name="model">jewellery.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Jewellery Reports">
+                <group>
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+                    <group>
+                        <field name="product_ids" widget="many2many_tags" string="Product Items" options="{'no_create': True}"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_view_in_odoo" string="Submit" type="object" class="btn-primary"/>
+                    <button name="action_export_excel" string="Export Excel" type="object" class="btn-secondary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard Action -->
+    <record id="action_jewellery_report_wizard" model="ir.actions.act_window">
+        <field name="name">Jewellery Reports</field>
+        <field name="res_model">jewellery.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Structure - Jewellery App -->
+    <menuitem
+        id="menu_jewellery_reports_root"
+        name="Reports"
+        parent="em_jewellery_management.menu_jewellery_root"
+        sequence="80"
+        groups="em_jewellery_management.group_jewellery_manager"
+    />
+
+    <menuitem
+        id="menu_jewellery_reports_wizard"
+        name="Jewellery Reports"
+        parent="menu_jewellery_reports_root"
+        action="action_jewellery_report_wizard"
+        sequence="10"
+    />
+
+    <!-- Menu Structure - Inventory App (Reporting submenu) -->
+    <menuitem
+        id="menu_stock_item_details_wizard"
+        name="Item Details"
+        parent="stock.menu_warehouse_report"
+        action="action_jewellery_report_wizard"
+        sequence="160"
+    />
+</odoo>

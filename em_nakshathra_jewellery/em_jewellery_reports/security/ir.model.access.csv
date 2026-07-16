@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_jewellery_report_wizard,jewellery.report.wizard,model_jewellery_report_wizard,base.group_user,1,1,1,1
+access_jewellery_item_detail_line,jewellery.item.detail.line,model_jewellery_item_detail_line,base.group_user,1,1,1,1
+access_jewellery_stock_weight_line,jewellery.stock.weight.line,model_jewellery_stock_weight_line,base.group_user,1,1,1,1
+access_jewellery_branch_detail_wizard,jewellery.branch.detail.wizard,model_jewellery_branch_detail_wizard,base.group_user,1,1,1,1
+access_jewellery_branch_detail_line,jewellery.branch.detail.line,model_jewellery_branch_detail_line,base.group_user,1,1,1,1

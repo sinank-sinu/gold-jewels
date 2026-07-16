@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="view_jewellery_stock_weight_line_tree" model="ir.ui.view">
+        <field name="name">jewellery.stock.weight.line.tree</field>
+        <field name="model">jewellery.stock.weight.line</field>
+        <field name="arch" type="xml">
+            <tree string="Stock Weights Report" create="false" edit="false" delete="false">
+                <field name="product_id"/>
+                <field name="category_id"/>
+                <field name="purity_id"/>
+                <field name="location_id"/>
+                <field name="branch_id"/>
+                <field name="quantity" sum="Total Quantity"/>
+                <field name="gross_weight" sum="Total Gross Weight"/>
+                <field name="net_weight" sum="Total Net Weight"/>
+                <field name="diamond_weight" sum="Total Diamond Weight"/>
+                <field name="stone_weight" sum="Total Stone Weight"/>
+                <field name="other_weight" sum="Total Other Weight"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_jewellery_stock_weight_line_search" model="ir.ui.view">
+        <field name="name">jewellery.stock.weight.line.search</field>
+        <field name="model">jewellery.stock.weight.line</field>
+        <field name="arch" type="xml">
+            <search string="Search Stock Weight Line">
+                <field name="product_id"/>
+                <field name="category_id"/>
+                <field name="purity_id"/>
+                <field name="location_id"/>
+                <field name="branch_id"/>
+
+                <group expand="1" string="Group By">
+                    <filter string="Product" name="group_by_product" context="{'group_by':'product_id'}"/>
+                    <filter string="Category" name="group_by_category" context="{'group_by':'category_id'}"/>
+                    <filter string="Purity" name="group_by_purity" context="{'group_by':'purity_id'}"/>
+                    <filter string="Location" name="group_by_location" context="{'group_by':'location_id'}"/>
+                    <filter string="Branch" name="group_by_branch" context="{'group_by':'branch_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_jewellery_stock_weight_line" model="ir.actions.act_window">
+        <field name="name">Stock Weights Report</field>
+        <field name="res_model">jewellery.stock.weight.line</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_jewellery_stock_weight_line_search"/>
+        <field name="target">current</field>
+    </record>
+</odoo>
