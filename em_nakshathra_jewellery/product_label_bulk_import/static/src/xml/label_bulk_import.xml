@@ -358,6 +358,37 @@
         </div>
       </div>
 
+      <!-- Update Source Location Result Panel -->
+      <t t-if="state.updateSourceLocationResult">
+        <div class="po-import-card" style="margin-top:8px;">
+          <h2 style="font-size:15px;margin:0 0 12px;">📍 Update Source Location Results</h2>
+          <div class="stats-grid" style="margin-bottom:12px;">
+            <div class="stat-card updated"><div class="stat-val"><t t-esc="state.updateSourceLocationResult.success"/></div><div class="stat-lbl">Updated</div></div>
+            <div class="stat-card created"><div class="stat-val"><t t-esc="state.updateSourceLocationResult.created"/></div><div class="stat-lbl">Created</div></div>
+            <div class="stat-card errors"><div class="stat-val"><t t-esc="state.updateSourceLocationResult.failed"/></div><div class="stat-lbl">Failed</div></div>
+          </div>
+          <t t-if="state.updateSourceLocationResult.errors and state.updateSourceLocationResult.errors.length">
+            <div class="reason-summary error-reasons" style="margin-bottom:8px;">
+              <strong>Failure Reasons:</strong>
+              <ul class="reason-list">
+                <t t-foreach="state.updateSourceLocationResult.errors" t-as="e" t-key="e"><li><t t-esc="e"/></li></t>
+              </ul>
+            </div>
+          </t>
+          <t t-if="state.updateSourceLocationResult.failed_labels and state.updateSourceLocationResult.failed_labels.length">
+            <div class="reason-summary" style="background:#fff3cd;border-color:#ffc107;">
+              <strong>Failed Labels:</strong>
+              <p style="margin:4px 0 0;font-size:12px;word-break:break-all;">
+                <t t-esc="state.updateSourceLocationResult.failed_labels.join(', ')"/>
+                <t t-if="state.updateSourceLocationResult.failed > state.updateSourceLocationResult.failed_labels.length">
+                  … and <t t-esc="state.updateSourceLocationResult.failed - state.updateSourceLocationResult.failed_labels.length"/> more
+                </t>
+              </p>
+            </div>
+          </t>
+        </div>
+      </t>
+
       <!-- Transfer Result Panel -->
       <t t-if="state.transferResult">
         <div class="po-import-card" style="margin-top:8px;">
@@ -392,6 +423,10 @@
         <button class="btn btn-secondary" t-on-click="startNewImport">← New Import</button>
         <button class="btn btn-warning" t-on-click="backToMapping"
                 title="Keep the same file, but re-configure the field mapping">↩ Back to Mapping</button>
+        <button class="btn btn-info" t-on-click="updateSourceLocations" t-att-disabled="state.transferLoading">
+          <t t-if="state.transferLoading"><span class="spinner-border spinner-border-sm me-1"/>Updating...</t>
+          <t t-else="">📍 Update Source Location</t>
+        </button>
         <button class="btn btn-success" t-on-click="triggerLabelTransfers" t-att-disabled="state.transferLoading">
           <t t-if="state.transferLoading"><span class="spinner-border spinner-border-sm me-1"/>Transferring...</t>
           <t t-else="">⇄ Transfer Imported Labels</t>
