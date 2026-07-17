@@ -279,22 +279,25 @@ class ImportEngine:
 
         # ── stock.location ────────────────────────────────────────────────────
         # Search by name first (computed complete_name field doesn't work in ORM).
-        # Filter to real (non-view) locations only.
+        # Filter to real (non-view) locations only. Do NOT filter by usage for
+        # source_location_id to allow any location type (internal, supplier, etc.)
         if model == 'stock.location':
-            usage = [('usage', 'in', ('internal', 'transit', 'supplier', 'inventory', 'customer'))]
+            # Only filter by usage if searching destination_location (branch_location_id)
+            # For source_location_id, allow any non-view location
+            usage = []  # Start with no usage filter
 
             rec = None
             # If company_id provided, try to find location in same company first
             if company_id:
                 company_filter = ['|', ('company_id', '=', company_id), ('company_id', '=', False)]
                 # Try exact match on name first
-                rec = self.env[model].search([('name', '=ilike', raw_stripped)] + usage + company_filter, limit=1)
+                rec = self.env[model].search([('name', '=ilike', raw_stripped)] + company_filter, limit=1)
                 if not rec:
-                    rec = self.env[model].search([('name', 'ilike', raw_stripped)] + usage + company_filter, limit=1)
+                    rec = self.env[model].search([('name', 'ilike', raw_stripped)] + company_filter, limit=1)
                 if not rec and '/' in raw_stripped:
                     parts = raw_stripped.split('/')
                     parent_name, child_name = parts[0].strip(), parts[-1].strip()
-                    for loc in self.env[model].search([('name', 'ilike', child_name)] + usage + company_filter, limit=10):
+                    for loc in self.env[model].search([('name', 'ilike', child_name)] + company_filter, limit=10):
                         parent = loc.location_id
                         if parent and parent.name and parent_name.lower() in parent.name.lower():
                             rec = loc
@@ -302,13 +305,13 @@ class ImportEngine:
 
             # Fallback: search without company filter if company_id didn't find anything
             if not rec:
-                rec = self.env[model].search([('name', '=ilike', raw_stripped)] + usage, limit=1)
+                rec = self.env[model].search([('name', '=ilike', raw_stripped)], limit=1)
             if not rec:
-                rec = self.env[model].search([('name', 'ilike', raw_stripped)] + usage, limit=1)
+                rec = self.env[model].search([('name', 'ilike', raw_stripped)], limit=1)
             if not rec and '/' in raw_stripped:
                 parts = raw_stripped.split('/')
                 parent_name, child_name = parts[0].strip(), parts[-1].strip()
-                for loc in self.env[model].search([('name', 'ilike', child_name)] + usage, limit=10):
+                for loc in self.env[model].search([('name', 'ilike', child_name)], limit=10):
                     parent = loc.location_id
                     if parent and parent.name and parent_name.lower() in parent.name.lower():
                         rec = loc
@@ -316,7 +319,7 @@ class ImportEngine:
 
             # Try complete_name matching as final fallback
             if not rec:
-                all_locs = self.env[model].search(usage)
+                all_locs = self.env[model].search([])
                 for loc in all_locs:
                     if loc.complete_name and raw_stripped.lower() in loc.complete_name.lower():
                         rec = loc
@@ -325,8 +328,8 @@ class ImportEngine:
             if rec:
                 self._related_cache[key] = rec.id
                 company_msg = f' in company {company_id}' if company_id else ''
-                _logger.info('Resolved stock.location "%s" to %s (id=%s, company=%s)%s',
-                            raw_stripped, rec.name, rec.id, rec.company_id.id if rec.company_id else 'None', company_msg)
+                _logger.info('Resolved stock.location "%s" to %s (id=%s, complete_name=%s)%s',
+                            raw_stripped, rec.name, rec.id, rec.complete_name, company_msg)
                 return rec.id
             _logger.warning('Could not resolve stock.location "%s"%s', raw_stripped,
                            f' in company {company_id}' if company_id else '')
@@ -445,6 +448,31 @@ class ImportEngine:
             except Exception as exc:
                 _logger.warning('Auto-create jewellery.job.work "%s" failed: %s', raw_stripped, exc)
                 rec = self.env['jewellery.job.work'].browse()
+
+        # ── purchase.order ────────────────────────────────────────────────────
+        # Search purchase orders by name, origin, and number fields. Only return
+        # purchase orders in 'purchase' state (as per product.label domain).
+        if model == 'purchase.order':
+            rec = self.env[model].search([('name', '=ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            if not rec:
+                rec = self.env[model].search([('name', 'ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            if not rec and 'origin' in self.env[model]._fields:
+                rec = self.env[model].search([('origin', '=ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            if not rec and 'origin' in self.env[model]._fields:
+                rec = self.env[model].search([('origin', 'ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            if not rec and 'number' in self.env[model]._fields:
+                rec = self.env[model].search([('number', '=ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            if not rec and 'number' in self.env[model]._fields:
+                rec = self.env[model].search([('number', 'ilike', raw_stripped), ('state', '=', 'purchase')], limit=1)
+            # Fallback: search without state filter (user may have other states)
+            if not rec:
+                rec = self.env[model].search([('name', '=ilike', raw_stripped)], limit=1)
+            if not rec:
+                rec = self.env[model].search([('name', 'ilike', raw_stripped)], limit=1)
+            if not rec and 'origin' in self.env[model]._fields:
+                rec = self.env[model].search([('origin', '=ilike', raw_stripped)], limit=1)
+            if not rec:
+                _logger.warning('Could not resolve purchase.order "%s". Note: domain requires state=purchase', raw_stripped)
 
         # product.product — additional fallbacks
         if not rec and model == 'product.product':

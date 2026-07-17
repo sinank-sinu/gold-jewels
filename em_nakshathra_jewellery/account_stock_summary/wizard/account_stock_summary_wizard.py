@@ -41,11 +41,9 @@ class AccountStockSummaryWizard(models.TransientModel):
 
     def action_generate_report(self):
 
-
         self.ensure_one()
 
         report_data = self._get_report_data()
-
 
         output = self._generate_excel(report_data)
 
@@ -63,7 +61,6 @@ class AccountStockSummaryWizard(models.TransientModel):
         }
 
     def _get_report_data(self):
-
 
         self.ensure_one()
 
@@ -132,11 +129,23 @@ class AccountStockSummaryWizard(models.TransientModel):
 END AS net_weight,
 
         pol.price_unit                                   AS rate,
+        
 
         CASE
+    WHEN COALESCE(pol.product_qty,0)=0 THEN 0
+    ELSE (
+        CASE
             WHEN COALESCE(pol.product_qty,0)=0 THEN 0
-            ELSE pol.price_subtotal * sml.quantity / pol.product_qty
-        END                                              AS value
+            ELSE (
+                (pol.product_qty
+                 - COALESCE(pol.stone_weight,0)
+                 - COALESCE(pol.diamond_weight_gm,0))
+                * sm.quantity
+                / pol.product_qty
+            )
+        END
+    ) * pol.price_unit
+END AS value
 
     FROM stock_move_line sml
 
@@ -222,18 +231,23 @@ END AS net_weight,
         (sol.product_uom_qty - COALESCE(sol.sale_stone_weight, 0) - COALESCE(sol.sale_diamond_weight_gm, 0))
         * sm.quantity
         / sol.product_uom_qty
-    )
-END AS net_weight,
+        )
+    END AS net_weight,
 
                 sol.price_unit                                   AS rate,
 
                 CASE
-                    WHEN COALESCE(sol.product_uom_qty,0)=0 THEN 0
-                    ELSE
-                        sol.price_subtotal
-                        * sml.quantity
-                        / sol.product_uom_qty
-                END                                              AS value
+    WHEN COALESCE(sol.product_uom_qty,0)=0 THEN 0
+    ELSE (
+        (
+            (sol.product_uom_qty
+             - COALESCE(sol.sale_stone_weight,0)
+             - COALESCE(sol.sale_diamond_weight_gm,0))
+            * sm.quantity
+            / sol.product_uom_qty
+        ) * sol.price_unit
+    )
+    END AS value
 
             FROM stock_move_line sml
 
@@ -272,18 +286,47 @@ END AS net_weight,
 
                 {sale_branch_filter}
 
-        ), report_data AS (
+        ), purchase_average AS (
 
     SELECT
-
         branch_id,
-        branch_name,
-
         product_id,
-        product_name,
-
         purity_id,
-        purity_name,
+
+        SUM(net_weight) AS purchased_net,
+
+        SUM(net_weight * rate) AS purchased_value,
+
+        CASE
+            WHEN SUM(net_weight) = 0 THEN 0
+            ELSE ROUND(
+                SUM(net_weight * rate) / SUM(net_weight),
+                2
+            )
+        END AS avg_rate
+
+    FROM stock_movements
+
+    WHERE move_type = 'IN'
+
+    GROUP BY
+        branch_id,
+        product_id,
+        purity_id
+),
+        report_data AS (
+
+
+        SELECT
+
+    branch_id,
+    branch_name,
+    
+    product_id,
+    product_name,
+    
+    purity_id,
+    purity_name,
 
         ------------------------------------------------------------------
         -- OPENING
@@ -430,119 +473,117 @@ END AS net_weight,
         ) AS out_diamond,
 
         SUM(
-            CASE
-                WHEN move_date BETWEEN %(date_from)s AND %(date_to)s
-                     AND move_type='OUT'
-                THEN net_weight
-                ELSE 0
-            END
-        ) AS out_net,
-
-        SUM(
-            CASE
-                WHEN move_date BETWEEN %(date_from)s AND %(date_to)s
-                     AND move_type='OUT'
-                THEN value
-                ELSE 0
-            END
-        ) AS out_value
+    CASE
+        WHEN move_date BETWEEN %(date_from)s AND %(date_to)s
+             AND move_type='OUT'
+        THEN net_weight
+        ELSE 0
+        END
+    ) AS out_net,
+    
+    MAX(
+        CASE
+            WHEN move_date BETWEEN %(date_from)s AND %(date_to)s
+                 AND move_type='OUT'
+            THEN rate
+        END
+    ) AS out_rate,
+    
+    SUM(
+        CASE
+            WHEN move_date BETWEEN %(date_from)s AND %(date_to)s
+                 AND move_type='OUT'
+            THEN value
+            ELSE 0
+        END
+    ) AS out_value
 
     FROM stock_movements
 
     GROUP BY
-
-        branch_id,
-        branch_name,
-        product_id,
-        product_name,
-        purity_id,
-        purity_name
-
-)SELECT
-
     branch_id,
     branch_name,
-
     product_id,
     product_name,
-
     purity_id,
-    purity_name,
+    purity_name
+
+)
+
+SELECT
+
+    rd.branch_id,
+rd.branch_name,
+
+rd.product_id,
+rd.product_name,
+
+rd.purity_id,
+rd.purity_name,
 
     ------------------------------------------------------------
     -- Opening
     ------------------------------------------------------------
 
-    opening_gross,
-    opening_stone,
-    opening_diamond,
-    opening_net,
+    rd.opening_gross,
+rd.opening_stone,
+rd.opening_diamond,
+rd.opening_net,
 
-    CASE
-        WHEN opening_net = 0 THEN 0
-        ELSE ROUND(opening_value / opening_net, 2)
-    END AS opening_rate,
+    COALESCE(ROUND(pa.avg_rate,2),0) AS opening_rate,
 
-    opening_value,
-
+    ROUND(rd.opening_net * COALESCE(pa.avg_rate,0),2) AS opening_value,
     ------------------------------------------------------------
     -- Stock In
     ------------------------------------------------------------
 
-    in_gross,
-    in_stone,
-    in_diamond,
-    in_net,
+    rd.in_gross,
+    rd.in_stone,
+    rd.in_diamond,
+    rd.in_net,
 
-    CASE
-        WHEN in_net = 0 THEN 0
-        ELSE ROUND(in_value / in_net, 2)
-    END AS in_rate,
+    COALESCE(ROUND(pa.avg_rate,2),0) AS in_rate,
 
-    in_value,
-
+    ROUND(rd.in_net * COALESCE(pa.avg_rate,0),2) AS in_value,
     ------------------------------------------------------------
     -- Stock Out
     ------------------------------------------------------------
 
-    out_gross,
-    out_stone,
-    out_diamond,
-    out_net,
+    rd.out_gross,
+    rd.out_stone,
+    rd.out_diamond,
+    rd.out_net,
 
-    CASE
-        WHEN out_net = 0 THEN 0
-        ELSE ROUND(out_value / out_net, 2)
-    END AS out_rate,
-
-    out_value,
-
+    
+    rd.out_rate,
+    rd.out_value,
+    
     ------------------------------------------------------------
     -- Closing
     ------------------------------------------------------------
 
-    (opening_gross + in_gross - out_gross)      AS closing_gross,
+    (rd.opening_gross + rd.in_gross - rd.out_gross) AS closing_gross,
+    (rd.opening_stone + rd.in_stone - rd.out_stone)      AS closing_stone,
 
-    (opening_stone + in_stone - out_stone)      AS closing_stone,
+    (rd.opening_diamond + rd.in_diamond - rd.out_diamond) AS closing_diamond,
 
-    (opening_diamond + in_diamond - out_diamond) AS closing_diamond,
+    (rd.opening_net + rd.in_net - rd.out_net)            AS closing_net,
 
-    (opening_net + in_net - out_net)            AS closing_net,
+    COALESCE(ROUND(pa.avg_rate,2),0) AS closing_rate,
 
-    CASE
-        WHEN (opening_net + in_net - out_net) = 0 THEN 0
-        ELSE ROUND(
-            (opening_value + in_value - out_value)
-            /
-            (opening_net + in_net - out_net),
-            2
-        )
-    END AS closing_rate,
-
-            (opening_value + in_value - out_value) AS closing_value
+            ROUND(
+        (rd.opening_net + rd.in_net - rd.out_net)
+        * COALESCE(pa.avg_rate,0),
+        2
+    ) AS closing_value
         
-        FROM report_data
+        FROM report_data rd
         
+        LEFT JOIN purchase_average pa
+        ON pa.branch_id = rd.branch_id
+        AND pa.product_id = rd.product_id
+        AND COALESCE(pa.purity_id,0)=COALESCE(rd.purity_id,0)
+                
         ORDER BY
         
             branch_name,
@@ -694,14 +735,14 @@ END AS net_weight,
 
         worksheet.write(row, 0, "Branch", formats["header"])
         worksheet.write(row, 1, "Product", formats["header"])
-        worksheet.write(row, 2, "Purity", formats["header"])
+        worksheet.write(row, 2, "Caret", formats["header"])
 
         columns = [
-            "Gross",
-            "Stone",
-            "Diamond",
-            "Net",
-            "Rate",
+            "Gross Wt (Grms)",
+            "Stone Wt (Gms)",
+            "Diamond Wt (CT)",
+            "Net Wt (Gms)",
+            "Unit Price",
             "Value",
         ]
 
@@ -843,4 +884,3 @@ END AS net_weight,
         worksheet.set_column(1, 1, 35)
         worksheet.set_column(2, 2, 15)
         worksheet.set_column(3, 26, 14)
-

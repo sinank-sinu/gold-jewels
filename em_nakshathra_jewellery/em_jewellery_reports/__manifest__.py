@@ -1,0 +1,27 @@
+{
+    'name': 'Jewellery Reports',
+    'version': '17.0.1.0.0',
+    'category': 'Technical/Technical',
+    'summary': 'Traceability and Stock Weight reports for Jewellery Management',
+    'description': 'Item Details Report and Stock Weights Report with Excel Export',
+    'depends': [
+        'base',
+        'product',
+        'stock',
+        'sale',
+        'purchase',
+        'em_jewellery_management',
+        'report_xlsx',
+    ],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/item_detail_line_views.xml',
+        'views/stock_weight_line_views.xml',
+        'views/branch_detail_line_views.xml',
+        'wizard/jewellery_report_wizard_views.xml',
+        'report/jewellery_report_xlsx_views.xml',
+    ],
+    'installable': True,
+    'application': False,
+    'auto_install': False,
+}

@@ -62,9 +62,17 @@
                                     <button name="action_confirm_payment"
                                             type="object"
                                             string="Confirm Payment"
-                                            class="btn-primary"/>
+                                            class="btn-primary"
+                                            invisible="state == 'paid'"/>
+                                    <field name="is_transferred" invisible="1"/>
+                                    <button name="action_transfer"
+                                            type="object"
+                                            string="Transfer"
+                                            class="btn-secondary"
+                                            invisible="is_transferred or state == 'paid'"/>
                                     <field name="move_id"/>
                                     <field name="transaction_id"/>
+                                    <field name="remark"/>
                                 </tree>
                             </field>
                         </page>

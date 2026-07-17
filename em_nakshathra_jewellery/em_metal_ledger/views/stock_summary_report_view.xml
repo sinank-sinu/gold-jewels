@@ -39,6 +39,7 @@
             <tree string="Stock Summary Report" create="false" edit="false" delete="false">
                 <field name="product_template_id" invisible="1"/>
                 <field name="product_id" column_invisible="1"/>
+                <field name="label_id"/>
                 <!--Attributes-->
                 <!-- <field name="attribute_values"/> -->
                 <field name="type_value"/>
@@ -68,8 +69,8 @@
                 <field name="average_inventory" sum="Total Avg Inventory"/>
                 <field name="no_of_days" avg="Average Days"/>
                 <field name="min_stock_level" sum="Total Min Stock"/>
-                <field name="turnover_ratio" sum="Total Turnover Ratio"/>
-                <field name="dio" avg="Average DIO"/>
+                <field name="turnover_ratio"/>
+                <field name="dio"/>
                 <field name="stock_gap" sum="Total Stock Gap"/>
             </tree>
         </field>

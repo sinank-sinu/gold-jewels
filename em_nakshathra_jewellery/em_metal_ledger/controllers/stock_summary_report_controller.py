@@ -12,7 +12,7 @@ class StockSummaryReportController(http.Controller):
     @http.route('/metal_ledger/export_stock_summary', type='http', auth='user')
     def export_stock_summary_report(self, start_date=None, end_date=None, branch_name=None, **kwargs):
         # Fetch report lines generated for the current user
-        report_lines = request.env['stock.summary.report.line'].search([
+        report_lines = request.env['stock.summary.report.line'].sudo().search([
             ('create_uid', '=', request.env.user.id)
         ])
         
@@ -46,7 +46,7 @@ class StockSummaryReportController(http.Controller):
 
         # Headers
         headers = [
-            'Product', 'Type', 'Variety', 'Size', 'Stone Colour', 'Metal Colour', 'Purity', 'Ageing',
+            'Product', 'Label', 'Type', 'Variety', 'Size', 'Stone Colour', 'Metal Colour', 'Purity', 'Ageing',
             'Opening PCs', 'Opening Gross', 'Opening Net',
             'In PCs', 'In Gross', 'In Net',
             'Out PCs', 'Out Gross', 'Out Net',
@@ -61,35 +61,36 @@ class StockSummaryReportController(http.Controller):
         row += 1
         for line in report_lines:
             worksheet.write(row, 0, line.product_id.display_name or line.product_template_id.display_name, border_format)
-            worksheet.write(row, 1, line.type_value or '', border_format)
-            worksheet.write(row, 2, line.variety_value or '', border_format)
-            worksheet.write(row, 3, line.size_value or '', border_format)
-            worksheet.write(row, 4, line.stone_colour_value or '', border_format)
-            worksheet.write(row, 5, line.metal_colour_value or '', border_format)
-            worksheet.write(row, 6, line.purity_id.name if line.purity_id else '', border_format)
+            worksheet.write(row, 1, line.label_id.name if line.label_id else '', border_format)
+            worksheet.write(row, 2, line.type_value or '', border_format)
+            worksheet.write(row, 3, line.variety_value or '', border_format)
+            worksheet.write(row, 4, line.size_value or '', border_format)
+            worksheet.write(row, 5, line.stone_colour_value or '', border_format)
+            worksheet.write(row, 6, line.metal_colour_value or '', border_format)
+            worksheet.write(row, 7, line.purity_id.name if line.purity_id else '', border_format)
             
             # Ageing (New Field)
             ageing_val = getattr(line, 'ageing', 0) or 0
-            worksheet.write(row, 7, ageing_val, border_format)
+            worksheet.write(row, 8, ageing_val, border_format)
 
-            worksheet.write(row, 8, line.opening_pcs, pcs_format)
-            worksheet.write(row, 9, line.opening_gross_weight, num_format)
-            worksheet.write(row, 10, line.opening_net_weight, num_format)
-            worksheet.write(row, 11, line.in_pcs, pcs_format)
-            worksheet.write(row, 12, line.in_gross_weight, num_format)
-            worksheet.write(row, 13, line.in_net_weight, num_format)
-            worksheet.write(row, 14, line.out_pcs, pcs_format)
-            worksheet.write(row, 15, line.out_gross_weight, num_format)
-            worksheet.write(row, 16, line.out_net_weight, num_format)
-            worksheet.write(row, 17, line.closing_pcs, pcs_format)
-            worksheet.write(row, 18, line.closing_gross_weight, num_format)
-            worksheet.write(row, 19, line.closing_net_weight, num_format)
-            worksheet.write(row, 20, line.average_inventory, num_format)
-            worksheet.write(row, 21, line.turnover_ratio, num_format)
-            worksheet.write(row, 22, line.no_of_days, border_format)
-            worksheet.write(row, 23, line.dio, border_format)
-            worksheet.write(row, 24, line.min_stock_level, num_format)
-            worksheet.write(row, 25, line.stock_gap, num_format)
+            worksheet.write(row, 9, line.opening_pcs, pcs_format)
+            worksheet.write(row, 10, line.opening_gross_weight, num_format)
+            worksheet.write(row, 11, line.opening_net_weight, num_format)
+            worksheet.write(row, 12, line.in_pcs, pcs_format)
+            worksheet.write(row, 13, line.in_gross_weight, num_format)
+            worksheet.write(row, 14, line.in_net_weight, num_format)
+            worksheet.write(row, 15, line.out_pcs, pcs_format)
+            worksheet.write(row, 16, line.out_gross_weight, num_format)
+            worksheet.write(row, 17, line.out_net_weight, num_format)
+            worksheet.write(row, 18, line.closing_pcs, pcs_format)
+            worksheet.write(row, 19, line.closing_gross_weight, num_format)
+            worksheet.write(row, 20, line.closing_net_weight, num_format)
+            worksheet.write(row, 21, line.average_inventory, num_format)
+            worksheet.write(row, 22, line.turnover_ratio, num_format)
+            worksheet.write(row, 23, line.no_of_days, border_format)
+            worksheet.write(row, 24, line.dio, border_format)
+            worksheet.write(row, 25, line.min_stock_level, num_format)
+            worksheet.write(row, 26, line.stock_gap, num_format)
             row += 1
 
         workbook.close()

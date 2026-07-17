@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="view_jewellery_item_detail_line_tree" model="ir.ui.view">
+        <field name="name">jewellery.item.detail.line.tree</field>
+        <field name="model">jewellery.item.detail.line</field>
+        <field name="arch" type="xml">
+            <tree string="Item Details Traceability" create="false" edit="false" delete="false">
+                <field name="product_id"/>
+                <field name="date"/>
+                <field name="ref"/>
+                <!-- Inward -->
+                <field name="inward_gross_weight" sum="Total Inward Gross Wt"/>
+                <field name="inward_net_weight" sum="Total Inward Net Wt"/>
+                <field name="inward_diamond_weight" sum="Total Inward Diamond Wt"/>
+                <!-- Outward -->
+                <field name="outward_gross_weight" sum="Total Outward Gross Wt"/>
+                <field name="outward_net_weight" sum="Total Outward Net Wt"/>
+                <field name="outward_diamond_weight" sum="Total Outward Diamond Wt"/>
+                <field name="outward_other_weight" sum="Total Outward Other Wt"/>
+                <!-- Closing -->
+                <field name="closing_net_weight" string="Closing Weight"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_jewellery_item_detail_line_search" model="ir.ui.view">
+        <field name="name">jewellery.item.detail.line.search</field>
+        <field name="model">jewellery.item.detail.line</field>
+        <field name="arch" type="xml">
+            <search string="Search Item Detail Line">
+                <field name="product_id"/>
+                <field name="ref"/>
+                <group expand="1" string="Group By">
+                    <filter string="Product Item" name="group_by_product" context="{'group_by':'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_jewellery_item_detail_line" model="ir.actions.act_window">
+        <field name="name">Item Details Traceability</field>
+        <field name="res_model">jewellery.item.detail.line</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_jewellery_item_detail_line_search"/>
+        <field name="context">{'search_default_group_by_product': 1}</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

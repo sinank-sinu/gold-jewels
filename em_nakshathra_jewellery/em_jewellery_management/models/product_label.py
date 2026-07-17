@@ -181,6 +181,8 @@ class ProductLabel(models.Model):
         compute="_compute_age",
     )
 
+    age_import = fields.Integer(string="Age (Import)", default=0, store=True)
+
     certification_charge = fields.Float(string="Certification Charge")
     transportation_charge = fields.Float(string="Transportation Charge")
     cargo_charge = fields.Float(string="Cargo Charge")
@@ -194,16 +196,27 @@ class ProductLabel(models.Model):
         for rec in self:
             rec.stock_move_count = self.env['stock.move'].search_count([('label_id', '=', rec.id)])
 
-
-    @api.depends('create_date')
+    # un comment the code if import the product label
+    @api.depends('age_import','create_date')
     def _compute_age(self):
         today = fields.Date.today()
         for rec in self:
-            if rec.create_date:
-                created_date = rec.create_date.date()
-                rec.age = (today - created_date).days+1
+            days_since_creation = (today - rec.create_date.date()).days if rec.create_date else 0
+            if rec.age_import > 0:
+                rec.age = rec.age_import + days_since_creation
             else:
-                rec.age = 0
+                rec.age = days_since_creation + 1
+
+    # comment this code for import age days
+    # @api.depends('create_date')
+    # def _compute_age(self):
+    #     today = fields.Date.today()
+    #     for rec in self:
+    #         if rec.create_date:
+    #             created_date = rec.create_date.date()
+    #             rec.age = (today - created_date).days+1
+    #         else:
+    #             rec.age = 0
 
     @api.onchange('product_id')
     def _onchange_product_id(self):

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cleanup old view records with stale field references -->
+    <function model="ir.ui.view" name="search_delete">
+        <value model="ir.ui.view" search="[('name', '=', 'purchase.order.form.destination_location')]" delete="True"/>
+    </function>
+</odoo>

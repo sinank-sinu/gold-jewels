@@ -8,11 +8,11 @@
     'data': [
         'security/ir.model.access.csv',
         'security/security.xml',
+        'data/salary_rule.xml',
         'data/sequence.xml',
         'views/salesman_target_views.xml',
         'views/hr_employee_inherit.xml',
         'views/hr_payslip_views.xml',
-        'data/salary_rule.xml',
         'reports/report_payslip.xml',
     ],
     'auto_install': False,
