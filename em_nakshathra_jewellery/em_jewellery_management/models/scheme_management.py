@@ -21,7 +21,7 @@ class CustomerScheme(models.Model):
         ('draft', 'Draft'),
         ('posted', 'Posted')
     ], default='draft')
-    payment_id = fields.Many2one()
+    payment_id = fields.Many2one('account.payment', string='Payment', readonly=True, copy=False)
     payment_line_ids = fields.One2many(
         'customer.scheme.payment',
         'scheme_id',
