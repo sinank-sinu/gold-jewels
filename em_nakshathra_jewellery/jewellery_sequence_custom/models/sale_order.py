@@ -26,6 +26,25 @@ class SaleOrder(models.Model):
                     ('company_id', '=', company.id)
                 ], limit=1)
                 
+                # Fetch name of existing sale orders for this company to calculate max sequence number used
+                existing_orders = self.env['sale.order'].search_read([
+                    ('company_id', '=', company.id),
+                    ('name', '!=', 'New'),
+                    ('name', '!=', False)
+                ], ['name'])
+                
+                next_number = 1
+                for order in existing_orders:
+                    name = order.get('name')
+                    if name:
+                        parts = name.split('/')
+                        seq_part = parts[-1] if parts else ''
+                        digits = ''.join(c for c in seq_part if c.isdigit())
+                        if digits:
+                            num = int(digits)
+                            if num >= next_number:
+                                next_number = num + 1
+                
                 if not sequence:
                     # If it doesn't exist for the company, we copy the global fallback one (company_id = False)
                     global_sequence = self.env['ir.sequence'].search([
@@ -37,7 +56,7 @@ class SaleOrder(models.Model):
                         sequence = global_sequence.copy({
                             'company_id': company.id,
                             'name': f"Sales Order - {company.name}",
-                            'number_next': 1
+                            'number_next': next_number
                         })
                     else:
                         sequence = self.env['ir.sequence'].create({
@@ -46,9 +65,12 @@ class SaleOrder(models.Model):
                             'company_id': company.id,
                             'prefix': 'S',
                             'padding': 5,
-                            'number_next': 1,
+                            'number_next': next_number,
                             'number_increment': 1
                         })
+                else:
+                    if sequence.number_next < next_number:
+                        sequence.write({'number_next': next_number})
                 
                 # Retrieve the next sequence from this company-specific record
                 standard_sequence = sequence.next_by_id() or _('New')
