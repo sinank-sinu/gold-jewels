@@ -72,7 +72,7 @@ class JewelleryReportXlsx(models.AbstractModel):
         sheet.set_row(6, 20)
 
         # Title
-        sheet.merge_range('A1:L1', 'Nakshathra Jewellery — Item Details Report', title_format)
+        sheet.merge_range('A1:N1', 'Nakshathra Jewellery — Item Details Report', title_format)
 
         # Meta Information
         sheet.write('A3', 'From Date:', meta_format)
@@ -84,19 +84,21 @@ class JewelleryReportXlsx(models.AbstractModel):
         sheet.merge_range(5, 0, 6, 0, 'Product Item', header_format)
         sheet.merge_range(5, 1, 6, 1, 'Date', header_format)
         sheet.merge_range(5, 2, 6, 2, 'Ref', header_format)
-        sheet.merge_range(5, 3, 5, 5, 'Inward', header_format)
-        sheet.merge_range(5, 6, 5, 9, 'Outward', header_format)
-        sheet.merge_range(5, 10, 5, 11, 'Closing', header_format)
+        sheet.merge_range(5, 3, 5, 6, 'Inward', header_format)
+        sheet.merge_range(5, 7, 5, 11, 'Outward', header_format)
+        sheet.merge_range(5, 12, 5, 13, 'Closing', header_format)
 
         sheet.write(6, 3, 'Gross Wt', header_format)
         sheet.write(6, 4, 'Net Wt', header_format)
         sheet.write(6, 5, 'Diamond Wt', header_format)
-        sheet.write(6, 6, 'Gross Wt', header_format)
-        sheet.write(6, 7, 'Net Wt', header_format)
-        sheet.write(6, 8, 'Diamond Wt', header_format)
-        sheet.write(6, 9, 'Other Wt', header_format)
-        sheet.write(6, 10, 'Gross Wt', header_format)
-        sheet.write(6, 11, 'Net Wt', header_format)
+        sheet.write(6, 6, 'Stone Wt', header_format)
+        sheet.write(6, 7, 'Gross Wt', header_format)
+        sheet.write(6, 8, 'Net Wt', header_format)
+        sheet.write(6, 9, 'Diamond Wt', header_format)
+        sheet.write(6, 10, 'Stone Wt', header_format)
+        sheet.write(6, 11, 'Other Wt', header_format)
+        sheet.write(6, 12, 'Gross Wt', header_format)
+        sheet.write(6, 13, 'Net Wt', header_format)
 
         # Data Rows
         row = 7
@@ -109,14 +111,16 @@ class JewelleryReportXlsx(models.AbstractModel):
             sheet.write(row, 3, line.inward_gross_weight or '', data_number)
             sheet.write(row, 4, line.inward_net_weight or '', data_number)
             sheet.write(row, 5, line.inward_diamond_weight or '', data_number)
+            sheet.write(row, 6, line.inward_stone_weight or '', data_number)
             
-            sheet.write(row, 6, line.outward_gross_weight or '', data_number)
-            sheet.write(row, 7, line.outward_net_weight or '', data_number)
-            sheet.write(row, 8, line.outward_diamond_weight or '', data_number)
-            sheet.write(row, 9, line.outward_other_weight or '', data_number)
+            sheet.write(row, 7, line.outward_gross_weight or '', data_number)
+            sheet.write(row, 8, line.outward_net_weight or '', data_number)
+            sheet.write(row, 9, line.outward_diamond_weight or '', data_number)
+            sheet.write(row, 10, line.outward_stone_weight or '', data_number)
+            sheet.write(row, 11, line.outward_other_weight or '', data_number)
             
-            sheet.write(row, 10, line.closing_gross_weight, data_number)
-            sheet.write(row, 11, line.closing_net_weight, data_number)
+            sheet.write(row, 12, line.closing_gross_weight, data_number)
+            sheet.write(row, 13, line.closing_net_weight, data_number)
             row += 1
 
         # Totals Row
@@ -128,16 +132,18 @@ class JewelleryReportXlsx(models.AbstractModel):
         sheet.write_formula(row, 7, f'=SUM(H8:H{row})', total_format)
         sheet.write_formula(row, 8, f'=SUM(I8:I{row})', total_format)
         sheet.write_formula(row, 9, f'=SUM(J8:J{row})', total_format)
-        sheet.write(row, 10, '', total_label_format)
-        sheet.write(row, 11, '', total_label_format)
+        sheet.write_formula(row, 10, f'=SUM(K8:K{row})', total_format)
+        sheet.write_formula(row, 11, f'=SUM(L8:L{row})', total_format)
+        sheet.write(row, 12, '', total_label_format)
+        sheet.write(row, 13, '', total_label_format)
 
         # Set Column Widths
         sheet.set_column(0, 0, 30)   # Product Item
         sheet.set_column(1, 1, 12)   # Date
         sheet.set_column(2, 2, 15)   # Ref
-        sheet.set_column(3, 5, 16)   # Inward Weights
-        sheet.set_column(6, 9, 16)   # Outward Weights
-        sheet.set_column(10, 11, 16) # Closing Weights
+        sheet.set_column(3, 6, 16)   # Inward Weights
+        sheet.set_column(7, 11, 16)  # Outward Weights
+        sheet.set_column(12, 13, 16) # Closing Weights
 
     def _generate_stock_weight_report(self, workbook, wizard):
         sheet = workbook.add_worksheet('Stock Weights Summary')
