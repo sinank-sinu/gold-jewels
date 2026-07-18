@@ -68,6 +68,7 @@ class LabelBulkImportWizard extends Component {
             // Transfer panel
             transferLoading: false,
             transferResult:  null,
+            updateSourceLocationResult: null,
         });
 
         this._loadFields();
@@ -509,6 +510,8 @@ class LabelBulkImportWizard extends Component {
             batchRunning:  false,
             allDone:       false,
             globalError:   null,
+            transferResult: null,
+            updateSourceLocationResult: null,
             batchStats:    { created: 0, updated: 0, duplicates: 0, skipped: 0, errors: 0, transferred: 0 },
             totalStats:    { created: 0, updated: 0, duplicates: 0, skipped: 0, errors: 0, transferred: 0 },
             skippedReasons: [],
@@ -542,6 +545,7 @@ class LabelBulkImportWizard extends Component {
             allDone:       false,
             globalError:   null,
             transferResult: null,
+            updateSourceLocationResult: null,
             batchStats: { created: 0, updated: 0, duplicates: 0, skipped: 0, errors: 0, transferred: 0 },
             totalStats: { created: 0, updated: 0, duplicates: 0, skipped: 0, errors: 0, transferred: 0 },
             skippedReasons: [],
@@ -557,6 +561,28 @@ class LabelBulkImportWizard extends Component {
             view_mode: "tree,form",
             views: [[false, "tree"], [false, "form"]],
         });
+    }
+
+    async updateSourceLocations() {
+        this.state.transferLoading = true;
+        try {
+            const res = await this.rpc("/product_label/import/update_source_locations", {
+                job_id: this.state.jobId || null,
+            });
+            if (res.error) {
+                this.state.updateSourceLocationResult = { success: 0, created: 0, failed: 0, errors: [res.error], failed_labels: [] };
+            } else {
+                this.state.updateSourceLocationResult = res;
+                if (res.failed === 0 && res.success > 0) {
+                    const createdText = res.created > 0 ? ` (${res.created} new locations created)` : '';
+                    this.notif.add(`${res.success} labels updated with source location${createdText}.`, { type: "success" });
+                }
+            }
+        } catch (e) {
+            this.state.updateSourceLocationResult = { success: 0, created: 0, failed: 1, errors: [String(e)], failed_labels: [] };
+        } finally {
+            this.state.transferLoading = false;
+        }
     }
 
     async triggerLabelTransfers() {

@@ -365,6 +365,106 @@ class LabelImportController(http.Controller):
             request.env.cr.commit()
         return {'ok': True}
 
+    # ── Update source locations ──────────────────────────────────────────────
+
+    @http.route('/product_label/import/update_source_locations', type='json', auth='user', methods=['POST'])
+    def update_source_locations(self, job_id=None):
+        _check_access()
+        env = request.env
+
+        if not job_id:
+            return {'error': 'Job ID is required for source location update'}
+
+        job = env['label.import.job'].browse(int(job_id))
+        if not job.exists():
+            return {'error': 'Import job not found'}
+
+        # Get the file attachment and mapping
+        attachment = job.attachment_id.sudo()
+        if not attachment:
+            return {'error': 'Source file not found'}
+
+        try:
+            file_b64 = attachment.datas
+        except FileNotFoundError:
+            return {'error': 'File is no longer available on disk'}
+
+        # Parse the file to get the data and headers
+        from ..services.file_parser import FileParser
+        file_name = job.file_name
+        sheet_name = job.sheet_name or None
+        headers = FileParser.get_headers(file_b64, file_name, sheet_name=sheet_name)
+        mapping = job.get_mapping()
+
+        # Find which column maps to source_location_id
+        source_location_col = None
+        for excel_col, odoo_field in mapping.items():
+            if odoo_field == 'source_location_id':
+                source_location_col = excel_col
+                break
+
+        if not source_location_col:
+            return {'error': 'No "source_location_id" mapping found in this import'}
+
+        # Get all rows from the file
+        rows_list = list(FileParser.iter_batch(
+            file_b64, file_name, headers, 0, 999999, sheet_name=sheet_name
+        ))
+
+        # Get labels created from this job
+        labels = env[MODEL].sudo().search([('create_date', '>=', job.create_date)])
+
+        success = 0
+        created = 0
+        failed_labels = []
+        error_counts = {}
+
+        # Map row index to label by name (assuming labels were created in order)
+        for row_idx, row in enumerate(rows_list):
+            if row_idx >= len(labels):
+                break
+
+            label = labels[row_idx]
+            source_loc_raw = row.get(source_location_col)
+
+            if not source_loc_raw or str(source_loc_raw).strip() == '':
+                continue
+
+            try:
+                with env.cr.savepoint():
+                    # Resolve the source location from the Excel value
+                    source_loc = ImportEngine(env, job)._resolve_related(
+                        'stock.location',
+                        str(source_loc_raw).strip(),
+                        auto_create=False,
+                        company_id=label.branch_id.company_id.id if label.branch_id and label.branch_id.company_id else env.company.id
+                    )
+
+                    if source_loc:
+                        label.write({'source_location_id': source_loc})
+                        success += 1
+                        _logger.info('Updated label %s (row %d) with source_location from Excel', label.name, row_idx + 1)
+                    else:
+                        failed_labels.append(label.name or str(label.id))
+                        error_counts[f'Could not resolve location: {source_loc_raw}'] = error_counts.get(f'Could not resolve location: {source_loc_raw}', 0) + 1
+
+            except Exception as exc:
+                err_text = str(exc).split('\n')[0][:120]
+                _logger.warning('update_source_locations from Excel: label %s (row %d) failed: %s',
+                                label.name, row_idx + 1, exc)
+                failed_labels.append(label.name or str(label.id))
+                error_counts[err_text] = error_counts.get(err_text, 0) + 1
+
+        request.env.cr.commit()
+        aggregated_errors = [f"{cnt}x {msg}" for msg, cnt in sorted(error_counts.items(), key=lambda x: -x[1])]
+        return {
+            'success': success,
+            'created': created,
+            'failed': len(failed_labels),
+            'failed_labels': failed_labels[:20],
+            'errors': aggregated_errors,
+        }
+
     # ── Bulk transfer (stock-in) pending labels ───────────────────────────────
 
     @http.route('/product_label/import/trigger_label_transfers', type='json', auth='user', methods=['POST'])

@@ -5,8 +5,8 @@
     "summary": "Custom label for user",
     "depends": ["base", "hr", "product", "em_jewellery_management", "stock"],
     "data": [
-        "security/security.xml",
         "security/product_label_groups.xml",
+        "security/security.xml",
         "security/ir.model.access.csv",
         "security/product_label_security.xml",
         "views/product_label_views.xml",
