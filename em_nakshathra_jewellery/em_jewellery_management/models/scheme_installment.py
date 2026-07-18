@@ -40,6 +40,11 @@ class JewellerySchemeInstallment(models.Model):
         if not partner:
             raise UserError(_("No partner found on the scheme enrollment."))
             
+        enrollment = self.enrollment_id
+        expected_total = enrollment.duration * enrollment.installment_amount
+        if expected_total > 0 and (enrollment.total_paid + self.amount) > expected_total:
+            raise UserError(_("Transfer limit exceeded. Total allowed amount for this scheme is %s. You cannot transfer more than the allowed duration.") % expected_total)
+            
         # 1. Find Suspense Journal
         journal = self.env['account.journal'].search(['|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'suspence')], limit=1)
         if not journal:
@@ -67,6 +72,7 @@ class JewellerySchemeInstallment(models.Model):
             'date': fields.Date.today(),
             'ref': f"Scheme Transfer - {self.enrollment_id.name or partner.name}",
             'branch_id': self.enrollment_id.branch_id.id if hasattr(self.env['account.move'], 'branch_id') and self.enrollment_id.branch_id else False,
+            'partner_id': partner.id,
             'line_ids': [
                 (0, 0, {
                     'account_id': suspense_account.id,
@@ -86,6 +92,7 @@ class JewellerySchemeInstallment(models.Model):
         }
         
         move = self.env['account.move'].create(move_vals)
+        move.write({'partner_id': partner.id})
         
         # Link the created transfer move to the installment so it shows in the 'Move' column
         self.move_id = move.id
@@ -126,6 +133,10 @@ class JewellerySchemeInstallment(models.Model):
                     _("Payment amount must be a multiple of installment amount (%s).")
                     % inst_amt
                 )
+
+            expected_total = enrollment.duration * inst_amt
+            if expected_total > 0 and (enrollment.total_paid + payment_amount) > expected_total:
+                raise UserError(_("Payment limit exceeded. Total allowed amount for this scheme is %s. You cannot pay more than the allowed duration.") % expected_total)
 
             # --------------------------------------------------
             # OPEN PAYMENT WIZARD

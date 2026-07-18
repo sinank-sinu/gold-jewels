@@ -16,7 +16,7 @@ class SaleBelowMaxXlsx(models.AbstractModel):
         row = 0
 
         #REPORT HEADER
-        sheet.merge_range(row, 0, row, 8, 'Sale Below Maximum Report', bold)
+        sheet.merge_range(row, 0, row, 11, 'Sale Below Minimum Report', bold)
         row += 2
 
         sheet.write(row, 0, 'From Date:', bold)
@@ -35,10 +35,10 @@ class SaleBelowMaxXlsx(models.AbstractModel):
         sheet.set_column(3, 3, 20)  # Branch
         sheet.set_column(4, 4, 30)  # Product
         sheet.set_column(5, 5, 20)  # Label
-        sheet.set_column(6, 8, 15)  # Numbers
+        sheet.set_column(6, 11, 15)  # Numbers
 
         #TABLE HEADER
-        headers = ['Order', 'Date', 'Customer', 'Branch', 'Product', 'Label', 'MC % Actual', 'MC % Min', 'Difference']
+        headers = ['Order', 'Date', 'Customer', 'Branch', 'Product', 'Label', 'Gross Wgt', 'Actual MC Amt', 'Metal Amt', 'MC % Actual', 'MC % Min', 'Difference']
 
         for col, header in enumerate(headers):
             sheet.write(row, col, header, bold)
@@ -77,9 +77,12 @@ class SaleBelowMaxXlsx(models.AbstractModel):
                     sheet.write(row, 3, order.branch_id.name if order.branch_id else '')
                     sheet.write(row, 4, line.product_id.display_name)
                     sheet.write(row, 5, line.label_id.name if line.label_id else '')
-                    sheet.write(row, 6, line.mc_percent_actual, number_format)
-                    sheet.write(row, 7, line.sale_making_charge_min, number_format)
-                    sheet.write(row, 8,
+                    sheet.write(row, 6, line.product_uom_qty, number_format)
+                    sheet.write(row, 7, line.mc_amount_actual, number_format)
+                    sheet.write(row, 8, line.metal_amount, number_format)
+                    sheet.write(row, 9, line.mc_percent_actual, number_format)
+                    sheet.write(row, 10, line.sale_making_charge_min, number_format)
+                    sheet.write(row, 11,
                                 line.mc_percent_actual - line.sale_making_charge_min,
                                 number_format)
 

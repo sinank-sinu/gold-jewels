@@ -5,7 +5,7 @@
         <field name="name">sale.below.max.wizard.form</field>
         <field name="model">sale.below.max.wizard</field>
         <field name="arch" type="xml">
-            <form string="Sale Below Maximum Report">
+            <form string="Sale Below Minimum Report">
                 <group>
                     <field name="date_from"/>
                     <field name="date_to"/>
@@ -24,7 +24,7 @@
 
     <!-- Action -->
     <record id="action_sale_below_max_wizard" model="ir.actions.act_window">
-        <field name="name">Sale Below Maximum Report</field>
+        <field name="name">Sale Below Minimum Report</field>
         <field name="res_model">sale.below.max.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
@@ -32,14 +32,14 @@
 
     <!-- Menu -->
     <menuitem id="menu_sale_below_max_report"
-              name="Sale Below Maximum Report"
+              name="Sale Below Minimum Report"
               parent="sale.menu_sale_report"
               action="action_sale_below_max_wizard"
               sequence="50"/>
 
     <!-- Report Action -->
     <record id="sale_below_max_xlsx_report" model="ir.actions.report">
-        <field name="name">Sale Below Maximum XLSX</field>
+        <field name="name">Sale Below Minimum XLSX</field>
         <field name="model">sale.below.max.wizard</field>
         <field name="report_type">xlsx</field>
         <field name="report_name">sale_below_max_report.sale_below_max_xlsx</field>

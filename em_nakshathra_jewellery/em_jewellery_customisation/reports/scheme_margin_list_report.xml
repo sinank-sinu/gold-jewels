@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_scheme_margin_list" model="ir.actions.report">
+        <field name="name">Scheme Margin List</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">em_jewellery_customisation.scheme_margin_list_xlsx</field>
+        <field name="report_file">em_jewellery_customisation.scheme_margin_list_xlsx</field>
+        <field name="binding_model_id" ref="em_jewellery_management.model_jewellery_scheme_enrollment"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>
