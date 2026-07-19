@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_scheme_margin_list_wizard_form" model="ir.ui.view">
+        <field name="name">scheme.margin.list.wizard.form</field>
+        <field name="model">scheme.margin.list.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Scheme Margin List Report">
+                <group>
+                    <group>
+                        <field name="start_date"/>
+                        <field name="is_redeemed" invisible="1"/>
+                    </group>
+                    <group>
+                        <field name="end_date"/>
+                    </group>
+                </group>
+                <footer>
+                    <button string="Download Report" name="action_print_report" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_scheme_margin_list_wizard_non_redeem" model="ir.actions.act_window">
+        <field name="name">Scheme NON redeem Report</field>
+        <field name="res_model">scheme.margin.list.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'default_is_redeemed': False}</field>
+    </record>
+
+    <record id="action_scheme_margin_list_wizard_redeem" model="ir.actions.act_window">
+        <field name="name">Scheme redeem Report</field>
+        <field name="res_model">scheme.margin.list.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'default_is_redeemed': True}</field>
+    </record>
+
+    <menuitem id="menu_scheme_non_redeem_report"
+              name="Scheme NON redeem Report"
+              parent="em_jewellery_management.menu_scheme_enrollment_category"
+              action="action_scheme_margin_list_wizard_non_redeem"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              sequence="26"/>
+
+    <menuitem id="menu_scheme_redeem_report"
+              name="Scheme redeem Report"
+              parent="em_jewellery_management.menu_scheme_enrollment_category"
+              action="action_scheme_margin_list_wizard_redeem"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              sequence="27"/>
+</odoo>

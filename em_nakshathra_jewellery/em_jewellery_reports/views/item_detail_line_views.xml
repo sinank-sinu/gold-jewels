@@ -13,10 +13,12 @@
                 <field name="inward_gross_weight" sum="Total Inward Gross Wt"/>
                 <field name="inward_net_weight" sum="Total Inward Net Wt"/>
                 <field name="inward_diamond_weight" sum="Total Inward Diamond Wt"/>
+                <field name="inward_stone_weight" sum="Total Inward Stone Wt"/>
                 <!-- Outward -->
                 <field name="outward_gross_weight" sum="Total Outward Gross Wt"/>
                 <field name="outward_net_weight" sum="Total Outward Net Wt"/>
                 <field name="outward_diamond_weight" sum="Total Outward Diamond Wt"/>
+                <field name="outward_stone_weight" sum="Total Outward Stone Wt"/>
                 <field name="outward_other_weight" sum="Total Outward Other Wt"/>
                 <!-- Closing -->
                 <field name="closing_net_weight" string="Closing Weight"/>

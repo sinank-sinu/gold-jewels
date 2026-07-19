@@ -8,7 +8,7 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 class ProductLabelReportWizard(models.TransientModel):
     _name = "product.label.report.wizard"
-    _description = "Product Label Report Wizard"
+    _description = "Label Closing Stock Report Wizard"
 
     @api.model
     def _default_start_datetime(self):
@@ -23,7 +23,7 @@ class ProductLabelReportWizard(models.TransientModel):
             return utc_dt.replace(tzinfo=None)
         return dt_local
 
-    start_datetime = fields.Datetime(string="From Date & Time", required=True, default=_default_start_datetime)
+    start_datetime = fields.Datetime(string="Up to Date & Time", required=True, default=fields.Datetime.now)
     branch_ids = fields.Many2many("res.branch", string="Branches")
 
     file_data = fields.Binary(readonly=True)
@@ -47,49 +47,257 @@ class ProductLabelReportWizard(models.TransientModel):
         loc_domain = [('usage', '=', 'internal')]
         if self.branch_ids:
             loc_domain.append(('branch_id', 'in', self.branch_ids.ids))
-        locations = self.env['stock.location'].search(loc_domain)
+        locations = self.env['stock.location'].sudo().search(loc_domain)
         loc_ids = locations.ids
 
-        # 2. Query stock quants with quantity > 0 in those locations
-        quants = self.env['stock.quant'].search([
+        # Get all done stock moves after start_datetime in these locations
+        moves_after = self.env['stock.move'].sudo().search([
+            ('state', '=', 'done'),
+            ('date', '>', self.start_datetime),
+            '|',
+            ('location_id', 'in', loc_ids),
+            ('location_dest_id', 'in', loc_ids)
+        ])
+
+        # Query stock quants with quantity > 0 in those locations
+        quants = self.env['stock.quant'].sudo().search([
             ('location_id', 'in', loc_ids),
             ('quantity', '>', 0)
         ])
-        product_ids = quants.mapped('product_id').ids
+
+        # Get all sale order lines for labels sold after start_datetime
+        sold_after_datetime_lines = self.env['sale.order.line'].sudo().search([
+            ('label_id', '!=', False),
+            ('state', '=', 'sale'),
+            ('order_id.date_order', '>', self.start_datetime)
+        ])
+        sold_after_label_ids = sold_after_datetime_lines.mapped('label_id').ids
+
+        # Combine all product IDs that might have had stock at start_datetime
+        product_ids = list(set(
+            quants.mapped('product_id').ids +
+            moves_after.mapped('product_id').ids +
+            sold_after_datetime_lines.mapped('product_id').ids
+        ))
 
         import pytz
-        
-        # Calculate local start and end of the chosen day, then convert end to UTC
         local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
-        local_end_dt = local_start_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-        utc_end_dt = local_end_dt.astimezone(pytz.utc).replace(tzinfo=None)
-
-        # 3. Query active product labels in stock (locations & branches) matching start_datetime filter
+        # Get all labels created before/at start_datetime that are active or sold after
         labels_domain = [
+            ('create_date', '<=', self.start_datetime),
+            '|',
             ('active', '=', True),
-            ('product_id', 'in', product_ids),
-            ('branch_location_id', 'in', loc_ids),
-            ('create_date', '>=', self.start_datetime),
-            ('create_date', '<=', utc_end_dt)
+            ('id', 'in', sold_after_label_ids)
         ]
-        if self.branch_ids:
-            labels_domain.append(('branch_id', 'in', self.branch_ids.ids))
-        labels = self.env['product.label'].search(labels_domain)
+        candidates = self.env['product.label'].sudo().search(labels_domain)
 
-        # Filter out unlabeled quants (where product is not in the active labels list)
-        labeled_product_ids = labels.mapped('product_id').ids
-        unlabeled_quants = quants.filtered(lambda q: q.product_id.id not in labeled_product_ids)
+        # Get all stock moves for these candidate labels
+        label_moves = self.env['stock.move'].sudo().search([
+            ('label_id', 'in', candidates.ids),
+            ('state', '=', 'done')
+        ], order='date asc')
 
-        # Apply date filter and vault item filter on unlabeled quants
-        unlabeled_quants = unlabeled_quants.filtered(lambda q:
-            q.product_id.is_vault_item and (
-                (q.in_date and self.start_datetime <= q.in_date <= utc_end_dt) or
-                (q.create_date and self.start_datetime <= q.create_date <= utc_end_dt) or
-                (not q.in_date and not q.create_date)
-            )
-        )
+        # Pre-process label moves in a single pass to avoid looping and list comprehensions
+        first_move_by_label = {}
+        last_move_before_by_label = {}
+        for m in label_moves:
+            label_id = m.label_id.id
+            if label_id not in first_move_by_label:
+                first_move_by_label[label_id] = m
+            if m.date <= self.start_datetime:
+                last_move_before_by_label[label_id] = m
 
-        # Create Excel Workbook
+        labels = []
+        label_locations = {}
+        label_branches = {}
+
+        for label in candidates:
+            # Find the last move of this label done before or at start_datetime
+            last_move = last_move_before_by_label.get(label.id)
+            if last_move:
+                historical_loc = last_move.location_dest_id
+                historical_branch = last_move.branch_id or historical_loc.branch_id
+            else:
+                first_move = first_move_by_label.get(label.id)
+                if first_move:
+                    historical_loc = first_move.location_id
+                    historical_branch = first_move.branch_id or historical_loc.branch_id
+                else:
+                    historical_loc = label.branch_location_id
+                    historical_branch = label.branch_id
+
+            # Filter by branch / location
+            if historical_loc.id not in loc_ids:
+                continue
+            if self.branch_ids and historical_branch.id not in self.branch_ids.ids:
+                continue
+
+            labels.append(label)
+            label_locations[label.id] = historical_loc
+            label_branches[label.id] = historical_branch
+
+        # Build dictionaries to quickly look up incoming and outgoing quantities after start_datetime
+        incoming_after = {}
+        outgoing_after = {}
+        for m in moves_after:
+            prod_id = m.product_id.id
+            qty = m.product_qty
+            if m.location_dest_id.id in loc_ids:
+                key = (prod_id, m.location_dest_id.id)
+                incoming_after[key] = incoming_after.get(key, 0.0) + qty
+            if m.location_id.id in loc_ids:
+                key = (prod_id, m.location_id.id)
+                outgoing_after[key] = outgoing_after.get(key, 0.0) + qty
+
+        # Collect current quant information
+        current_quant_qty = {(q.product_id.id, q.location_id.id): q.quantity for q in quants}
+        current_quant_in_date = {(q.product_id.id, q.location_id.id): q.in_date for q in quants}
+        current_quant_create_date = {(q.product_id.id, q.location_id.id): q.create_date for q in quants}
+
+        # Collect all unique (product, location) pairs
+        prod_loc_pairs = set()
+        for q in quants:
+            prod_loc_pairs.add((q.product_id, q.location_id))
+        for m in moves_after:
+            if m.location_id.id in loc_ids:
+                prod_loc_pairs.add((m.product_id, m.location_id))
+            if m.location_dest_id.id in loc_ids:
+                prod_loc_pairs.add((m.product_id, m.location_dest_id))
+
+        # Query all completed done stock moves of vault items in the selected locations
+        vault_product_moves = self.env['stock.move'].sudo().search([
+            ('product_id.product_tmpl_id.is_vault_item', '=', True),
+            ('state', '=', 'done'),
+            '|',
+            ('location_id', 'in', loc_ids),
+            ('location_dest_id', 'in', loc_ids)
+        ], order='date asc')
+
+        for m in vault_product_moves:
+            if m.location_id.id in loc_ids:
+                prod_loc_pairs.add((m.product_id, m.location_id))
+            if m.location_dest_id.id in loc_ids:
+                prod_loc_pairs.add((m.product_id, m.location_dest_id))
+
+        # Group vault product moves by product ID for quick lookups
+        vault_moves_by_product = {}
+        for m in vault_product_moves:
+            vault_moves_by_product.setdefault(m.product_id.id, []).append(m)
+
+        # Pre-group vault moves before or at start_datetime by product ID and destination location
+        vault_moves_before_by_product = {}
+        vault_moves_dest_before_by_product_loc = {}
+        for m in vault_product_moves:
+            if m.date <= self.start_datetime:
+                vault_moves_before_by_product.setdefault(m.product_id.id, []).append(m)
+                key_loc = (m.product_id.id, m.location_dest_id.id)
+                vault_moves_dest_before_by_product_loc.setdefault(key_loc, []).append(m)
+
+        class HistoricalQuantMock:
+            def __init__(self, product, location, qty, in_date, branch=None, label_no="", is_labeled=False,
+                         pcs=None, gross=None, diamond_g=0.0, diamond_ct=0.0, stone=0.0, other=0.0, net=None):
+                self.product_id = product
+                self.location_id = location
+                self.quantity = qty
+                self.in_date = in_date
+                self.create_date = in_date
+                self.branch_id = branch or location.branch_id
+                self.label_no = label_no
+                self.is_labeled = is_labeled
+                self.pcs = pcs
+                self.gross = gross
+                self.diamond_g = diamond_g
+                self.diamond_ct = diamond_ct
+                self.stone = stone
+                self.other = other
+                self.net = net
+
+        # Collect vault items
+        unlabeled_quants = []
+        for product, location in prod_loc_pairs:
+            # Check if this product is a vault item
+            if not product.is_vault_item:
+                continue
+
+            key = (product.id, location.id)
+            
+            # If the product type is 'consu' (Consumable), compute historical qty directly from moves
+            if product.detailed_type == 'consu' or product.type == 'consu':
+                moves_before = vault_moves_before_by_product.get(product.id, [])
+                in_qty = sum(m.product_qty for m in moves_before if m.location_dest_id.id == location.id)
+                out_qty = sum(m.product_qty for m in moves_before if m.location_id.id == location.id)
+                historical_qty = in_qty - out_qty
+            else:
+                current_qty = current_quant_qty.get(key, 0.0)
+                historical_qty = current_qty - incoming_after.get(key, 0.0) + outgoing_after.get(key, 0.0)
+
+            # If there is remaining stock
+            if historical_qty > 0.0001:
+                in_date = None
+                if product.detailed_type == 'consu' or product.type == 'consu':
+                    moves_before_dest = vault_moves_dest_before_by_product_loc.get(key, [])
+                    if moves_before_dest:
+                        in_date = moves_before_dest[0].date
+                else:
+                    in_date = current_quant_in_date.get(key) or current_quant_create_date.get(key)
+
+                if not in_date:
+                    earliest_move = self.env['stock.move'].sudo().search([
+                        ('product_id', '=', product.id),
+                        ('location_dest_id', '=', location.id),
+                        ('state', '=', 'done')
+                    ], order='date asc', limit=1)
+                    in_date = earliest_move.date if earliest_move else self.start_datetime
+
+                # Since it is a vault item, retrieve its purchase details
+                po_line = self.env['purchase.order.line'].sudo().search([
+                    ('product_id', '=', product.id),
+                    ('state', 'in', ('purchase', 'done'))
+                ], order='id desc', limit=1)
+
+                if po_line:
+                    scale_factor = historical_qty / po_line.product_qty if po_line.product_qty else 1.0
+                    pcs = int(historical_qty)
+                    gross = (po_line.gross_weight or po_line.product_qty or 0.0) * scale_factor
+                    diamond_g = (po_line.diamond_weight_gm or 0.0) * scale_factor
+                    diamond_ct = ((po_line.diamond_weight_gm or 0.0) / 0.2) * scale_factor
+                    stone = (po_line.stone_weight or 0.0) * scale_factor
+                    other = 0.0
+                    net = (po_line.net_weight or 0.0) * scale_factor
+                    
+                    po_date = po_line.order_id.date_approve or po_line.order_id.date_order
+                    if po_date:
+                        in_date = po_date
+                else:
+                    # Fallback to standard product defaults if no PO line is found
+                    uom_id = product.uom_id
+                    uom_cat = uom_id.category_id.name if uom_id and uom_id.category_id else ""
+                    if uom_cat in ('Unit', 'Working Time'):
+                        pcs = int(historical_qty)
+                        gross = historical_qty * (product.weight or 0.0)
+                    else:
+                        pcs = 0
+                        gross = historical_qty
+                    diamond_g = 0.0
+                    diamond_ct = 0.0
+                    stone = 0.0
+                    other = 0.0
+                    net = gross
+
+                unlabeled_quants.append(HistoricalQuantMock(
+                    product=product,
+                    location=location,
+                    qty=historical_qty,
+                    in_date=in_date,
+                    is_labeled=False,
+                    pcs=pcs,
+                    gross=gross,
+                    diamond_g=diamond_g,
+                    diamond_ct=diamond_ct,
+                    stone=stone,
+                    other=other,
+                    net=net
+                ))
         wb = Workbook()
 
         # Styles
@@ -114,7 +322,7 @@ class ProductLabelReportWizard(models.TransientModel):
         align_left = Alignment(horizontal="left", vertical="center")
         align_right = Alignment(horizontal="right", vertical="center")
 
-        headers = [
+        headers_sheet1 = [
             "Branch Receipt Date",
             "Label No.",
             "Item Name",
@@ -132,11 +340,26 @@ class ProductLabelReportWizard(models.TransientModel):
             "Aging Days"
         ]
 
+        headers_sheet2 = [
+            "Branch Receipt Date",
+            "Item Name",
+            "Variety Name",
+            "Carat",
+            "Branch",
+            "Location",
+            "Gross Wt.",
+            "Diamond Wt",
+            "Diamond Wt ( Caret )",
+            "Stone Weight",
+            "Net Wt.",
+            "Aging Days"
+        ]
+
         # Branch name header text
         branch_name_text = ", ".join(self.branch_ids.mapped('name')) if self.branch_ids else "All Branches"
         start_date_str = local_start_dt.strftime('%d-%b-%y %I:%M:%S %p')
 
-        def setup_sheet_headers(ws, title_text):
+        def setup_sheet_headers(ws, title_text, sheet_headers):
             # Row 1
             ws.cell(row=1, column=2, value=title_text).font = font_total
             ws.cell(row=1, column=4, value=branch_name_text).font = font_total
@@ -149,7 +372,7 @@ class ProductLabelReportWizard(models.TransientModel):
 
             # Row 3 - Table headers
             ws.row_dimensions[3].height = 25
-            for col_idx, header in enumerate(headers, start=1):
+            for col_idx, header in enumerate(sheet_headers, start=1):
                 cell = ws.cell(row=3, column=col_idx, value=header)
                 cell.font = font_header
                 cell.alignment = align_center
@@ -160,7 +383,7 @@ class ProductLabelReportWizard(models.TransientModel):
         # ==========================================
         ws1 = wb.active
         ws1.title = "Label Closing Stock Report"
-        setup_sheet_headers(ws1, "Closing Stock Label Wise")
+        setup_sheet_headers(ws1, "Closing Stock Label Wise", headers_sheet1)
 
         row_idx = 4
         tot_pcs = 0
@@ -179,7 +402,7 @@ class ProductLabelReportWizard(models.TransientModel):
             receipt_date_str = receipt_date_val.strftime('%d-%b-%y')
 
             # Aging Days
-            days = (today - receipt_date_val).days + 1
+            days = (local_start_dt.date() - receipt_date_val).days + 1
             if days < 0:
                 days = 0
 
@@ -218,8 +441,8 @@ class ProductLabelReportWizard(models.TransientModel):
             ws1.cell(row=row_idx, column=3, value=item_name or "").alignment = align_left
             ws1.cell(row=row_idx, column=4, value=variety_name or "").alignment = align_left
             ws1.cell(row=row_idx, column=5, value=label.purity_id.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=6, value=label.branch_id.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=7, value=label.branch_location_id.name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=6, value=label_branches[label.id].name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=7, value=label_locations[label.id].complete_name or "").alignment = align_center
 
             c_pcs = ws1.cell(row=row_idx, column=8, value=pcs)
             c_pcs.alignment = align_right
@@ -293,11 +516,15 @@ class ProductLabelReportWizard(models.TransientModel):
         # SHEET 2: Vault Item Closing Stock
         # ==========================================
         ws2 = wb.create_sheet(title="Vault Item Closing Stock")
-        setup_sheet_headers(ws2, "Closing Stock Vault Item Wise")
+        setup_sheet_headers(ws2, "Closing Stock Vault Item Wise", headers_sheet2)
 
         row_idx2 = 4
         tot_pcs2 = 0
         tot_gross2 = 0.0
+        tot_diamond_g2 = 0.0
+        tot_diamond_ct2 = 0.0
+        tot_stone2 = 0.0
+        tot_other2 = 0.0
         tot_net2 = 0.0
 
         for quant in unlabeled_quants:
@@ -308,64 +535,82 @@ class ProductLabelReportWizard(models.TransientModel):
             receipt_date_str = receipt_date_val.strftime('%d-%b-%y')
 
             # Aging Days
-            days = (today - receipt_date_val).days + 1
+            days = (local_start_dt.date() - receipt_date_val).days + 1
             if days < 0:
                 days = 0
 
             # Branch Name
-            branch_name = quant.location_id.branch_id.name or quant.location_id.warehouse_id.name or ""
+            branch_name = quant.branch_id.name or quant.location_id.branch_id.name or quant.location_id.warehouse_id.name or ""
 
-            # Check UOM Category
-            uom_cat = quant.product_id.uom_id.category_id.name
-            if uom_cat in ('Unit', 'Working Time'):
-                pcs = int(quant.quantity)
-                gross = quant.quantity * (quant.product_id.weight or 0.0)
+            # Check if labeled or not
+            if quant.is_labeled or quant.product_id.is_vault_item:
+                pcs = quant.pcs
+                gross = quant.gross
+                diamond_g = quant.diamond_g
+                diamond_ct = quant.diamond_ct
+                stone = quant.stone
+                other = quant.other
+                net = quant.net
             else:
-                pcs = 0
-                gross = quant.quantity
-
-            net = gross  # For unlabeled weight fallback
+                # Check UOM Category
+                uom_id = quant.product_id.uom_id
+                uom_cat = uom_id.category_id.name if uom_id and uom_id.category_id else ""
+                if uom_cat in ('Unit', 'Working Time'):
+                    pcs = int(quant.quantity)
+                    gross = quant.quantity * (quant.product_id.weight or 0.0)
+                else:
+                    pcs = 0
+                    gross = quant.quantity
+                diamond_g = 0.0
+                diamond_ct = 0.0
+                stone = 0.0
+                other = 0.0
+                net = gross  # For unlabeled weight fallback
 
             tot_pcs2 += pcs
             tot_gross2 += gross
+            tot_diamond_g2 += diamond_g
+            tot_diamond_ct2 += diamond_ct
+            tot_stone2 += stone
+            tot_other2 += other
             tot_net2 += net
 
             # Write data row
             ws2.cell(row=row_idx2, column=1, value=receipt_date_str).alignment = align_center
-            ws2.cell(row=row_idx2, column=2, value="").alignment = align_center  # Label No is blank
-            
-            ws2.cell(row=row_idx2, column=3, value=quant.product_id.product_tmpl_id.name or "").alignment = align_left
+            ws2.cell(row=row_idx2, column=2, value=quant.product_id.product_tmpl_id.name or "").alignment = align_left
             
             variety_name2 = quant.product_id.name or ""
-            ws2.cell(row=row_idx2, column=4, value=variety_name2).alignment = align_left
+            ws2.cell(row=row_idx2, column=3, value=variety_name2).alignment = align_left
             
-            ws2.cell(row=row_idx2, column=5, value=quant.product_id.purity_id.name or "").alignment = align_center
-            ws2.cell(row=row_idx2, column=6, value=branch_name).alignment = align_center
-            ws2.cell(row=row_idx2, column=7, value=quant.location_id.name or "").alignment = align_center
+            ws2.cell(row=row_idx2, column=4, value=quant.product_id.purity_id.name or "").alignment = align_center
+            ws2.cell(row=row_idx2, column=5, value=branch_name).alignment = align_center
+            ws2.cell(row=row_idx2, column=6, value=quant.location_id.complete_name or "").alignment = align_center
 
-            c_pcs = ws2.cell(row=row_idx2, column=8, value=pcs)
-            c_pcs.alignment = align_right
-            c_pcs.number_format = "#,##0"
-
-            c_gross = ws2.cell(row=row_idx2, column=9, value=gross)
+            c_gross = ws2.cell(row=row_idx2, column=7, value=gross)
             c_gross.alignment = align_right
             c_gross.number_format = "#,##0.000"
 
-            # Diamond, Stone, and Other Weights are empty on Sheet 2
-            ws2.cell(row=row_idx2, column=10, value="")
-            ws2.cell(row=row_idx2, column=11, value="")
-            ws2.cell(row=row_idx2, column=12, value="")
-            ws2.cell(row=row_idx2, column=13, value="")
+            c_di_g = ws2.cell(row=row_idx2, column=8, value=diamond_g)
+            c_di_g.alignment = align_right
+            c_di_g.number_format = "#,##0.000"
 
-            c_net = ws2.cell(row=row_idx2, column=14, value=net)
+            c_di_ct = ws2.cell(row=row_idx2, column=9, value=diamond_ct)
+            c_di_ct.alignment = align_right
+            c_di_ct.number_format = "#,##0.00"
+
+            c_stone = ws2.cell(row=row_idx2, column=10, value=stone)
+            c_stone.alignment = align_right
+            c_stone.number_format = "#,##0.000"
+
+            c_net = ws2.cell(row=row_idx2, column=11, value=net)
             c_net.alignment = align_right
             c_net.number_format = "#,##0.000"
 
-            c_days = ws2.cell(row=row_idx2, column=15, value=days)
+            c_days = ws2.cell(row=row_idx2, column=12, value=days)
             c_days.alignment = align_right
             c_days.number_format = "#,##0"
 
-            for col in range(1, 16):
+            for col in range(1, 13):
                 cell = ws2.cell(row=row_idx2, column=col)
                 cell.font = font_data
                 cell.border = border_all_cells
@@ -374,22 +619,24 @@ class ProductLabelReportWizard(models.TransientModel):
 
         # Sheet 2 Totals
         ws2.row_dimensions[row_idx2].height = 22
-        ws2.cell(row=row_idx2, column=4, value="Total").alignment = align_left
-        ws2.cell(row=row_idx2, column=8, value=tot_pcs2).number_format = "#,##0"
+        ws2.cell(row=row_idx2, column=3, value="Total").alignment = align_left
+
+        ws2.cell(row=row_idx2, column=7, value=tot_gross2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=7).alignment = align_right
+
+        ws2.cell(row=row_idx2, column=8, value=tot_diamond_g2).number_format = "#,##0.000"
         ws2.cell(row=row_idx2, column=8).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=9, value=tot_gross2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=9, value=tot_diamond_ct2).number_format = "#,##0.00"
         ws2.cell(row=row_idx2, column=9).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=10, value="")
-        ws2.cell(row=row_idx2, column=11, value="")
-        ws2.cell(row=row_idx2, column=12, value="")
-        ws2.cell(row=row_idx2, column=13, value="")
+        ws2.cell(row=row_idx2, column=10, value=tot_stone2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=10).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=14, value=tot_net2).number_format = "#,##0.000"
-        ws2.cell(row=row_idx2, column=14).alignment = align_right
+        ws2.cell(row=row_idx2, column=11, value=tot_net2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=11).alignment = align_right
 
-        for col in range(1, 16):
+        for col in range(1, 13):
             cell = ws2.cell(row=row_idx2, column=col)
             cell.font = font_total
             cell.border = border_total_row
@@ -413,7 +660,7 @@ class ProductLabelReportWizard(models.TransientModel):
         output.seek(0)
 
         self.file_data = base64.b64encode(output.read())
-        self.file_name = "Product_Label_Report.xlsx"
+        self.file_name = "label_closing_stock_report.xlsx"
         output.close()
 
         return {

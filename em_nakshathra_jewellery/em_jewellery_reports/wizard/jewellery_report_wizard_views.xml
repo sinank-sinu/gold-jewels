@@ -32,23 +32,6 @@
         <field name="target">new</field>
     </record>
 
-    <!-- Menu Structure - Jewellery App -->
-    <menuitem
-        id="menu_jewellery_reports_root"
-        name="Reports"
-        parent="em_jewellery_management.menu_jewellery_root"
-        sequence="80"
-        groups="em_jewellery_management.group_jewellery_manager"
-    />
-
-    <menuitem
-        id="menu_jewellery_reports_wizard"
-        name="Jewellery Reports"
-        parent="menu_jewellery_reports_root"
-        action="action_jewellery_report_wizard"
-        sequence="10"
-    />
-
     <!-- Menu Structure - Inventory App (Reporting submenu) -->
     <menuitem
         id="menu_stock_item_details_wizard"

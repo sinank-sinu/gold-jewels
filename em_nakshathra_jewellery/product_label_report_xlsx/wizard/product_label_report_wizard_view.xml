@@ -4,7 +4,7 @@
         <field name="name">product.label.report.wizard.form</field>
         <field name="model">product.label.report.wizard</field>
         <field name="arch" type="xml">
-            <form string="Product Label Report">
+            <form string="Label Closing Stock Report">
                 <group>
                     <group>
                         <field name="start_datetime"/>
@@ -22,7 +22,7 @@
     </record>
 
     <record id="action_product_label_report_wizard" model="ir.actions.act_window">
-        <field name="name">Product Label Report</field>
+        <field name="name">Label Closing Stock Report</field>
         <field name="res_model">product.label.report.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>

@@ -213,7 +213,7 @@
                                     
                                     <tr>
                                         <td class="text-left">
-                                            <span t-field="line.product_id.name"/>
+                                            <span t-esc="line.product_id.name.split('(')[0].strip() if line.product_id and line.product_id.name else ''"/>
                                         </td>
                                         <td>
                                             <t t-if="sale_line and sale_line.purity_id">

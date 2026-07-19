@@ -65,8 +65,9 @@ class PurchaseFineRateXlsx(models.AbstractModel):
         sheet.set_column('A:A', 20)
         sheet.set_column('B:B', 30)
         sheet.set_column('C:C', 35)
-        sheet.set_column('D:D', 12)
-        sheet.set_column('E:G', 18)
+        sheet.set_column('D:D', 15)
+        sheet.set_column('E:E', 12)
+        sheet.set_column('F:H', 18)
 
         row = 0
 
@@ -75,7 +76,7 @@ class PurchaseFineRateXlsx(models.AbstractModel):
         # =====================================================
 
         sheet.merge_range(
-            row, 0, row, 6,
+            row, 0, row, 7,
             'Purchase Fine Rate Variance Report',
             title_format
         )
@@ -103,10 +104,11 @@ class PurchaseFineRateXlsx(models.AbstractModel):
         sheet.write(row, 0, 'Purchase Ref', header_format)
         sheet.write(row, 1, 'Vendor', header_format)
         sheet.write(row, 2, 'Product', header_format)
-        sheet.write(row, 3, 'Qty', header_format)
-        sheet.write(row, 4, 'PO Fine Rate', header_format)
-        sheet.write(row, 5, 'Current Fine Rate', header_format)
-        sheet.write(row, 6, 'Difference', header_format)
+        sheet.write(row, 3, 'Purity', header_format)
+        sheet.write(row, 4, 'Qty', header_format)
+        sheet.write(row, 5, 'PO Fine Rate', header_format)
+        sheet.write(row, 6, 'Current Fine Rate', header_format)
+        sheet.write(row, 7, 'Difference', header_format)
 
         row += 1
 
@@ -155,14 +157,18 @@ class PurchaseFineRateXlsx(models.AbstractModel):
                             text_format)
 
                 sheet.write(row, 3,
+                            line.purity_id.name if line.purity_id else '',
+                            text_format)
+
+                sheet.write(row, 4,
                             line.product_qty,
                             number_format)
 
-                sheet.write(row, 4, po_rate, number_format)
+                sheet.write(row, 5, po_rate, number_format)
 
-                sheet.write(row, 5, latest_fine_rate, number_format)
+                sheet.write(row, 6, latest_fine_rate, number_format)
 
-                sheet.write(row, 6,
+                sheet.write(row, 7,
                             difference,
                             diff_format)
 
@@ -179,9 +185,9 @@ class PurchaseFineRateXlsx(models.AbstractModel):
         )
 
         sheet.merge_range(
-            row, 0, row, 5,
+            row, 0, row, 6,
             'Total Difference',
             total_header_format
         )
 
-        sheet.write(row, 6, total_difference, total_format)
+        sheet.write(row, 7, total_difference, total_format)
