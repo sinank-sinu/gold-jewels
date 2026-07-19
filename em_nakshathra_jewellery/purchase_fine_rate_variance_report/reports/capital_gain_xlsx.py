@@ -55,12 +55,13 @@ class PurchaseCapitalGainXlsx(models.AbstractModel):
         sheet.set_column('A:A', 20)  # Purchase Ref
         sheet.set_column('B:B', 25)  # Vendor
         sheet.set_column('C:C', 35)  # Product
-        sheet.set_column('D:D', 12)  # Qty
-        sheet.set_column('E:I', 18)  # Remaining financial columns
+        sheet.set_column('D:D', 15)  # Purity
+        sheet.set_column('E:E', 12)  # Qty
+        sheet.set_column('F:J', 18)  # Remaining financial columns
 
         row = 0
 
-        sheet.merge_range(row, 0, row, 8, 'Capital Gain Report', title_format)
+        sheet.merge_range(row, 0, row, 9, 'Capital Gain Report', title_format)
 
         row += 2
 
@@ -79,7 +80,7 @@ class PurchaseCapitalGainXlsx(models.AbstractModel):
         # =====================================================
 
         headers = [
-            'Purchase Ref', 'Vendor', 'Product', 'Qty', 
+            'Purchase Ref', 'Vendor', 'Product', 'Purity', 'Qty', 
             'PO Fine Rate', 'Purchase Value', 'Paid day Fine rate', 
             'Value', 'Gain / Loss'
         ]
@@ -137,12 +138,13 @@ class PurchaseCapitalGainXlsx(models.AbstractModel):
                 sheet.write(row, 0, po.name or '', text_format)
                 sheet.write(row, 1, po.partner_id.name or '', text_format)
                 sheet.write(row, 2, line.product_id.display_name or '', text_format)
-                sheet.write(row, 3, qty, number_format)
-                sheet.write(row, 4, po_rate, number_format)
-                sheet.write(row, 5, purchase_value, number_format)
-                sheet.write(row, 6, paid_day_fine_rate, number_format)
-                sheet.write(row, 7, calculated_value, number_format)
-                sheet.write(row, 8, gain_loss, gain_loss_style)
+                sheet.write(row, 3, line.purity_id.name if line.purity_id else '', text_format)
+                sheet.write(row, 4, qty, number_format)
+                sheet.write(row, 5, po_rate, number_format)
+                sheet.write(row, 6, purchase_value, number_format)
+                sheet.write(row, 7, paid_day_fine_rate, number_format)
+                sheet.write(row, 8, calculated_value, number_format)
+                sheet.write(row, 9, gain_loss, gain_loss_style)
 
                 row += 1
 
