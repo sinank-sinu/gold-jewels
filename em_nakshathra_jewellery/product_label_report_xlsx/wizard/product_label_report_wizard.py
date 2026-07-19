@@ -212,98 +212,6 @@ class ProductLabelReportWizard(models.TransientModel):
                 self.other = other
                 self.net = net
 
-        # Query all vault labels (active or inactive) created before or at start_datetime
-        vault_labels_domain = [
-            ('create_date', '<=', self.start_datetime),
-            ('product_tmpl_id.is_vault_item', '=', True),
-            '|',
-            ('active', '=', True),
-            ('active', '=', False)
-        ]
-        vault_candidates = self.env['product.label'].sudo().with_context(active_test=False).search(vault_labels_domain)
-
-        # Get all stock moves for these vault candidate labels
-        vault_label_moves = self.env['stock.move'].sudo().search([
-            ('label_id', 'in', vault_candidates.ids),
-            ('state', '=', 'done')
-        ], order='date asc')
-
-        # Pre-process vault label moves in a single pass to avoid nested looping and list comprehensions
-        first_vault_move_by_label = {}
-        last_vault_move_before_by_label = {}
-        internal_dest_vault_moves_before_by_label = {}
-        internal_src_vault_moves_overall_by_label = {}
-
-        for m in vault_label_moves:
-            label_id = m.label_id.id
-            if label_id not in first_vault_move_by_label:
-                first_vault_move_by_label[label_id] = m
-            if m.location_id.usage == 'internal':
-                internal_src_vault_moves_overall_by_label.setdefault(label_id, []).append(m)
-
-            if m.date <= self.start_datetime:
-                last_vault_move_before_by_label[label_id] = m
-                if m.location_dest_id.usage == 'internal':
-                    internal_dest_vault_moves_before_by_label.setdefault(label_id, []).append(m)
-
-        vault_labels_by_prod_loc = {}
-        for label in vault_candidates:
-            # Find the last move of this label done before or at start_datetime
-            last_move = last_vault_move_before_by_label.get(label.id)
-            if last_move:
-                historical_loc = last_move.location_dest_id
-                historical_branch = last_move.branch_id or historical_loc.branch_id
-                
-                # If the last location before/at start_datetime is not internal (e.g. Customers, Inventory Loss),
-                # trace its last internal location before that!
-                if historical_loc.usage != 'internal':
-                    internal_moves = internal_dest_vault_moves_before_by_label.get(label.id, [])
-                    if internal_moves:
-                        historical_loc = internal_moves[-1].location_dest_id
-                        historical_branch = internal_moves[-1].branch_id or historical_loc.branch_id
-                    else:
-                        # Fallback to source of last move if it was internal
-                        if last_move.location_id.usage == 'internal':
-                            historical_loc = last_move.location_id
-                            historical_branch = last_move.branch_id or historical_loc.branch_id
-                        else:
-                            historical_loc = label.branch_location_id
-                            historical_branch = label.branch_id
-            else:
-                first_move = first_vault_move_by_label.get(label.id)
-                if first_move:
-                    internal_moves = internal_src_vault_moves_overall_by_label.get(label.id, [])
-                    if internal_moves:
-                        historical_loc = internal_moves[0].location_id
-                        historical_branch = internal_moves[0].branch_id or historical_loc.branch_id
-                    else:
-                        historical_loc = first_move.location_id
-                        historical_branch = first_move.branch_id or historical_loc.branch_id
-                else:
-                    historical_loc = label.branch_location_id
-                    historical_branch = label.branch_id
-
-            # Filter by branch / location
-            if historical_loc.id not in loc_ids:
-                continue
-            if self.branch_ids and (not historical_branch or historical_branch.id not in self.branch_ids.ids):
-                continue
-
-            # Check if this label was physically in-stock (internal location) at start_datetime
-            is_in_stock = False
-            if last_move:
-                is_in_stock = (last_move.location_dest_id.usage == 'internal')
-            else:
-                is_in_stock = label.active
-
-            key = (label.product_id.id, historical_loc.id)
-            vault_labels_by_prod_loc.setdefault(key, []).append((label, historical_loc, historical_branch, is_in_stock))
-
-        # Ensure prod_loc_pairs includes any product/location combination that has vault labels
-        for (prod_id, loc_id), items in vault_labels_by_prod_loc.items():
-            if items:
-                prod_loc_pairs.add((items[0][0].product_id, items[0][1]))
-
         # Collect vault items
         unlabeled_quants = []
         for product, location in prod_loc_pairs:
@@ -323,37 +231,8 @@ class ProductLabelReportWizard(models.TransientModel):
                 current_qty = current_quant_qty.get(key, 0.0)
                 historical_qty = current_qty - incoming_after.get(key, 0.0) + outgoing_after.get(key, 0.0)
 
-            # Get matching labels for this product and location
-            matching = vault_labels_by_prod_loc.get(key, [])
-            
-            # Count only labels that were physically in-stock at start_datetime
-            in_stock_labeled_qty = sum(1 for m in matching if m[3])
-
-            # Calculate remaining unlabeled qty
-            unlabeled_qty = historical_qty - in_stock_labeled_qty
-
-            # Add all matching labels (active or inactive)
-            for label, loc, branch, is_in_stock in matching:
-                in_date = label.create_date
-                unlabeled_quants.append(HistoricalQuantMock(
-                    product=product,
-                    location=location,
-                    qty=1.0,
-                    in_date=in_date,
-                    branch=branch,
-                    label_no=label.name,
-                    is_labeled=True,
-                    pcs=1,
-                    gross=label.purchase_gross_weight or 0.0,
-                    diamond_g=label.purchase_diamond_weight_gm or 0.0,
-                    diamond_ct=label.purchase_diamond_weight_ct or 0.0,
-                    stone=label.purchase_stone_weight or 0.0,
-                    other=label.other_weight_g or 0.0,
-                    net=label.purchase_net_weight or 0.0
-                ))
-
-            # If there is remaining unlabeled stock
-            if unlabeled_qty > 0.0001:
+            # If there is remaining stock
+            if historical_qty > 0.0001:
                 in_date = None
                 if product.detailed_type == 'consu' or product.type == 'consu':
                     moves_before_dest = vault_moves_dest_before_by_product_loc.get(key, [])
@@ -370,12 +249,54 @@ class ProductLabelReportWizard(models.TransientModel):
                     ], order='date asc', limit=1)
                     in_date = earliest_move.date if earliest_move else self.start_datetime
 
+                # Since it is a vault item, retrieve its purchase details
+                po_line = self.env['purchase.order.line'].sudo().search([
+                    ('product_id', '=', product.id),
+                    ('state', 'in', ('purchase', 'done'))
+                ], order='id desc', limit=1)
+
+                if po_line:
+                    scale_factor = historical_qty / po_line.product_qty if po_line.product_qty else 1.0
+                    pcs = int(historical_qty)
+                    gross = (po_line.gross_weight or po_line.product_qty or 0.0) * scale_factor
+                    diamond_g = (po_line.diamond_weight_gm or 0.0) * scale_factor
+                    diamond_ct = ((po_line.diamond_weight_gm or 0.0) / 0.2) * scale_factor
+                    stone = (po_line.stone_weight or 0.0) * scale_factor
+                    other = 0.0
+                    net = (po_line.net_weight or 0.0) * scale_factor
+                    
+                    po_date = po_line.order_id.date_approve or po_line.order_id.date_order
+                    if po_date:
+                        in_date = po_date
+                else:
+                    # Fallback to standard product defaults if no PO line is found
+                    uom_id = product.uom_id
+                    uom_cat = uom_id.category_id.name if uom_id and uom_id.category_id else ""
+                    if uom_cat in ('Unit', 'Working Time'):
+                        pcs = int(historical_qty)
+                        gross = historical_qty * (product.weight or 0.0)
+                    else:
+                        pcs = 0
+                        gross = historical_qty
+                    diamond_g = 0.0
+                    diamond_ct = 0.0
+                    stone = 0.0
+                    other = 0.0
+                    net = gross
+
                 unlabeled_quants.append(HistoricalQuantMock(
                     product=product,
                     location=location,
-                    qty=unlabeled_qty,
+                    qty=historical_qty,
                     in_date=in_date,
-                    is_labeled=False
+                    is_labeled=False,
+                    pcs=pcs,
+                    gross=gross,
+                    diamond_g=diamond_g,
+                    diamond_ct=diamond_ct,
+                    stone=stone,
+                    other=other,
+                    net=net
                 ))
         wb = Workbook()
 
@@ -426,12 +347,10 @@ class ProductLabelReportWizard(models.TransientModel):
             "Carat",
             "Branch",
             "Location",
-            "Pcs",
             "Gross Wt.",
             "Diamond Wt",
             "Diamond Wt ( Caret )",
             "Stone Weight",
-            "Other Weight",
             "Net Wt.",
             "Aging Days"
         ]
@@ -523,7 +442,7 @@ class ProductLabelReportWizard(models.TransientModel):
             ws1.cell(row=row_idx, column=4, value=variety_name or "").alignment = align_left
             ws1.cell(row=row_idx, column=5, value=label.purity_id.name or "").alignment = align_center
             ws1.cell(row=row_idx, column=6, value=label_branches[label.id].name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=7, value=label_locations[label.id].name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=7, value=label_locations[label.id].complete_name or "").alignment = align_center
 
             c_pcs = ws1.cell(row=row_idx, column=8, value=pcs)
             c_pcs.alignment = align_right
@@ -624,7 +543,7 @@ class ProductLabelReportWizard(models.TransientModel):
             branch_name = quant.branch_id.name or quant.location_id.branch_id.name or quant.location_id.warehouse_id.name or ""
 
             # Check if labeled or not
-            if quant.is_labeled:
+            if quant.is_labeled or quant.product_id.is_vault_item:
                 pcs = quant.pcs
                 gross = quant.gross
                 diamond_g = quant.diamond_g
@@ -634,7 +553,8 @@ class ProductLabelReportWizard(models.TransientModel):
                 net = quant.net
             else:
                 # Check UOM Category
-                uom_cat = quant.product_id.uom_id.category_id.name
+                uom_id = quant.product_id.uom_id
+                uom_cat = uom_id.category_id.name if uom_id and uom_id.category_id else ""
                 if uom_cat in ('Unit', 'Working Time'):
                     pcs = int(quant.quantity)
                     gross = quant.quantity * (quant.product_id.weight or 0.0)
@@ -664,41 +584,33 @@ class ProductLabelReportWizard(models.TransientModel):
             
             ws2.cell(row=row_idx2, column=4, value=quant.product_id.purity_id.name or "").alignment = align_center
             ws2.cell(row=row_idx2, column=5, value=branch_name).alignment = align_center
-            ws2.cell(row=row_idx2, column=6, value=quant.location_id.name or "").alignment = align_center
+            ws2.cell(row=row_idx2, column=6, value=quant.location_id.complete_name or "").alignment = align_center
 
-            c_pcs = ws2.cell(row=row_idx2, column=7, value=pcs)
-            c_pcs.alignment = align_right
-            c_pcs.number_format = "#,##0"
-
-            c_gross = ws2.cell(row=row_idx2, column=8, value=gross)
+            c_gross = ws2.cell(row=row_idx2, column=7, value=gross)
             c_gross.alignment = align_right
             c_gross.number_format = "#,##0.000"
 
-            c_di_g = ws2.cell(row=row_idx2, column=9, value=diamond_g)
+            c_di_g = ws2.cell(row=row_idx2, column=8, value=diamond_g)
             c_di_g.alignment = align_right
             c_di_g.number_format = "#,##0.000"
 
-            c_di_ct = ws2.cell(row=row_idx2, column=10, value=diamond_ct)
+            c_di_ct = ws2.cell(row=row_idx2, column=9, value=diamond_ct)
             c_di_ct.alignment = align_right
             c_di_ct.number_format = "#,##0.00"
 
-            c_stone = ws2.cell(row=row_idx2, column=11, value=stone)
+            c_stone = ws2.cell(row=row_idx2, column=10, value=stone)
             c_stone.alignment = align_right
             c_stone.number_format = "#,##0.000"
 
-            c_other = ws2.cell(row=row_idx2, column=12, value=other)
-            c_other.alignment = align_right
-            c_other.number_format = "#,##0.000"
-
-            c_net = ws2.cell(row=row_idx2, column=13, value=net)
+            c_net = ws2.cell(row=row_idx2, column=11, value=net)
             c_net.alignment = align_right
             c_net.number_format = "#,##0.000"
 
-            c_days = ws2.cell(row=row_idx2, column=14, value=days)
+            c_days = ws2.cell(row=row_idx2, column=12, value=days)
             c_days.alignment = align_right
             c_days.number_format = "#,##0"
 
-            for col in range(1, 15):
+            for col in range(1, 13):
                 cell = ws2.cell(row=row_idx2, column=col)
                 cell.font = font_data
                 cell.border = border_all_cells
@@ -708,28 +620,23 @@ class ProductLabelReportWizard(models.TransientModel):
         # Sheet 2 Totals
         ws2.row_dimensions[row_idx2].height = 22
         ws2.cell(row=row_idx2, column=3, value="Total").alignment = align_left
-        ws2.cell(row=row_idx2, column=7, value=tot_pcs2).number_format = "#,##0"
+
+        ws2.cell(row=row_idx2, column=7, value=tot_gross2).number_format = "#,##0.000"
         ws2.cell(row=row_idx2, column=7).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=8, value=tot_gross2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=8, value=tot_diamond_g2).number_format = "#,##0.000"
         ws2.cell(row=row_idx2, column=8).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=9, value=tot_diamond_g2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=9, value=tot_diamond_ct2).number_format = "#,##0.00"
         ws2.cell(row=row_idx2, column=9).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=10, value=tot_diamond_ct2).number_format = "#,##0.00"
+        ws2.cell(row=row_idx2, column=10, value=tot_stone2).number_format = "#,##0.000"
         ws2.cell(row=row_idx2, column=10).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=11, value=tot_stone2).number_format = "#,##0.000"
+        ws2.cell(row=row_idx2, column=11, value=tot_net2).number_format = "#,##0.000"
         ws2.cell(row=row_idx2, column=11).alignment = align_right
 
-        ws2.cell(row=row_idx2, column=12, value=tot_other2).number_format = "#,##0.000"
-        ws2.cell(row=row_idx2, column=12).alignment = align_right
-
-        ws2.cell(row=row_idx2, column=13, value=tot_net2).number_format = "#,##0.000"
-        ws2.cell(row=row_idx2, column=13).alignment = align_right
-
-        for col in range(1, 15):
+        for col in range(1, 13):
             cell = ws2.cell(row=row_idx2, column=col)
             cell.font = font_total
             cell.border = border_total_row
@@ -753,7 +660,7 @@ class ProductLabelReportWizard(models.TransientModel):
         output.seek(0)
 
         self.file_data = base64.b64encode(output.read())
-        self.file_name = "Product_Label_Report.xlsx"
+        self.file_name = "label_closing_stock_report.xlsx"
         output.close()
 
         return {

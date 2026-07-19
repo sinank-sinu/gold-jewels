@@ -4,7 +4,7 @@
     'depends': [ "base",
         "stock",
         "product",
-                 "purchase",
+         "purchase",
         "uom",
         "em_jewellery_management",],
     'data': [
