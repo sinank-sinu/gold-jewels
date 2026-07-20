@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<odoo>
+
+    <record id="view_label_summary_wizard" model="ir.ui.view">
+        <field name="name">label.summary.wizard.form</field>
+        <field name="model">label.summary.wizard</field>
+
+        <field name="arch" type="xml">
+
+            <form string="Purchase / Job Work Label Summary">
+
+                <group>
+
+                    <field name="date_from"/>
+
+                    <field name="date_to"/>
+
+                    <field
+                            name="branch_ids"
+                            widget="many2many_tags"/>
+
+                    <field name="source"/>
+
+                </group>
+
+                <footer>
+
+                    <button
+                            string="Generate Excel"
+                            type="object"
+                            name="action_print_excel"
+                            class="btn-primary"/>
+
+                    <button
+                            string="Cancel"
+                            special="cancel"/>
+
+                </footer>
+
+            </form>
+
+        </field>
+
+    </record>
+
+    <record id="action_label_summary_wizard" model="ir.actions.act_window">
+    <field name="name">Purchase / Job Work Label Summary</field>
+    <field name="res_model">label.summary.wizard</field>
+    <field name="view_mode">form</field>
+    <field name="view_id" ref="view_label_summary_wizard"/>
+    <field name="target">new</field>
+</record>
+</odoo>

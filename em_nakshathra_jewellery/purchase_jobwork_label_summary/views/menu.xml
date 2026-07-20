@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<odoo>
+
+    <menuitem
+        id="menu_purchase_jobwork_label_summary"
+        name="Purchase / Job Work Label Summary"
+        parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
+        action="action_label_summary_wizard"
+        sequence="50"/>
+
+</odoo>
