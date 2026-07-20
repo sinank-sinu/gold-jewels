@@ -219,7 +219,7 @@
                                 <!-- Table Body -->
                                 <tbody t-ref="tbody">
                                     <!-- Iterate over partners -->
-                                    <t t-if="state.visible_partners">
+                                    <t t-if="state.visible_partners and state.total">
                                         <t t-set="i" t-value="0"/>
                                         <t t-foreach="state.visible_partners"
                                            t-as="partner"

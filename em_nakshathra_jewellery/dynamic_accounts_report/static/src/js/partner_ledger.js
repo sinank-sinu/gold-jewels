@@ -268,6 +268,7 @@ class PartnerLedger extends owl.Component {
         let partner_totals = ''
         let month = null
         this.state.partners = null
+        this.state.visible_partners = null
         this.state.data = null
         this.state.total = null
         this.state.filter_applied = true;
