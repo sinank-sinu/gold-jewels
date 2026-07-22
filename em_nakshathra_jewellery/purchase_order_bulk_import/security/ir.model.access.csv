@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_po_import_job_manager,po.import.job manager,model_po_import_job,group_po_bulk_import_manager,1,1,1,1
-access_po_import_job_purchase_manager,po.import.job purchase manager,model_po_import_job,purchase.group_purchase_manager,1,1,1,1
-access_po_import_batch_manager,po.import.batch manager,model_po_import_batch,group_po_bulk_import_manager,1,1,1,1
-access_po_import_batch_purchase_manager,po.import.batch purchase manager,model_po_import_batch,purchase.group_purchase_manager,1,1,1,1
