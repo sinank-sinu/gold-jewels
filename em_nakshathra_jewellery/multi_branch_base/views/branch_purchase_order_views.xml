@@ -43,6 +43,9 @@
                 <field name="company_id" position="after">
                     <field name="branch_id" optional="show"/>
                 </field>
+                <xpath expr="//field[@name='amount_total']" position="replace">
+                    <field name="amount_total" sum="Total" widget="monetary" decoration-bf="1" optional="show"/>
+                </xpath>
             </field>
         </record>
 
