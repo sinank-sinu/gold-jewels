@@ -104,11 +104,25 @@ class ImportLabelService:
             'partner_ref': vendor_ref,
             'company_id': current_company.id,
         }
-        branch_name = lines[0].get('Branch') if lines else None
-        if branch_name:
-            branch = self.env['res.branch'].search([('name', '=', str(branch_name).strip())], limit=1)
-            if branch:
-                po_vals['branch_id'] = branch.id
+        
+        excel_branch = lines[0].get('Branch') if lines else None
+        if excel_branch:
+            _logger.info(f"Excel branch value ignored: '{excel_branch}'")
+            
+        fixed_branch_name = 'HEAD OFFICE'
+        _logger.info(f"Using fixed Purchase Order branch: '{fixed_branch_name}'")
+        _logger.info(f"Company: '{current_company.name}'")
+        
+        branch = self.env['res.branch'].search([
+            ('name', '=', fixed_branch_name),
+            ('company_id', '=', current_company.id)
+        ], limit=1)
+        
+        if not branch:
+            raise UserError(f"Branch '{fixed_branch_name}' not found for company '{current_company.name}'.")
+            
+        po_vals['branch_id'] = branch.id
+        _logger.info(f"Purchase Order branch: '{fixed_branch_name}'")
                 
         po = self.env['purchase.order'].create(po_vals)
         
@@ -159,6 +173,7 @@ class ImportLabelService:
                 'gross_weight': weight,
                 'product_uom': product.uom_id.id,
                 'date_planned': date_str,
+                'taxes_id': [(5, 0, 0)],
             }
             if purity_id:
                 po_line_vals['purity_id'] = purity_id
@@ -168,6 +183,11 @@ class ImportLabelService:
         if not po.order_line:
             po.unlink()
             return
+            
+        _logger.info("GST disabled for imported Purchase Order")
+        for line in po.order_line:
+            line.taxes_id = [(5, 0, 0)]
+            _logger.info(f"Taxes cleared from Purchase Order Line: {line.product_id.name}")
             
         # 4. Confirm PO
         po.button_confirm()
@@ -277,6 +297,7 @@ class ImportLabelService:
                 # INTERCEPT DEBIT ACCOUNT: Use Stock Input (100306)
                 if not line.display_type:
                     line_vals['account_id'] = stock_input_account.id
+                    line_vals['tax_ids'] = [(5, 0, 0)]
                     
                 invoice_vals['invoice_line_ids'].append((0, 0, line_vals))
                 sequence += 1
@@ -291,6 +312,15 @@ class ImportLabelService:
         try:
             # Create and Post the Vendor Bill
             bill = self.env['account.move'].with_company(po.company_id).create([invoice_vals])[0]
+            
+            # Ensure no taxes exist on the vendor bill before posting
+            tax_lines = bill.line_ids.filtered(lambda l: l.tax_line_id or l.tax_repartition_line_id)
+            if tax_lines:
+                tax_lines.with_context(check_move_validity=False).unlink()
+                
+            _logger.info("Taxes cleared from Vendor Bill")
+            _logger.info("No GST taxes applied during migration")
+            
             bill.action_post()
         finally:
             # Restore the vendor's original payable account configuration

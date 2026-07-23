@@ -9,7 +9,7 @@ _logger = logging.getLogger(__name__)
 
 class ProductLabelImportService:
     def __init__(self, env):
-        self.env = env.sudo()
+        self.env = env(su=True)
 
     def process_import(self, file_base64):
         _logger.info("Starting Product Label Bulk Import via Python Script...")
@@ -51,16 +51,24 @@ class ProductLabelImportService:
         self.env.cr.commit()
         
         # Run Transfers (auto-stock in)
-        labels = self.env['product.label'].search([('is_stocked_in', '=', False), ('picking_id', '=', False)])
-        for label in labels:
+        import odoo
+        label_ids = self.env['product.label'].search([('is_stocked_in', '=', False), ('picking_id', '=', False)]).ids
+        for label_id in label_ids:
             try:
-                with self.env.cr.savepoint():
-                    label.sudo().action_stock_in()
+                with self.env.registry.cursor() as new_cr:
+                    new_env = odoo.api.Environment(new_cr, self.env.uid, self.env.context)(su=True)
+                    label = new_env['product.label'].browse(label_id)
+                    # Force company context to prevent 'Incompatible companies on records' error during stock moves
+                    company = label.branch_id.company_id or label.product_id.company_id
+                    if company:
+                        label = label.with_company(company)
+                    label.action_stock_in()
                     transferred += 1
             except Exception as e:
-                _logger.warning(f"Failed to auto-transfer label {label.name}: {e}")
-                
-        self.env.cr.commit()
+                import traceback
+                with open('/tmp/odoo_transfer_error.log', 'a') as f:
+                    f.write(f"Error on label {label_id}:\n{traceback.format_exc()}\n")
+                _logger.warning(f"Failed to auto-transfer label ID {label_id}: {e}")
                 
         return {'created': created, 'transferred': transferred}
 
@@ -191,7 +199,7 @@ class ProductLabelImportService:
         
         # Force product_tmpl_id via write to ensure it doesn't get cleared by any internal onchange
         if variant.product_tmpl_id:
-            label.write({'product_tmpl_id': variant.product_tmpl_id.id})
+            label.write({'product_tmpl_id': variant.product_tmpl_id.id, 'product_id': variant.id})
             
         return label
 
@@ -205,12 +213,53 @@ class ProductLabelImportService:
         return 'percent'
 
     def _resolve_product_variant(self, row, product_name, get_val_func):
-        _logger.info(f"Finding Product Template: {product_name}")
-        template = self.env['product.template'].search([('name', '=ilike', product_name)], limit=1)
-        if not template:
-            raise UserError(f"Product Template '{product_name}' not found. Please ensure it is created before importing.")
+        import re
+        
+        # Normalize product name
+        norm_product_name = re.sub(r'\s+', ' ', str(product_name)).strip()
+        _logger.info(f"Finding Product Template: Original '{product_name}' -> Normalized '{norm_product_name}'")
+        
+        # Resolve Company from Excel
+        excel_company_name = str(get_val_func('Company') or '').strip()
+        if not excel_company_name:
+            raise UserError(f"No Company specified in Excel for product '{norm_product_name}'.")
             
-        _logger.info(f"Found existing Product Template: {template.name}")
+        excel_company = self.env['res.company'].search([('name', '=', excel_company_name)], limit=1)
+        if not excel_company:
+            raise UserError(f"Company '{excel_company_name}' from Excel not found in Odoo.")
+            
+        _logger.info(f"Excel Company: '{excel_company.name}' (ID: {excel_company.id})")
+
+        # Search Product Template using broad search then python strict matching
+        first_word = norm_product_name.split('(')[0].strip() if '(' in norm_product_name else norm_product_name
+        domain = [
+            ('name', 'ilike', first_word),
+            ('company_id', 'in', [excel_company.id, False])
+        ]
+        
+        TemplateModel = self.env['product.template'].with_context(active_test=False).with_company(excel_company)
+        all_templates = TemplateModel.search(domain)
+        
+        matched_templates = []
+        excel_name_no_spaces = re.sub(r'\s+', '', norm_product_name).upper()
+        
+        for t in all_templates:
+            db_name_no_spaces = re.sub(r'\s+', '', str(t.name or '')).upper()
+            if db_name_no_spaces == excel_name_no_spaces:
+                matched_templates.append(t)
+                
+        if matched_templates:
+            # Prioritize company-specific templates over shared templates, then by oldest ID
+            matched_templates.sort(key=lambda t: (0 if t.company_id and t.company_id.id == excel_company.id else 1, t.id))
+            template = matched_templates[0]
+            _logger.info(f"Found existing Product Template: {template.name} (ID: {template.id}) for Company {template.company_id.name if template.company_id else 'Shared'}")
+        else:
+            _logger.error(f"Excel Product Name: '{product_name}'")
+            _logger.error(f"Normalized Name: '{norm_product_name}'")
+            _logger.error(f"Excel Company: '{excel_company.name}'")
+            _logger.error(f"Company ID: {excel_company.id}")
+            _logger.error(f"Search Domain: {domain}")
+            raise UserError(f"Product Template '{norm_product_name}' not found for company '{excel_company.name}'. Please ensure it is created before importing.")
 
         attrs = {
             'TYPE': str(get_val_func('TYPE') or '').strip().title(),
@@ -256,6 +305,11 @@ class ProductLabelImportService:
                 break
                 
         if not exact_variant:
+            _logger.error(f"Excel Product Name: '{product_name}'")
+            _logger.error(f"Excel Company: '{excel_company.name}' (ID: {excel_company.id})")
+            _logger.error(f"Attribute Values: {attrs}")
+            _logger.error(f"Template ID: {template.id} (Company: {template.company_id.name if template.company_id else 'Shared'})")
+            _logger.error(f"Variant Search Domain Target PTAVs: {target_ptav_set}")
             raise UserError(f"Exact Product Variant for '{template.name}' with attributes {attrs} not found.")
             
         _logger.info(f"Found exact variant {exact_variant.id} for {template.name}")
