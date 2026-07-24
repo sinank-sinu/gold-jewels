@@ -32,11 +32,13 @@ class SaleOrder(models.Model):
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
+        redemption_scheme_ids = self.env['scheme.redemption'].search([]).mapped('scheme_id.id')
         return self.env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', self.partner_id.id),
                 ('active', '=', True),
                 # ('state', '=', 'running'),
-                ('balance_amount', '=', 0)
+                ('balance_amount', '=', 0),
+                ('id', 'not in', redemption_scheme_ids)
             ])
 
     def action_apply_scheme(self):
@@ -106,10 +108,6 @@ class SaleOrder(models.Model):
                     'price_subtotal': -redeem_amount,
                 })
                 order.scheme_line_id = line
-                scheme.write({
-                    'state': 'redeemed',
-                    'is_redeemed': True, 
-                })
                 self.env['scheme.redemption'].create({
                     'scheme_id': scheme.id,
                     'sale_order_id': order.id,
@@ -293,3 +291,42 @@ class SaleOrder(models.Model):
     #         adjusted_total = original_total + order.amount_rounding
     #         rounded_total = ceil(adjusted_total / 100.0) * 100
     #         order.amount_total = rounded_total
+
+    def action_confirm(self):
+        res = super().action_confirm()
+        for order in self:
+            redemptions = self.env['scheme.redemption'].search([
+                ('sale_order_id', '=', order.id)
+            ])
+            for redemption in redemptions:
+                redemption.scheme_id.write({
+                    'state': 'redeemed',
+                    'is_redeemed': True,
+                })
+        return res
+
+    def action_cancel(self):
+        for order in self:
+            redemptions = self.env['scheme.redemption'].search([
+                ('sale_order_id', '=', order.id)
+            ])
+            for redemption in redemptions:
+                redemption.scheme_id.write({
+                    'state': 'completed',
+                    'is_redeemed': False,
+                })
+                redemption.unlink()
+        return super().action_cancel()
+
+    def unlink(self):
+        for order in self:
+            redemptions = self.env['scheme.redemption'].search([
+                ('sale_order_id', '=', order.id)
+            ])
+            for redemption in redemptions:
+                redemption.scheme_id.write({
+                    'state': 'completed',
+                    'is_redeemed': False,
+                })
+                redemption.unlink()
+        return super().unlink()
