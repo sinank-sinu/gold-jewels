@@ -9,6 +9,8 @@ from odoo.tests.common import Form
 
 from odoo import _, fields, models
 from odoo.exceptions import ValidationError
+import re
+
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -37,6 +39,13 @@ class PurchaseOrderImportWizard(models.TransientModel):
     def _float(self, value):
         if value in (None, "", False):
             return 0.0
+
+        if isinstance(value, str):
+            value = value.strip().replace(",", "")
+
+            # Remove trailing %
+            if value.endswith("%"):
+                value = value[:-1].strip()
 
         try:
             return float(value)
@@ -155,7 +164,7 @@ class PurchaseOrderImportWizard(models.TransientModel):
 
         return purity
 
-    def _find_product(self, product_template_name, row_no):
+    def _find_product(self, product_name, product_template_name, row_no):
 
         if not product_template_name:
             raise ValidationError(
@@ -176,15 +185,24 @@ class PurchaseOrderImportWizard(models.TransientModel):
                 "detailed_type": "product",
             })
 
-        product = template.product_variant_id
+        # If Product column is empty, use/create the default variant
+        if not product_name:
+            return template.product_variant_id
+
+        Product = self.env["product.product"]
+
+        product = Product.search([
+            ("product_tmpl_id", "=", template.id),
+            ("default_code", "=", product_name),
+        ], limit=1)
 
         if not product:
-            product = self.env["product.product"].create({
+            product = Product.create({
                 "product_tmpl_id": template.id,
+                "default_code": product_name,
             })
 
         return product
-
     def _find_product_template(self, template_name):
 
         if not template_name:
@@ -222,18 +240,40 @@ class PurchaseOrderImportWizard(models.TransientModel):
 
         return uom
 
-    def _find_tax(self, tax_name):
+    import re
 
+    def _find_tax(self, tax_name):
         if not tax_name:
             return [(5, 0, 0)]
 
-        tax = self.env["account.tax"].search([
+        tax_name = str(tax_name).strip()
+
+        Tax = self.env["account.tax"]
+
+        # Search existing purchase tax
+        tax = Tax.search([
             ("name", "=", tax_name),
-            ("type_tax_use", "in", ["purchase", "none"])
+            ("type_tax_use", "=", "purchase"),
         ], limit=1)
 
-        if not tax:
-            return [(5, 0, 0)]
+        if tax:
+            return [(6, 0, tax.ids)]
+
+        # Extract percentage from names like:
+        # 3% GST
+        # GST 3%
+        # 1.5% IGST
+        match = re.search(r'(\d+(\.\d+)?)', tax_name)
+        amount = float(match.group(1)) if match else 0.0
+
+        # Create purchase tax
+        tax = Tax.create({
+            "name": tax_name,
+            "amount_type": "percent",
+            "amount": amount,
+            "type_tax_use": "purchase",
+            "active": True,
+        })
 
         return [(6, 0, tax.ids)]
 
@@ -315,38 +355,18 @@ class PurchaseOrderImportWizard(models.TransientModel):
         if purity:
             vals["purity_id"] = purity.id
 
-
-
         vals.update({
-            "gross_weight":
-                self._float(
-                    row["Order Lines/Gross Weight (g)"]
-                ),
+            "gross_weight": self._float(row["Order Lines/Gross Weight (g)"]),
 
-            "net_weight":
-                self._float(
-                    row["Order Lines/Net Weight (g)"]
-                ),
+            "net_weight": self._float(row["Order Lines/Net Weight (g)"]),
 
-            "stone_weight":
-                self._float(
-                    row["Order Lines/Stone Weight (g)"]
-                ),
+            "stone_weight": self._float(row["Order Lines/Stone Weight (g)"]),
 
-            "diamond_weight_gm":
-                self._float(
-                    row["Order Lines/Diamond Weight (g)"]
-                ),
+            "diamond_weight_gm": self._float(row["Order Lines/Diamond Weight (g)"]),
 
-            "gold_rate":
-                self._float(
-                    row["Order Lines/Rate(g)"]
-                ),
+            "gold_rate": self._float(row["Order Lines/Rate(g)"]),
 
-            "purchase_price_per_gram":
-                self._float(
-                    row["Order Lines/Rate(g)"]
-                ),
+            "purchase_price_per_gram": self._float(row["Order Lines/Rate(g)"]),
 
             "purchase_making_charge_type": (
                 "percent"
@@ -354,36 +374,25 @@ class PurchaseOrderImportWizard(models.TransientModel):
                 else "amount"
                 if row["Purchase Making Charge Type"] == "Amount"
                 else "rate_per_gram"
-                if row["Purchase Making Charge Type"] == "Rate Per Gram"
-                else "percent"
             ),
 
-            "purchase_making_charge_value":
-                self._float(
-                    row["Purchase Making Charge"]
-                ),
+            "stone_rate": self._float(row["Stone Amount"]),
 
-            "purchase_making_charge_amount":
-                self._float(
-                    row["Purchase Making Charge Amount"]
-                ),
+            "diamond_rate": self._float(row["Diamond Amount"]),
 
-            "stone_rate":
-                self._float(
-                    row["Stone Amount"]
-                ),
+            "rate_value": self._float(row["Order Lines/Rate(g)"]),
 
-            "diamond_rate":
-                self._float(
-                    row["Diamond Amount"]
-                ),
-
-            "rate_value":
-                self._float(
-                    row["Order Lines/Rate(g)"]
-                ),
         })
+        _logger.info(
+            "Purchase Making Charge: %s (%s)",
+            row["Purchase Making Charge"],
+            type(row["Purchase Making Charge"])
+        )
+        mc_value = self._float(row["Purchase Making Charge"])
 
+        if row["Purchase Making Charge Type"] == "Percentage":
+            mc_value *= 100
+        vals["mc_percent"] = mc_value
         return vals
 
 
@@ -430,18 +439,15 @@ class PurchaseOrderImportWizard(models.TransientModel):
             row,
     ):
 
-        template_name = row["Order Lines/Product Template"]
-
         product = self._find_product(
-            template_name,
+            row["Order Lines/Product"],
+            row["Order Lines/Product Template"],
             row["row_no"],
         )
 
+
         template = product.product_tmpl_id
 
-        # template = self._find_product_template(
-        #     row["Order Lines/Product Template"]
-        # )
 
         purity = self._find_purity(
             row["Purity"],
@@ -459,7 +465,7 @@ class PurchaseOrderImportWizard(models.TransientModel):
             })
 
         taxes = self._find_tax(
-            row["Order Lines/Taxes 3% GST"]
+            row["Order Lines/Taxes"]
         )
 
         self.env["purchase.order.line"].create(
@@ -525,7 +531,7 @@ class PurchaseOrderImportWizard(models.TransientModel):
             "Purchase Making Charge Amount",
             "Stone Amount",
             "Diamond Amount",
-            "Order Lines/Taxes 3% GST",
+            "Order Lines/Taxes",
             "Order Lines/Unit Price",
         ]
 

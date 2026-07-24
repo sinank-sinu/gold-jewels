@@ -45,10 +45,18 @@ class LabelSummaryWizard(models.TransientModel):
             "date_to": self.date_to,
         }
 
-        branch_filter = ""
+        params = {
+            "date_from": self.date_from,
+            "date_to": self.date_to,
+        }
+
+        purchase_branch_filter = ""
+        jobwork_branch_filter = ""
+
         if self.branch_ids:
             params["branch_ids"] = tuple(self.branch_ids.ids)
-            branch_filter = "AND branch_id IN %(branch_ids)s"
+            purchase_branch_filter = "AND po.branch_id IN %(branch_ids)s"
+            jobwork_branch_filter = "AND jw.branch_id IN %(branch_ids)s"
 
         purchase_sql = f"""
             SELECT
@@ -101,7 +109,7 @@ class LabelSummaryWizard(models.TransientModel):
     )
     AND po.date_order::date BETWEEN %(date_from)s
                                AND %(date_to)s
-    {branch_filter}
+    {purchase_branch_filter}
         """
 
         jobwork_sql = f"""
@@ -155,7 +163,7 @@ class LabelSummaryWizard(models.TransientModel):
                 )
                                 AND jw.order_date::date BETWEEN %(date_from)s
                                      AND %(date_to)s
-                {branch_filter}
+                {jobwork_branch_filter}
         """
 
         sql = f"""

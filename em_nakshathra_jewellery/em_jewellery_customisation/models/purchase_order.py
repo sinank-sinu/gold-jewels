@@ -44,3 +44,14 @@ class PurchaseOrder(models.Model):
             )
 
             order.tax_totals = tax_totals
+
+    #need to hide  after the import
+    @api.depends('order_line.price_total', 'order_line.price_subtotal', 'order_line.price_unit', 'order_line.product_qty')
+    def _amount_all(self):
+        super()._amount_all()
+        for order in self:
+            # Recompute total if custom price_subtotal evaluates to 0.0 but price_unit is provided (e.g., imports)
+            if order.amount_untaxed == 0.0 and any(line.price_unit for line in order.order_line):
+                amount_untaxed = sum(line.price_unit * line.product_qty for line in order.order_line)
+                order.amount_untaxed = amount_untaxed
+                order.amount_total = amount_untaxed + order.amount_tax

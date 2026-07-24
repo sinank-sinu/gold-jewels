@@ -1,7 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_label_import_job_manager,label.import.job manager,model_label_import_job,group_label_bulk_import_manager,1,1,1,1
-access_label_import_job_stock_manager,label.import.job stock manager,model_label_import_job,stock.group_stock_manager,1,1,1,1
-access_label_import_batch_manager,label.import.batch manager,model_label_import_batch,group_label_bulk_import_manager,1,1,1,1
-access_label_import_batch_stock_manager,label.import.batch stock manager,model_label_import_batch,stock.group_stock_manager,1,1,1,1
-access_label_import_wizard_manager,label.import.wizard manager,model_label_import_wizard,group_label_bulk_import_manager,1,1,1,1
-access_label_import_wizard_stock_manager,label.import.wizard stock manager,model_label_import_wizard,stock.group_stock_manager,1,1,1,1
