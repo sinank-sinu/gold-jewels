@@ -46,32 +46,52 @@ class TaxReport(models.TransientModel):
         """
         sale = []
         purchase = []
-        tax_ids = self.env['account.move.line'].search([]).mapped(
-            'tax_ids')
         today = fields.Date.today()
+        
+        # 1. Get all taxes in the system
+        tax_ids = self.env['account.tax'].search([])
+        
+        # 2. Pre-aggregate balances for the current month
+        domain = [
+            ('parent_state', '=', 'posted'),
+            ('date', '>=', get_month(today)[0]),
+            ('date', '<=', get_month(today)[1]),
+            ('tax_ids', '!=', False)
+        ]
+        groups = self.env['account.move.line'].read_group(
+            domain,
+            ['tax_ids', 'debit:sum', 'credit:sum'],
+            ['tax_ids'],
+            lazy=False
+        )
+        balance_map = {}
+        for g in groups:
+            if g['tax_ids']:
+                balance_map[g['tax_ids'][0]] = {
+                    'debit': g['debit'] or 0.0,
+                    'credit': g['credit'] or 0.0
+                }
+                
+        # 3. Populate sale and purchase lists
         for tax in tax_ids:
-            tax_id = self.env['account.move.line'].search(
-                [('tax_ids', '=', tax.id), ('parent_state', '=', 'posted'),
-                 ('date', '>=', get_month(today)[0]),
-                 ('date', '<=', get_month(today)[1])]).read(
-                ['debit', 'credit'])
-            tax_debit_sums = sum(record['debit'] for record in tax_id)
-            tax_credit_sums = sum(record['credit'] for record in tax_id)
+            balances = balance_map.get(tax.id, {'debit': 0.0, 'credit': 0.0})
+            debit = balances['debit']
+            credit = balances['credit']
+            net = round(debit + credit, 2)
+            tax_amount = round(net * (tax.amount / 100), 2)
             if tax.type_tax_use == 'sale':
                 sale.append({
                     'name': tax.name,
                     'amount': tax.amount,
-                    'net': round(tax_debit_sums + tax_credit_sums, 2),
-                    'tax': round((tax_debit_sums + tax_credit_sums) * (
-                            tax.amount / 100), 2)
+                    'net': net,
+                    'tax': tax_amount
                 })
             elif tax.type_tax_use == 'purchase':
                 purchase.append({
                     'name': tax.name,
                     'amount': tax.amount,
-                    'net': round(tax_debit_sums + tax_credit_sums, 2),
-                    'tax': round((tax_debit_sums + tax_credit_sums) * (
-                            tax.amount / 100), 2)
+                    'net': net,
+                    'tax': tax_amount
                 })
         return {
             'sale': sale,
@@ -102,492 +122,170 @@ class TaxReport(models.TransientModel):
             option_domain = ['posted']
         elif 'draft' in options:
             option_domain = ['posted', 'draft']
-        tax_ids = self.env['account.move.line'].search([]).mapped(
-            'tax_ids')
+
+        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+
         start_date_first = \
-            get_fiscal_year(datetime.strptime(start_date, "%Y-%m-%d").date())[
-                0] if comparison_type == 'year' else datetime.strptime(
-                start_date, "%Y-%m-%d").date()
+            get_fiscal_year(start_date_dt)[0] if comparison_type == 'year' else start_date_dt
         end_date_first = \
-            get_fiscal_year(datetime.strptime(end_date, "%Y-%m-%d").date())[
-                1] if comparison_type == 'year' else datetime.strptime(
-                end_date, "%Y-%m-%d").date()
-        if report_type is not None and 'account' in report_type:
-            start_date = start_date_first
-            end_date = end_date_first
-            account_ids = self.env['account.move.line'].search([]).mapped(
-                'account_id')
-            for account in account_ids:
-                tax_ids = self.env['account.move.line'].search(
-                    [('account_id', '=', account.id)]).mapped('tax_ids')
-                if tax_ids:
-                    for tax in tax_ids:
-                        dynamic_total_tax_sum = {}
-                        dynamic_total_net_sum = {}
-                        if comparison_number:
-                            if comparison_type == 'year':
-                                start_date = start_date_first
-                                end_date = end_date_first
-                                for i in range(1, eval(comparison_number) + 1):
-                                    com_start_date = subtract(start_date,
-                                                              years=i)
-                                    com_end_date = subtract(end_date, years=i)
-                                    tax_id = self.env[
-                                        'account.move.line'].search(
-                                        [('tax_ids', '=', tax.id),
-                                         ('date', '>=', com_start_date),
-                                         ('date', '<=', com_end_date),
-                                         ('account_id', '=', account.id),
-                                         ('parent_state', 'in',
-                                          option_domain)]).read(
-                                        ['debit', 'credit'])
-                                    tax_debit_sums = sum(
-                                        record['debit'] for record in tax_id)
-                                    tax_credit_sums = sum(
-                                        record['credit'] for record in tax_id)
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                    dynamic_total_tax_sum[
-                                        f"dynamic_total_tax_sum{i}"] = \
-                                        dynamic_total_net_sum[
-                                            f"dynamic_total_net_sum{i}"] * (
-                                                tax.amount / 100)
-                            elif comparison_type == 'month':
-                                dynamic_date_num[
-                                    f"dynamic_date_num{0}"] = self.get_month_name(
-                                    start_date) + ' ' + str(start_date.year)
-                                for i in range(1, eval(comparison_number) + 1):
-                                    com_start_date = subtract(start_date,
-                                                              months=i)
-                                    com_end_date = subtract(end_date, months=i)
-                                    tax_id = self.env[
-                                        'account.move.line'].search(
-                                        [('tax_ids', '=', tax.id),
-                                         ('date', '>=', com_start_date),
-                                         ('account_id', '=', account.id),
-                                         ('date', '<=', com_end_date),
-                                         ('parent_state', 'in',
-                                          option_domain)]).read(
-                                        ['debit', 'credit'])
-                                    tax_debit_sums = sum(
-                                        record['debit'] for record in tax_id)
-                                    tax_credit_sums = sum(
-                                        record['credit'] for record in tax_id)
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                    dynamic_total_tax_sum[
-                                        f"dynamic_total_tax_sum{i}"] = \
-                                        dynamic_total_net_sum[
-                                            f"dynamic_total_net_sum{i}"] * (
-                                                tax.amount / 100)
-                                    dynamic_date_num[
-                                        f"dynamic_date_num{i}"] = self.get_month_name(
-                                        com_start_date) + ' ' + str(
-                                        com_start_date.year)
-                            elif comparison_type == 'quarter':
-                                dynamic_date_num[
-                                    f"dynamic_date_num{0}"] = 'Q' + ' ' + str(
-                                    get_quarter_number(
-                                        start_date)) + ' ' + str(
-                                    start_date.year)
-                                for i in range(1, eval(comparison_number) + 1):
-                                    com_start_date = subtract(start_date,
-                                                              months=i * 3)
-                                    com_end_date = subtract(end_date,
-                                                            months=i * 3)
-                                    tax_id = self.env[
-                                        'account.move.line'].search(
-                                        [('tax_ids', '=', tax.id),
-                                         ('date', '>=', com_start_date),
-                                         ('account_id', '=', account.id),
-                                         ('date', '<=', com_end_date),
-                                         ('parent_state', 'in',
-                                          option_domain)]).read(
-                                        ['debit', 'credit'])
-                                    tax_debit_sums = sum(
-                                        record['debit'] for record in tax_id)
-                                    tax_credit_sums = sum(
-                                        record['credit'] for record in tax_id)
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                    dynamic_total_tax_sum[
-                                        f"dynamic_total_tax_sum{i}"] = \
-                                        dynamic_total_net_sum[
-                                            f"dynamic_total_net_sum{i}"] * (
-                                                tax.amount / 100)
-                                    dynamic_date_num[
-                                        f"dynamic_date_num{i}"] = 'Q' + ' ' + str(
-                                        get_quarter_number(
-                                            com_start_date)) + ' ' + str(
-                                        com_start_date.year)
-                        tax_id = self.env['account.move.line'].search(
-                            [('tax_ids', '=', tax.id),
-                             ('date', '>=', start_date_first),
-                             ('date', '<=', end_date_first),
-                             ('parent_state', 'in', option_domain),
-                             ('account_id', '=', account.id)]).read(
-                            ['debit', 'credit'])
-                        tax_debit_sums = sum(
-                            record['debit'] for record in tax_id)
-                        tax_credit_sums = sum(
-                            record['credit'] for record in tax_id)
-                        if tax_id and tax.type_tax_use == 'sale':
-                            if comparison_number:
-                                sale.append({
-                                    'name': tax.name,
-                                    'amount': tax.amount,
-                                    'net': round(
-                                        tax_debit_sums + tax_credit_sums,
-                                        2),
-                                    'tax': round(
-                                        (tax_debit_sums + tax_credit_sums) * (
-                                                tax.amount / 100), 2),
-                                    'dynamic net': dynamic_total_net_sum,
-                                    'dynamic tax': dynamic_total_tax_sum,
-                                    'account': account.display_name,
-                                })
-                            else:
-                                sale.append({
-                                    'name': tax.name,
-                                    'amount': tax.amount,
-                                    'net': round(
-                                        tax_debit_sums + tax_credit_sums,
-                                        2),
-                                    'tax': round(
-                                        (tax_debit_sums + tax_credit_sums) * (
-                                                tax.amount / 100), 2),
-                                    'account': account.display_name,
-                                })
-                        elif tax_id and tax.type_tax_use == 'purchase':
-                            if comparison_number:
-                                purchase.append({
-                                    'name': tax.name,
-                                    'amount': tax.amount,
-                                    'net': round(
-                                        tax_debit_sums + tax_credit_sums,
-                                        2),
-                                    'tax': round(
-                                        (tax_debit_sums + tax_credit_sums) * (
-                                                tax.amount / 100), 2),
-                                    'dynamic net': dynamic_total_net_sum,
-                                    'dynamic tax': dynamic_total_tax_sum,
-                                    'account': account.display_name,
-                                })
-                            else:
-                                purchase.append({
-                                    'name': tax.name,
-                                    'amount': tax.amount,
-                                    'net': round(
-                                        tax_debit_sums + tax_credit_sums,
-                                        2),
-                                    'tax': round(
-                                        (tax_debit_sums + tax_credit_sums) * (
-                                                tax.amount / 100), 2),
-                                    'account': account.display_name,
-                                })
-        elif report_type is not None and 'tax' in report_type:
-            start_date = start_date_first
-            end_date = end_date_first
-            for tax in tax_ids:
-                account_ids = self.env['account.move.line'].search(
-                    [('tax_ids', '=', tax.id)]).mapped('account_id')
-                for account in account_ids:
-                    dynamic_total_tax_sum = {}
-                    dynamic_total_net_sum = {}
-                    if comparison_number:
-                        if comparison_type == 'year':
-                            start_date = start_date_first
-                            end_date = end_date_first
-                            for i in range(1, eval(comparison_number) + 1):
-                                com_start_date = subtract(start_date,
-                                                          years=i)
-                                com_end_date = subtract(end_date, years=i)
-                                tax_id = self.env[
-                                    'account.move.line'].search(
-                                    [('tax_ids', '=', tax.id),
-                                     ('date', '>=', com_start_date),
-                                     ('date', '<=', com_end_date),
-                                     ('account_id', '=', account.id),
-                                     ('parent_state', 'in',
-                                      option_domain)]).read(
-                                    ['debit', 'credit'])
-                                tax_debit_sums = sum(
-                                    record['debit'] for record in tax_id)
-                                tax_credit_sums = sum(
-                                    record['credit'] for record in tax_id)
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                dynamic_total_tax_sum[
-                                    f"dynamic_total_tax_sum{i}"] = \
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] * (
-                                            tax.amount / 100)
-                        elif comparison_type == 'month':
-                            dynamic_date_num[
-                                f"dynamic_date_num{0}"] = self.get_month_name(
-                                start_date) + ' ' + str(start_date.year)
-                            for i in range(1, eval(comparison_number) + 1):
-                                com_start_date = subtract(start_date, months=i)
-                                com_end_date = subtract(end_date, months=i)
-                                tax_id = self.env[
-                                    'account.move.line'].search(
-                                    [('tax_ids', '=', tax.id),
-                                     ('date', '>=', com_start_date),
-                                     ('date', '<=', com_end_date),
-                                     ('account_id', '=', account.id),
-                                     ('parent_state', 'in',
-                                      option_domain)]).read(
-                                    ['debit', 'credit'])
-                                tax_debit_sums = sum(
-                                    record['debit'] for record in tax_id)
-                                tax_credit_sums = sum(
-                                    record['credit'] for record in tax_id)
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                dynamic_total_tax_sum[
-                                    f"dynamic_total_tax_sum{i}"] = \
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] * (
-                                            tax.amount / 100)
-                                dynamic_date_num[
-                                    f"dynamic_date_num{i}"] = self.get_month_name(
-                                    com_start_date) + ' ' + str(
-                                    com_start_date.year)
-                        elif comparison_type == 'quarter':
-                            dynamic_date_num[
-                                f"dynamic_date_num{0}"] = 'Q' + ' ' + str(
-                                get_quarter_number(start_date)) + ' ' + str(
-                                start_date.year)
-                            for i in range(1, eval(comparison_number) + 1):
-                                com_start_date = subtract(start_date,
-                                                          months=i * 3)
-                                com_end_date = subtract(end_date,
-                                                        months=i * 3)
-                                tax_id = self.env[
-                                    'account.move.line'].search(
-                                    [('tax_ids', '=', tax.id),
-                                     ('date', '>=', com_start_date),
-                                     ('date', '<=', com_end_date),
-                                     ('account_id', '=', account.id),
-                                     ('parent_state', 'in',
-                                      option_domain)]).read(
-                                    ['debit', 'credit'])
-                                tax_debit_sums = sum(
-                                    record['debit'] for record in tax_id)
-                                tax_credit_sums = sum(
-                                    record['credit'] for record in tax_id)
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                                dynamic_total_tax_sum[
-                                    f"dynamic_total_tax_sum{i}"] = \
-                                    dynamic_total_net_sum[
-                                        f"dynamic_total_net_sum{i}"] * (
-                                            tax.amount / 100)
-                                dynamic_date_num[
-                                    f"dynamic_date_num{i}"] = 'Q' + ' ' + str(
-                                    get_quarter_number(
-                                        com_start_date)) + ' ' + str(
-                                    com_start_date.year)
-                    tax_id = self.env['account.move.line'].search(
-                        [('tax_ids', '=', tax.id),
-                         ('parent_state', 'in', option_domain),
-                         ('date', '>=', start_date_first),
-                         ('date', '<=', end_date_first),
-                         ('account_id', '=', account.id)]).read(
-                        ['debit', 'credit'])
-                    tax_debit_sums = sum(
-                        record['debit'] for record in tax_id)
-                    tax_credit_sums = sum(
-                        record['credit'] for record in tax_id)
-                    if tax_id and tax.type_tax_use == 'sale':
-                        if comparison_number:
-                            sale.append({
-                                'name': tax.name,
-                                'amount': tax.amount,
-                                'net': round(tax_debit_sums + tax_credit_sums,
-                                             2),
-                                'tax': round(
-                                    (tax_debit_sums + tax_credit_sums) * (
-                                            tax.amount / 100), 2),
-                                'dynamic net': dynamic_total_net_sum,
-                                'dynamic tax': dynamic_total_tax_sum,
-                                'account': account.display_name,
-                            })
-                        else:
-                            sale.append({
-                                'name': tax.name,
-                                'amount': tax.amount,
-                                'net': round(tax_debit_sums + tax_credit_sums,
-                                             2),
-                                'tax': round(
-                                    (tax_debit_sums + tax_credit_sums) * (
-                                            tax.amount / 100), 2),
-                                'account': account.display_name,
-                            })
-                    elif tax_id and tax.type_tax_use == 'purchase':
-                        if comparison_number:
-                            purchase.append({
-                                'name': tax.name,
-                                'amount': tax.amount,
-                                'net': round(tax_debit_sums + tax_credit_sums,
-                                             2),
-                                'tax': round(
-                                    (tax_debit_sums + tax_credit_sums) * (
-                                            tax.amount / 100), 2),
-                                'dynamic net': dynamic_total_net_sum,
-                                'dynamic tax': dynamic_total_tax_sum,
-                                'account': account.display_name,
-                            })
-                        else:
-                            purchase.append({
-                                'name': tax.name,
-                                'amount': tax.amount,
-                                'net': round(tax_debit_sums + tax_credit_sums,
-                                             2),
-                                'tax': round(
-                                    (tax_debit_sums + tax_credit_sums) * (
-                                            tax.amount / 100), 2),
-                                'account': account.display_name,
-                            })
+            get_fiscal_year(end_date_dt)[1] if comparison_type == 'year' else end_date_dt
+
+        def get_comparison_dates(i):
+            if comparison_type == 'year':
+                c_start = subtract(start_date_first, years=i)
+                c_end = subtract(end_date_first, years=i)
+            elif comparison_type == 'month':
+                c_start = subtract(start_date_first, months=i)
+                c_end = subtract(end_date_first, months=i)
+            elif comparison_type == 'quarter':
+                c_start = subtract(start_date_first, months=i * 3)
+                c_end = subtract(end_date_first, months=i * 3)
+            return c_start, c_end
+
+        # Determine grouping fields
+        groupby_account = False
+        if report_type is not None:
+            if 'account' in report_type:
+                groupby = ['account_id', 'tax_ids']
+                groupby_account = True
+            elif 'tax' in report_type:
+                groupby = ['tax_ids', 'account_id']
+                groupby_account = True
+            else:
+                groupby = ['tax_ids']
         else:
-            start_date = start_date_first
-            end_date = end_date_first
-            for tax in tax_ids:
+            groupby = ['tax_ids']
+
+        # 1. Main period aggregation
+        domain = [
+            ('parent_state', 'in', option_domain),
+            ('date', '>=', start_date_first),
+            ('date', '<=', end_date_first),
+            ('tax_ids', '!=', False)
+        ]
+        groups_main = self.env['account.move.line'].read_group(
+            domain,
+            groupby + ['debit:sum', 'credit:sum'],
+            groupby,
+            lazy=False
+        )
+
+        # 2. Comparison periods aggregation
+        com_balance_maps = {}
+        if comparison_number:
+            comp_num = int(comparison_number)
+            # Set up dynamic date names
+            if comparison_type == 'month':
+                dynamic_date_num["dynamic_date_num0"] = self.get_month_name(start_date_first) + ' ' + str(start_date_first.year)
+            elif comparison_type == 'quarter':
+                dynamic_date_num["dynamic_date_num0"] = 'Q' + ' ' + str(get_quarter_number(start_date_first)) + ' ' + str(start_date_first.year)
+            
+            for i in range(1, comp_num + 1):
+                com_start, com_end = get_comparison_dates(i)
+                if comparison_type == 'month':
+                    dynamic_date_num[f"dynamic_date_num{i}"] = self.get_month_name(com_start) + ' ' + str(com_start.year)
+                elif comparison_type == 'quarter':
+                    dynamic_date_num[f"dynamic_date_num{i}"] = 'Q' + ' ' + str(get_quarter_number(com_start)) + ' ' + str(com_start.year)
+                    
+                com_domain = [
+                    ('parent_state', 'in', option_domain),
+                    ('date', '>=', com_start),
+                    ('date', '<=', com_end),
+                    ('tax_ids', '!=', False)
+                ]
+                groups_com = self.env['account.move.line'].read_group(
+                    com_domain,
+                    groupby + ['debit:sum', 'credit:sum'],
+                    groupby,
+                    lazy=False
+                )
+                com_map = {}
+                for g in groups_com:
+                    if groupby_account:
+                        if g['account_id'] and g['tax_ids']:
+                            acc_id = g['account_id'][0]
+                            tax_id = g['tax_ids'][0]
+                            com_map[(acc_id, tax_id)] = (g['debit'] or 0.0) + (g['credit'] or 0.0)
+                    else:
+                        if g['tax_ids']:
+                            tax_id = g['tax_ids'][0]
+                            com_map[tax_id] = (g['debit'] or 0.0) + (g['credit'] or 0.0)
+                com_balance_maps[i] = com_map
+
+        # 3. Build response lists
+        if groupby_account:
+            # For account or tax grouped reports: iterate over active combinations in main period
+            for g in groups_main:
+                if not g['account_id'] or not g['tax_ids']:
+                    continue
+                acc_id, acc_name = g['account_id']
+                tax_id, tax_name = g['tax_ids']
+                key = (acc_id, tax_id)
+
+                tax = self.env['account.tax'].browse(tax_id)
+                tax_debit_sums = g['debit'] or 0.0
+                tax_credit_sums = g['credit'] or 0.0
+                net = round(tax_debit_sums + tax_credit_sums, 2)
+                tax_amount = round(net * (tax.amount / 100), 2)
+
                 dynamic_total_tax_sum = {}
                 dynamic_total_net_sum = {}
                 if comparison_number:
-                    if comparison_type == 'year':
-                        start_date = start_date_first
-                        end_date = end_date_first
-                        for i in range(1, eval(comparison_number) + 1):
-                            com_start_date = subtract(start_date,
-                                                      years=i)
-                            com_end_date = subtract(end_date, years=i)
-                            tax_id = self.env[
-                                'account.move.line'].search(
-                                [('tax_ids', '=', tax.id),
-                                 ('date', '>=', com_start_date),
-                                 ('date', '<=', com_end_date),
-                                 ('parent_state', 'in', option_domain)]).read(
-                                ['debit', 'credit'])
-                            tax_debit_sums = sum(
-                                record['debit'] for record in tax_id)
-                            tax_credit_sums = sum(
-                                record['credit'] for record in tax_id)
-                            dynamic_total_net_sum[
-                                f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                            dynamic_total_tax_sum[
-                                f"dynamic_total_tax_sum{i}"] = \
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] * (
-                                        tax.amount / 100)
-                    elif comparison_type == 'month':
-                        dynamic_date_num[
-                            f"dynamic_date_num{0}"] = self.get_month_name(
-                            start_date) + ' ' + str(start_date.year)
-                        for i in range(1, eval(comparison_number) + 1):
-                            com_start_date = subtract(start_date, months=i)
-                            com_end_date = subtract(end_date, months=i)
-                            tax_id = self.env[
-                                'account.move.line'].search(
-                                [('tax_ids', '=', tax.id),
-                                 ('date', '>=', com_start_date),
-                                 ('date', '<=', com_end_date),
-                                 ('parent_state', 'in', option_domain)]).read(
-                                ['debit', 'credit'])
-                            tax_debit_sums = sum(
-                                record['debit'] for record in tax_id)
-                            tax_credit_sums = sum(
-                                record['credit'] for record in tax_id)
-                            dynamic_total_net_sum[
-                                f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                            dynamic_total_tax_sum[
-                                f"dynamic_total_tax_sum{i}"] = \
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] * (
-                                        tax.amount / 100)
-                            dynamic_date_num[
-                                f"dynamic_date_num{i}"] = self.get_month_name(
-                                com_start_date) + ' ' + str(
-                                com_start_date.year)
-                    elif comparison_type == 'quarter':
-                        dynamic_date_num[
-                            f"dynamic_date_num{0}"] = 'Q' + ' ' + str(
-                            get_quarter_number(start_date)) + ' ' + str(
-                            start_date.year)
-                        for i in range(1, eval(comparison_number) + 1):
-                            com_start_date = subtract(start_date,
-                                                      months=i * 3)
-                            com_end_date = subtract(end_date,
-                                                    months=i * 3)
-                            tax_id = self.env[
-                                'account.move.line'].search(
-                                [('tax_ids', '=', tax.id),
-                                 ('date', '>=', com_start_date),
-                                 ('date', '<=', com_end_date),
-                                 ('parent_state', 'in', option_domain)]).read(
-                                ['debit', 'credit'])
-                            tax_debit_sums = sum(
-                                record['debit'] for record in tax_id)
-                            tax_credit_sums = sum(
-                                record['credit'] for record in tax_id)
-                            dynamic_total_net_sum[
-                                f"dynamic_total_net_sum{i}"] = tax_debit_sums + tax_credit_sums
-                            dynamic_total_tax_sum[
-                                f"dynamic_total_tax_sum{i}"] = \
-                                dynamic_total_net_sum[
-                                    f"dynamic_total_net_sum{i}"] * (
-                                        tax.amount / 100)
-                            dynamic_date_num[
-                                f"dynamic_date_num{i}"] = 'Q' + ' ' + str(
-                                get_quarter_number(
-                                    com_start_date)) + ' ' + str(
-                                com_start_date.year)
-                tax_id = self.env['account.move.line'].search(
-                    [('tax_ids', '=', tax.id),
-                     ('parent_state', 'in', option_domain),
-                     ('date', '>=', start_date_first),
-                     ('date', '<=', end_date_first)]).read(['debit', 'credit'])
-                tax_debit_sums = sum(record['debit'] for record in tax_id)
-                tax_credit_sums = sum(record['credit'] for record in tax_id)
+                    comp_num = int(comparison_number)
+                    for i in range(1, comp_num + 1):
+                        com_net = com_balance_maps[i].get(key, 0.0)
+                        dynamic_total_net_sum[f"dynamic_total_net_sum{i}"] = round(com_net, 2)
+                        dynamic_total_tax_sum[f"dynamic_total_tax_sum{i}"] = round(com_net * (tax.amount / 100), 2)
+
+                entry = {
+                    'name': tax_name,
+                    'amount': tax.amount,
+                    'net': net,
+                    'tax': tax_amount,
+                    'account': acc_name,
+                }
+                if comparison_number:
+                    entry['dynamic net'] = dynamic_total_net_sum
+                    entry['dynamic tax'] = dynamic_total_tax_sum
+
                 if tax.type_tax_use == 'sale':
-                    if comparison_number:
-                        sale.append({
-                            'name': tax.name,
-                            'amount': tax.amount,
-                            'net': round(tax_debit_sums + tax_credit_sums, 2),
-                            'tax': round((tax_debit_sums + tax_credit_sums) * (
-                                    tax.amount / 100), 2),
-                            'dynamic net': dynamic_total_net_sum,
-                            'dynamic tax': dynamic_total_tax_sum,
-                        })
-                    else:
-                        sale.append({
-                            'name': tax.name,
-                            'amount': tax.amount,
-                            'net': round(tax_debit_sums + tax_credit_sums, 2),
-                            'tax': round((tax_debit_sums + tax_credit_sums) * (
-                                    tax.amount / 100), 2),
-                        })
+                    sale.append(entry)
                 elif tax.type_tax_use == 'purchase':
-                    if comparison_number:
-                        purchase.append({
-                            'name': tax.name,
-                            'amount': tax.amount,
-                            'net': round(tax_debit_sums + tax_credit_sums, 2),
-                            'tax': round((tax_debit_sums + tax_credit_sums) * (
-                                    tax.amount / 100), 2),
-                            'dynamic net': dynamic_total_net_sum,
-                            'dynamic tax': dynamic_total_tax_sum,
-                        })
-                    else:
-                        purchase.append({
-                            'name': tax.name,
-                            'amount': tax.amount,
-                            'net': round(tax_debit_sums + tax_credit_sums, 2),
-                            'tax': round((tax_debit_sums + tax_credit_sums) * (
-                                    tax.amount / 100), 2),
-                        })
+                    purchase.append(entry)
+        else:
+            # For global tax report: display all taxes in the system
+            balance_map_main = {g['tax_ids'][0]: (g['debit'] or 0.0) + (g['credit'] or 0.0) 
+                                for g in groups_main if g['tax_ids']}
+            all_taxes = self.env['account.tax'].search([])
+            for tax in all_taxes:
+                net = round(balance_map_main.get(tax.id, 0.0), 2)
+                tax_amount = round(net * (tax.amount / 100), 2)
+
+                dynamic_total_tax_sum = {}
+                dynamic_total_net_sum = {}
+                if comparison_number:
+                    comp_num = int(comparison_number)
+                    for i in range(1, comp_num + 1):
+                        com_net = com_balance_maps[i].get(tax.id, 0.0)
+                        dynamic_total_net_sum[f"dynamic_total_net_sum{i}"] = round(com_net, 2)
+                        dynamic_total_tax_sum[f"dynamic_total_tax_sum{i}"] = round(com_net * (tax.amount / 100), 2)
+
+                entry = {
+                    'name': tax.name,
+                    'amount': tax.amount,
+                    'net': net,
+                    'tax': tax_amount,
+                }
+                if comparison_number:
+                    entry['dynamic net'] = dynamic_total_net_sum
+                    entry['dynamic tax'] = dynamic_total_tax_sum
+
+                if tax.type_tax_use == 'sale':
+                    sale.append(entry)
+                elif tax.type_tax_use == 'purchase':
+                    purchase.append(entry)
+
         return {
             'dynamic_date_num': dynamic_date_num,
             'sale': sale,
