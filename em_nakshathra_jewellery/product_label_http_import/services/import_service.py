@@ -300,34 +300,32 @@ class ProductLabelImportService:
             _logger.error(f"Search Domain: {domain}")
             raise UserError(f"Product Template '{norm_product_name}' not found for company '{fixed_company.name}'. Please ensure it is created before importing.")
 
-        def get_norm_attr(val):
+        def clean_val(key):
+            val = get_val_func(key)
             if val is None:
                 return None
-            str_val = str(val).strip()
-            if not str_val or str_val.upper() in ('NONE', 'NAN', 'FALSE', 'NULL'):
-                return None
-            return str_val.title()
+            return str(val).strip().title()
 
         attrs = {
-            'TYPE': get_norm_attr(get_val_func('TYPE')),
-            'VARIETY': get_norm_attr(get_val_func('VARIETY')),
-            'DESIGN': get_norm_attr(get_val_func('DESIGN')),
-            'SIZE': get_norm_attr(get_val_func('SIZE')),
-            'STONE COLOUR': get_norm_attr(get_val_func('STONE COLOUR')),
-            'METAL COLOUR': get_norm_attr(get_val_func('METAL COLOUR')),
+            'TYPE': clean_val('TYPE'),
+            'VARIETY': clean_val('VARIETY'),
+            'DESIGN': clean_val('DESIGN'),
+            'SIZE': clean_val('SIZE'),
+            'STONE COLOUR': clean_val('STONE COLOUR'),
+            'METAL COLOUR': clean_val('METAL COLOUR'),
         }
 
         ptav_ids = []
         for attr_name, attr_val in attrs.items():
-            if attr_val is None:
-                _logger.info(f"Excel Value for '{attr_name}' is None/Empty. Matching: empty/unselected '{attr_name}' value.")
-                continue
-
             attribute = self.env['product.attribute'].search([('name', '=ilike', attr_name)], limit=1)
             if not attribute:
                 raise UserError(f"Product Attribute '{attr_name}' not found. Please ensure it exists.")
                 
-            value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=ilike', attr_val)], limit=1)
+            if attr_val is None:
+                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=', False)], limit=1)
+            else:
+                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=ilike', attr_val)], limit=1)
+                
             if not value:
                 raise UserError(f"Product Attribute Value '{attr_val}' for '{attr_name}' not found.")
                 
