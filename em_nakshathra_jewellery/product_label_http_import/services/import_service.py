@@ -56,8 +56,65 @@ class ProductLabelImportService:
                     with self.env.cr.savepoint():
                         _logger.info(f"Processing row {row_idx}...")
                         label = self._process_row(row_dict, row_idx, fixed_company_id)
+                        
+                        # Extract and parse date from excel row (Bill Date or Date)
+                        def get_local_val(key_name):
+                            for k in row_dict.keys():
+                                if str(k).strip().lower() == key_name.lower():
+                                    return row_dict[k]
+                            return None
+
+                        raw_date = get_local_val('bill date') or get_local_val('date')
+                        excel_date = None
+                        if raw_date:
+                            if hasattr(raw_date, 'strftime'):
+                                excel_date = raw_date
+                            elif isinstance(raw_date, str):
+                                try:
+                                    from dateutil import parser
+                                    excel_date = parser.parse(raw_date)
+                                except Exception:
+                                    pass
+                        
+                        # Perform Transfer immediately
+                        company = label.branch_id.company_id or label.product_id.company_id
+                        if company:
+                            label = label.with_company(company)
+                        label.action_stock_in()
+                        
+                        picking = label.picking_id
+                        if picking and excel_date:
+                            formatted_date = excel_date.strftime('%Y-%m-%d %H:%M:%S')
+                            try:
+                                # Flush pending ORM updates to the database to prevent overwriting our SQL
+                                picking.flush_recordset()
+                                picking.move_ids.flush_recordset()
+                                picking.move_line_ids.flush_recordset()
+
+                                # Use raw SQL to reliably bypass any ORM restrictions on done pickings
+                                self.env.cr.execute(
+                                    "UPDATE stock_picking SET scheduled_date=%s, date_done=%s, date=%s WHERE id=%s",
+                                    (formatted_date, formatted_date, formatted_date, picking.id)
+                                )
+                                self.env.cr.execute(
+                                    "UPDATE stock_move SET date=%s WHERE picking_id=%s",
+                                    (formatted_date, picking.id)
+                                )
+                                self.env.cr.execute(
+                                    "UPDATE stock_move_line SET date=%s WHERE picking_id=%s",
+                                    (formatted_date, picking.id)
+                                )
+
+                                # Invalidate cache so the ORM loads the newly updated SQL values
+                                picking.invalidate_recordset()
+                                picking.move_ids.invalidate_recordset()
+                                picking.move_line_ids.invalidate_recordset()
+                            except Exception as date_e:
+                                _logger.warning(f"Could not apply excel date {formatted_date} to picking {picking.name}: {date_e}")
+                                
+                        transferred += 1
                         created += 1
-                        _logger.info(f"Row {row_idx} imported successfully as Label {label.name}.")
+                        _logger.info(f"Row {row_idx} imported and transferred successfully as Label {label.name}.")
                 except Exception as e:
                     _logger.error(f"Error on row {row_idx}: {e}")
                     
@@ -66,25 +123,6 @@ class ProductLabelImportService:
                     
             current_cr.commit()
             
-            # Run Transfers (auto-stock in)
-            label_ids = self.env['product.label'].search([('is_stocked_in', '=', False), ('picking_id', '=', False)]).ids
-            for label_id in label_ids:
-                try:
-                    with self.env.registry.cursor() as new_cr:
-                        new_env = odoo.api.Environment(new_cr, self.env.uid, self.env.context)(su=True)
-                        label = new_env['product.label'].browse(label_id)
-                        # Force company context to prevent 'Incompatible companies on records' error during stock moves
-                        company = label.branch_id.company_id or label.product_id.company_id
-                        if company:
-                            label = label.with_company(company)
-                        label.action_stock_in()
-                        transferred += 1
-                except Exception as e:
-                    import traceback
-                    with open('/tmp/odoo_transfer_error.log', 'a') as f:
-                        f.write(f"Error on label {label_id}:\n{traceback.format_exc()}\n")
-                    _logger.warning(f"Failed to auto-transfer label ID {label_id}: {e}")
-                    
         finally:
             if not current_cr.closed:
                 current_cr.close()
@@ -248,6 +286,28 @@ class ProductLabelImportService:
             
         if write_vals:
             label.write(write_vals)
+            
+        raw_bill_date = get_val('Bill Date') or get_val('Date')
+        if raw_bill_date:
+            parsed_date = None
+            if hasattr(raw_bill_date, 'strftime'):
+                parsed_date = raw_bill_date
+            elif isinstance(raw_bill_date, str):
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(raw_bill_date)
+                except Exception:
+                    pass
+            
+            if parsed_date:
+                try:
+                    formatted_create_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+                    self.env.cr.execute(
+                        "UPDATE product_label SET create_date=%s WHERE id=%s",
+                        (formatted_create_date, label.id)
+                    )
+                except Exception as e:
+                    _logger.warning(f"Could not update create_date for label {label.id}: {e}")
             
         _logger.info(f"Final Product Label Barcode: {label.barcode}")
             
