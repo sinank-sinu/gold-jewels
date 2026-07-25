@@ -59,6 +59,21 @@ class ImportLabelService:
 
         self.env.cr.commit()
 
+    def _find_tax(self, tax_name):
+
+        if not tax_name:
+            return [(5, 0, 0)]
+
+        tax = self.env["account.tax"].search([
+            ("name", "=", tax_name),
+            ("type_tax_use", "in", ["purchase", "none"])
+        ], limit=1)
+
+        if not tax:
+            return [(5, 0, 0)]
+
+        return [(6, 0, tax.ids)]
+
     def process_import(self, file_base64):
         _logger.info("Starting Purchase Label Bulk Import...")
         _logger.info("Upload started")
@@ -175,6 +190,23 @@ class ImportLabelService:
             product = self._resolve_product(line, current_company)
             if not product:
                 continue
+            import re
+
+            tax_name = str(line.get("Order Lines/Taxes") or "").strip()
+
+            tax = False
+
+            if tax_name == "3% GST":
+                tax = self.env["account.tax"].browse(118)
+            elif tax_name == "18% GST":
+                tax = self.env["account.tax"].browse(82)
+                print("tax 18 % found")
+
+            # if not tax:
+            #     raise UserError(
+            #         _("Purchase Tax '%s' not found for company '%s'.")
+            #         % (tax_name, current_company.name)
+            #     )
 
             qty = float(line.get('Order Lines/Quantity') or line.get('Quantity') or 1.0)
             price = float(line.get('Order Lines/Unit Price') or line.get('Unit Price') or 0.0)
@@ -215,6 +247,7 @@ class ImportLabelService:
                 'gross_weight': weight,
                 'product_uom': product.uom_id.id,
                 'date_planned': date_str,
+                'taxes_id': [(6, 0, [tax.id])] if tax else [(5, 0, 0)],
             }
             if purity_id:
                 po_line_vals['purity_id'] = purity_id

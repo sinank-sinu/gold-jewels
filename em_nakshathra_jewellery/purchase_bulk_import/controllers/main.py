@@ -10,7 +10,7 @@ _logger = logging.getLogger(__name__)
 
 class PurchaseLabelImportController(http.Controller):
 
-    @http.route('/purchase_label_import', type='http', auth='user', website=True)
+    @http.route('/purchase_bulk_import', type='http', auth='user', website=True)
     def import_page(self, **kw):
         """Render the HTML page for uploading the purchase label excel."""
         html_content = """
@@ -27,7 +27,7 @@ class PurchaseLabelImportController(http.Controller):
         <body>
             <div class="container">
                 <h2 class="mb-4">Purchase Label Bulk Import</h2>
-                <form action="/purchase_label_import/upload" method="post" enctype="multipart/form-data">
+                <form action="/purchase_bulk_import/upload" method="post" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="%s"/>
                     <div class="mb-3">
                         <label for="excel_file" class="form-label">Upload Excel File (10,000+ rows supported)</label>
@@ -41,13 +41,13 @@ class PurchaseLabelImportController(http.Controller):
         """ % request.csrf_token()
         return request.make_response(html_content)
 
-    @http.route('/purchase_label_import/upload', type='http', auth='user', methods=['GET', 'POST'], csrf=True)
+    @http.route('/purchase_bulk_import/upload', type='http', auth='user', methods=['GET', 'POST'], csrf=True)
     def upload_file(self, excel_file=None, **kw):
         """Handle the file upload and start background processing."""
         import uuid
         
         if request.httprequest.method == 'GET':
-            return request.redirect('/purchase_label_import')
+            return request.redirect('/purchase_bulk_import')
             
         if not excel_file:
             return request.make_response("No file uploaded.", status=400)
@@ -83,7 +83,7 @@ class PurchaseLabelImportController(http.Controller):
             </style>
             <script>
                 function checkStatus() {
-                    fetch('/purchase_label_import/status?task_id=%(task_id)s')
+                    fetch('/purchase_bulk_import/status?task_id=%(task_id)s')
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'done') {
@@ -115,13 +115,13 @@ class PurchaseLabelImportController(http.Controller):
                     <p>All records have been processed successfully.</p>
                     <p>You can now check the generated Purchase Orders and Vendor Bills in Odoo.</p>
                     <a href="/web" class="btn btn-outline-primary mt-3">Return to Odoo</a>
-                    <a href="/purchase_label_import" class="btn btn-outline-secondary mt-3">Upload Another</a>
+                    <a href="/purchase_bulk_import" class="btn btn-outline-secondary mt-3">Upload Another</a>
                 </div>
                 
                 <div id="error-ui" style="display: none;">
                     <h2 class="text-danger mb-3">Import Failed</h2>
                     <p>An error occurred during the import process. Please check the server logs for more details.</p>
-                    <a href="/purchase_label_import" class="btn btn-outline-primary mt-3">Try Again</a>
+                    <a href="/purchase_bulk_import" class="btn btn-outline-primary mt-3">Try Again</a>
                 </div>
             </div>
         </body>
@@ -129,7 +129,7 @@ class PurchaseLabelImportController(http.Controller):
         """ % {'task_id': task_id}
         return request.make_response(html_content)
 
-    @http.route('/purchase_label_import/status', type='http', auth='user', methods=['GET'])
+    @http.route('/purchase_bulk_import/status', type='http', auth='user', methods=['GET'])
     def import_status(self, task_id, **kw):
         import json
         status = request.env['ir.config_parameter'].sudo().get_param(f'import_status_{task_id}', 'running')
