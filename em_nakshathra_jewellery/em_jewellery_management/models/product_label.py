@@ -203,7 +203,7 @@ class ProductLabel(models.Model):
         today = fields.Date.today()
         for rec in self:
             days_since_creation = (today - rec.create_date.date()).days if rec.create_date else 0
-            if rec.age_import > 0:
+            if rec.age_import != 0:
                 rec.age = rec.age_import + days_since_creation
             else:
                 rec.age = days_since_creation + 1
