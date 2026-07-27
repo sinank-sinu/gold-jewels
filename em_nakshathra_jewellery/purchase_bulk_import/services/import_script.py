@@ -197,7 +197,7 @@ class ImportLabelService:
             tax = False
 
             if tax_name == "3% GST":
-                tax = self.env["account.tax"].browse(118)
+                tax = self.env["account.tax"].browse(147)
             elif tax_name == "18% GST":
                 tax = self.env["account.tax"].browse(160)
                 print("tax 18 % found")
