@@ -208,3 +208,5 @@ __marimo__/
 
 # Odoo custom config
 odoo.config
+
+*.xlsx
