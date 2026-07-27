@@ -18,12 +18,26 @@ class ProductLabelImportController(http.Controller):
             file_content = file.read()
             file_base64 = base64.b64encode(file_content)
 
-            service = ProductLabelImportService(request.env)
-            result = service.process_import(file_base64)
+            import threading
+            def run_import(env, base64_file):
+                with env.registry.cursor() as new_cr:
+                    import odoo
+                    new_env = odoo.api.Environment(new_cr, env.uid, env.context)
+                    service = ProductLabelImportService(new_env)
+                    try:
+                        service.process_import(base64_file)
+                    except Exception as e:
+                        _logger.exception("Background import failed.")
+
+            thread = threading.Thread(target=run_import, args=(request.env, file_base64))
+            thread.start()
             
-            return request.make_response(json.dumps({'success': True, 'result': result}), headers=[('Content-Type', 'application/json')])
+            return request.make_response(json.dumps({
+                'success': True, 
+                'message': 'Import process started in the background. Please check the terminal logs for progress.'
+            }), headers=[('Content-Type', 'application/json')])
         except Exception as e:
-            _logger.exception("Error during product label import via HTTP.")
+            _logger.exception("Error starting background product label import.")
             return request.make_response(json.dumps({'error': str(e)}), headers=[('Content-Type', 'application/json')])
 
     @http.route('/import/product_labels', type='http', auth='user', methods=['GET'])
@@ -45,13 +59,56 @@ class ProductLabelImportController(http.Controller):
                 <div class="container">
                     <h2>Product Label Excel Import</h2>
                     <p>Select your <b>.xlsx</b> file and click Import. Processing 10,000+ rows may take a few moments.</p>
-                    <form action="/api/import/product_labels" method="POST" enctype="multipart/form-data">
+                    <form id="importForm">
                         <div class="file-input">
-                            <input type="file" name="file" accept=".xlsx, .xls" required="required" />
+                            <input type="file" id="fileInput" name="file" accept=".xlsx, .xls" required="required" />
                         </div>
-                        <button type="submit" class="btn">Start Import</button>
+                        <button type="submit" class="btn" id="submitBtn">Start Import</button>
                     </form>
+                    <div id="statusMessage" style="margin-top: 20px; font-weight: bold;"></div>
                 </div>
+                <script>
+                    document.getElementById('importForm').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const fileInput = document.getElementById('fileInput');
+                        const statusMessage = document.getElementById('statusMessage');
+                        const submitBtn = document.getElementById('submitBtn');
+                        
+                        if (fileInput.files.length === 0) return;
+                        
+                        const formData = new FormData();
+                        formData.append('file', fileInput.files[0]);
+                        
+                        submitBtn.disabled = true;
+                        submitBtn.innerText = 'Starting...';
+                        statusMessage.innerText = 'Sending request to server...';
+                        statusMessage.style.color = '#333';
+                        
+                        fetch('/api/import/product_labels', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                statusMessage.innerText = 'Success: ' + (data.message || 'Import completed.');
+                                statusMessage.style.color = 'green';
+                            } else {
+                                statusMessage.innerText = 'Error: ' + data.error;
+                                statusMessage.style.color = 'red';
+                            }
+                            submitBtn.disabled = false;
+                            submitBtn.innerText = 'Start Import';
+                        })
+                        .catch(err => {
+                            statusMessage.innerText = 'Request failed. See console for details.';
+                            statusMessage.style.color = 'red';
+                            console.error(err);
+                            submitBtn.disabled = false;
+                            submitBtn.innerText = 'Start Import';
+                        });
+                    });
+                </script>
             </body>
         </html>
         """

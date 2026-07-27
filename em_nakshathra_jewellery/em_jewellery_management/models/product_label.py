@@ -49,6 +49,7 @@ class ProductLabel(models.Model):
     )
     branch_id = fields.Many2one('res.branch', string='Branch', store=True,
                                 readonly=False )
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
     job_work_id = fields.Many2one(
@@ -202,7 +203,7 @@ class ProductLabel(models.Model):
         today = fields.Date.today()
         for rec in self:
             days_since_creation = (today - rec.create_date.date()).days if rec.create_date else 0
-            if rec.age_import > 0:
+            if rec.age_import != 0:
                 rec.age = rec.age_import + days_since_creation
             else:
                 rec.age = days_since_creation + 1

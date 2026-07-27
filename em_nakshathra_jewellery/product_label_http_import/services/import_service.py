@@ -14,11 +14,14 @@ class ProductLabelImportService:
     def process_import(self, file_base64):
         _logger.info("Starting Product Label Bulk Import via Python Script...")
         file_content = base64.b64decode(file_base64)
-        wb = load_workbook(io.BytesIO(file_content), data_only=True)
+        
+        # Using read_only=True significantly reduces openpyxl memory footprint
+        wb = load_workbook(io.BytesIO(file_content), data_only=True, read_only=True)
         sheet = wb.active
         
-        # Extract headers and handle duplicates (e.g. Diamond Weight (g) appears twice)
-        raw_headers = [str(cell.value).strip() if cell.value else f"Col_{idx}" for idx, cell in enumerate(sheet[1])]
+        # Extract headers and handle duplicates for read_only mode
+        header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+        raw_headers = [str(val).strip() if val else f"Col_{idx}" for idx, val in enumerate(header_row)]
         headers = []
         counts = {}
         for h in raw_headers:
@@ -32,43 +35,116 @@ class ProductLabelImportService:
         created = 0
         transferred = 0
         
-        # Set up a batch counter to commit periodically if needed
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-            if not any(row):
-                continue
-                
-            row_dict = dict(zip(headers, row))
-            
-            try:
-                with self.env.cr.savepoint():
-                    _logger.info(f"Processing row {row_idx}...")
-                    label = self._process_row(row_dict, row_idx)
-                    created += 1
-                    _logger.info(f"Row {row_idx} imported successfully as Label {label.name}.")
-            except Exception as e:
-                _logger.error(f"Error on row {row_idx}: {e}")
-                
-        self.env.cr.commit()
-        
-        # Run Transfers (auto-stock in)
         import odoo
-        label_ids = self.env['product.label'].search([('is_stocked_in', '=', False), ('picking_id', '=', False)]).ids
-        for label_id in label_ids:
-            try:
-                with self.env.registry.cursor() as new_cr:
-                    new_env = odoo.api.Environment(new_cr, self.env.uid, self.env.context)(su=True)
-                    label = new_env['product.label'].browse(label_id)
-                    # Force company context to prevent 'Incompatible companies on records' error during stock moves
-                    company = label.branch_id.company_id or label.product_id.company_id
-                    if company:
-                        label = label.with_company(company)
-                    label.action_stock_in()
-                    transferred += 1
-            except Exception as e:
-                import traceback
-                with open('/tmp/odoo_transfer_error.log', 'a') as f:
-                    f.write(f"Error on label {label_id}:\n{traceback.format_exc()}\n")
-                _logger.warning(f"Failed to auto-transfer label ID {label_id}: {e}")
+        import gc
+        
+        # Safe psutil patch in case Odoo's process_limit memory tracker crashes
+        try:
+            import psutil
+            if not hasattr(psutil.Process, '_cache'):
+                setattr(psutil.Process, '_cache', property(lambda self: {}))
+        except Exception:
+            pass
+        
+        current_cr = self.env.registry.cursor()
+        current_env = odoo.api.Environment(current_cr, self.env.uid, self.env.context)(su=True)
+        original_env = self.env
+        
+        try:
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+                if not any(row):
+                    continue
+                    
+                row_dict = dict(zip(headers, row))
+                
+                if current_cr.closed:
+                    current_cr = self.env.registry.cursor()
+                    current_env = odoo.api.Environment(current_cr, self.env.uid, self.env.context)(su=True)
+                    
+                self.env = current_env
+                
+                try:
+                    with self.env.cr.savepoint():
+                        _logger.info(f"Processing row {row_idx}...")
+                        label = self._process_row(row_dict, row_idx)
+                        
+                        # Extract and parse date from excel row (Bill Date or Date)
+                        def get_local_val(key_name):
+                            for k in row_dict.keys():
+                                if str(k).strip().lower() == key_name.lower():
+                                    return row_dict[k]
+                            return None
+
+                        raw_date = get_local_val('bill date') or get_local_val('date')
+                        excel_date = None
+                        if raw_date:
+                            if hasattr(raw_date, 'strftime'):
+                                excel_date = raw_date
+                            elif isinstance(raw_date, str):
+                                try:
+                                    from dateutil import parser
+                                    excel_date = parser.parse(raw_date)
+                                except Exception:
+                                    pass
+                        
+                        # Perform Transfer immediately
+                        company = label.branch_id.company_id or label.product_id.company_id
+                        if company:
+                            label = label.with_company(company)
+                        label.action_stock_in()
+                        
+                        picking = label.picking_id
+                        if picking and excel_date:
+                            formatted_date = excel_date.strftime('%Y-%m-%d %H:%M:%S')
+                            try:
+                                # Flush pending ORM updates to the database to prevent overwriting our SQL
+                                picking.flush_recordset()
+                                picking.move_ids.flush_recordset()
+                                picking.move_line_ids.flush_recordset()
+
+                                # Use raw SQL to reliably bypass any ORM restrictions on done pickings
+                                self.env.cr.execute(
+                                    "UPDATE stock_picking SET scheduled_date=%s, date_done=%s, date=%s WHERE id=%s",
+                                    (formatted_date, formatted_date, formatted_date, picking.id)
+                                )
+                                self.env.cr.execute(
+                                    "UPDATE stock_move SET date=%s WHERE picking_id=%s",
+                                    (formatted_date, picking.id)
+                                )
+                                self.env.cr.execute(
+                                    "UPDATE stock_move_line SET date=%s WHERE picking_id=%s",
+                                    (formatted_date, picking.id)
+                                )
+
+                                # Invalidate cache so the ORM loads the newly updated SQL values
+                                picking.invalidate_recordset()
+                                picking.move_ids.invalidate_recordset()
+                                picking.move_line_ids.invalidate_recordset()
+                            except Exception as date_e:
+                                _logger.warning(f"Could not apply excel date {formatted_date} to picking {picking.name}: {date_e}")
+                                
+                        transferred += 1
+                        created += 1
+                        _logger.info(f"Row {row_idx} imported and transferred successfully as Label {label.name}.")
+                except Exception as e:
+                    _logger.error(f"Error on row {row_idx}: {e}")
+                    
+                if created > 0 and created % 100 == 0:
+                    current_cr.commit()
+                    # Close and recreate cursor to aggressively free Odoo ORM cache
+                    current_cr.close()
+                    current_cr = self.env.registry.cursor()
+                    current_env = odoo.api.Environment(current_cr, self.env.uid, self.env.context)(su=True)
+                    self.env = current_env
+                    gc.collect()
+                    _logger.info(f"Memory Checkpoint: Batch committed at row {row_idx}. ORM cache cleared.")
+                    
+            current_cr.commit()
+            
+        finally:
+            if not current_cr.closed:
+                current_cr.close()
+            self.env = original_env
                 
         return {'created': created, 'transferred': transferred}
 
@@ -79,47 +155,77 @@ class ProductLabelImportService:
                 if str(k).strip().lower() == key_name.lower():
                     return row[k]
             return None
+            
+        company_name = str(get_val('Company') or '').strip()
+        if not company_name:
+            raise UserError(f"Company column is missing or empty on row {row_idx}.")
+            
+        excel_company = self.env['res.company'].search([('name', '=ilike', company_name)], limit=1)
+        if not excel_company:
+            raise UserError(f"Company '{company_name}' not found in Odoo for row {row_idx}.")
+            
+        _logger.info(f"Row {row_idx}: Using Excel Company: '{excel_company.name}' (ID: {excel_company.id})")
 
         # 1. Product Template & Variant matching
         product_name = str(get_val('Product') or '').strip()
         if not product_name:
             raise UserError(f"Product column is missing on row {row_idx}.")
             
-        variant = self._resolve_product_variant(row, product_name, get_val)
+        variant = self._resolve_product_variant(row, product_name, get_val, excel_company)
+        if variant.company_id and variant.company_id.id != excel_company.id:
+            raise UserError(f"Product Variant {variant.name} belongs to company {variant.company_id.name}, but Excel row specifies {excel_company.name}.")
         
         # 2. Find Branch
         branch_name = str(get_val('Branch') or '').strip()
         branch = False
         if branch_name:
-            branch = self.env['res.branch'].search([('name', '=ilike', branch_name)], limit=1)
+            branch = self.env['res.branch'].search([('name', '=ilike', branch_name), ('company_id', '=', excel_company.id)], limit=1)
             if not branch:
-                branch = self.env['res.branch'].create({'name': branch_name})
+                branch = self.env['res.branch'].create({'name': branch_name, 'company_id': excel_company.id})
                 
         # 3. Find Source Location
         src_loc_name = str(get_val('Source Location') or '').strip()
         src_loc = False
         if src_loc_name:
-            src_loc = self.env['stock.location'].search(['|', ('complete_name', '=ilike', src_loc_name), ('name', '=ilike', src_loc_name)], limit=1)
+            src_loc = self.env['stock.location'].search([
+                '|', ('complete_name', '=ilike', src_loc_name), ('name', '=ilike', src_loc_name),
+                ('company_id', 'in', [excel_company.id, False])
+            ], limit=1)
             if not src_loc:
-                src_loc = self.env['stock.location'].create({'name': src_loc_name, 'usage': 'internal'})
+                src_loc = self.env['stock.location'].create({
+                    'name': src_loc_name, 
+                    'usage': 'internal',
+                    'company_id': excel_company.id
+                })
+            elif src_loc.company_id and src_loc.company_id.id != excel_company.id:
+                raise UserError(f"Source Location '{src_loc_name}' belongs to {src_loc.company_id.name}, expected {excel_company.name}")
                 
         # 4. Find Destination Location
         dest_loc_name = str(get_val('Destination Location') or '').strip()
         dest_loc = False
         if dest_loc_name:
-            dest_loc = self.env['stock.location'].search(['|', ('complete_name', '=ilike', dest_loc_name), ('name', '=ilike', dest_loc_name)], limit=1)
+            dest_loc = self.env['stock.location'].search([
+                '|', ('complete_name', '=ilike', dest_loc_name), ('name', '=ilike', dest_loc_name),
+                ('company_id', 'in', [excel_company.id, False])
+            ], limit=1)
             if not dest_loc:
                 dest_loc = self.env['stock.location'].create({
                     'name': dest_loc_name,
                     'usage': 'internal',
-                    'branch_id': branch.id if branch else False
+                    'branch_id': branch.id if branch else False,
+                    'company_id': excel_company.id
                 })
+            elif dest_loc.company_id and dest_loc.company_id.id != excel_company.id:
+                raise UserError(f"Destination Location '{dest_loc_name}' belongs to {dest_loc.company_id.name}, expected {excel_company.name}")
                 
         # 5. Find Purchase Order
         po_name = str(get_val('Choose Purchase Order') or get_val('Purchase Order') or '').strip()
         po = False
         if po_name:
-            po = self.env['purchase.order'].search([('name', '=ilike', po_name)], limit=1)
+            po = self.env['purchase.order'].search([
+                ('name', '=ilike', po_name),
+                ('company_id', '=', excel_company.id)
+            ], limit=1)
             
         # Purity
         purity_name = str(get_val('Purity') or '').strip()
@@ -130,11 +236,13 @@ class ProductLabelImportService:
                 purity = self.env['gold.purity'].create({'name': purity_name})
 
         # Making charge type mapping
-        sale_mc_type_raw = str(get_val('Sale Making Charge Type') or '').strip().lower()
+        sale_mc_type_raw = str(get_val('Sale Making Charge Type') or '').strip()
         sale_mc_type = self._map_mc_type(sale_mc_type_raw)
             
-        purch_mc_type_raw = str(get_val('Purchase Making Charge Type') or '').strip().lower()
+        purch_mc_type_raw = str(get_val('Purchase Making Charge Type') or '').strip()
         purch_mc_type = self._map_mc_type(purch_mc_type_raw)
+        
+        _logger.info(f"Row {row_idx}: Excel Purchase Making Charge Type = '{purch_mc_type_raw}' -> Normalized Odoo Value = '{purch_mc_type}'")
 
         # Helper to convert to float
         def get_float(col):
@@ -148,18 +256,71 @@ class ProductLabelImportService:
 
         label_name = str(get_val('Label Name') or '').strip()
         
+        # 6. Normalize Barcode
+        raw_barcode = get_val('Barcode')
+        _logger.info(f"Excel Barcode: {raw_barcode}")
+        
+        normalized_barcode = False
+        if raw_barcode is not None and str(raw_barcode).strip():
+            if isinstance(raw_barcode, float) and raw_barcode.is_integer():
+                normalized_barcode = str(int(raw_barcode))
+            elif isinstance(raw_barcode, str) and raw_barcode.endswith('.0'):
+                normalized_barcode = raw_barcode[:-2]
+            else:
+                normalized_barcode = str(raw_barcode).strip()
+                
+        _logger.info(f"Normalized Barcode: {normalized_barcode}")
+        _logger.info(f"Creating Product Label with Barcode: {normalized_barcode}")
+
+        # Parse Bill Date to correctly offset the age_import value
+        excel_age = int(get_float('Age (Days)'))
+        age_import_val = excel_age
+        
+        raw_bill_date = get_val('Bill Date') or get_val('Date')
+        parsed_date = None
+        if raw_bill_date:
+            if hasattr(raw_bill_date, 'strftime'):
+                parsed_date = raw_bill_date
+            elif isinstance(raw_bill_date, str):
+                try:
+                    from dateutil import parser
+                    parsed_date = parser.parse(raw_bill_date)
+                except Exception:
+                    pass
+                    
+        if parsed_date:
+            from odoo import fields
+            today = fields.Date.today()
+            parsed_date_only = parsed_date.date() if hasattr(parsed_date, 'date') else parsed_date
+            # By subtracting the days since bill_date, Odoo will calculate the exact excel_age for today
+            days_diff = (today - parsed_date_only).days
+            age_import_val = excel_age - days_diff
+
+        excel_pmc_value = get_float('Purchase Making Charge')
+        excel_pmc_amount = get_float('Purchase Making Charge Amount')
+        
+        # Odoo's purchase_making_charge_amount is a computed field.
+        # If type is 'amount', the compute method strictly reads from purchase_making_charge_value.
+        # We must feed the excel amount into the value field to drive the computation correctly.
+        final_pmc_value = excel_pmc_amount if purch_mc_type == 'amount' and excel_pmc_amount else excel_pmc_value
+        
+        _logger.info(f"Row {row_idx}: Excel Purchase Making Charge = {excel_pmc_value}")
+        _logger.info(f"Row {row_idx}: Excel Purchase Making Charge Amount = {excel_pmc_amount}")
+        _logger.info(f"Row {row_idx}: Source field 'purchase_making_charge_value' set to {final_pmc_value} to drive computation.")
+
         vals = {
             'label_name': label_name,
             'name': label_name or 'New',
             'product_id': variant.id,
             'product_tmpl_id': variant.product_tmpl_id.id,
             'branch_id': branch.id if branch else False,
+            'company_id': excel_company.id,
             'source_location_id': src_loc.id if src_loc else False,
             'branch_location_id': dest_loc.id if dest_loc else False,
             'purchase_id': po.id if po else False,
             
-            'barcode': str(get_val('Barcode') or '').strip() or False,
-            'age_import': int(get_float('Age (Days)')),
+            'barcode': normalized_barcode,
+            'age_import': age_import_val,
             'tag_weight': get_float('Tag Weight (g)'),
             'purity_id': purity.id if purity else False,
             'sale_purity_id': purity.id if purity else False,
@@ -187,7 +348,7 @@ class ProductLabelImportService:
             'purchase_diamond_weight_ct': get_float('Diamond Weight (ct)_1') if get_val('Diamond Weight (ct)_1') is not None else get_float('Diamond Weight (ct)'),
             
             'purchase_making_charge_type': purch_mc_type,
-            'purchase_making_charge_value': get_float('Purchase Making Charge'),
+            'purchase_making_charge_value': final_pmc_value,
             
             'purchase_stone_rate': get_float('Purchase Stone Amount'),
             'purchase_diamond_rate': get_float('Purchase Diamond Amount'),
@@ -196,48 +357,60 @@ class ProductLabelImportService:
         }
             
         label = self.env['product.label'].create(vals)
+        _logger.info(f"Row {row_idx}: Final Product Label created with purchase_making_charge_value = {label.purchase_making_charge_value}, purchase_making_charge_amount = {label.purchase_making_charge_amount}")
         
         # Force product_tmpl_id via write to ensure it doesn't get cleared by any internal onchange
+        write_vals = {}
         if variant.product_tmpl_id:
-            label.write({'product_tmpl_id': variant.product_tmpl_id.id, 'product_id': variant.id})
+            write_vals['product_tmpl_id'] = variant.product_tmpl_id.id
+            write_vals['product_id'] = variant.id
+            
+        # Ensure barcode wasn't overwritten by any automatic generation during create
+        if normalized_barcode and label.barcode != normalized_barcode:
+            write_vals['barcode'] = normalized_barcode
+            
+        if write_vals:
+            label.write(write_vals)
+            
+        if parsed_date:
+            try:
+                formatted_create_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+                self.env.cr.execute(
+                    "UPDATE product_label SET create_date=%s WHERE id=%s",
+                    (formatted_create_date, label.id)
+                )
+            except Exception as e:
+                _logger.warning(f"Could not update create_date for label {label.id}: {e}")
+            
+        _logger.info(f"Final Product Label Barcode: {label.barcode}")
             
         return label
 
     def _map_mc_type(self, raw_val):
-        if 'percent' in raw_val or '%' in raw_val:
-            return 'percent'
-        elif 'amount' in raw_val:
-            return 'amount'
-        elif 'rate' in raw_val:
+        val = str(raw_val).strip().lower()
+        if 'rate' in val or 'per gram' in val:
             return 'rate_per_gram'
+        elif 'percent' in val or '%' in val:
+            return 'percent'
+        elif 'amount' in val:
+            return 'amount'
         return 'percent'
 
-    def _resolve_product_variant(self, row, product_name, get_val_func):
+    def _resolve_product_variant(self, row, product_name, get_val_func, fixed_company):
         import re
         
         # Normalize product name
         norm_product_name = re.sub(r'\s+', ' ', str(product_name)).strip()
         _logger.info(f"Finding Product Template: Original '{product_name}' -> Normalized '{norm_product_name}'")
         
-        # Resolve Company from Excel
-        excel_company_name = str(get_val_func('Company') or '').strip()
-        if not excel_company_name:
-            raise UserError(f"No Company specified in Excel for product '{norm_product_name}'.")
-            
-        excel_company = self.env['res.company'].search([('name', '=', excel_company_name)], limit=1)
-        if not excel_company:
-            raise UserError(f"Company '{excel_company_name}' from Excel not found in Odoo.")
-            
-        _logger.info(f"Excel Company: '{excel_company.name}' (ID: {excel_company.id})")
-
         # Search Product Template using broad search then python strict matching
         first_word = norm_product_name.split('(')[0].strip() if '(' in norm_product_name else norm_product_name
         domain = [
             ('name', 'ilike', first_word),
-            ('company_id', 'in', [excel_company.id, False])
+            ('company_id', 'in', [fixed_company.id, False])
         ]
         
-        TemplateModel = self.env['product.template'].with_context(active_test=False).with_company(excel_company)
+        TemplateModel = self.env['product.template'].with_context(active_test=False).with_company(fixed_company)
         all_templates = TemplateModel.search(domain)
         
         matched_templates = []
@@ -250,36 +423,43 @@ class ProductLabelImportService:
                 
         if matched_templates:
             # Prioritize company-specific templates over shared templates, then by oldest ID
-            matched_templates.sort(key=lambda t: (0 if t.company_id and t.company_id.id == excel_company.id else 1, t.id))
+            matched_templates.sort(key=lambda t: (0 if t.company_id and t.company_id.id == fixed_company.id else 1, t.id))
             template = matched_templates[0]
             _logger.info(f"Found existing Product Template: {template.name} (ID: {template.id}) for Company {template.company_id.name if template.company_id else 'Shared'}")
         else:
             _logger.error(f"Excel Product Name: '{product_name}'")
             _logger.error(f"Normalized Name: '{norm_product_name}'")
-            _logger.error(f"Excel Company: '{excel_company.name}'")
-            _logger.error(f"Company ID: {excel_company.id}")
+            _logger.error(f"Fixed Company: '{fixed_company.name}'")
+            _logger.error(f"Company ID: {fixed_company.id}")
             _logger.error(f"Search Domain: {domain}")
-            raise UserError(f"Product Template '{norm_product_name}' not found for company '{excel_company.name}'. Please ensure it is created before importing.")
+            raise UserError(f"Product Template '{norm_product_name}' not found for company '{fixed_company.name}'. Please ensure it is created before importing.")
+
+        def clean_val(key):
+            val = get_val_func(key)
+            if val is None:
+                return None
+            return str(val).strip().title()
 
         attrs = {
-            'TYPE': str(get_val_func('TYPE') or '').strip().title(),
-            'VARIETY': str(get_val_func('VARIETY') or '').strip().title(),
-            'DESIGN': str(get_val_func('DESIGN') or '').strip().title(),
-            'SIZE': str(get_val_func('SIZE') or '').strip().title(),
-            'STONE COLOUR': str(get_val_func('STONE COLOUR') or '').strip().title(),
-            'METAL COLOUR': str(get_val_func('METAL COLOUR') or '').strip().title(),
+            'TYPE': clean_val('TYPE'),
+            'VARIETY': clean_val('VARIETY'),
+            'DESIGN': clean_val('DESIGN'),
+            'SIZE': clean_val('SIZE'),
+            'STONE COLOUR': clean_val('STONE COLOUR'),
+            'METAL COLOUR': clean_val('METAL COLOUR'),
         }
 
         ptav_ids = []
         for attr_name, attr_val in attrs.items():
-            if not attr_val or attr_val.upper() in ('NONE', 'FALSE', ''):
-                attr_val = 'None'
-                
             attribute = self.env['product.attribute'].search([('name', '=ilike', attr_name)], limit=1)
             if not attribute:
                 raise UserError(f"Product Attribute '{attr_name}' not found. Please ensure it exists.")
                 
-            value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=ilike', attr_val)], limit=1)
+            if attr_val is None:
+                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=', False)], limit=1)
+            else:
+                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=ilike', attr_val)], limit=1)
+                
             if not value:
                 raise UserError(f"Product Attribute Value '{attr_val}' for '{attr_name}' not found.")
                 
@@ -305,12 +485,9 @@ class ProductLabelImportService:
                 break
                 
         if not exact_variant:
-            _logger.error(f"Excel Product Name: '{product_name}'")
-            _logger.error(f"Excel Company: '{excel_company.name}' (ID: {excel_company.id})")
-            _logger.error(f"Attribute Values: {attrs}")
-            _logger.error(f"Template ID: {template.id} (Company: {template.company_id.name if template.company_id else 'Shared'})")
-            _logger.error(f"Variant Search Domain Target PTAVs: {target_ptav_set}")
-            raise UserError(f"Exact Product Variant for '{template.name}' with attributes {attrs} not found.")
+            error_msg = f"Product Variant not found for template '{template.name}' with exactly these attributes: {attrs}. Please ensure the variant is created before importing."
+            _logger.error(error_msg)
+            raise UserError(error_msg)
             
         _logger.info(f"Found exact variant {exact_variant.id} for {template.name}")
             
