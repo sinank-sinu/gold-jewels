@@ -237,6 +237,7 @@ class ImportLabelService:
             price = float(line.get('Order Lines/Unit Price') or line.get('Unit Price') or 0.0)
             weight = float(line.get('Weight') or line.get('Gross Weight') or line.get('Weight (g)') or line.get(
                 'Weight in grams') or 0.0)
+            gold_rate = float(line.get("Fine Rate") or 0.0)
 
             purity_id = False
             purity_name = line.get('Purity')
@@ -272,6 +273,7 @@ class ImportLabelService:
                 'gross_weight': weight,
                 'product_uom': product.uom_id.id,
                 'date_planned': date_str,
+                'gold_rate': gold_rate,
                 'taxes_id': [(6, 0, [tax.id])] if tax else [(5, 0, 0)],
             }
             if purity_id:
