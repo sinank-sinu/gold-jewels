@@ -39,6 +39,10 @@
                               type="object" string="Making Charge Bill" class="btn-secondary"
                               invisible="making_charge_bill_id or job_type_selection != 'gold_alloy'"/>
                       <button
+                              name="action_update_stock_valuation"
+                              type="object" string="Update Stock Valuation" class="btn-info"
+                              invisible="state != 'done'"/>
+                      <button
                               name="action_edit_voucher"
                               type="object"
                               string="Edit Voucher"

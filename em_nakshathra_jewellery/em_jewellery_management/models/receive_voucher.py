@@ -236,6 +236,7 @@ class JewelleryReceiveVoucher(models.Model):
         for move_line in picking.move_line_ids:
             # Read qty from parent stock.move (product_uom_qty is invalid on move.line)
             move_line.quantity = move_line.move_id.product_uom_qty
+            move_line.picked = True
 
         picking.with_context(skip_backorder=True).button_validate()
 
@@ -248,6 +249,78 @@ class JewelleryReceiveVoucher(models.Model):
             for line in self.line_ids:
                 if line.issue_voucher_line_id and line.issue_voucher_line_id.refinery_issue_id:
                     line.issue_voucher_line_id.refinery_issue_id.state = 'received'
+
+    def action_update_stock_valuation(self):
+        self.ensure_one()
+        if self.state != 'done':
+            raise ValidationError(_("Receive Voucher must be in Done state to update valuation."))
+        if not self.issue_voucher_id or self.issue_voucher_id.state != 'done':
+            raise ValidationError(_("The linked Issue Voucher must be Done before updating valuation."))
+
+        # Link Issue Voucher Lines to Receive Voucher Lines if not already linked
+        issue_lines = self.issue_voucher_id.line_ids.sorted('id')
+        remaining_issue_lines = issue_lines
+
+        for line in self.line_ids:
+            if not line.issue_voucher_line_id:
+                matching_issue_line = remaining_issue_lines[:1]
+                if matching_issue_line and remaining_issue_lines:
+                    remaining_issue_lines -= matching_issue_line
+                if matching_issue_line:
+                    line.issue_voucher_line_id = matching_issue_line.id
+            
+            if line.issue_voucher_line_id:
+                line.fine_gms_price = line.issue_voucher_line_id.fine_gms_price
+                line.fine_issue_amount = line.issue_voucher_line_id.fine_issue_amount
+
+        for line in self.line_ids:
+            if not line.fine_gms_price or line.fine_gms_price <= 0:
+                raise ValidationError(_("Fine GMS Price must be greater than zero for product %s. Please check Issue Voucher.") % line.product_id.name)
+
+        if not self.picking_id:
+            return
+
+        for line in self.line_ids:
+            new_price_unit = (line.total_receive_fine_amount / line.gross_weight) if line.gross_weight else 0.0
+            
+            move = self.picking_id.move_ids.filtered(lambda m: m.product_id == line.product_id and m.receive_voucher_line_id == line)
+            if not move:
+                move = self.picking_id.move_ids.filtered(lambda m: m.product_id == line.product_id)
+            
+            for m in move:
+                m.sudo().write({'price_unit': new_price_unit})
+                for svl in m.stock_valuation_layer_ids:
+                    new_value = new_price_unit * svl.quantity
+                    svl.sudo().write({
+                        'unit_cost': new_price_unit,
+                        'value': new_value,
+                        'remaining_value': new_price_unit * svl.remaining_qty,
+                    })
+                    
+                    if svl.account_move_id:
+                        am = svl.account_move_id
+                        was_posted = am.state == 'posted'
+                        if was_posted:
+                            am.button_draft()
+                            
+                        for aml in am.line_ids:
+                            if aml.debit > 0:
+                                aml.with_context(check_move_validity=False).sudo().write({'debit': abs(new_value)})
+                            elif aml.credit > 0:
+                                aml.with_context(check_move_validity=False).sudo().write({'credit': abs(new_value)})
+                                
+                        if was_posted:
+                            am.action_post()
+                    else:
+                        if m.product_id.valuation == 'real_time':
+                            try:
+                                am_vals = m.sudo().with_company(m.company_id)._account_entry_move(svl.quantity, svl.description, svl.id, new_value)
+                                if am_vals:
+                                    account_moves = self.env['account.move'].sudo().create(am_vals)
+                                    account_moves._post()
+                            except Exception as e:
+                                pass
+
 
 
     def action_dept_approve(self):
