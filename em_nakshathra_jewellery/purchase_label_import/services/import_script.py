@@ -109,7 +109,7 @@ class ImportLabelService:
         if excel_branch:
             _logger.info(f"Excel branch value ignored: '{excel_branch}'")
             
-        fixed_branch_name = 'HEAD OFFICE'
+        fixed_branch_name = 'Head Office Main'
         _logger.info(f"Using fixed Purchase Order branch: '{fixed_branch_name}'")
         _logger.info(f"Company: '{current_company.name}'")
         
@@ -464,90 +464,193 @@ class ImportLabelService:
             assert template.exists(), "Product Template not found. Creation of new Product Templates is disabled."
             self.template_cache[template_cache_key] = template
             
+        # Ensure the template is active
+        if hasattr(template, 'active') and not template.active:
+            raise UserError(f"Product Template '{template.name}' is archived. Unarchive it before importing.")
+
+        def normalize_value(value):
+            import unicodedata
+            if not value or str(value).strip().lower() in ['false', 'none', '']:
+                return "none"
+            val_str = str(value)
+            
+            # Normalize Unicode
+            val_str = unicodedata.normalize('NFKC', val_str)
+            
+            # Replace smart quotes with normal quotes
+            val_str = val_str.replace('”', '"').replace('“', '"').replace('„', '"')
+            val_str = val_str.replace('‘', "'").replace('’', "'")
+            
+            # Replace smart dashes with '-' and remove spaces around them
+            val_str = re.sub(r'\s*[-\u2013\u2014]\s*', '-', val_str)
+            
+            # Remove spaces immediately before or after a double quote (")
+            val_str = re.sub(r'\s*"\s*', '"', val_str)
+            
+            # Remove spaces immediately before or after a single quote (')
+            val_str = re.sub(r"\s*'\s*", "'", val_str)
+            
+            # Collapse repeated spaces again after replacements
+            return " ".join(val_str.strip().split()).casefold()
+
         # Build exact Product Template Attribute Values (PTAVs) for the variant
         ptav_ids = []
         for attr_name, attr_val in attrs.items():
-            if not attr_val:
-                continue
+            attribute = self.env['product.attribute'].search([('name', '=ilike', str(attr_name).strip())], limit=1)
+            if not attribute:
+                raise UserError(f"Product Attribute '{attr_name}' not found. Please ensure it exists.")
                 
-            # Get or create attribute
-            if attr_name in self.attribute_cache:
-                attribute = self.attribute_cache[attr_name]
-            else:
-                attribute = self.env['product.attribute'].search([('name', '=ilike', attr_name)], limit=1)
-                if not attribute:
-                    attribute = self.env['product.attribute'].create({'name': attr_name})
-                self.attribute_cache[attr_name] = attribute
+            norm_excel = normalize_value(attr_val)
+            
+            # Fetch all values belonging to the attribute and compare in Python
+            available_values = attribute.value_ids
+            matched_value = next(
+                (
+                    v for v in available_values
+                    if normalize_value(v.name) == norm_excel
+                ),
+                False,
+            )
+            value = matched_value
+            
+            _logger.info(f"Excel: {repr(attr_val)} -> Normalized: {repr(norm_excel)} | Database Matched: {'YES' if matched_value else 'NO'}")
+            
+            if not value:
+                available_diagnostics = [f"Raw: {repr(v.name)} -> Normalized: {repr(normalize_value(v.name))}" for v in available_values]
+                _logger.error("--- ATTRIBUTE VALUE MISMATCH ---")
+                _logger.error(f"Template ID: {template.id} | Name: {template.name} | Attribute: {attr_name}")
+                _logger.error(f"Raw Excel Val: {repr(attr_val)}")
+                _logger.error(f"Normalized Excel Val: {repr(norm_excel)}")
+                _logger.error("Available Values in Database:")
+                for diag in available_diagnostics:
+                    _logger.error(diag)
+                _logger.error("--------------------------------")
                 
-            # Get or create attribute value
-            val_key = (attribute.id, attr_val)
-            if val_key in self.attribute_value_cache:
-                value = self.attribute_value_cache[val_key]
-            else:
-                value = self.env['product.attribute.value'].search([
-                    ('attribute_id', '=', attribute.id),
-                    ('name', '=ilike', attr_val)
-                ], limit=1)
-                if not value:
-                    value = self.env['product.attribute.value'].create({
-                        'attribute_id': attribute.id,
-                        'name': attr_val
-                    })
-                self.attribute_value_cache[val_key] = value
+                raise UserError(
+                    f"Product Attribute Value {repr(attr_val)} for Attribute '{attr_name}' not found. "
+                    f"Normalized search was: {repr(norm_excel)}. Check logs for available values."
+                )
                 
-            # Ensure the template has this attribute line
+            if hasattr(value, 'active') and not value.active:
+                raise UserError(f"Product Attribute Value {repr(attr_val)} for Attribute '{attr_name}' is archived.")
+
+            # Step 2: Verify product.template.attribute.line exists. If missing create it.
             ptal = template.attribute_line_ids.filtered(lambda l: l.attribute_id.id == attribute.id)
             if not ptal:
+                _logger.info(f"Creating missing Attribute Line for '{attr_name}' on Template '{template.name}'")
                 ptal = self.env['product.template.attribute.line'].create({
                     'product_tmpl_id': template.id,
                     'attribute_id': attribute.id,
                     'value_ids': [(4, value.id)]
                 })
-            elif value.id not in ptal.value_ids.ids:
-                ptal.write({'value_ids': [(4, value.id)]})
-                
-            # Search for the PTAV directly created by Odoo
-            ptav = self.env['product.template.attribute.value'].search([
-                ('attribute_line_id', '=', ptal.id),
-                ('product_attribute_value_id', '=', value.id)
-            ], limit=1)
             
-            if ptav:
-                ptav_ids.append(ptav.id)
+            if hasattr(ptal, 'active') and not ptal.active:
+                 raise UserError(f"Attribute Line for '{attr_name}' on Template '{template.name}' is archived.")
+
+            # Step 3: Verify the Excel value exists inside that template attribute line.
+            if value.id not in ptal.value_ids.ids:
+                _logger.info(f"Attaching existing value '{norm_excel}' to Attribute Line '{attr_name}' on Template '{template.name}'")
+                ptal.write({'value_ids': [(4, value.id)]})
+
+            # Step 4: From that attribute line, search the Product Template Attribute Value (PTAV).
+            ptavs = self.env['product.template.attribute.value'].search([('attribute_line_id', '=', ptal.id), ('product_attribute_value_id', '=', value.id)])
+            
+            if not ptavs:
+                # Fallback to flush in case Odoo ORM hasn't generated the PTAV record yet
+                ptal.flush_recordset(['value_ids'])
+                ptavs = self.env['product.template.attribute.value'].search([('attribute_line_id', '=', ptal.id), ('product_attribute_value_id', '=', value.id)])
+                if not ptavs:
+                    raise UserError(f"Failed to resolve PTAV for '{norm_excel}' on Attribute '{attr_name}' for Template '{template.name}' after attaching the value.")
+            
+            matched_ptav = ptavs[0]
+            
+            if hasattr(matched_ptav, 'ptav_active') and not matched_ptav.ptav_active:
+                raise UserError(f"PTAV for '{norm_excel}' on Attribute '{attr_name}' for Template '{template.name}' is archived.")
                 
+            ptav_ids.append(matched_ptav.id)
+            _logger.info(f"Template ID: {template.id} | Template Name: {template.name} | Attribute: {attr_name} | Excel Val: {attr_val} | Norm Val: {norm_excel} | Attr ID: {attribute.id} | PTAL ID: {ptal.id} | PTAV ID: {matched_ptav.id} | Value ID: {value.id}")
+                
+        # Check Variant Creation Modes
+        creation_modes = {}
+        for ptav_id in ptav_ids:
+            ptav = self.env['product.template.attribute.value'].browse(ptav_id)
+            attr_name = ptav.attribute_id.name
+            create_mode = ptav.attribute_id.create_variant
+            creation_modes[attr_name] = create_mode
+            if create_mode == 'no_variant':
+                _logger.warning(f"Attribute '{attr_name}' on Template '{template.name}' is configured as 'Never (No Variants)'. Odoo will not generate variants for this attribute.")
+
         # Find exact variant by checking if ptav_ids perfectly match the variant's product_template_attribute_value_ids
         exact_variant = None
+        target_ptav_set = set(ptav_ids)
+        
+        count_before = len(template.product_variant_ids)
+        
         for variant in template.product_variant_ids:
             if variant.company_id and variant.company_id.id != current_company.id:
                 continue
                 
-            variant_ptav_ids = set(variant.product_template_attribute_value_ids.ids)
-            if variant_ptav_ids == set(ptav_ids):
+            if set(variant.product_template_attribute_value_ids.ids) == target_ptav_set:
                 exact_variant = variant
                 break
                 
+        generation_triggered = False
         if not exact_variant:
-            # Force create variant if it doesn't exist
-            try:
-                _logger.info(
-                    "Using company %s (%s) for product variant creation",
-                    current_company.name,
-                    current_company.id
-                )
-                exact_variant = self.env['product.product'].create({
-                    'product_tmpl_id': template.id,
-                    'product_template_attribute_value_ids': [(6, 0, ptav_ids)],
-                })
-                _logger.info(
-                    "Variant created: Variant ID %s under Template ID %s",
-                    exact_variant.id, template.id
-                )
-            except Exception as e:
-                _logger.error(f"Failed to create exact variant for {template_name} with attributes {attrs}: {e}")
+            _logger.info("Exact variant not found. Triggering Odoo's standard variant generation...")
+            generation_triggered = True
+            
+            # Combine the PTAVs for dynamic variant generation
+            combination = self.env['product.template.attribute.value'].browse(ptav_ids)
+            
+            # Try dynamic generation first (this activates archived variants or creates new ones if dynamic)
+            created_variant = template._create_product_variant(combination)
+            if created_variant:
+                _logger.info(f"Dynamic generation returned Variant ID: {created_variant.id}")
                 
-        if exact_variant:
-            _logger.info(f"Selected Variant ID: {exact_variant.id}")
-            _logger.info(f"Variant Company: {exact_variant.company_id.name if exact_variant.company_id else 'Shared'} (ID: {exact_variant.company_id.id if exact_variant.company_id else False})")
+            # Also trigger standard generation just in case there are missing instantly created variants
+            template._create_variant_ids()
+            
+            # Reload template to fetch newly created variants
+            template.invalidate_recordset(['product_variant_ids'])
+            
+            # Search again after generation
+            for variant in template.product_variant_ids:
+                if variant.company_id and variant.company_id.id != current_company.id:
+                    continue
+                    
+                if set(variant.product_template_attribute_value_ids.ids) == target_ptav_set:
+                    exact_variant = variant
+                    _logger.info(f"Newly generated/activated Variant ID: {exact_variant.id}")
+                    break
+                    
+        if not exact_variant:
+            count_after = len(template.product_variant_ids)
+            ptav_names = [self.env['product.template.attribute.value'].browse(p).display_name for p in ptav_ids]
+            
+            _logger.error("--- VARIANT RESOLUTION DIAGNOSTICS ---")
+            _logger.error(f"Template ID: {template.id}")
+            _logger.error(f"Template Name: {template.name}")
+            _logger.error(f"Company: {current_company.name} (ID: {current_company.id})")
+            _logger.error(f"Attribute Creation Modes: {creation_modes}")
+            _logger.error(f"Requested PTAV IDs: {ptav_ids}")
+            _logger.error(f"Requested PTAV Names: {ptav_names}")
+            _logger.error(f"Total variants on template: {count_after}")
+            _logger.error(f"Variants before generation: {count_before} | After: {count_after}")
+            _logger.error(f"Generation triggered: {generation_triggered}")
+            
+            for variant in template.product_variant_ids:
+                v_ptav_ids = variant.product_template_attribute_value_ids.ids
+                v_ptav_names = variant.product_template_attribute_value_ids.mapped('display_name')
+                _logger.error(f"Existing Variant ID {variant.id}: PTAV IDs {v_ptav_ids} | PTAV Names {v_ptav_names}")
+                
+            _logger.error("--------------------------------------")
+            
+            missing_combination = ", ".join(ptav_names)
+            error_msg = f"Product Variant not found for template '{template.name}'. The exact attribute combination [{missing_combination}] could not be resolved or generated. Check if an attribute is set to 'Never (No Variants)' or if the template configuration is incomplete."
+            raise UserError(error_msg)
+            
+        _logger.info(f"Final Variant ID used: {exact_variant.id}")
+        _logger.info(f"Variant Company: {exact_variant.company_id.name if exact_variant.company_id else 'Shared'} (ID: {exact_variant.company_id.id if exact_variant.company_id else False})")
                 
         if exact_variant:
             self.variant_cache[cache_key] = exact_variant
