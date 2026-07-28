@@ -110,35 +110,21 @@ class ImportLabelService:
                     date_str = str(bill_date).split(' ')[0] if bill_date else datetime.now().strftime('%Y-%m-%d')
 
                 bill_ref = str(row_dict.get('Bill Reference') or '').strip()
-                key = bill_ref
+                key = (bill_ref, date_str)
+                print(bill_ref)
                 grouped_data[key].append(row_dict)
 
             _logger.info(f"Found {len(grouped_data)} unique Purchase Orders.")
 
             count = 0
-            # # Process each group
-            # for (bill_ref, date_str), lines in grouped_data.items():
-            #     vendor_name = str(lines[0].get('Purchase Order') or '').strip()
-            #     self._process_po_group(vendor_name, bill_ref, date_str, lines)
-            #     count += 1
-            #     if count % 10 == 0:
-            #         self.env.cr.commit()
-            #         _logger.info(f"Processed {count} POs...")
-
-            for bill_ref, lines in grouped_data.items():
+            # Process each group
+            for (bill_ref, date_str), lines in grouped_data.items():
                 vendor_name = str(lines[0].get('Purchase Order') or '').strip()
-
-                bill_date = lines[0].get('Bill Date')
-                if isinstance(bill_date, datetime):
-                    date_str = bill_date.strftime('%Y-%m-%d')
-                else:
-                    date_str = (
-                        str(bill_date).split(' ')[0]
-                        if bill_date
-                        else datetime.now().strftime('%Y-%m-%d')
-                    )
-
                 self._process_po_group(vendor_name, bill_ref, date_str, lines)
+                count += 1
+                if count % 10 == 0:
+                    self.env.cr.commit()
+                    _logger.info(f"Processed {count} POs...")
 
             self.env.cr.commit()
             _logger.info("Purchase Label Bulk Import Completed Successfully!")
@@ -211,9 +197,19 @@ class ImportLabelService:
             tax = False
 
             if tax_name == "3% GST":
-                tax = self.env["account.tax"].browse(147)
+                tax = self.env["account.tax"].search([
+                    ("name", "=", tax_name),
+                    ("type_tax_use", "in", ["purchase", "none"]),('company_id','=',current_company.id)
+                ], limit=1)
+
+                tax = self.env["account.tax"].browse(tax.id)
             elif tax_name == "18% GST":
-                tax = self.env["account.tax"].browse(160)
+                tax = self.env["account.tax"].search([
+                    ("name", "=", tax_name),
+                    ("type_tax_use", "in", ["purchase", "none"]), ('company_id', '=', current_company.id)
+                ], limit=1)
+
+                tax = self.env["account.tax"].browse(tax.id)
                 print("tax 18 % found")
 
             # if not tax:
@@ -383,6 +379,8 @@ class ImportLabelService:
         # bill = f.save()
 
     def _resolve_product(self, row, current_company):
+        _logger.info("ROW = %s", row)
+        _logger.info("ROW KEYS = %s", list(row.keys()))
         # Initialize caches on the instance if they don't exist
         if not hasattr(self, 'variant_cache'):
             self.variant_cache = {}
@@ -391,18 +389,32 @@ class ImportLabelService:
             self.attribute_value_cache = {}
 
         # Normalize attributes
+        _logger.info("ROW DATA = %s", row)
+
+        for k, v in row.items():
+            _logger.info("COLUMN [%s] = %r", k, v)
+
+        # Normalize attributes
+        def get_col(name):
+            for k, v in row.items():
+                if str(k).strip().upper() == name.upper():
+                    return v
+            return None
+
+        # Normalize attributes
         attrs = {
-            'TYPE': str(row.get('TYPE') or '').strip().title(),
-            'VARIETY': str(row.get('VARIETY') or '').strip().title(),
-            'DESIGN': str(row.get('DESIGN') or row.get('DESIGN SIZE') or '').strip().title(),
-            'SIZE': str(row.get('SIZE') or '').strip().title(),
-            'STONE COLOUR': str(row.get('STONE COLOUR') or '').strip().title(),
-            'METAL COLOUR': str(row.get('METAL COLOUR') or '').strip().title(),
+            'TYPE': str(get_col('TYPE') or '').strip().title(),
+            'VARIETY': str(get_col('VARIETY') or '').strip().title(),
+            'DESIGN': str(get_col('DESIGN') or get_col('DESIGN SIZE') or '').strip().title(),
+            'SIZE': str(get_col('SIZE') or '').strip().title(),
+            'STONE COLOUR': str(get_col('STONE COLOUR') or '').strip().title(),
+            'METAL COLOUR': str(get_col('METAL COLOUR') or '').strip().title(),
         }
 
         # Treat 'FALSE', '' as None
         for k, v in attrs.items():
-            if v.upper() in ('FALSE', '', 'NONE'):
+            _logger.info("%r => %r", k, v)
+            if v.upper() in ('FALSE', ''):
                 attrs[k] = 'None'
 
         _logger.info(
@@ -480,56 +492,39 @@ class ImportLabelService:
             else:
 
                 service_products = {
-
                     "ADD OR LESS",
-
-                    "HALLMARKING EXPENSES",
-
                     "ROUND OFF",
-
+                    "HALLMARKING EXPENSES",
+                    "FREIGHT CHARGES",
                 }
 
                 if template_name.strip().upper() in service_products:
 
-                    # Search for an existing template in this company (or shared)
-
-                    template = self.env['product.template'].search([
-
-                        ('name', '=ilike', template_name),
-
-                        ('company_id', 'in', [current_company.id, False]),
-
+                    template = self.env["product.template"].search([
+                        ("name", "=ilike", template_name),
+                        ("company_id", "in", [current_company.id, False]),
                     ], limit=1)
 
+                    # Create if it doesn't exist
                     if not template:
                         _logger.info(
-
                             "Creating Service Product '%s' for company '%s'",
-
                             template_name,
-
-                            current_company.name
-
+                            current_company.name,
                         )
 
-                        template = self.env['product.template'].create({
-
-                            'name': template_name,
-
-                            'type': 'service',
-
-                            'purchase_ok': True,
-
-                            'sale_ok': False,
-
-                            'company_id': current_company.id,
-
+                        template = self.env["product.template"].create({
+                            "name": template_name,
+                            "type": "service",
+                            "purchase_ok": True,
+                            "sale_ok": False,
+                            "company_id": current_company.id,
                         })
 
-                    self.template_cache[template_cache_key] = template
-
+                    # Return the only variant of the service product
                     variant = template.product_variant_id
 
+                    self.template_cache[template_cache_key] = template
                     self.variant_cache[cache_key] = variant
 
                     return variant
@@ -541,94 +536,122 @@ class ImportLabelService:
                 )
             assert template.exists(), "Product Template not found. Creation of new Product Templates is disabled."
             self.template_cache[template_cache_key] = template
+        # Service products never have attributes or variants
+        if template.type == "service":
+            variant = template.product_variant_id
+            self.variant_cache[cache_key] = variant
+            return variant
 
-        # Build exact Product Template Attribute Values (PTAVs) for the variant
+        # ------------------------------------------------------------------
+        # Resolve Variant EXACT MATCH
+        # ------------------------------------------------------------------
         ptav_ids = []
+
         for attr_name, attr_val in attrs.items():
-            if not attr_val:
-                continue
 
-            # Get or create attribute
-            if attr_name in self.attribute_cache:
-                attribute = self.attribute_cache[attr_name]
-            else:
-                attribute = self.env['product.attribute'].search([('name', '=ilike', attr_name)], limit=1)
-                if not attribute:
-                    attribute = self.env['product.attribute'].create({'name': attr_name})
-                self.attribute_cache[attr_name] = attribute
+            ptal = template.attribute_line_ids.filtered(
+                lambda l: l.attribute_id.name.strip().upper() == attr_name.upper()
+            )
 
-            # Get or create attribute value
-            val_key = (attribute.id, attr_val)
-            if val_key in self.attribute_value_cache:
-                value = self.attribute_value_cache[val_key]
-            else:
-                value = self.env['product.attribute.value'].search([
-                    ('attribute_id', '=', attribute.id),
-                    ('name', '=ilike', attr_val)
-                ], limit=1)
-                if not value:
-                    value = self.env['product.attribute.value'].create({
-                        'attribute_id': attribute.id,
-                        'name': attr_val
-                    })
-                self.attribute_value_cache[val_key] = value
-
-            # Ensure the template has this attribute line
-            ptal = template.attribute_line_ids.filtered(lambda l: l.attribute_id.id == attribute.id)
             if not ptal:
-                ptal = self.env['product.template.attribute.line'].create({
-                    'product_tmpl_id': template.id,
-                    'attribute_id': attribute.id,
-                    'value_ids': [(4, value.id)]
-                })
-            elif value.id not in ptal.value_ids.ids:
-                ptal.write({'value_ids': [(4, value.id)]})
+                raise UserError(
+                    f"Attribute '{attr_name}' is not configured on template '{template.name}'."
+                )
 
-            # Search for the PTAV directly created by Odoo
-            ptav = self.env['product.template.attribute.value'].search([
-                ('attribute_line_id', '=', ptal.id),
-                ('product_attribute_value_id', '=', value.id)
+            # ------------------------------------------------------------
+            # Find/Create Attribute Value
+            # ------------------------------------------------------------
+            value = ptal.value_ids.filtered(
+                lambda v: (v.name or "").strip().upper() == (attr_val or "").strip().upper()
+            )[:1]
+
+            if not value:
+
+                _logger.info(
+                    "Adding missing value '%s' to attribute '%s' on template '%s'",
+                    attr_val,
+                    attr_name,
+                    template.display_name,
+                )
+
+                value = self.env["product.attribute.value"].search([
+                    ("attribute_id", "=", ptal.attribute_id.id),
+                    ("name", "=ilike", attr_val),
+                ], limit=1)
+
+                if not value:
+                    value = self.env["product.attribute.value"].create({
+                        "attribute_id": ptal.attribute_id.id,
+                        "name": attr_val,
+                    })
+
+                # Add value to template
+                ptal.write({
+                    "value_ids": [(4, value.id)]
+                })
+
+                self.env.flush_all()
+
+                # Reload
+                ptal.invalidate_recordset()
+
+            # ------------------------------------------------------------
+            # Find PTAV
+            # ------------------------------------------------------------
+            ptav = self.env["product.template.attribute.value"].search([
+                ("attribute_line_id", "=", ptal.id),
+                ("product_attribute_value_id", "=", value.id),
             ], limit=1)
 
-            if ptav:
-                ptav_ids.append(ptav.id)
+            if not ptav:
+                raise UserError(
+                    _("Unable to configure attribute '%s' value '%s'.")
+                    % (attr_name, attr_val)
+                )
 
-        # Find exact variant by checking if ptav_ids perfectly match the variant's product_template_attribute_value_ids
-        exact_variant = None
+            ptav_ids.append(ptav.id)
+
+        # ------------------------------------------------------------------
+        # Exact Variant Match
+        # ------------------------------------------------------------------
+        target_ptav_set = set(ptav_ids)
+        exact_variant = False
+
         for variant in template.product_variant_ids:
-            if variant.company_id and variant.company_id.id != current_company.id:
+
+            if variant.company_id and variant.company_id != current_company:
                 continue
 
-            variant_ptav_ids = set(variant.product_template_attribute_value_ids.ids)
-            if variant_ptav_ids == set(ptav_ids):
+            if set(variant.product_template_attribute_value_ids.ids) == target_ptav_set:
                 exact_variant = variant
                 break
 
+        # ------------------------------------------------------------------
+        # Create Variant if Missing
+        # ------------------------------------------------------------------
         if not exact_variant:
-            # Force create variant if it doesn't exist
-            try:
-                _logger.info(
-                    "Using company %s (%s) for product variant creation",
-                    current_company.name,
-                    current_company.id
-                )
-                exact_variant = self.env['product.product'].create({
-                    'product_tmpl_id': template.id,
-                    'product_template_attribute_value_ids': [(6, 0, ptav_ids)],
-                })
-                _logger.info(
-                    "Variant created: Variant ID %s under Template ID %s",
-                    exact_variant.id, template.id
-                )
-            except Exception as e:
-                _logger.error(f"Failed to create exact variant for {template_name} with attributes {attrs}: {e}")
-
-        if exact_variant:
-            _logger.info(f"Selected Variant ID: {exact_variant.id}")
             _logger.info(
-                f"Variant Company: {exact_variant.company_id.name if exact_variant.company_id else 'Shared'} (ID: {exact_variant.company_id.id if exact_variant.company_id else False})")
+                "Variant not found. Creating variant for %s",
+                template.display_name,
+            )
 
-        if exact_variant:
-            self.variant_cache[cache_key] = exact_variant
+            exact_variant = self.env["product.product"].create({
+                "product_tmpl_id": template.id,
+                "product_template_attribute_value_ids": [(6, 0, ptav_ids)],
+            })
+
+            _logger.info(
+                "Created Variant %s (%s)",
+                exact_variant.display_name,
+                exact_variant.id,
+            )
+
+        _logger.info(
+            "Selected Variant %s (%s)",
+            exact_variant.display_name,
+            exact_variant.id,
+        )
+
+        self.variant_cache[cache_key] = exact_variant
 
         return exact_variant
