@@ -209,17 +209,12 @@ class JewelleryReceiveVoucher(models.Model):
             return
 
         # ── First-time confirm: create a new picking ───────────────────────
-        picking_type = self.env['stock.picking.type'].search([
-            ('code', '=', 'internal'),
-            ('company_id', '=', self.company_id.id)
-        ], limit=1)
         picking = self.env['stock.picking'].create({
-            'picking_type_id': picking_type.id if picking_type else self.env.ref('stock.picking_type_internal').id,
+            'picking_type_id': self.env.ref('stock.picking_type_internal').id,
             'location_id': self.source_location_id.id,
             'location_dest_id': self.received_location_id.id,
             'origin': self.name,
             'is_old_gold': True,
-            'company_id': self.company_id.id,
         })
         for line in self.line_ids:
             price_unit = (line.total_receive_fine_amount / line.gross_weight) if line.gross_weight else 0.0
@@ -234,26 +229,13 @@ class JewelleryReceiveVoucher(models.Model):
                 'purity_id': line.purity_id.id,
                 'price_unit': price_unit,
                 'receive_voucher_line_id': line.id,
-                'company_id': self.company_id.id,
             })
 
         picking.action_confirm()
         picking.action_assign()
-        for move in picking.move_ids:
-            if not move.move_line_ids:
-                self.env['stock.move.line'].create({
-                    'picking_id': picking.id,
-                    'move_id': move.id,
-                    'product_id': move.product_id.id,
-                    'product_uom_id': move.product_uom.id,
-                    'location_id': move.location_id.id,
-                    'location_dest_id': move.location_dest_id.id,
-                    'quantity': move.product_uom_qty,
-                    'company_id': move.company_id.id,
-                })
-            else:
-                for ml in move.move_line_ids:
-                    ml.quantity = move.product_uom_qty
+        for move_line in picking.move_line_ids:
+            # Read qty from parent stock.move (product_uom_qty is invalid on move.line)
+            move_line.quantity = move_line.move_id.product_uom_qty
 
         picking.with_context(skip_backorder=True).button_validate()
 
