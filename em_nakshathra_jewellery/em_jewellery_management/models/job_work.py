@@ -216,6 +216,8 @@ class JewelleryJobWork(models.Model):
 
         })
         
+        self.state = 'issued'
+        
         # Create Manufacturing Order when issuing material
         # self._create_manufacturing_order()
 
@@ -270,7 +272,12 @@ class JewelleryJobWork(models.Model):
         self.ensure_one()
         lines = []
 
-        # Only consider issue vouchers in 'done' state for this job work
+        # Get the issue voucher (draft or done) for this job work to link it
+        issue_voucher = self.env['jewellery.issue.voucher'].search([
+            ('job_work_id', '=', self.id)
+        ], limit=1)
+
+        # Only consider issue vouchers in 'done' state for this job work to get lines to match
         issued_vouchers = self.env['jewellery.issue.voucher'].search([
             ('job_work_id', '=', self.id),
             ('state', '=', 'done')
@@ -310,6 +317,7 @@ class JewelleryJobWork(models.Model):
         voucher = self.env['jewellery.receive.voucher'].create({
             'job_work_id': self.id,
             'job_worker_id': self.job_worker_id.id,
+            'issue_voucher_id': issue_voucher.id if issue_voucher else False,
             'line_ids': lines,
         })
 

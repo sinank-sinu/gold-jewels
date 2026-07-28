@@ -230,6 +230,7 @@ class JewelleryIssueVoucher(models.Model):
         for move_line in picking.move_line_ids:
             # Read qty from parent stock.move (product_uom_qty is invalid on move.line in Odoo 17)
             move_line.quantity = move_line.move_id.product_uom_qty
+            move_line.picked = True
 
         picking.with_context(skip_backorder=True).button_validate()
 
