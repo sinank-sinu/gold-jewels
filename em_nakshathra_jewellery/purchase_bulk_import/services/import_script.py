@@ -237,7 +237,12 @@ class ImportLabelService:
             price = float(line.get('Order Lines/Unit Price') or line.get('Unit Price') or 0.0)
             weight = float(line.get('Weight') or line.get('Gross Weight') or line.get('Weight (g)') or line.get(
                 'Weight in grams') or 0.0)
-            gold_rate = float(line.get("Fine Rate") or 0.0)
+            gold_rate_val = str(line.get("Fine Rate") or "").strip()
+
+            try:
+                gold_rate = float(gold_rate_val)
+            except (ValueError, TypeError):
+                gold_rate = 0.0
 
             purity_id = False
             purity_name = line.get('Purity')
