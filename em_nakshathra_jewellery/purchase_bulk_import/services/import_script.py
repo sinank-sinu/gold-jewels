@@ -109,17 +109,32 @@ class ImportLabelService:
                 else:
                     date_str = str(bill_date).split(' ')[0] if bill_date else datetime.now().strftime('%Y-%m-%d')
 
-                bill_ref = str(row_dict.get('Bill Reference') or '').strip()
-                key = (bill_ref, date_str)
-                print(bill_ref)
+                bill_ref = str(row_dict.get("Bill Reference") or "").strip()
+
+                # Group only by Bill Reference
+                key = bill_ref
+
                 grouped_data[key].append(row_dict)
 
             _logger.info(f"Found {len(grouped_data)} unique Purchase Orders.")
 
             count = 0
             # Process each group
-            for (bill_ref, date_str), lines in grouped_data.items():
-                vendor_name = str(lines[0].get('Purchase Order') or '').strip()
+            for bill_ref, lines in grouped_data.items():
+
+                vendor_name = str(lines[0].get("Purchase Order") or "").strip()
+
+                bill_date = lines[0].get("Bill Date")
+
+                if isinstance(bill_date, datetime):
+                    date_str = bill_date.strftime("%Y-%m-%d")
+                else:
+                    date_str = (
+                        str(bill_date).split(" ")[0]
+                        if bill_date
+                        else datetime.now().strftime("%Y-%m-%d")
+                    )
+
                 self._process_po_group(vendor_name, bill_ref, date_str, lines)
                 count += 1
                 if count % 10 == 0:
