@@ -1,0 +1,1753 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+<t t-name="jw_business_dashboard.MainDashboard">
+    <div class="jw-dashboard-wrapper">
+
+        <!-- ═══════════════ SIDEBAR ═══════════════ -->
+        <div class="jw-sidebar">
+            <div class="jw-sidebar-brand">
+                <img src="/jw_business_dashboard/static/src/img/jw_dashboard_logo.png" class="jw-brand-icon" style="object-fit: contain; width: 32px; height: 32px; border-radius: 4px;"/>
+                <span>Analytics</span>
+            </div>
+            <div class="jw-sidebar-menu">
+                <!-- Overview Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'overview' ? 'active' : ''}" t-on-click="() => this.switchTab('overview')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="9"/>
+                        <rect x="14" y="3" width="7" height="5"/>
+                        <rect x="14" y="12" width="7" height="9"/>
+                        <rect x="3" y="16" width="7" height="5"/>
+                    </svg>
+                    Overview
+                </button>
+
+                <!-- Sales Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'sales' ? 'active' : ''}" t-on-click="() => this.switchTab('sales')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    Sales
+                </button>
+
+                <!-- Navigation Links -->
+                <!-- Purchase Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'purchase' ? 'active' : ''}" t-on-click="() => this.switchTab('purchase')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                    Purchase
+                </button>
+                <!-- Product Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'product' ? 'active' : ''}" t-on-click="() => this.switchTab('product')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                        <polyline points="2 17 12 22 22 17"/>
+                        <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                    Product
+                </button>
+                <!-- Inventory on Hand Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'inventory_on_hand' ? 'active' : ''}" t-on-click="() => this.switchTab('inventory_on_hand')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                    </svg>
+                    Inventory on Hand
+                </button>
+
+                <!-- Expense Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'expense' ? 'active' : ''}" t-on-click="() => this.switchTab('expense')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                    Expense
+                </button>
+                <!-- Vendor Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'vendor' ? 'active' : ''}" t-on-click="() => this.switchTab('vendor')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Vendor
+                </button>
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'invoicing' ? 'active' : ''}" t-on-click="() => this.switchTab('invoicing')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    Invoicing
+                </button>
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'employees' ? 'active' : ''}" t-on-click="() => this.switchTab('employees')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Employees
+                </button>
+            </div>
+        </div>
+
+        <!-- ═══════════════ MAIN CONTENT area ═══════════════ -->
+        <div class="jw-main-content">
+
+            <!-- ═══════════════ HEADER ═══════════════ -->
+            <div class="jw-header">
+                <div class="jw-header-right">
+                    <div class="jw-filter-group">
+                        <t t-if="state.branches and state.branches.length">
+                            <select class="jw-select" t-on-change="onBranchChange">
+                                <option value="all">All Branches</option>
+                                <t t-foreach="state.branches" t-as="b" t-key="b.id">
+                                    <option t-att-value="b.id" t-att-selected="state.branchId == b.id ? 'selected' : ''"><t t-esc="b.name"/></option>
+                                </t>
+                            </select>
+                        </t>
+                        <select class="jw-select" t-on-change="onPeriodChange">
+                            <option value="today">Today</option>
+                            <option value="this_week">This Week</option>
+                            <option value="this_month" t-att-selected="state.period === 'this_month' ? 'selected' : ''">This Month</option>
+                            <option value="last_month">Last Month</option>
+                            <option value="last_6_months">Last 6 Months</option>
+                            <option value="this_year">This Year</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                        <t t-if="state.period === 'custom'">
+                            <input type="date" class="jw-date-input" t-model="state.dateFrom" t-on-change="onDateChange"/>
+                            <span class="jw-date-sep">→</span>
+                            <input type="date" class="jw-date-input" t-model="state.dateTo" t-on-change="onDateChange"/>
+                        </t>
+                        <button class="jw-btn-refresh" t-on-click="loadData">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 4v6h6M23 20v-6h-6"/>
+                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="jw-period-badge">
+                        <span t-esc="state.periodLabel"/>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ LOADING ═══════════════ -->
+            <t t-if="state.loading">
+                <div class="jw-loading">
+                    <div class="jw-spinner"/>
+                    <p>Loading dashboard data...</p>
+                </div>
+            </t>
+
+            <t t-if="!state.loading">
+
+                <!-- ═══════════════ TABS CONDITIONAL RENDERING ═══════════════ -->
+
+                <!-- OVERVIEW TAB CONTENT -->
+                <t t-if="state.currentTab === 'overview'">
+                    <!-- ═══════════════ OVERVIEW KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Sales Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.sale_weight)"/>
+                                <span class="jw-kpi-sub"><t t-esc="state.kpis.sale_count"/> orders</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                                    <line x1="3" y1="6" x2="21" y2="6"/>
+                                    <path d="M16 10a4 4 0 0 1-8 0"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Purchase Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.purchase_total_weight)"/>
+                                <span class="jw-kpi-sub"><t t-esc="state.kpis.purchase_count"/> orders</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-down">↓</div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-stock">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Inventory Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.stock_qty)"/>
+                                <span class="jw-kpi-sub">On Hand Quantity</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-neutral">→</div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-expense">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                                    <line x1="1" y1="10" x2="23" y2="10"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Expenses</span>
+                                <span class="jw-kpi-value" t-esc="formatCurrency(state.kpis.expense_total)"/>
+                                <span class="jw-kpi-sub">Operating costs</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-down">↓</div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-profit">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"/>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Net Profit</span>
+                                <span class="jw-kpi-value" t-esc="formatCurrency(state.kpis.net_profit)"/>
+                                <span class="jw-kpi-sub">Revenue - Cost</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Products</span>
+                                <span class="jw-kpi-value" t-esc="state.kpis.product_count"/>
+                                <span class="jw-kpi-sub">Active items</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ OVERVIEW CHARTS ROW 1 ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <div class="jw-chart-card jw-chart-large">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Monthly Sales (Gross Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">12 Months</span>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="salesLineChart"/>
+                            </div>
+                        </div>
+
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Monthly Purchase (Gross Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">12 Months</span>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="purchaseBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ OVERVIEW CHARTS ROW 2 ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Stock Balance by Product (Top 10 in gms)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 300px;">
+                                <canvas id="stockBalanceBarChart"/>
+                            </div>
+                        </div>
+
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Sales by Branch (Gross Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 300px;">
+                                <canvas id="salesByBranchBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ OVERVIEW CHARTS ROW 3 (PIE CHARTS) ═══════════════ -->
+                    <div class="jw-charts-grid-3">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Inventory by Category (Gross Weight)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="inventoryPieChart"/>
+                            </div>
+                            <div class="jw-legend" id="inventoryLegend"/>
+                        </div>
+
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Product Distribution (Gross Weight)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="productDoughnutChart"/>
+                            </div>
+                            <div class="jw-legend" id="productLegend"/>
+                        </div>
+
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-gold"/>
+                                    <h3>Jewellery Purity Breakdown (Gross Weight)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="purityPieChart"/>
+                            </div>
+                            <div class="jw-legend" id="purityLegend"/>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- SALES TAB CONTENT -->
+                <t t-if="state.currentTab === 'sales'">
+                    <!-- ═══════════════ SALES KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Total Weight Sold -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Weight Sold</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.sale_weight)"/>
+                                <span class="jw-kpi-sub">Confirmed Sales</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+
+                        <!-- Sale Orders Count -->
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Sale Orders</span>
+                                <span class="jw-kpi-value" t-esc="state.kpis.sale_count"/>
+                                <span class="jw-kpi-sub">Total Orders</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+
+                        <!-- Quotation Count -->
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Quotation Count</span>
+                                <span class="jw-kpi-value" t-esc="state.kpis.quotation_count"/>
+                                <span class="jw-kpi-sub">Draft &amp; Sent</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-neutral">→</div>
+                        </div>
+
+                        <!-- Quotation Total Weight -->
+                        <div class="jw-kpi-card jw-kpi-customers">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="16"/>
+                                    <line x1="8" y1="12" x2="16" y2="12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Quotation Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.quotation_weight)"/>
+                                <span class="jw-kpi-sub">Potential Sales</span>
+                            </div>
+                            <div class="jw-kpi-trend jw-trend-up">↑</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ SALES CHARTS ═══════════════ -->
+                    <div class="jw-charts-grid-3">
+                        <!-- Monthly Sale line graph -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Monthly Sales (Gross Weight)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="salesLineChart"/>
+                            </div>
+                        </div>
+
+                        <!-- Sales by Salesman -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-teal"/>
+                                    <h3>Sales by Salesman (Target Achievement)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="salesmanBarChart"/>
+                            </div>
+                        </div>
+
+                        <!-- Order State Distribution -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-orange"/>
+                                    <h3>Order State Distribution</h3>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="salesStatePieChart"/>
+                            </div>
+                            <div class="jw-legend" id="salesStateLegend"/>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ SALES TABLES ═══════════════ -->
+                    <div class="jw-tables-grid">
+                        <!-- Top Sale Orders -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Sale Orders</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Customer</th>
+                                            <th>Date</th>
+                                            <th>Weight</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topSaleOrders" t-as="r" t-key="r_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openSaleOrder(r.id)">
+                                                <td class="jw-product-name"><t t-esc="r.ref"/></td>
+                                                <td class="jw-product-name"><t t-esc="r.customer"/></td>
+                                                <td><t t-esc="r.date"/></td>
+                                                <td><t t-esc="formatWeight(r.total_weight)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topSaleOrders.length">
+                                            <tr><td colspan="4" class="jw-empty">No sale orders found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Quotations -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-orange"/>
+                                    <h3>Top Quotations</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Customer</th>
+                                            <th>Date</th>
+                                            <th>Weight</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topQuotations" t-as="r" t-key="r_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openSaleOrder(r.id)">
+                                                <td class="jw-product-name"><t t-esc="r.ref"/></td>
+                                                <td class="jw-product-name"><t t-esc="r.customer"/></td>
+                                                <td><t t-esc="r.date"/></td>
+                                                <td><t t-esc="formatWeight(r.total_weight)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topQuotations.length">
+                                            <tr><td colspan="4" class="jw-empty">No quotations found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Selling Products -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Top Selling Products</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product</th>
+                                            <th>Weight</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topProducts" t-as="p" t-key="p_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductTemplate(p.id)">
+                                                <td class="jw-rank"><t t-esc="p_index + 1"/></td>
+                                                <td class="jw-product-name"><t t-esc="p.name"/></td>
+                                                <td><t t-esc="formatWeight(p.qty)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topProducts.length">
+                                            <tr><td colspan="3" class="jw-empty">No products sold in this period</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- PURCHASE TAB CONTENT -->
+                <t t-if="state.currentTab === 'purchase'">
+                    <!-- ═══════════════ PURCHASE KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Purchased (Total Weight) -->
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Weight Purchased</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.purchase_total_weight)"/>
+                                <span class="jw-kpi-sub">Total Purchased</span>
+                            </div>
+                        </div>
+
+                        <!-- Purchase Orders Count -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                                    <line x1="3" y1="6" x2="21" y2="6"/>
+                                    <path d="M16 10a4 4 0 0 1-8 0"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Purchase Orders</span>
+                                <span class="jw-kpi-value" t-esc="state.kpis.purchase_count"/>
+                                <span class="jw-kpi-sub">Total Orders</span>
+                            </div>
+                        </div>
+
+                        <!-- Average Order Weight -->
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Average Order Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.purchase_average_weight)"/>
+                                <span class="jw-kpi-sub">Per Purchase Order</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ PURCHASE TREND LINE CHART ═══════════════ -->
+                    <div class="jw-charts-grid-1">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Gross Weight Purchased Trend</h3>
+                                </div>
+                                <span class="jw-chart-badge">Line Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 320px;">
+                                <canvas id="purchaseLineChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ PURCHASE TABLES ROW 1 ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Top RFQs List -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Top RFQs</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Vendor</th>
+                                            <th>Date</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topRfqs" t-as="r" t-key="r_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPurchaseOrder(r.id)">
+                                                <td class="jw-product-name"><t t-esc="r.ref"/></td>
+                                                <td class="jw-product-name"><t t-esc="r.vendor"/></td>
+                                                <td><t t-esc="r.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(r.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topRfqs.length">
+                                            <tr><td colspan="4" class="jw-empty">No RFQs found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Purchase Orders List -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Purchase Orders</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Vendor</th>
+                                            <th>Date</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topPurchaseOrders" t-as="r" t-key="r_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPurchaseOrder(r.id)">
+                                                <td class="jw-product-name"><t t-esc="r.ref"/></td>
+                                                <td class="jw-product-name"><t t-esc="r.vendor"/></td>
+                                                <td><t t-esc="r.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(r.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topPurchaseOrders.length">
+                                            <tr><td colspan="4" class="jw-empty">No purchase orders found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ PURCHASE TABLES ROW 2 ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Top Vendors List -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-red"/>
+                                    <h3>Top Vendors</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Vendor</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topVendors" t-as="v" t-key="v_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPartner(v.id)">
+                                                <td class="jw-rank"><t t-esc="v_index + 1"/></td>
+                                                <td class="jw-product-name"><t t-esc="v.vendor"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(v.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topVendors.length">
+                                            <tr><td colspan="3" class="jw-empty">No vendors found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Buyers Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-gold"/>
+                                    <h3>Top Buyers</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 280px;">
+                                <canvas id="topBuyersBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- PRODUCT TAB CONTENT -->
+                <t t-if="state.currentTab === 'product'">
+                    <!-- ═══════════════ PRODUCT KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Total Weight Sold -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Weight Sold</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.sale_weight)"/>
+                                <span class="jw-kpi-sub">For selected period</span>
+                            </div>
+                        </div>
+
+                        <!-- Best Selling Product by Quantity -->
+                        <div class="jw-kpi-card jw-kpi-stock">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Seller (Weight)</span>
+                                <span class="jw-kpi-value" t-esc="state.bestSellersByQty.length ? state.bestSellersByQty[0].name : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.bestSellersByQty.length">
+                                        Weight: <t t-esc="formatWeight(state.bestSellersByQty[0].qty)"/>
+                                    </t>
+                                    <t t-else="">No sales data</t>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Best Selling Category -->
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="7" height="7"/>
+                                    <rect x="14" y="3" width="7" height="7"/>
+                                    <rect x="14" y="14" width="7" height="7"/>
+                                    <rect x="3" y="14" width="7" height="7"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Category</span>
+                                <span class="jw-kpi-value" t-esc="state.bestSellingCategories.length ? state.bestSellingCategories[0].name : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.bestSellingCategories.length">
+                                        Weight: <t t-esc="formatWeight(state.bestSellingCategories[0].qty)"/>
+                                    </t>
+                                    <t t-else="">No category data</t>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Total Active Products -->
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Active Products</span>
+                                <span class="jw-kpi-value" t-esc="state.kpis.product_count"/>
+                                <span class="jw-kpi-sub">In Catalog</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ PRODUCT CHARTS ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                    <!-- Best Selling Categories Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Best Selling Categories (Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 320px;">
+                                <canvas id="bestSellingCategoriesChart"/>
+                            </div>
+                        </div>
+
+                        <!-- Best Sellers by Qty Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Best Sellers by Weight (gms)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body" style="height: 320px;">
+                                <canvas id="bestSellersByQtyChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ PRODUCT TABLES ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Best Selling Products Details Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Best Selling Products</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.bestSellersByQty" t-as="p" t-key="p_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductTemplate(p.id)">
+                                                <td class="jw-rank"><t t-esc="p_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="p.name"><t t-esc="p.name"/></td>
+                                                <td><t t-esc="formatWeight(p.qty)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.bestSellersByQty.length">
+                                            <tr><td colspan="3" class="jw-empty">No products sold in this period</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Best Selling Categories Details Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Best Selling Categories</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Category</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.bestSellingCategories" t-as="c" t-key="c_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductCategory(c.id)">
+                                                <td class="jw-rank"><t t-esc="c_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="c.name"><t t-esc="c.name"/></td>
+                                                <td><t t-esc="formatWeight(c.qty)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.bestSellingCategories.length">
+                                            <tr><td colspan="3" class="jw-empty">No categories sold in this period</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <t t-if="state.currentTab === 'inventory_on_hand'">
+                    <!-- ═══════════════ INVENTORY ON HAND KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Inventory Weight Card -->
+                        <div class="jw-kpi-card jw-kpi-revenue">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Inventory Weight</span>
+                                <span class="jw-kpi-value" t-esc="formatWeight(state.kpis.stock_qty)"/>
+                                <span class="jw-kpi-sub">Total stock weight</span>
+                            </div>
+                        </div>
+
+                        <!-- Total Products Card -->
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Products</span>
+                                <span class="jw-kpi-value"><t t-esc="state.kpis.product_count"/></span>
+                                <span class="jw-kpi-sub">Active items count</span>
+                            </div>
+                        </div>
+
+                        <!-- Top Location Card -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                    <circle cx="12" cy="10" r="3"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Location</span>
+                                <span class="jw-kpi-value" t-esc="state.stockByLocation.length ? state.stockByLocation[0].location : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.stockByLocation.length">
+                                        Weight: <t t-esc="formatNumber(state.stockByLocation[0].qty)"/> gms
+                                    </t>
+                                    <t t-else="">No location data</t>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Top Product Card -->
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Product (Stock)</span>
+                                <span class="jw-kpi-value" t-esc="state.stockBalanceProducts.length ? state.stockBalanceProducts[0].name : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.stockBalanceProducts.length">
+                                        Weight: <t t-esc="formatNumber(state.stockBalanceProducts[0].qty)"/> gms
+                                    </t>
+                                    <t t-else="">No product data</t>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ INVENTORY ON HAND CHARTS ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Stock by Location Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Stock by Location</h3>
+                                </div>
+                                <span class="jw-chart-badge">Pie Chart</span>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie" style="height: 320px;">
+                                <canvas id="stockByLocationChart"/>
+                            </div>
+                            <div class="jw-legend" id="stockByLocationLegend"/>
+                        </div>
+
+                        <!-- Top Products in Stock Details Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Products in Stock</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product Name</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.stockBalanceProducts" t-as="p" t-key="p_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductTemplate(p.id)">
+                                                <td class="jw-rank"><t t-esc="p_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="p.name"><t t-esc="p.name"/></td>
+                                                <td><t t-esc="formatWeight(p.qty)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.stockBalanceProducts.length">
+                                            <tr><td colspan="3" class="jw-empty">No products in stock</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ LOCATION DETAILS TABLE ═══════════════ -->
+                    <div class="jw-charts-grid-1" style="margin-top: 1.5rem;">
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Stock Level by Location</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Location Complete Name</th>
+                                            <th>Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.stockByLocation" t-as="l" t-key="l_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openStockLocation(l.id)">
+                                                <td class="jw-rank"><t t-esc="l_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="l.location"><t t-esc="l.location"/></td>
+                                                <td><t t-esc="formatWeight(l.qty)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.stockByLocation.length">
+                                            <tr><td colspan="3" class="jw-empty">No stock location data found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ════════════════════ EXPENSE TAB ════════════════════ -->
+                <t t-if="state.currentTab === 'expense'">
+                    <!-- ═══════════════ EXPENSE KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Total Expenses Card -->
+                        <div class="jw-kpi-card jw-kpi-expense">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                                    <line x1="1" y1="10" x2="23" y2="10"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Expenses</span>
+                                <span class="jw-kpi-value" t-esc="formatCurrency(state.kpis.expense_total)"/>
+                                <span class="jw-kpi-sub">Total logged expense</span>
+                            </div>
+                        </div>
+
+                        <!-- Top Expense Category Card -->
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Category</span>
+                                <span class="jw-kpi-value" t-esc="state.topExpenseCategories.length ? state.topExpenseCategories[0].category : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.topExpenseCategories.length">
+                                        Amount: <t t-esc="formatCurrency(state.topExpenseCategories[0].amount)"/>
+                                    </t>
+                                    <t t-else="">No category data</t>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Top Spender (Employee) Card -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Top Employee</span>
+                                <span class="jw-kpi-value" t-esc="state.topExpenseEmployees.length ? state.topExpenseEmployees[0].employee : 'N/A'"/>
+                                <span class="jw-kpi-sub">
+                                    <t t-if="state.topExpenseEmployees.length">
+                                        Amount: <t t-esc="formatCurrency(state.topExpenseEmployees[0].amount)"/>
+                                    </t>
+                                    <t t-else="">No employee data</t>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Number of Claims Card -->
+                        <div class="jw-kpi-card jw-kpi-customers">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                    <line x1="16" y1="13" x2="8" y2="13"/>
+                                    <line x1="16" y1="17" x2="8" y2="17"/>
+                                    <polyline points="10 9 9 9 8 9"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Expense Claims</span>
+                                <span class="jw-kpi-value" t-esc="state.topExpenses.length"/>
+                                <span class="jw-kpi-sub">Registered expense claims</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ BULLET CHART CARD ═══════════════ -->
+                    <div class="jw-charts-grid-1" style="margin-bottom: 1.5rem;">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Expense Budget Analysis</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bullet Chart</span>
+                            </div>
+                            <div style="padding: 24px 20px; position: relative; min-height: 320px;">
+                                <canvas id="expenseBulletChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ DETAILED TABLES GRID ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Top Employees Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Employee Expenses</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Employee Name</th>
+                                            <th>Claims</th>
+                                            <th>Total Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topExpenseEmployees" t-as="emp" t-key="emp_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openEmployee(emp.id)">
+                                                <td class="jw-rank"><t t-esc="emp_index + 1"/></td>
+                                                <td class="jw-product-name"><t t-esc="emp.employee"/></td>
+                                                <td><t t-esc="emp.count"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatCurrency(emp.amount)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topExpenseEmployees.length">
+                                            <tr><td colspan="4" class="jw-empty">No employee data found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Categories Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-amber"/>
+                                    <h3>Expense Categories Breakdown</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Category Name</th>
+                                            <th>Claims</th>
+                                            <th>Total Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topExpenseCategories" t-as="cat" t-key="cat_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductCategory(cat.id)">
+                                                <td class="jw-rank"><t t-esc="cat_index + 1"/></td>
+                                                <td class="jw-product-name"><t t-esc="cat.category"/></td>
+                                                <td><t t-esc="cat.count"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatCurrency(cat.amount)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topExpenseCategories.length">
+                                            <tr><td colspan="4" class="jw-empty">No category data found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ INDIVIDUAL EXPENSE TRANSACTIONS ═══════════════ -->
+                    <div class="jw-charts-grid-1" style="margin-top: 1.5rem;">
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-blue"/>
+                                    <h3>Individual Expense Claims (Top 10)</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Expense Name</th>
+                                            <th>Category</th>
+                                            <th>Employee</th>
+                                            <th>Date</th>
+                                            <th>Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topExpenses" t-as="exp" t-key="exp_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openExpense(exp.id)">
+                                                <td class="jw-rank"><t t-esc="exp_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="exp.name"><t t-esc="exp.name"/></td>
+                                                <td><t t-esc="exp.category"/></td>
+                                                <td><t t-esc="exp.employee"/></td>
+                                                <td><t t-esc="exp.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatCurrency(exp.amount)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topExpenses.length">
+                                            <tr><td colspan="6" class="jw-empty">No individual expenses found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ════════════════════════════════════════════════════════════════ -->
+                <!-- ════════════════════ VENDOR TAB ════════════════════════════════ -->
+                <!-- ════════════════════════════════════════════════════════════════ -->
+                <t t-if="state.currentTab === 'vendor'">
+                    <!-- ═══════════════ TOP VENDORS BAR CHART ═══════════════ -->
+                    <div class="jw-charts-grid-1" style="margin-bottom: 1.5rem;">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Top Vendors by Gross Weight</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div style="padding: 24px 20px; position: relative; min-height: 350px;">
+                                <canvas id="vendorAmountBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ DETAILED TABLES GRID ═══════════════ -->
+                    <div class="jw-tables-grid">
+                        <!-- Top Orders Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-table-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Top Purchase Orders</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-wrapper">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Vendor</th>
+                                            <th>Date</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topPurchaseOrders" t-as="order" t-key="order_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPurchaseOrder(order.id)">
+                                                <td class="jw-rank"><span class="jw-badge" t-esc="order.ref"/></td>
+                                                <td class="jw-product-name" t-att-title="order.vendor"><t t-esc="order.vendor"/></td>
+                                                <td><t t-esc="order.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(order.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topPurchaseOrders.length">
+                                            <tr><td colspan="4" class="jw-empty">No orders found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Vendors Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-table-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Top Vendors</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-wrapper">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Vendor Name</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topVendors" t-as="vendor" t-key="vendor_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPartner(vendor.id)">
+                                                <td class="jw-rank"><t t-esc="vendor_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="vendor.vendor"><t t-esc="vendor.vendor"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(vendor.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topVendors.length">
+                                            <tr><td colspan="3" class="jw-empty">No vendors found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Buyers Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-table-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Buyers</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-wrapper">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Buyer Name</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topBuyers" t-as="buyer" t-key="buyer_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPartner(buyer.id)">
+                                                <td class="jw-rank"><t t-esc="buyer_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="buyer.name"><t t-esc="buyer.name"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(buyer.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topBuyers.length">
+                                            <tr><td colspan="3" class="jw-empty">No buyers found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- INVOICING TAB CONTENT -->
+                <t t-if="state.currentTab === 'invoicing'">
+                    <!-- ═══════════════ INVOICING KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"/>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Invoiced (Weight)</span>
+                                <div class="jw-kpi-value"><t t-esc="formatWeight(state.invoicedKpis.total_invoiced)"/></div>
+                                <div class="jw-kpi-sub">For the selected period</div>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-stock">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Paid Invoices (Weight)</span>
+                                <div class="jw-kpi-value"><t t-esc="formatWeight(state.invoicedKpis.total_paid)"/></div>
+                                <div class="jw-kpi-sub">Fully paid total</div>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-expense">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Unpaid Invoices (Weight)</span>
+                                <div class="jw-kpi-value"><t t-esc="formatWeight(state.invoicedKpis.total_unpaid)"/></div>
+                                <div class="jw-kpi-sub">Open/draft total amount</div>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-products">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="16" x2="12" y2="12"/>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Avg Invoice Weight</span>
+                                <div class="jw-kpi-value"><t t-esc="formatWeight(state.invoicedKpis.avg_invoice)"/></div>
+                                <div class="jw-kpi-sub">Total of <t t-esc="state.invoicedKpis.invoice_count"/> invoices</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ CHARTS GRID ═══════════════ -->
+                    <div class="jw-charts-grid-2-sym">
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Invoiced by Month (Gross Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="invoicedMonthlyBarChart"/>
+                            </div>
+                        </div>
+
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Invoiced by Category (Gross Weight)</h3>
+                                </div>
+                                <span class="jw-chart-badge">Doughnut Chart</span>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="invoicedCategoryChart"/>
+                            </div>
+                            <div class="jw-legend" id="invoicedCategoryLegend"/>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ TABLES GRID ═══════════════ -->
+                    <div class="jw-tables-grid-2">
+                        <!-- Top Invoices Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Top Invoices</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice No</th>
+                                            <th>Customer</th>
+                                            <th>Date</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.invoicedTopInvoices" t-as="inv" t-key="inv_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openInvoice(inv.id)">
+                                                <td class="jw-product-name" t-att-title="inv.name"><t t-esc="inv.name"/></td>
+                                                <td class="jw-product-name" t-att-title="inv.partner"><t t-esc="inv.partner"/></td>
+                                                <td><t t-esc="inv.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(inv.amount)"/></td>
+                                                <td>
+                                                    <span t-attf-class="jw-badge #{inv.status === 'paid' ? 'jw-badge-green' : inv.status === 'in_payment' ? 'jw-badge-blue' : 'jw-badge-orange'}">
+                                                        <t t-esc="inv.status"/>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.invoicedTopInvoices.length">
+                                            <tr><td colspan="5" class="jw-empty">No invoices found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Salespeople Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Top Salespeople</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Salesperson</th>
+                                            <th class="jw-revenue">Total Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.invoicedTopSalespeople" t-as="sp" t-key="sp_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openUser(sp.id)">
+                                                <td class="jw-rank"><t t-esc="sp_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="sp.name"><t t-esc="sp.name"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(sp.value)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.invoicedTopSalespeople.length">
+                                            <tr><td colspan="3" class="jw-empty">No sales records found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ═══════════════ EMPLOYEES TAB ═══════════════ -->
+                <t t-if="state.currentTab === 'employees'">
+                    <!-- Top Action Bar -->
+                    <div class="jw-tab-action-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 class="jw-tab-title" style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;">Employee &amp; Attendance Analytics</h2>
+                        <button class="jw-sidebar-btn active" style="width: auto; padding: 8px 16px; border-radius: 6px; font-weight: 500; display: flex; align-items: center; gap: 8px;" t-on-click="createEmployee">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            Create Employee
+                        </button>
+                    </div>
+
+                    <!-- KPI Cards Grid -->
+                    <div class="jw-kpis-grid-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px;">
+                        <!-- Total Employees -->
+                        <div class="jw-kpi-card jw-clickable-row" t-on-click="() => this.navigateTo('hr.open_view_employee_list_my')" style="cursor: pointer;">
+                            <div class="jw-kpi-icon" style="background: rgba(99,102,241,0.1); color: #6366f1;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-info">
+                                <div class="jw-kpi-title">Total Employees</div>
+                                <div class="jw-kpi-value"><t t-esc="state.kpis.employee_count"/></div>
+                                <div class="jw-kpi-sub">Active Directory</div>
+                            </div>
+                        </div>
+
+                        <!-- Active Departments -->
+                        <div class="jw-kpi-card jw-clickable-row" t-on-click="() => this.navigateTo('hr.hr_department_kanban_action')" style="cursor: pointer;">
+                            <div class="jw-kpi-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="7" height="9"/>
+                                    <rect x="14" y="3" width="7" height="5"/>
+                                    <rect x="14" y="12" width="7" height="9"/>
+                                    <rect x="3" y="16" width="7" height="5"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-info">
+                                <div class="jw-kpi-title">Active Departments</div>
+                                <div class="jw-kpi-value"><t t-esc="state.kpis.department_count"/></div>
+                                <div class="jw-kpi-sub">Total Departments</div>
+                            </div>
+                        </div>
+
+                        <!-- Present Employees -->
+                        <div class="jw-kpi-card" style="cursor: default;">
+                            <div class="jw-kpi-icon" style="background: rgba(16,185,129,0.1); color: #10b981;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-info">
+                                <div class="jw-kpi-title">Present Employees</div>
+                                <div class="jw-kpi-value"><t t-esc="state.kpis.present_count"/></div>
+                                <div class="jw-kpi-sub">Within Selected Date Range</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid -->
+                    <div class="jw-charts-grid-2-sym" style="margin-bottom: 25px;">
+                        <!-- Employees by Department Doughnut Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Employees by Department</h3>
+                                </div>
+                                <span class="jw-chart-badge">Doughnut Chart</span>
+                            </div>
+                            <div class="jw-chart-body jw-chart-body-pie">
+                                <canvas id="employeesByDepartmentChart"/>
+                            </div>
+                            <div class="jw-legend" id="employeesDepartmentLegend"/>
+                        </div>
+
+                        <!-- Attendance Trend Bar Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Attendance Trend</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div class="jw-chart-body">
+                                <canvas id="attendanceTrendChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Tables Grid -->
+                    <div class="jw-tables-grid-2" style="margin-bottom: 25px;">
+                        <!-- Department Attendance Breakdown Bar Chart -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Department Attendance Breakdown</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div style="padding: 24px 20px; position: relative; min-height: 350px;">
+                                <canvas id="departmentAttendanceBarChart"/>
+                            </div>
+                        </div>
+
+                        <!-- Branch Employee Breakdown Bar Chart -->
+                        <div class="jw-table-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-orange"/>
+                                    <h3>Branch Employee Breakdown</h3>
+                                </div>
+                                <span class="jw-chart-badge">Bar Chart</span>
+                            </div>
+                            <div style="padding: 24px 20px; position: relative; min-height: 350px;">
+                                <canvas id="branchAttendanceBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+            </t><!-- end !loading -->
+
+            <!-- Footer -->
+            <div class="jw-footer">
+                <span>JW Business Dashboard • Powered by Chart.js • Last updated: <t t-esc="state.lastUpdated"/></span>
+            </div>
+
+        </div><!-- end main content area -->
+
+    </div>
+</t>
+
+</templates>
