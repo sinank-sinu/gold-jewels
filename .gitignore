@@ -210,3 +210,5 @@ __marimo__/
 odoo.config
 
 *.xlsx
+data_migration_guide.md
+migrate_job_works.py
