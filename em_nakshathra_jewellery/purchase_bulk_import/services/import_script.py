@@ -588,9 +588,20 @@ class ImportLabelService:
                 ("attribute_id", "=", ptal.attribute_id.id),
             ])
 
+            # value = values.filtered(
+            #     lambda v: (v.name or "").strip().lower() ==
+            #               (attr_val or "").strip().lower()
+            # )[:1]
+            def normalize_attr(val):
+                val = str(val or "").strip().lower()
+                # Remove spaces around hyphens
+                val = re.sub(r"\s*-\s*", "-", val)
+                # Normalize multiple spaces
+                val = re.sub(r"\s+", " ", val)
+                return val
+
             value = values.filtered(
-                lambda v: (v.name or "").strip().lower() ==
-                          (attr_val or "").strip().lower()
+                lambda v: normalize_attr(v.name) == normalize_attr(attr_val)
             )[:1]
 
             if not value:
