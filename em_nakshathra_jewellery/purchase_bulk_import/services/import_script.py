@@ -594,12 +594,20 @@ class ImportLabelService:
             # )[:1]
             def normalize_attr(val):
                 val = str(val or "").strip().lower()
-                # Remove spaces around hyphens
-                val = re.sub(r"\s*-\s*", "-", val)
+
                 # Normalize multiple spaces
                 val = re.sub(r"\s+", " ", val)
-                return val
 
+                # Normalize hyphens
+                val = re.sub(r"\s*-\s*", "-", val)
+
+                # Normalize double quotes
+                val = val.replace("“", '"').replace("”", '"')
+
+                # Remove spaces before/after quotes
+                val = re.sub(r'\s*"\s*', '"', val)
+
+                return val
             value = values.filtered(
                 lambda v: normalize_attr(v.name) == normalize_attr(attr_val)
             )[:1]
