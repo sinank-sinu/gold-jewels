@@ -363,10 +363,6 @@ class SaleOrder(models.Model):
                 })
                 line.write({'tax_id': [(5, 0, 0)]})
                 order.scheme_line_id = line
-                scheme.write({
-                    'state': 'redeemed',
-                    'is_redeemed': True,
-                })
                 self.env['scheme.redemption'].create({
                     'scheme_id': scheme.id,
                     'sale_order_id': order.id,

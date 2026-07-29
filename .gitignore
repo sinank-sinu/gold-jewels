@@ -208,3 +208,7 @@ __marimo__/
 
 # Odoo custom config
 odoo.config
+
+*.xlsx
+data_migration_guide.md
+migrate_job_works.py

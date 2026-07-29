@@ -93,42 +93,31 @@ class ProfitLossReport(models.TransientModel):
             target_move = ['posted']
         if comparison:
             for count in range(0, int(comparison) + 1):
+                domain = [('parent_state', 'in', target_move)]
                 if comparison_type == "month":
-                    account_move_lines = self.env['account.move.line'].search(
-                        [(
-                            'parent_state', 'in', target_move),
-                            ('date', '>=', (current_date - datetime.timedelta(
-                                days=30 * count)).strftime('%Y-%m-01')),
-                            ('date', '<=', (current_date - datetime.timedelta(
-                                days=30 * count)).strftime('%Y-%m-12'))])
+                    domain.extend([
+                        ('date', '>=', (current_date - datetime.timedelta(days=30 * count)).strftime('%Y-%m-01')),
+                        ('date', '<=', (current_date - datetime.timedelta(days=30 * count)).strftime('%Y-%m-12'))
+                    ])
                 elif comparison_type == "year":
-                    account_move_lines = self.env['account.move.line'].search(
-                        [(
-                            'parent_state', 'in', target_move),
-                            ('date', '>=', f'{current_year - count}-01-01'),
-                            ('date', '<=', f'{current_year - count}-12-31')])
-                lists = [{'id': rec.id, 'value': [eval(i) for i in
-                                                  rec.analytic_distribution.keys()]}
-                         for rec in account_move_lines if
-                         rec.analytic_distribution]
-                if financial_report_id.analytic_ids:
-                    account_move_lines = account_move_lines.filtered(lambda
-                                                                         rec: rec.id in [
-                        lst['id'] for lst in lists if lst['value'] and any(
-                            i in financial_report_id.analytic_ids.mapped('id')
-                            for i in lst['value'])])
-                account_move_lines = account_move_lines.filtered(lambda
-                                                                     a: not financial_report_id.journal_ids or a.journal_id in financial_report_id.journal_ids)
-                account_move_lines = account_move_lines.filtered(lambda
-                                                                     a: not financial_report_id.account_ids or a.account_id in financial_report_id.account_ids)
-                account_move_lines = account_move_lines.filtered(lambda
-                                                                     a: not financial_report_id.date_from or a.date >= financial_report_id.date_from)
-                account_move_lines = account_move_lines.filtered(lambda
-                                                                     a: not financial_report_id.date_to or a.date <= financial_report_id.date_to)
+                    domain.extend([
+                        ('date', '>=', f'{current_year - count}-01-01'),
+                        ('date', '<=', f'{current_year - count}-12-31')
+                    ])
+                if financial_report_id.journal_ids:
+                    domain.append(('journal_id', 'in', financial_report_id.journal_ids.ids))
+                if financial_report_id.account_ids:
+                    domain.append(('account_id', 'in', financial_report_id.account_ids.ids))
+                if financial_report_id.date_from:
+                    domain.append(('date', '>=', financial_report_id.date_from))
+                if financial_report_id.date_to:
+                    domain.append(('date', '<=', financial_report_id.date_to))
+                
+                balance_by_account = self._get_balance_by_account(domain, financial_report_id)
                 account_entries = {}
                 for account_type in account_types.values():
                     account_entries[account_type] = self._get_entries(
-                        account_move_lines, self.env['account.account'].search(
+                        balance_by_account, self.env['account.account'].search(
                             [('account_type', '=', account_type)]),
                         account_type)
                 total_income = sum(
@@ -198,34 +187,21 @@ class ProfitLossReport(models.TransientModel):
             current_year = fields.Date.today().year
             date_from = financial_report_id.date_from or f'{current_year}-01-01'
             date_to = financial_report_id.date_to or f'{current_year}-12-31'
-            account_move_lines = self.env['account.move.line'].search(
-                [('parent_state', 'in', target_move),
-                 ('date', '>=', date_from),
-                 ('date', '<=', date_to)])
-            lists = [{'id': rec.id,
-                      'value': [eval(i) for i in
-                                rec.analytic_distribution.keys()]}
-                     for rec in account_move_lines if
-                     rec.analytic_distribution]
-            if financial_report_id.analytic_ids:
-                account_move_lines = account_move_lines.filtered(
-                    lambda rec: rec.id in [lst['id'] for lst in lists if
-                                           lst['value'] and any(
-                                               i in financial_report_id.analytic_ids.mapped(
-                                                   'id') for i in
-                                               lst['value'])])
-            account_move_lines = account_move_lines.filtered(lambda
-                                                                 a: not financial_report_id.journal_ids or a.journal_id in financial_report_id.journal_ids)
-            account_move_lines = account_move_lines.filtered(lambda
-                                                                 a: not financial_report_id.account_ids or a.account_id in financial_report_id.account_ids)
-            account_move_lines = account_move_lines.filtered(lambda
-                                                                 a: not financial_report_id.date_from or a.date >= financial_report_id.date_from)
-            account_move_lines = account_move_lines.filtered(lambda
-                                                                 a: not financial_report_id.date_to or a.date <= financial_report_id.date_to)
+            domain = [
+                ('parent_state', 'in', target_move),
+                ('date', '>=', date_from),
+                ('date', '<=', date_to)
+            ]
+            if financial_report_id.journal_ids:
+                domain.append(('journal_id', 'in', financial_report_id.journal_ids.ids))
+            if financial_report_id.account_ids:
+                domain.append(('account_id', 'in', financial_report_id.account_ids.ids))
+            
+            balance_by_account = self._get_balance_by_account(domain, financial_report_id)
             account_entries = {}
             for account_type in account_types.values():
                 account_entries[account_type] = self._get_entries(
-                    account_move_lines, self.env['account.account'].search(
+                    balance_by_account, self.env['account.account'].search(
                         [('account_type', '=', account_type)]), account_type)
             total_income = sum(
                 float(entry['amount'].replace(',', '')) for account_type in
@@ -282,10 +258,35 @@ class ProfitLossReport(models.TransientModel):
         filters = self._get_filter_data()
         return data, filters, datas
 
-    def _get_entries(self, account_move_lines, account_ids, account_type):
+    def _get_balance_by_account(self, domain, financial_report_id):
+        if financial_report_id.analytic_ids:
+            account_move_lines = self.env['account.move.line'].search(domain)
+            lists = [{'id': rec.id,
+                      'value': [int(i) for i in rec.analytic_distribution.keys() if i.isdigit()]}
+                     for rec in account_move_lines if rec.analytic_distribution]
+            filtered_ids = [lst['id'] for lst in lists if lst['value'] and any(
+                i in financial_report_id.analytic_ids.ids for i in lst['value'])]
+            domain = [('id', 'in', filtered_ids)]
+            
+        groups = self.env['account.move.line'].read_group(
+            domain,
+            ['account_id', 'debit:sum', 'credit:sum'],
+            ['account_id']
+        )
+        balance_by_account = {}
+        for g in groups:
+            if g['account_id']:
+                acc_id = g['account_id'][0]
+                balance_by_account[acc_id] = {
+                    'debit': g['debit'] or 0.0,
+                    'credit': g['credit'] or 0.0
+                }
+        return balance_by_account
+
+    def _get_entries(self, balance_by_account, account_ids, account_type):
         """
             Get the entries for the specified account type.
-            :param account_move_lines: The account move lines to filter.
+            :param balance_by_account: Pre-aggregated balance dictionary by account ID.
             :param account_ids: The account IDs to filter.
             :param account_type: The account type.
             :return: A tuple containing the entries and the total amount.
@@ -293,18 +294,17 @@ class ProfitLossReport(models.TransientModel):
         entries = []
         total = 0
         for account in account_ids:
-            filtered_lines = account_move_lines.filtered(
-                lambda line: line.account_id == account)
-            if filtered_lines:
+            balances = balance_by_account.get(account.id)
+            if balances:
+                debit_sum = balances['debit']
+                credit_sum = balances['credit']
                 if account_type in ['income', 'income_other',
                                     'liability_payable', 'liability_current',
                                     'liability_non_current', 'equity',
                                     'equity_unaffected']:
-                    amount = -(sum(filtered_lines.mapped('debit')) - sum(
-                        filtered_lines.mapped('credit')))
+                    amount = -(debit_sum - credit_sum)
                 else:
-                    amount = sum(filtered_lines.mapped('debit')) - sum(
-                        filtered_lines.mapped('credit'))
+                    amount = debit_sum - credit_sum
                 entries.append({
                     'name': "{} - {}".format(account.code, account.name),
                     'amount': "{:,.2f}".format(amount),
