@@ -89,10 +89,7 @@ class JwBusinessDashboard extends Component {
             topExpenseCategories: [],
             topExpenseEmployees: [],
             expenseBulletData: [],
-            employeesByDepartment: [],
-            attendanceTrend: [],
-            departmentAttendanceSummary: [],
-            branchAttendanceSummary: [],
+
             invoicedKpis: { total_invoiced: 0, total_paid: 0, total_unpaid: 0, avg_invoice: 0, invoice_count: 0 },
             invoicedMonthly: [],
             invoicedTopInvoices: [],
@@ -161,7 +158,10 @@ class JwBusinessDashboard extends Component {
                 kwargs: {},
             });
 
-            // Update state
+            // Update state — set branches explicitly first to guarantee OWL reactivity
+            if (data.branches && data.branches.length) {
+                this.state.branches = data.branches;
+            }
             Object.assign(this.state, {
                 kpis: data.kpis || this.state.kpis,
                 salesMonthly: data.sales_monthly || [],
@@ -172,7 +172,6 @@ class JwBusinessDashboard extends Component {
                 jewelleryPurity: data.jewellery_purity || [],
                 topProducts: data.top_products || [],
                 salesBySalesman: data.sales_by_salesman || [],
-                branches: data.branches || this.state.branches || [],
                 topSaleOrders: data.top_sale_orders || [],
                 topQuotations: data.top_quotations || [],
                 salesStateDistribution: data.sales_state_distribution || [],
@@ -190,10 +189,7 @@ class JwBusinessDashboard extends Component {
                 topExpenseCategories: data.top_expense_categories || [],
                 topExpenseEmployees: data.top_expense_employees || [],
                 expenseBulletData: data.expense_bullet_data || [],
-                employeesByDepartment: data.employees_by_department || [],
-                attendanceTrend: data.attendance_trend || [],
-                departmentAttendanceSummary: data.department_attendance_summary || [],
-                branchAttendanceSummary: data.branch_attendance_summary || [],
+
                 invoicedKpis: data.invoiced_kpis || this.state.invoicedKpis,
                 invoicedMonthly: data.invoiced_monthly || [],
                 invoicedTopInvoices: data.invoiced_top_invoices || [],
@@ -254,11 +250,6 @@ class JwBusinessDashboard extends Component {
         } else if (this.state.currentTab === 'invoicing') {
             this._renderInvoicedMonthlyBar();
             this._renderInvoicedCategoryChart();
-        } else if (this.state.currentTab === 'employees') {
-            this._renderEmployeesByDepartmentChart();
-            this._renderAttendanceTrendChart();
-            this._renderDepartmentAttendanceChart();
-            this._renderBranchAttendanceChart();
         }
     }
 
@@ -1547,195 +1538,7 @@ class JwBusinessDashboard extends Component {
         });
     }
 
-    createEmployee() {
-        this.action.doAction({
-            type: 'ir.actions.act_window',
-            name: 'Create Employee',
-            res_model: 'hr.employee',
-            views: [[false, 'form']],
-            target: 'current',
-        });
-    }
 
-    _renderEmployeesByDepartmentChart() {
-        const canvas = this._getCanvas('employeesByDepartmentChart');
-        if (!canvas) return;
-        this._destroyChart('employeesByDepartmentChart');
-        const data = this.state.employeesByDepartment;
-        const labels = data.map(d => d.department);
-        const values = data.map(d => d.count);
-
-        this.charts.employeesByDepartmentChart = new window.Chart(canvas, {
-            type: 'doughnut',
-            data: {
-                labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: PALETTE.slice(0, labels.length).map(c => c + 'cc'),
-                    borderColor: 'transparent',
-                    borderWidth: 0,
-                    hoverOffset: 10,
-                }],
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                cutout: '60%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15,23,42,0.9)',
-                        callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw} Employees` }
-                    }
-                },
-            },
-        });
-        this._buildLegend('employeesDepartmentLegend', labels, PALETTE, values, false);
-    }
-
-    _renderAttendanceTrendChart() {
-        const canvas = this._getCanvas('attendanceTrendChart');
-        if (!canvas) return;
-        this._destroyChart('attendanceTrendChart');
-        const data = this.state.attendanceTrend;
-        const labels = data.map(d => d.period);
-        const values = data.map(d => d.count);
-
-        this.charts.attendanceTrendChart = new window.Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Employees Present',
-                    data: values,
-                    backgroundColor: '#10b981cc',
-                    borderColor: '#10b981',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                }],
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15,23,42,0.9)',
-                        callbacks: { label: (ctx) => ` Present: ${ctx.raw}` }
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-                    y: {
-                        grid: { color: 'rgba(148,163,184,0.08)' },
-                        ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 1 }
-                    }
-                }
-            }
-        });
-    }
-
-    _renderDepartmentAttendanceChart() {
-        const canvas = this._getCanvas('departmentAttendanceBarChart');
-        if (!canvas) return;
-        this._destroyChart('departmentAttendanceBarChart');
-        const data = this.state.departmentAttendanceSummary || [];
-        const labels = data.map(d => d.department);
-        const values = data.map(d => d.attendance_count);
-
-        this.charts.departmentAttendanceBarChart = new window.Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Attendance',
-                    data: values,
-                    backgroundColor: 'rgba(124, 58, 237, 0.85)',
-                    borderColor: '#7c3aed',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                }],
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15,23,42,0.9)',
-                        callbacks: {
-                            label: (ctx) => {
-                                const idx = ctx.dataIndex;
-                                const item = data[idx];
-                                return [
-                                    ` Attendance: ${ctx.raw}`,
-                                    ` Present: ${item.present_employees} / ${item.total_employees}`,
-                                    ` Attendance Rate: ${item.attendance_rate}%`
-                                ];
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-                    y: {
-                        min: 0,
-                        grid: { color: 'rgba(148,163,184,0.08)' },
-                        ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 1 }
-                    }
-                }
-            }
-        });
-    }
-
-    _renderBranchAttendanceChart() {
-        const canvas = this._getCanvas('branchAttendanceBarChart');
-        if (!canvas) return;
-        this._destroyChart('branchAttendanceBarChart');
-        const data = this.state.branchAttendanceSummary || [];
-        const labels = data.map(b => b.branch);
-        const values = data.map(b => b.attendance_count);
-
-        this.charts.branchAttendanceBarChart = new window.Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Attendance',
-                    data: values,
-                    backgroundColor: 'rgba(245, 158, 11, 0.85)',
-                    borderColor: '#f59e0b',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                }],
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15,23,42,0.9)',
-                        callbacks: {
-                            label: (ctx) => {
-                                const idx = ctx.dataIndex;
-                                const item = data[idx];
-                                return [
-                                    ` Attendance: ${ctx.raw}`,
-                                    ` Present: ${item.present_employees} / ${item.total_employees}`,
-                                    ` Attendance Rate: ${item.attendance_rate}%`
-                                ];
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-                    y: {
-                        min: 0,
-                        grid: { color: 'rgba(148,163,184,0.08)' },
-                        ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 1 }
-                    }
-                }
-            }
-        });
-    }
 }
 
 registry.category("actions").add("jw_business_dashboard", JwBusinessDashboard);

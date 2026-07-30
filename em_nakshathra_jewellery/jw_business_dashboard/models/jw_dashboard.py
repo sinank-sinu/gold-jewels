@@ -34,10 +34,34 @@ class JwBusinessDashboard(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
     # Main dashboard data entry point
     # ─────────────────────────────────────────────────────────────────────────
+
+    def _has_essl_column(self):
+        """Return True if hr_employee.essl_location_id column exists in this DB."""
+        cr = self._cr
+        cr.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='hr_employee' AND column_name='essl_location_id'
+            )
+        """)
+        return bool(cr.fetchone()[0])
+
+    @staticmethod
+    def _emp_branch_sql(essl_exists, emp_alias='e', user_alias='u', loc_alias='sl'):
+        """Return the COALESCE SQL fragment for resolving an employee branch.
+        Omits essl_location_id when that column does not exist."""
+        if essl_exists:
+            return (f"COALESCE({emp_alias}.essl_location_id,"
+                    f" {user_alias}.branch_id, {loc_alias}.branch_id)")
+        return f"COALESCE({user_alias}.branch_id, {loc_alias}.branch_id)"
+
     @api.model
     def get_dashboard_data(self, period='this_month', date_from=None, date_to=None, branch_id=None):
         cr = self._cr
-        
+
+        # Detect optional custom column once per RPC call
+        essl = self._has_essl_column()
+
         # Fetch branch list if table exists
         branches = []
         cr.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'res_branch')")
@@ -58,10 +82,10 @@ class JwBusinessDashboard(models.Model):
             d_from, d_to = self._date_range(period)
 
         return {
-            'kpis': self._get_kpis(d_from, d_to, b_id),
+            'kpis': self._get_kpis(d_from, d_to, b_id, essl),
             'sales_monthly': self._get_sales_monthly(d_from, d_to, b_id),
             'purchase_monthly': self._get_purchase_monthly(d_from, d_to, b_id),
-            'expense_monthly': self._get_expense_monthly(b_id),
+            'expense_monthly': self._get_expense_monthly(b_id, essl),
             'inventory_category': self._get_inventory_by_category(b_id),
             'product_category': self._get_product_category_distribution(b_id),
             'jewellery_purity': self._get_jewellery_purity_breakdown(b_id),
@@ -85,14 +109,11 @@ class JwBusinessDashboard(models.Model):
             'best_sellers_by_qty': self._get_best_sellers_by_qty(d_from, d_to, b_id),
             'best_selling_categories': self._get_best_selling_categories(d_from, d_to, b_id),
             'stock_by_location': self._get_stock_by_location(b_id),
-            'top_expenses': self._get_top_expenses(d_from, d_to, b_id),
-            'top_expense_categories': self._get_top_expense_categories(d_from, d_to, b_id),
-            'top_expense_employees': self._get_top_expense_employees(d_from, d_to, b_id),
-            'expense_bullet_data': self._get_expense_bullet_data(d_from, d_to, b_id),
-            'employees_by_department': self._get_employees_by_department(d_from, d_to, b_id),
-            'attendance_trend': self._get_attendance_trend(d_from, d_to, b_id),
-            'department_attendance_summary': self._get_department_attendance_summary(d_from, d_to, b_id),
-            'branch_attendance_summary': self._get_branch_attendance_summary(d_from, d_to),
+            'top_expenses': self._get_top_expenses(d_from, d_to, b_id, essl),
+            'top_expense_categories': self._get_top_expense_categories(d_from, d_to, b_id, essl),
+            'top_expense_employees': self._get_top_expense_employees(d_from, d_to, b_id, essl),
+            'expense_bullet_data': self._get_expense_bullet_data(d_from, d_to, b_id, essl),
+
             'period': {'from': str(d_from), 'to': str(d_to)},
             'branches': branches,
         }
@@ -100,7 +121,7 @@ class JwBusinessDashboard(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
     # KPIs
     # ─────────────────────────────────────────────────────────────────────────
-    def _get_kpis(self, d_from, d_to, branch_id=None):
+    def _get_kpis(self, d_from, d_to, branch_id=None, essl=True):
         cr = self._cr
 
         # Sales revenue
@@ -286,7 +307,7 @@ class JwBusinessDashboard(models.Model):
         """
         params = [d_from, d_to]
         if branch_id:
-            q += " AND COALESCE(emp.essl_location_id, u.branch_id, sl.branch_id) = %s"
+            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
             params.append(branch_id)
         cr.execute(q, params)
         expense_total = cr.fetchone()[0] or 0.0
@@ -322,52 +343,6 @@ class JwBusinessDashboard(models.Model):
         cr.execute(q, params)
         customer_count = cr.fetchone()[0] or 0
 
-        # HR / Employee KPIs
-        emp_q = """
-            SELECT COUNT(DISTINCT e.id) FROM hr_employee e
-            LEFT JOIN res_users u ON u.id = e.user_id
-            LEFT JOIN stock_location sl ON sl.id = e.label_location_id
-            WHERE e.active = TRUE
-              AND (e.joining_date <= %s OR e.joining_date IS NULL)
-              AND (e.departure_date >= %s OR e.departure_date IS NULL)
-        """
-        emp_params = [d_to, d_from]
-        if branch_id:
-            emp_q += " AND COALESCE(e.essl_location_id, u.branch_id, sl.branch_id) = %s"
-            emp_params.append(branch_id)
-        cr.execute(emp_q, emp_params)
-        employee_count = cr.fetchone()[0] or 0
-
-        dept_q = """
-            SELECT COUNT(DISTINCT e.department_id) FROM hr_employee e
-            LEFT JOIN res_users u ON u.id = e.user_id
-            LEFT JOIN stock_location sl ON sl.id = e.label_location_id
-            WHERE e.active = TRUE AND e.department_id IS NOT NULL
-              AND (e.joining_date <= %s OR e.joining_date IS NULL)
-              AND (e.departure_date >= %s OR e.departure_date IS NULL)
-        """
-        dept_params = [d_to, d_from]
-        if branch_id:
-            dept_q += " AND COALESCE(e.essl_location_id, u.branch_id, sl.branch_id) = %s"
-            dept_params.append(branch_id)
-        cr.execute(dept_q, dept_params)
-        department_count = cr.fetchone()[0] or 0
-
-        pres_q = """
-            SELECT COUNT(DISTINCT a.employee_id) 
-            FROM hr_attendance a
-            JOIN hr_employee e ON e.id = a.employee_id
-            LEFT JOIN res_users u ON u.id = e.user_id
-            LEFT JOIN stock_location sl ON sl.id = e.label_location_id
-            WHERE a.check_in::DATE BETWEEN %s AND %s
-        """
-        pres_params = [d_from, d_to]
-        if branch_id:
-            pres_q += " AND COALESCE(e.essl_location_id, u.branch_id, sl.branch_id) = %s"
-            pres_params.append(branch_id)
-        cr.execute(pres_q, pres_params)
-        present_count = cr.fetchone()[0] or 0
-
         net_profit = sale_revenue - purchase_total - expense_total
         return {
             'sale_revenue': round(float(sale_revenue), 2),
@@ -388,9 +363,6 @@ class JwBusinessDashboard(models.Model):
             'net_profit': round(float(net_profit), 2),
             'purchase_average': round(float(purchase_total / purchase_count if purchase_count > 0 else 0.0), 2),
             'purchase_average_weight': round(float(purchase_total_weight / purchase_count if purchase_count > 0 else 0.0), 2),
-            'employee_count': int(employee_count),
-            'department_count': int(department_count),
-            'present_count': int(present_count),
         }
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -447,7 +419,7 @@ class JwBusinessDashboard(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
     # Monthly Expense (12 months) – Bar Chart
     # ─────────────────────────────────────────────────────────────────────────
-    def _get_expense_monthly(self, branch_id=None):
+    def _get_expense_monthly(self, branch_id=None, essl=True):
         cr = self._cr
         q = """
             SELECT
@@ -463,7 +435,7 @@ class JwBusinessDashboard(models.Model):
         """
         params = []
         if branch_id:
-            q += " AND COALESCE(emp.essl_location_id, u.branch_id, sl.branch_id) = %s"
+            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
             params.append(branch_id)
         q += " GROUP BY month, month_start ORDER BY month_start"
         cr.execute(q, params)
@@ -473,7 +445,7 @@ class JwBusinessDashboard(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
     # Expense Analysis Methods
     # ─────────────────────────────────────────────────────────────────────────
-    def _get_top_expenses(self, d_from, d_to, branch_id=None):
+    def _get_top_expenses(self, d_from, d_to, branch_id=None, essl=True):
         cr = self._cr
         q = """
             SELECT 
@@ -494,7 +466,7 @@ class JwBusinessDashboard(models.Model):
         """
         params = [d_from, d_to]
         if branch_id:
-            q += " AND COALESCE(emp.essl_location_id, u.branch_id, sl.branch_id) = %s"
+            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
             params.append(branch_id)
         q += " ORDER BY he.total_amount DESC LIMIT 10"
         cr.execute(q, params)
@@ -514,7 +486,7 @@ class JwBusinessDashboard(models.Model):
             })
         return result
 
-    def _get_top_expense_categories(self, d_from, d_to, branch_id=None):
+    def _get_top_expense_categories(self, d_from, d_to, branch_id=None, essl=True):
         cr = self._cr
         q = """
             SELECT 
@@ -533,7 +505,7 @@ class JwBusinessDashboard(models.Model):
         """
         params = [d_from, d_to]
         if branch_id:
-            q += " AND COALESCE(emp.essl_location_id, u.branch_id, sl.branch_id) = %s"
+            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
             params.append(branch_id)
         q += " GROUP BY pt.id, pt.name ORDER BY total_amount DESC"
         cr.execute(q, params)
@@ -551,7 +523,7 @@ class JwBusinessDashboard(models.Model):
             })
         return result
 
-    def _get_top_expense_employees(self, d_from, d_to, branch_id=None):
+    def _get_top_expense_employees(self, d_from, d_to, branch_id=None, essl=True):
         cr = self._cr
         q = """
             SELECT 
@@ -568,7 +540,7 @@ class JwBusinessDashboard(models.Model):
         """
         params = [d_from, d_to]
         if branch_id:
-            q += " AND COALESCE(emp.essl_location_id, u.branch_id, sl.branch_id) = %s"
+            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
             params.append(branch_id)
         q += " GROUP BY emp.id, emp.name ORDER BY total_amount DESC"
         cr.execute(q, params)
@@ -583,8 +555,8 @@ class JwBusinessDashboard(models.Model):
             })
         return result
 
-    def _get_expense_bullet_data(self, d_from, d_to, branch_id=None):
-        categories = self._get_top_expense_categories(d_from, d_to, branch_id)
+    def _get_expense_bullet_data(self, d_from, d_to, branch_id=None, essl=True):
+        categories = self._get_top_expense_categories(d_from, d_to, branch_id, essl)
         result = []
         for c in categories:
             cat = c['category']
@@ -1406,196 +1378,4 @@ class JwBusinessDashboard(models.Model):
             'name': r[1] or 'Unknown',
             'value': round(float(r[2]), 3)
         } for r in rows]
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Employee Tab aggregation methods
-    # ─────────────────────────────────────────────────────────────────────────
-    def _get_employees_by_department(self, d_from=None, d_to=None, branch_id=None):
-        cr = self._cr
-        q = """
-            SELECT 
-                d.name,
-                COUNT(e.id) AS emp_count
-            FROM hr_department d
-            LEFT JOIN (
-                SELECT emp.id, emp.department_id, emp.joining_date, emp.departure_date, emp.active,
-                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
-                FROM hr_employee emp
-                LEFT JOIN res_users u ON u.id = emp.user_id
-                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            ) e ON e.department_id = d.id AND e.active = TRUE
-                AND (%s::date IS NULL OR e.joining_date <= %s OR e.joining_date IS NULL)
-                AND (%s::date IS NULL OR e.departure_date >= %s OR e.departure_date IS NULL)
-                AND (%s::integer IS NULL OR COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = %s)
-            WHERE d.active = TRUE
-            GROUP BY d.id, d.name
-            ORDER BY emp_count DESC
-        """
-        cr.execute(q, [d_to, d_to, d_from, d_from, branch_id, branch_id])
-        rows = cr.fetchall()
-        result = []
-        for r in rows:
-            name = r[0]
-            if isinstance(name, dict):
-                name = list(name.values())[0] if name else 'Department'
-            result.append({
-                'department': str(name),
-                'count': int(r[1])
-            })
-        return result
-
-    def _get_attendance_trend(self, d_from, d_to, branch_id=None):
-        cr = self._cr
-        delta_days = (d_to - d_from).days
-        if delta_days > 90:
-            q = """
-                SELECT
-                    to_char(a.check_in, 'Mon YYYY') AS period,
-                    date_trunc('month', a.check_in) AS period_start,
-                    COUNT(DISTINCT a.employee_id) AS present_count
-                FROM hr_attendance a
-                JOIN hr_employee e ON e.id = a.employee_id
-                LEFT JOIN res_users u ON u.id = e.user_id
-                LEFT JOIN stock_location sl ON sl.id = e.label_location_id
-                WHERE a.check_in::DATE BETWEEN %s AND %s
-                  AND (%s::integer IS NULL OR COALESCE(e.essl_location_id, u.branch_id, sl.branch_id) = %s)
-                GROUP BY period, period_start
-                ORDER BY period_start
-            """
-        else:
-            q = """
-                SELECT
-                    to_char(a.check_in, 'YYYY-MM-DD') AS period,
-                    date_trunc('day', a.check_in) AS period_start,
-                    COUNT(DISTINCT a.employee_id) AS present_count
-                FROM hr_attendance a
-                JOIN hr_employee e ON e.id = a.employee_id
-                LEFT JOIN res_users u ON u.id = e.user_id
-                LEFT JOIN stock_location sl ON sl.id = e.label_location_id
-                WHERE a.check_in::DATE BETWEEN %s AND %s
-                  AND (%s::integer IS NULL OR COALESCE(e.essl_location_id, u.branch_id, sl.branch_id) = %s)
-                GROUP BY period, period_start
-                ORDER BY period_start
-            """
-        cr.execute(q, [d_from, d_to, branch_id, branch_id])
-        rows = cr.fetchall()
-        return [{'period': r[0], 'count': int(r[2])} for r in rows]
-
-    def _get_department_attendance_summary(self, d_from, d_to, branch_id=None):
-        cr = self._cr
-        num_days = (d_to - d_from).days + 1
-        if num_days <= 0:
-            num_days = 1
-        q = """
-            SELECT 
-                d.name AS dept_name,
-                COUNT(DISTINCT e.id) AS total_employees,
-                COUNT(DISTINCT a.employee_id) AS present_employees,
-                COUNT(DISTINCT CONCAT(a.employee_id, '_', a.check_in::DATE)) AS present_days_count,
-                COUNT(a.id) AS attendance_count
-            FROM hr_department d
-            LEFT JOIN (
-                SELECT emp.id, emp.department_id, emp.joining_date, emp.departure_date, emp.active,
-                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
-                FROM hr_employee emp
-                LEFT JOIN res_users u ON u.id = emp.user_id
-                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            ) e ON e.department_id = d.id AND e.active = TRUE
-                AND (e.joining_date <= %s OR e.joining_date IS NULL)
-                AND (e.departure_date >= %s OR e.departure_date IS NULL)
-                AND (%s::integer IS NULL OR COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = %s)
-            LEFT JOIN hr_attendance a ON a.employee_id = e.id AND a.check_in::DATE BETWEEN %s AND %s
-            WHERE d.active = TRUE
-            GROUP BY d.id, d.name
-            ORDER BY total_employees DESC, present_employees DESC
-        """
-        cr.execute(q, [d_to, d_from, branch_id, branch_id, d_from, d_to])
-        rows = cr.fetchall()
-        result = []
-        for r in rows:
-            name = r[0]
-            if isinstance(name, dict):
-                name = list(name.values())[0] if name else 'Department'
-            total_emp = int(r[1])
-            present_emp = int(r[2])
-            present_days = int(r[3])
-            att_count = int(r[4])
-            
-            # Expected person-days of attendance
-            expected_person_days = total_emp * num_days
-            if expected_person_days > 0:
-                rate = round((present_days / expected_person_days * 100.0), 1)
-                rate = min(rate, 100.0)
-            else:
-                rate = 0.0
-
-            result.append({
-                'department': str(name),
-                'total_employees': total_emp,
-                'present_employees': present_emp,
-                'attendance_count': att_count,
-                'attendance_rate': rate
-            })
-        return result
-
-    def _get_branch_attendance_summary(self, d_from, d_to):
-        cr = self._cr
-        cr.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'res_branch')")
-        if not cr.fetchone()[0]:
-            return []
-            
-        num_days = (d_to - d_from).days + 1
-        if num_days <= 0:
-            num_days = 1
-        q = """
-            SELECT 
-                b.name AS branch_name,
-                COUNT(DISTINCT e.id) AS total_employees,
-                COUNT(DISTINCT a.employee_id) AS present_employees,
-                COUNT(DISTINCT CONCAT(a.employee_id, '_', a.check_in::DATE)) AS present_days_count,
-                COUNT(a.id) AS attendance_count,
-                b.id AS branch_id
-            FROM res_branch b
-            LEFT JOIN (
-                SELECT emp.id, emp.joining_date, emp.departure_date, emp.active,
-                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
-                FROM hr_employee emp
-                LEFT JOIN res_users u ON u.id = emp.user_id
-                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            ) e ON COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = b.id AND e.active = TRUE
-                AND (e.joining_date <= %s OR e.joining_date IS NULL)
-                AND (e.departure_date >= %s OR e.departure_date IS NULL)
-            LEFT JOIN hr_attendance a ON a.employee_id = e.id AND a.check_in::DATE BETWEEN %s AND %s
-            GROUP BY b.id, b.name
-            ORDER BY total_employees DESC, present_employees DESC, b.name
-        """
-        cr.execute(q, [d_to, d_from, d_from, d_to])
-        rows = cr.fetchall()
-        result = []
-        for r in rows:
-            name = r[0]
-            total_emp = int(r[1])
-            present_emp = int(r[2])
-            present_days = int(r[3])
-            att_count = int(r[4])
-            
-            # Expected person-days of attendance
-            expected_person_days = total_emp * num_days
-            if expected_person_days > 0:
-                rate = round((present_days / expected_person_days * 100.0), 1)
-                rate = min(rate, 100.0)
-            else:
-                rate = 0.0
-
-            result.append({
-                'id': int(r[5]),
-                'branch': str(name),
-                'total_employees': total_emp,
-                'present_employees': present_emp,
-                'attendance_count': att_count,
-                'attendance_rate': rate
-            })
-        return result
-
-
 
