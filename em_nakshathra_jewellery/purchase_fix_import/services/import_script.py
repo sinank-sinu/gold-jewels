@@ -119,6 +119,7 @@ class ImportLabelService:
             _logger.info(f"Found {len(grouped_data)} unique Purchase Orders.")
 
             count = 0
+            failed_records = []
             # Process each group
             for bill_ref, lines in grouped_data.items():
 
@@ -135,13 +136,39 @@ class ImportLabelService:
                         else datetime.now().strftime("%Y-%m-%d")
                     )
 
-                self._process_po_group(vendor_name, bill_ref, date_str, lines)
-                count += 1
-                if count % 10 == 0:
-                    self.env.cr.commit()
-                    _logger.info(f"Processed {count} POs...")
+                # self._process_po_group(vendor_name, bill_ref, date_str, lines)
+                # count += 1
+                # if count % 10 == 0:
+                #     self.env.cr.commit()
+                #     _logger.info(f"Processed {count} POs...")
+                try:
+                    self._process_po_group(vendor_name, bill_ref, date_str, lines)
+
+                    count += 1
+
+                    if count % 10 == 0:
+                        self.env.cr.commit()
+                        _logger.info(f"Processed {count} POs...")
+
+                except Exception as e:
+                    self.env.cr.rollback()
+
+                    failed_records.append(
+                        f"Bill Reference: {bill_ref}\n"
+                        f"Vendor: {vendor_name}\n"
+                        f"Reason: {str(e)}"
+                    )
+
+                    continue
 
             self.env.cr.commit()
+
+            if failed_records:
+                raise UserError(
+                    "Import completed with the following failures:\n\n"
+                    + "\n\n".join(failed_records)
+                )
+
             _logger.info("Purchase Label Bulk Import Completed Successfully!")
             _logger.info("===== PROCESS IMPORT FINISHED =====")
 
