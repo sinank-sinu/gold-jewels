@@ -144,11 +144,11 @@ class JewelleryJobWork(models.Model):
                 order.job_work_line_ids.mapped('total_fine')
             )
 
-    @api.depends('label_ids.purchase_gross_weight')
+    @api.depends('label_ids.sale_gross_weight')
     def _compute_total_labelled(self):
         for order in self:
             order.total_labelled = sum(
-                order.label_ids.mapped('purchase_gross_weight')
+                order.label_ids.mapped('sale_gross_weight')
             )
 
     @api.depends(
