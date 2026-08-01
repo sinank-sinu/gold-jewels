@@ -978,7 +978,7 @@ class JobWorkImportWizard(models.TransientModel):
 
             "total_fine_weight": self._float(fine_wt_val),
 
-            "state": "draft",
+            "state": "done",
 
         }
 
@@ -1027,13 +1027,20 @@ class JobWorkImportWizard(models.TransientModel):
         range_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Gram Range", "Job Work Line/Gram Range", "Gram Range"])
         gram_range = self._find_gram_range(range_val, master) if range_val else False
 
-        issued_wt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Issued Weight (g)", "Issued Weight", "Issued Weight (g)", "Net Weight", "Quantity", "Qty"], default=0.0)
+        issued_wt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Issued Weight (g)", "Job Work Line/Net Weight (g)", "Job Work Line/ Quantity", "Issued Weight", "Issued Weight (g)", "Net Weight", "Quantity", "Qty"], default=0.0)
         stone_wt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Stone Weight (g)", "Stone Weight", "Stone Weight (g)"], default=0.0)
         dia_wt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Diamond Weight (g)", "Diamond Weight", "Diamond Weight (g)"], default=0.0)
         rate_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Purchase fine Rate / gram", "Purchase fine Rate / gram", "Fine Rate"], default=0.0)
         pcs_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/No. of Pieces", "No. of Pieces", "No.ofPieces", "Pieces", "Pcs"], default=1)
         fine_gms_price_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Fine GMS Price", "Fine GMS Price"], default=0.0)
         fine_amt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Fine Amount", "Fine Amount"], default=0.0)
+        fine_wt_val = self._get_val(row, header_map, ["Issue Voucher/Order Lines/Fine Weight  (g)", "Job Work Line/Fine Weight", "Fine Weight", "Fine Weight (g)"], default=0.0)
+
+        flt_issued_wt = self._float(issued_wt_val)
+        flt_stone_wt = self._float(stone_wt_val)
+        flt_fine_wt = self._float(fine_wt_val)
+        if not flt_fine_wt and purity and purity.percentage:
+            flt_fine_wt = flt_issued_wt * (purity.percentage / 100.0)
 
         ptav_ids = self._get_ptav_ids_for_row(product, row, header_map)
         variant_product = self._find_or_create_variant(product.product_tmpl_id, ptav_ids)
@@ -1052,9 +1059,15 @@ class JobWorkImportWizard(models.TransientModel):
 
             "purity_id": purity.id,
 
-            "issued_weight": self._float(issued_wt_val),
+            "issued_weight": flt_issued_wt,
 
-            "stone_weight": self._float(stone_wt_val),
+            "qty": flt_issued_wt,
+
+            "gross_weight": flt_issued_wt + flt_stone_wt,
+
+            "fine_weight": flt_fine_wt,
+
+            "stone_weight": flt_stone_wt,
 
             "diamond_weight": self._float(dia_wt_val),
 
@@ -1213,10 +1226,12 @@ class JobWorkImportWizard(models.TransientModel):
         )[:1]
 
         gross_wt_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Gross Weight (g)", "Gross Weight", "Gross Weight (g)"], default=0.0)
+        net_wt_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Net Weight (g)", "Job Work Line/Net Weight (g)", "Net Weight", "Net Weight (g)"], default=gross_wt_val)
+        qty_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Qty", "Receive Voucher/Order Lines/Net Weight (g)", "Job Work Line/ Quantity", "Job Work Line/Net Weight (g)", "Quantity", "Net Weight (g)"], default=net_wt_val)
         stone_wt_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Stone Weight (g)", "Stone Weight", "Stone Weight (g)"], default=0.0)
         dia_wt_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Diamond Weight (g)", "Diamond Weight", "Diamond Weight (g)"], default=0.0)
-        mc_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Purchase Making Charge", "Purchase Making Charge", "MC Value"], default=0.0)
-        fine_price_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Fine GMS Price", "Fine GMS Price"], default=0.0)
+        mc_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Purchase Making Charge", "Receive Voucher/MC%", "Job Work Line/MC%", "Job Work Line/Purchase Making Charge", "Purchase Making Charge", "MC Value"], default=0.0)
+        fine_price_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Fine GMS Price", "Receive Voucher/Fine Rate (g)", "Fine GMS Price", "Fine Rate (g)"], default=0.0)
         fine_amt_val = self._get_val(row, header_map, ["Receive Voucher/Order Lines/Fine Issue Amount", "Fine Issue Amount", "Fine Amount"], default=0.0)
 
         ptav_ids = self._get_ptav_ids_for_row(product, row, header_map)
@@ -1238,7 +1253,11 @@ class JobWorkImportWizard(models.TransientModel):
 
             "purity_id": purity.id,
 
+            "qty": self._float(qty_val),
+
             "gross_weight": self._float(gross_wt_val),
+
+            "net_weight": self._float(net_wt_val),
 
             "stone_weight": self._float(stone_wt_val),
 
