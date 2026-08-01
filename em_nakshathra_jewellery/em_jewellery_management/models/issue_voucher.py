@@ -72,6 +72,7 @@ class JewelleryIssueVoucher(models.Model):
         string="Order Date",
         default=fields.Date.today
     )
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
 
     @api.depends('is_refinery', 'job_worker_id', 'refinery_id')
     def _compute_received_location_id(self):

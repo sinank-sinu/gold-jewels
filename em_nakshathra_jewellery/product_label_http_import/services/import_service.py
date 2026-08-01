@@ -11,7 +11,67 @@ class ProductLabelImportService:
     def __init__(self, env):
         self.env = env(su=True)
 
+    def _create_stock_transfer(self, label):
+        """Create and validate internal transfer during import."""
+
+        company = label.company_id
+
+        picking_type = self.env['stock.picking.type'].search([
+            ('code', '=', 'internal'),
+            ('company_id', '=', company.id)
+        ], limit=1)
+
+        if not picking_type:
+            raise UserError(
+                f"Internal Picking Type not found for company {company.name}"
+            )
+
+        picking = self.env['stock.picking'].create({
+            'company_id': company.id,
+            'picking_type_id': picking_type.id,
+            'location_id': label.source_location_id.id,
+            'location_dest_id': label.branch_location_id.id,
+            'origin': label.name,
+            'branch_id': label.branch_id.id,
+        })
+
+        move = self.env['stock.move'].create({
+            'name': label.name,
+            'company_id': company.id,
+            'product_id': label.product_id.id,
+            'product_uom_qty': label.purchase_gross_weight or 1.0,
+            'product_uom': label.product_id.uom_id.id,
+            'location_id': label.source_location_id.id,
+            'location_dest_id': label.branch_location_id.id,
+            'picking_id': picking.id,
+            'branch_id': label.branch_id.id,
+            'label_id': label.id,
+            'purity_id': label.purity_id.id if label.purity_id else False,
+        })
+        move.quantity = label.purchase_gross_weight or 1.0
+
+        picking.action_confirm()
+        picking.action_assign()
+
+        self.env['stock.move.line'].create({
+            'company_id': company.id,
+            'move_id': move.id,
+            'picking_id': picking.id,
+            'product_id': label.product_id.id,
+            'product_uom_id': label.product_id.uom_id.id,
+            'location_id': label.source_location_id.id,
+            'location_dest_id': label.branch_location_id.id,
+            'quantity': label.purchase_gross_weight or 1.0,
+        })
+
+        picking.button_validate()
+
+        return picking
+
     def process_import(self, file_base64):
+        created = 0
+        transferred = 0
+        failed_labels = []
         _logger.info("Starting Product Label Bulk Import via Python Script...")
         file_content = base64.b64decode(file_base64)
         
@@ -67,6 +127,9 @@ class ProductLabelImportService:
                     with self.env.cr.savepoint():
                         _logger.info(f"Processing row {row_idx}...")
                         label = self._process_row(row_dict, row_idx)
+                        if not label:
+                            _logger.info("Row %s skipped.", row_idx)
+                            continue
                         
                         # Extract and parse date from excel row (Bill Date or Date)
                         def get_local_val(key_name):
@@ -88,12 +151,11 @@ class ProductLabelImportService:
                                     pass
                         
                         # Perform Transfer immediately
-                        company = label.branch_id.company_id or label.product_id.company_id
-                        if company:
-                            label = label.with_company(company)
-                        label.action_stock_in()
-                        
-                        picking = label.picking_id
+                        # Perform Transfer immediately
+                        picking = self._create_stock_transfer(label)
+
+                        label.picking_id = picking.id
+                        label.is_stocked_in = True
                         if picking and excel_date:
                             formatted_date = excel_date.strftime('%Y-%m-%d %H:%M:%S')
                             try:
@@ -125,9 +187,16 @@ class ProductLabelImportService:
                                 
                         transferred += 1
                         created += 1
-                        _logger.info(f"Row {row_idx} imported and transferred successfully as Label {label.name}.")
+                        # Total product.label records currently in the database
+
                 except Exception as e:
-                    _logger.error(f"Error on row {row_idx}: {e}")
+                        label_name = row_dict.get("Label Name") or row_dict.get("label name") or ""
+                        failed_labels.append({
+                            "row": row_idx,
+                            "label": str(label_name).strip(),
+                            "reason": str(e),
+                        })
+                        _logger.error(f"Error on row {row_idx}: {e}")
                     
                 if created > 0 and created % 100 == 0:
                     current_cr.commit()
@@ -145,8 +214,36 @@ class ProductLabelImportService:
             if not current_cr.closed:
                 current_cr.close()
             self.env = original_env
+            total_labels = self.env['product.label'].search_count([])
+
+            _logger.info("=" * 100)
+            _logger.info("PRODUCT LABEL IMPORT COMPLETED")
+            _logger.info("Rows Imported Successfully : %s", created)
+            _logger.info("Labels Transferred         : %s", transferred)
+            _logger.info("Total product.label Records: %s", total_labels)
+            _logger.info("Failed Records             : %s", len(failed_labels))
+
+            if failed_labels:
+                _logger.info("---------- NON CREATED LABELS ----------")
+                for rec in failed_labels:
+                    _logger.info(
+                        "Row: %s | Label: %s | Reason: %s",
+                        rec["row"],
+                        rec["label"],
+                        rec["reason"],
+                    )
+                _logger.info("-------- END NON CREATED LABELS --------")
+
+            _logger.info("=" * 100)
+
+        return {
+                "created": created,
+                "transferred": transferred,
+                "total_product_labels": total_labels,
+                "failed": len(failed_labels),
+            }
                 
-        return {'created': created, 'transferred': transferred}
+        # return {'created': created, 'transferred': transferred}
 
     def _process_row(self, row, row_idx):
         # Helper to get row value case-insensitively
@@ -179,9 +276,30 @@ class ProductLabelImportService:
         branch_name = str(get_val('Branch') or '').strip()
         branch = False
         if branch_name:
-            branch = self.env['res.branch'].search([('name', '=ilike', branch_name), ('company_id', '=', excel_company.id)], limit=1)
+            branch = self.env['res.branch'].search([
+                ('name', '=ilike', branch_name),
+            ], limit=1)
+
+            # if branch:
+            #     if not branch.company_id:
+            #         branch.company_id = excel_company.id
+            #     elif branch.company_id != excel_company:
+            #         _logger.warning(
+            #             "Branch '%s' belongs to company '%s', using existing branch.",
+            #             branch.name,
+            #             branch.company_id.name,
+            #         )
+            # else:
+            #     branch = self.env['res.branch'].create({
+            #         'name': branch_name,
+            #         'company_id': excel_company.id,
+            #     })
             if not branch:
-                branch = self.env['res.branch'].create({'name': branch_name, 'company_id': excel_company.id})
+                _logger.warning(
+                                "Branch '%s' not found",
+                                branch_name
+                            )
+                # branch = self.env['res.branch'].create({'name': branch_name, 'company_id': excel_company.id})
                 
         # 3. Find Source Location
         src_loc_name = str(get_val('Source Location') or '').strip()
@@ -255,6 +373,12 @@ class ProductLabelImportService:
                 return 0.0
 
         label_name = str(get_val('Label Name') or '').strip()
+        if not label_name:
+            _logger.warning(
+                "Row %s skipped because 'Label Name' is empty in the Excel.",
+                row_idx,
+            )
+            return False
         
         # 6. Normalize Barcode
         raw_barcode = get_val('Barcode')
@@ -454,14 +578,42 @@ class ProductLabelImportService:
             attribute = self.env['product.attribute'].search([('name', '=ilike', attr_name)], limit=1)
             if not attribute:
                 raise UserError(f"Product Attribute '{attr_name}' not found. Please ensure it exists.")
-                
+
             if attr_val is None:
-                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=', False)], limit=1)
+                value = self.env["product.attribute.value"].search([
+                    ("attribute_id", "=", attribute.id),
+                    ("name", "=", False),
+                ], limit=1)
             else:
-                value = self.env['product.attribute.value'].search([('attribute_id', '=', attribute.id), ('name', '=ilike', attr_val)], limit=1)
-                
+                import re
+
+                def normalize_attr(val):
+                    val = str(val or "").strip().lower()
+
+                    # Normalize spaces
+                    val = re.sub(r"\s+", " ", val)
+
+                    # Ignore spaces around hyphens
+                    val = re.sub(r"\s*-\s*", "-", val)
+
+                    # Normalize quotes
+                    val = val.replace("“", '"').replace("”", '"')
+                    val = re.sub(r'\s*"\s*', '"', val)
+
+                    return val
+
+                values = self.env["product.attribute.value"].search([
+                    ("attribute_id", "=", attribute.id),
+                ])
+
+                value = values.filtered(
+                    lambda v: normalize_attr(v.name) == normalize_attr(attr_val)
+                )[:1]
+
             if not value:
-                raise UserError(f"Product Attribute Value '{attr_val}' for '{attr_name}' not found.")
+                raise UserError(
+                    f"Product Attribute Value '{attr_val}' for '{attr_name}' not found."
+                )
                 
             ptal = template.attribute_line_ids.filtered(lambda l: l.attribute_id.id == attribute.id)
             if not ptal:

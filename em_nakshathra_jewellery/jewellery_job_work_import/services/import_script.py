@@ -342,6 +342,31 @@ class JobWorkImportService:
                         ptal.write({'value_ids': [(6, 0, new_ids)]})
                 template.flush_recordset()
                 
+            # Ensure Silver Bullion exists and pre-stocked
+            silver_bullion = self.env['product.product'].search([('name', '=', 'Silver Bullion')], limit=1)
+            if not silver_bullion:
+                silver_tmpl = self.env['product.template'].create({
+                    'name': 'Silver Bullion',
+                    'type': 'product',
+                    'uom_id': uom_gram.id,
+                    'uom_po_id': uom_gram.id,
+                    'purchase_ok': True,
+                    'company_id': False,
+                })
+                silver_bullion = silver_tmpl.product_variant_id
+                
+            # Pre-stock opening balance (1,000,000g)
+            Quant = self.env['stock.quant'].sudo()
+            quant = Quant.search([('product_id', '=', silver_bullion.id), ('location_id', '=', stock_loc.id)], limit=1)
+            if quant:
+                quant.quantity = max(quant.quantity, 1000000.0)
+            else:
+                Quant.create({
+                    'product_id': silver_bullion.id,
+                    'location_id': stock_loc.id,
+                    'quantity': 1000000.0
+                })
+                
             # Phase 2: Process Job Works
             total_jws = len(grouped_data)
             count = 0
@@ -415,10 +440,58 @@ class JobWorkImportService:
                     
                 job_work.write({'job_work_line_ids': jw_lines_vals})
                 job_work.flush_recordset()
+                total_fine = job_work.total_fine_weight
                 
-                # --- 1. Create Issue Voucher (Draft State) ---
+                # --- 1. Create Issue Voucher ---
                 issue_num = f"ISS-{job_work.name}"
-
+                
+                # Pre-create internal stock picking with correct company context
+                picking_type = self.env['stock.picking.type'].search([
+                    ('code', '=', 'internal'),
+                    ('company_id', '=', silver_company.id)
+                ], limit=1)
+                
+                picking = self.env['stock.picking'].create({
+                    'picking_type_id': picking_type.id if picking_type else self.env.ref('stock.picking_type_internal').id,
+                    'location_id': stock_loc.id,
+                    'location_dest_id': subcon_loc.id,
+                    'origin': issue_num,
+                    'is_old_gold': True,
+                    'company_id': silver_company.id,
+                })
+                
+                move = self.env['stock.move'].create({
+                    'product_id': silver_bullion.id,
+                    'product_uom_qty': total_net,
+                    'name': silver_bullion.name,
+                    'product_uom': uom_gram.id,
+                    'location_id': picking.location_id.id,
+                    'location_dest_id': picking.location_dest_id.id,
+                    'picking_id': picking.id,
+                    'purity_id': self.env['gold.purity'].search([('percentage', '>=', 99.0)], limit=1).id,
+                    'company_id': silver_company.id,
+                })
+                
+                picking.action_confirm()
+                picking.action_assign()
+                
+                if not move.move_line_ids:
+                    self.env['stock.move.line'].create({
+                        'picking_id': picking.id,
+                        'move_id': move.id,
+                        'product_id': move.product_id.id,
+                        'product_uom_id': move.product_uom.id,
+                        'location_id': move.location_id.id,
+                        'location_dest_id': move.location_dest_id.id,
+                        'quantity': move.product_uom_qty,
+                        'company_id': move.company_id.id,
+                    })
+                else:
+                    for ml in move.move_line_ids:
+                        ml.quantity = move.product_uom_qty
+                        
+                picking.with_context(skip_backorder=True).button_validate()
+                
                 issue = self.env['jewellery.issue.voucher'].create({
                     'name': issue_num,
                     'job_work_id': job_work.id,
@@ -428,44 +501,22 @@ class JobWorkImportService:
                     'source_location_id': stock_loc.id,
                     'received_location_id': subcon_loc.id,
                     'order_date': order_date,
+                    'picking_id': picking.id,
                     'state': 'draft'
                 })
-
-                for line in lines:
-                    raw_prod = line.get('JobWorkLine/ProductTemplate')
-                    purity_name = line.get('JobWorkLine/Purity')
-                    qty = self.safe_float(line.get('JobWorkLine/Quantity'))
-                    purity = self.get_or_create_purity(purity_name)
-
-                    attrs = {
-                        'TYPE': str(line.get('Type') or '').strip().title(),
-                        'VARIETY': str(line.get('Variety') or '').strip().title(),
-                        'DESIGN': str(line.get('Design') or '').strip().title(),
-                        'SIZE': str(line.get('Size') or '').strip().title(),
-                        'STONE COLOUR': str(line.get('StoneColour') or '').strip().title(),
-                        'METAL COLOUR': str(line.get('MetalColour') or '').strip().title(),
-                    }
-                    for k, v in attrs.items():
-                        if v.upper() in ('FALSE', '', 'NONE', 'NAN'):
-                            attrs[k] = 'None'
-
-                    product = self._resolve_product(raw_prod, attrs, silver_company, uom_gram)
-                    if not product:
-                        continue
-
-                    self.env['jewellery.issue.voucher.line'].create({
-                        'voucher_id': issue.id,
-                        'product_id': product.id,
-                        'product_template_id': product.product_tmpl_id.id,
-                        'product_template_attribute_value_ids': [(6, 0, product.product_template_attribute_value_ids.ids)],
-                        'purity_id': purity.id if purity else False,
-                        'qty': qty,
-                        'fine_weight': qty * (purity.percentage / 100.0 if purity else 1.0),
-                        'gross_weight': qty,
-                    })
-
+                
+                self.env['jewellery.issue.voucher.line'].create({
+                    'voucher_id': issue.id,
+                    'product_id': silver_bullion.id,
+                    'purity_id': self.env['gold.purity'].search([('percentage', '>=', 99.0)], limit=1).id,
+                    'qty': total_net,
+                    'fine_weight': total_fine,
+                    'gross_weight': total_net,
+                })
                 self.stats['issues_created'] += 1
                 
+                # Confirm issue (bypasses picking generation because self.picking_id is already done!)
+                issue.action_done()
                 # --- 2. Create Receive Voucher ---
                 receive_num = f"REC-{job_work.name}"
                 fine_rate_val = self.safe_float(first_line.get('ReceiveVoucher/FineRate(g)'))

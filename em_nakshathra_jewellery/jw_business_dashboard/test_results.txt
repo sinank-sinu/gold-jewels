@@ -1,0 +1,486 @@
+2026-07-30 05:11:05,783 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:05,848 16182 INFO ? odoo.addons.base.models.ir_actions_report: You need Wkhtmltopdf to print a pdf version of the reports. 
+2026-07-30 05:11:05,959 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.18s, 0 queries (+0 extra) 
+2026-07-30 05:11:05,967 16182 WARNING ? odoo.modules.graph: module custom_product_import: not installable, skipped 
+2026-07-30 05:11:05,968 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'old_gold_xlsx_report', defaulting to LGPL-3 
+2026-07-30 05:11:05,970 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'expense_xlsx_report', defaulting to LGPL-3 
+2026-07-30 05:11:05,970 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'sales_target_report', defaulting to LGPL-3 
+2026-07-30 05:11:05,971 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_jewellery_management', defaulting to LGPL-3 
+2026-07-30 05:11:05,972 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_barcode_scanner', defaulting to LGPL-3 
+2026-07-30 05:11:05,973 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_jewellery_customisation', defaulting to LGPL-3 
+2026-07-30 05:11:05,973 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'jewellery_daily_stock', defaulting to LGPL-3 
+2026-07-30 05:11:05,975 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'salesman_target_incentive', defaulting to LGPL-3 
+2026-07-30 05:11:05,976 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'product_movement_report_pdf', defaulting to LGPL-3 
+2026-07-30 05:11:05,976 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'job_work_xlsx', defaulting to LGPL-3 
+2026-07-30 05:11:05,977 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'scheme_due_xlsx', defaulting to LGPL-3 
+2026-07-30 05:11:05,978 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'sale_register_pevert_view', defaulting to LGPL-3 
+2026-07-30 05:11:05,978 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'sale_register_report', defaulting to LGPL-3 
+2026-07-30 05:11:05,985 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_jewellery_reports', defaulting to LGPL-3 
+2026-07-30 05:11:05,988 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'hr_mobile_api', defaulting to LGPL-3 
+2026-07-30 05:11:05,990 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'custom_hr_import', defaulting to LGPL-3 
+2026-07-30 05:11:05,997 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'purchase_fine_rate_variance_report', defaulting to LGPL-3 
+2026-07-30 05:11:06,007 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'customer_xlsx_report', defaulting to LGPL-3 
+2026-07-30 05:11:06,015 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'scheme_collection_report_xlsx', defaulting to LGPL-3 
+2026-07-30 05:11:06,015 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_purchase_edit', defaulting to LGPL-3 
+2026-07-30 05:11:06,015 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'salesman_cart_custom', defaulting to LGPL-3 
+2026-07-30 05:11:06,015 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'custom_scheme_import', defaulting to LGPL-3 
+2026-07-30 05:11:06,016 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'sale_below_max_report', defaulting to LGPL-3 
+2026-07-30 05:11:06,016 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'custom_label_import', defaulting to LGPL-3 
+2026-07-30 05:11:06,016 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_jewellery_custom', defaulting to LGPL-3 
+2026-07-30 05:11:06,020 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'pos_branch_custom', defaulting to LGPL-3 
+2026-07-30 05:11:06,020 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'custom_label_user', defaulting to LGPL-3 
+2026-07-30 05:11:06,021 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'cf_inventory_custom', defaulting to LGPL-3 
+2026-07-30 05:11:06,022 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'jewellery_sequence_custom', defaulting to LGPL-3 
+2026-07-30 05:11:06,022 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'em_metal_ledger', defaulting to LGPL-3 
+2026-07-30 05:11:06,023 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'ornament_label', defaulting to LGPL-3 
+2026-07-30 05:11:06,034 16182 INFO ? odoo.modules.loading: loading 254 modules... 
+2026-07-30 05:11:06,050 16182 WARNING ? odoo.addons.attachment_indexation.models.ir_attachment: Attachment indexation of PDF documents is unavailable because the 'pdfminer' Python library cannot be found on the system. You may install it from https://pypi.org/project/pdfminer.six/ (e.g. `pip3 install pdfminer.six`) 
+2026-07-30 05:11:06,388 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,399 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,400 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,422 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,423 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,472 16182 WARNING ? odoo.api.create: The model odoo.addons.hr_reward_warning.models.hr_announcement is not overriding the create method in batch 
+2026-07-30 05:11:06,565 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,565 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,566 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,566 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,566 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,566 16182 WARNING ? odoo.addons.base.models.decimal_precision: Deprecated call to decimal_precision.get_precision(<application>), use digits=<application> instead 
+2026-07-30 05:11:06,631 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,633 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:06,702 16182 WARNING ? odoo.api.create: The model odoo.addons.base_account_budget.models.account_budget is not overriding the create method in batch 
+2026-07-30 05:11:06,765 16182 WARNING ? odoo.api.create: The model odoo.addons.hr_resignation.models.hr_resignation is not overriding the create method in batch 
+2026-07-30 05:11:06,907 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.po_fine_rate_xlsx has no _description 
+2026-07-30 05:11:06,908 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.capital_gain_xlsx has no _description 
+2026-07-30 05:11:06,955 16182 WARNING ? odoo.api.create: The model odoo.addons.base_accounting_kit.models.account_asset is not overriding the create method in batch 
+2026-07-30 05:11:06,970 16182 WARNING ? odoo.models: The model account.account.type has no _description 
+2026-07-30 05:11:07,206 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_template has no _description 
+2026-07-30 05:11:07,206 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_xlsx has no _description 
+2026-07-30 05:11:07,235 16182 WARNING ? odoo.api.create: The model odoo.addons.cr_material_purchase_requisitions.model.purchase_requisition is not overriding the create method in batch 
+2026-07-30 05:11:07,247 16182 WARNING ? odoo.models: The model report.expense_xlsx_report.expense_xlsx has no _description 
+2026-07-30 05:11:07,269 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.product_label is not overriding the create method in batch 
+2026-07-30 05:11:07,291 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.job_work is not overriding the create method in batch 
+2026-07-30 05:11:07,293 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.issue_voucher is not overriding the create method in batch 
+2026-07-30 05:11:07,294 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.receive_voucher is not overriding the create method in batch 
+2026-07-30 05:11:07,297 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.refinery_order is not overriding the create method in batch 
+2026-07-30 05:11:07,302 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.sale_old_gold_line is not overriding the create method in batch 
+2026-07-30 05:11:07,304 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_management.models.old_gold_ho_verify is not overriding the create method in batch 
+2026-07-30 05:11:07,309 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:07,309 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:07,310 16182 WARNING ? odoo.models: The model old.gold.refinery.issue.line has no _description 
+2026-07-30 05:11:07,310 16182 WARNING ? odoo.models: The model old.gold.purchase has no _description 
+2026-07-30 05:11:07,310 16182 WARNING ? odoo.models: The model sale.old.gold.line has no _description 
+2026-07-30 05:11:07,324 16182 WARNING ? odoo.api.create: The model odoo.addons.custom_label_user.models.product_label is not overriding the create method in batch 
+2026-07-30 05:11:07,330 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:07,330 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:07,332 16182 WARNING ? odoo.api.create: The model odoo.addons.em_jewellery_customisation.models.product_label is not overriding the create method in batch 
+2026-07-30 05:11:07,336 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_redeem_margin_xlsx has no _description 
+2026-07-30 05:11:07,336 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_margin_list_xlsx has no _description 
+2026-07-30 05:11:07,339 16182 WARNING ? odoo.models: The model report.em_jewellery_reports.jewellery_report_xlsx has no _description 
+2026-07-30 05:11:07,347 16182 WARNING ? odoo.models: The model report.em_metal_ledger.metal_ledger_xlsx has no _description 
+2026-07-30 05:11:07,347 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_margin_xlsx has no _description 
+2026-07-30 05:11:07,347 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_lab_xlsx has no _description 
+2026-07-30 05:11:07,351 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.product_label is not overriding the create method in batch 
+2026-07-30 05:11:07,351 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.job_work is not overriding the create method in batch 
+2026-07-30 05:11:07,352 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.issue_voucher is not overriding the create method in batch 
+2026-07-30 05:11:07,352 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.receive_voucher is not overriding the create method in batch 
+2026-07-30 05:11:07,353 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.refinery_order is not overriding the create method in batch 
+2026-07-30 05:11:07,353 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_sequence_custom.models.old_gold_batch is not overriding the create method in batch 
+2026-07-30 05:11:07,356 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.old_gold_margin_xlsx has no _description 
+2026-07-30 05:11:07,356 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.og_refine_margin_xlsx has no _description 
+2026-07-30 05:11:07,358 16182 WARNING ? odoo.api.create: The model odoo.addons.pine_labs_payment.models.pinelabs_transaction is not overriding the create method in batch 
+2026-07-30 05:11:07,362 16182 WARNING ? odoo.models: The model report.sale_below_max_report.sale_below_max_xlsx has no _description 
+2026-07-30 05:11:07,368 16182 WARNING ? odoo.models: The model report.scheme_collection_report_xlsx.scheme_collection_xlsx has no _description 
+2026-07-30 05:11:07,369 16182 WARNING ? odoo.models: The model report.scheme_due_xlsx.scheme_due_xlsx has no _description 
+2026-07-30 05:11:07,370 16182 WARNING ? odoo.api.create: The model odoo.addons.jewellery_weekly_stock_check.models.weekly_stock_check is not overriding the create method in batch 
+2026-07-30 05:11:07,373 16182 WARNING ? odoo.models: The model report.job_work_xlsx.job_work_xlsx has no _description 
+2026-07-30 05:11:07,376 16182 INFO ? odoo.modules.loading: 254 modules loaded in 1.34s, 0 queries (+0 extra) 
+2026-07-30 05:11:07,534 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:07,561 16182 WARNING ? odoo.fields: Field hr.announcement.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,568 16182 WARNING ? odoo.fields: Field hr.employee.family.employee_id: unknown parameter 'invisible', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,569 16182 WARNING ? odoo.fields: Field hr.employee.family.birth_date: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,577 16182 WARNING ? odoo.fields: Field hr.resignation.resign_confirm_date: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,577 16182 WARNING ? odoo.fields: Field hr.resignation.approved_revealing_date: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,577 16182 WARNING ? odoo.fields: Field hr.resignation.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,578 16182 WARNING ? odoo.fields: Field hr.resignation.employee_contract: unknown parameter 'String', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,580 16182 WARNING ? odoo.fields: Field account.asset.category.currency_id: unknown parameter 'hide', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,585 16182 WARNING ? py.warnings: /home/sinan/odoo/odoo/fields.py:540: UserWarning: Since Odoo 17, property sale.order.warehouse_id.states is no longer supported.
+  File "/home/sinan/.gemini/antigravity/brain/9e527cb8-057c-4f64-affd-053cb0379e9f/scratch/test_dashboards.py", line 14, in <module>
+    registry = odoo.registry(db_name)
+  File "/home/sinan/odoo/odoo/__init__.py", line 106, in registry
+    return modules.registry.Registry(database_name)
+  File "/home/sinan/odoo/odoo/modules/registry.py", line 75, in __new__
+    return cls.new(db_name)
+  File "/home/sinan/odoo/venv/lib/python3.14/site-packages/decorator.py", line 232, in fun
+    return caller(func, *(extras + args), **kw)
+  File "/home/sinan/odoo/odoo/tools/func.py", line 87, in locked
+    return func(inst, *args, **kwargs)
+  File "/home/sinan/odoo/odoo/modules/registry.py", line 96, in new
+    odoo.modules.load_modules(registry, force_demo, status, update_module)
+  File "/home/sinan/odoo/odoo/modules/loading.py", line 507, in load_modules
+    registry.setup_models(cr)
+  File "/home/sinan/odoo/venv/lib/python3.14/site-packages/decorator.py", line 232, in fun
+    return caller(func, *(extras + args), **kw)
+  File "/home/sinan/odoo/odoo/tools/func.py", line 87, in locked
+    return func(inst, *args, **kwargs)
+  File "/home/sinan/odoo/odoo/modules/registry.py", line 305, in setup_models
+    model._setup_fields()
+  File "/home/sinan/odoo/odoo/models.py", line 3420, in _setup_fields
+    field.setup(self)
+  File "/home/sinan/odoo/odoo/fields.py", line 540, in setup
+    warnings.warn(f'Since Odoo 17, property {self}.states is no longer supported.')
+ 
+2026-07-30 05:11:07,586 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:07,588 16182 WARNING ? odoo.fields: Field res.branch.essl_serial_number: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,589 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:07,591 16182 WARNING ? odoo.fields: Redundant default on jewellery.receive.voucher.currency_id 
+2026-07-30 05:11:07,591 16182 WARNING ? odoo.fields: Field jewellery.scheme.enrollment.user_id: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:07,651 16182 ERROR ? odoo.modules.loading: Some modules are not loaded, some dependencies or manifest may be missing: ['custom_product_import'] 
+2026-07-30 05:11:07,652 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:07,659 16182 INFO ? odoo.modules.registry: Registry loaded in 1.899s 
+2026-07-30 05:11:07,735 16182 ERROR ? odoo.sql_db: bad query: 
+            SELECT 
+                d.name,
+                COUNT(e.id) AS emp_count
+            FROM hr_department d
+            LEFT JOIN (
+                SELECT emp.id, emp.department_id, emp.joining_date, emp.departure_date, emp.active,
+                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
+                FROM hr_employee emp
+                LEFT JOIN res_users u ON u.id = emp.user_id
+                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
+            ) e ON e.department_id = d.id AND e.active = TRUE
+                AND ('2026-07-30'::date::date IS NULL OR e.joining_date <= '2026-07-30'::date OR e.joining_date IS NULL)
+                AND ('2026-07-01'::date::date IS NULL OR e.departure_date >= '2026-07-01'::date OR e.departure_date IS NULL)
+                AND (NULL::integer IS NULL OR COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = NULL)
+            WHERE d.active = TRUE
+            GROUP BY d.id, d.name
+            ORDER BY emp_count DESC
+        
+ERROR: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+ 
+2026-07-30 05:11:07,755 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:07,760 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.00s, 0 queries (+0 extra) 
+2026-07-30 05:11:07,769 16182 INFO ? odoo.modules.loading: loading 108 modules... 
+2026-07-30 05:11:07,827 16182 INFO ? odoo.modules.loading: 108 modules loaded in 0.06s, 0 queries (+0 extra) 
+2026-07-30 05:11:07,924 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:07,949 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:07,950 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:07,984 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:07,988 16182 INFO ? odoo.modules.registry: Registry loaded in 0.252s 
+2026-07-30 05:11:08,004 16182 ERROR ? odoo.sql_db: bad query: 
+            SELECT COALESCE(SUM(hes.total_amount), 0)
+            FROM hr_expense_sheet hes
+            LEFT JOIN hr_employee emp ON emp.id = hes.employee_id
+            LEFT JOIN res_users u ON u.id = emp.user_id
+            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
+            WHERE hes.state IN ('post','done')
+              AND hes.accounting_date BETWEEN '2026-07-01'::date AND '2026-07-30'::date
+        
+ERROR: column emp.label_location_id does not exist
+LINE 6: ...           LEFT JOIN stock_location sl ON sl.id = emp.label_...
+                                                             ^
+ 
+2026-07-30 05:11:08,029 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:08,033 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.00s, 0 queries (+0 extra) 
+2026-07-30 05:11:08,041 16182 WARNING ? odoo.modules.graph: module custom_product_import: not installable, skipped 
+2026-07-30 05:11:08,042 16182 WARNING ? odoo.modules.graph: module purchase_bulk_import: not installable, skipped 
+2026-07-30 05:11:08,043 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'account_stock_summary', defaulting to LGPL-3 
+2026-07-30 05:11:08,044 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'product_label_excel_import', defaulting to LGPL-3 
+2026-07-30 05:11:08,045 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'ecommerce_api', defaulting to LGPL-3 
+2026-07-30 05:11:08,046 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'purchase_register_report', defaulting to LGPL-3 
+2026-07-30 05:11:08,047 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'scheme_collection_xlsx', defaulting to LGPL-3 
+2026-07-30 05:11:08,052 16182 WARNING ? odoo.modules.graph: module purchase_jobwork_label_summary: not installable, skipped 
+2026-07-30 05:11:08,052 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'activity_report', defaulting to LGPL-3 
+2026-07-30 05:11:08,053 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'custom_sale_import', defaulting to LGPL-3 
+2026-07-30 05:11:08,059 16182 INFO ? odoo.modules.loading: loading 252 modules... 
+2026-07-30 05:11:08,078 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,079 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,080 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,084 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,085 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,100 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,102 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,121 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.po_fine_rate_xlsx has no _description 
+2026-07-30 05:11:08,121 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.capital_gain_xlsx has no _description 
+2026-07-30 05:11:08,128 16182 WARNING ? odoo.models: The model account.account.type has no _description 
+2026-07-30 05:11:08,138 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_template has no _description 
+2026-07-30 05:11:08,138 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_xlsx has no _description 
+2026-07-30 05:11:08,148 16182 WARNING ? odoo.api.create: The model odoo.addons.ecommerce_api.models.ecommerce_order is not overriding the create method in batch 
+2026-07-30 05:11:08,151 16182 WARNING ? odoo.models: The model report.expense_xlsx_report.expense_xlsx has no _description 
+2026-07-30 05:11:08,156 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:08,156 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:08,157 16182 WARNING ? odoo.models: The model old.gold.refinery.issue.line has no _description 
+2026-07-30 05:11:08,157 16182 WARNING ? odoo.models: The model old.gold.purchase has no _description 
+2026-07-30 05:11:08,157 16182 WARNING ? odoo.models: The model sale.old.gold.line has no _description 
+2026-07-30 05:11:08,164 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:08,165 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:08,165 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_redeem_margin_xlsx has no _description 
+2026-07-30 05:11:08,165 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_margin_list_xlsx has no _description 
+2026-07-30 05:11:08,166 16182 WARNING ? odoo.models: The model report.em_jewellery_reports.jewellery_report_xlsx has no _description 
+2026-07-30 05:11:08,166 16182 WARNING ? odoo.models: The model report.em_metal_ledger.metal_ledger_xlsx has no _description 
+2026-07-30 05:11:08,167 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_margin_xlsx has no _description 
+2026-07-30 05:11:08,167 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_lab_xlsx has no _description 
+2026-07-30 05:11:08,169 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.old_gold_margin_xlsx has no _description 
+2026-07-30 05:11:08,169 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.og_refine_margin_xlsx has no _description 
+2026-07-30 05:11:08,174 16182 WARNING ? odoo.models: The model report.sale_below_max_report.sale_below_max_xlsx has no _description 
+2026-07-30 05:11:08,177 16182 WARNING ? odoo.models: The model report.scheme_due_xlsx.scheme_due_xlsx has no _description 
+2026-07-30 05:11:08,178 16182 WARNING ? odoo.models: The model report.job_work_xlsx.job_work_xlsx has no _description 
+2026-07-30 05:11:08,178 16182 INFO ? odoo.modules.loading: 252 modules loaded in 0.12s, 0 queries (+0 extra) 
+2026-07-30 05:11:08,330 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:08,407 16182 WARNING ? odoo.fields: Field hr.announcement.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,413 16182 WARNING ? odoo.fields: Field hr.employee.family.employee_id: unknown parameter 'invisible', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,413 16182 WARNING ? odoo.fields: Field hr.employee.family.birth_date: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,420 16182 WARNING ? odoo.fields: Field account.asset.category.currency_id: unknown parameter 'hide', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,423 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:08,425 16182 WARNING ? odoo.fields: Field res.branch.essl_serial_number: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,425 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:08,426 16182 WARNING ? odoo.fields: Redundant default on jewellery.receive.voucher.currency_id 
+2026-07-30 05:11:08,427 16182 WARNING ? odoo.fields: Field jewellery.scheme.enrollment.user_id: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,489 16182 ERROR ? odoo.modules.loading: Some modules are not loaded, some dependencies or manifest may be missing: ['custom_product_import', 'purchase_bulk_import', 'purchase_jobwork_label_summary'] 
+2026-07-30 05:11:08,490 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:08,497 16182 INFO ? odoo.modules.registry: Registry loaded in 0.492s 
+2026-07-30 05:11:08,584 16182 ERROR ? odoo.sql_db: bad query: 
+            SELECT 
+                d.name,
+                COUNT(e.id) AS emp_count
+            FROM hr_department d
+            LEFT JOIN (
+                SELECT emp.id, emp.department_id, emp.joining_date, emp.departure_date, emp.active,
+                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
+                FROM hr_employee emp
+                LEFT JOIN res_users u ON u.id = emp.user_id
+                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
+            ) e ON e.department_id = d.id AND e.active = TRUE
+                AND ('2026-07-30'::date::date IS NULL OR e.joining_date <= '2026-07-30'::date OR e.joining_date IS NULL)
+                AND ('2026-07-01'::date::date IS NULL OR e.departure_date >= '2026-07-01'::date OR e.departure_date IS NULL)
+                AND (NULL::integer IS NULL OR COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = NULL)
+            WHERE d.active = TRUE
+            GROUP BY d.id, d.name
+            ORDER BY emp_count DESC
+        
+ERROR: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+ 
+2026-07-30 05:11:08,605 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:08,609 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.00s, 0 queries (+0 extra) 
+2026-07-30 05:11:08,616 16182 WARNING ? odoo.modules.graph: module custom_product_import: not installable, skipped 
+2026-07-30 05:11:08,626 16182 INFO ? odoo.modules.loading: loading 252 modules... 
+2026-07-30 05:11:08,649 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,651 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,652 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,655 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,657 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,673 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,675 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:08,696 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.po_fine_rate_xlsx has no _description 
+2026-07-30 05:11:08,696 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.capital_gain_xlsx has no _description 
+2026-07-30 05:11:08,700 16182 WARNING ? odoo.models: The model account.account.type has no _description 
+2026-07-30 05:11:08,709 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_template has no _description 
+2026-07-30 05:11:08,709 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_xlsx has no _description 
+2026-07-30 05:11:08,714 16182 WARNING ? odoo.models: The model report.expense_xlsx_report.expense_xlsx has no _description 
+2026-07-30 05:11:08,717 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:08,717 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:08,718 16182 WARNING ? odoo.models: The model old.gold.refinery.issue.line has no _description 
+2026-07-30 05:11:08,718 16182 WARNING ? odoo.models: The model old.gold.purchase has no _description 
+2026-07-30 05:11:08,718 16182 WARNING ? odoo.models: The model sale.old.gold.line has no _description 
+2026-07-30 05:11:08,721 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:08,721 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:08,722 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_redeem_margin_xlsx has no _description 
+2026-07-30 05:11:08,722 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_margin_list_xlsx has no _description 
+2026-07-30 05:11:08,722 16182 WARNING ? odoo.models: The model report.em_jewellery_reports.jewellery_report_xlsx has no _description 
+2026-07-30 05:11:08,723 16182 WARNING ? odoo.models: The model report.em_metal_ledger.metal_ledger_xlsx has no _description 
+2026-07-30 05:11:08,723 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_margin_xlsx has no _description 
+2026-07-30 05:11:08,723 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_lab_xlsx has no _description 
+2026-07-30 05:11:08,724 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.old_gold_margin_xlsx has no _description 
+2026-07-30 05:11:08,724 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.og_refine_margin_xlsx has no _description 
+2026-07-30 05:11:08,732 16182 WARNING ? odoo.models: The model report.sale_below_max_report.sale_below_max_xlsx has no _description 
+2026-07-30 05:11:08,733 16182 WARNING ? odoo.models: The model report.scheme_due_xlsx.scheme_due_xlsx has no _description 
+2026-07-30 05:11:08,733 16182 WARNING ? odoo.models: The model report.job_work_xlsx.job_work_xlsx has no _description 
+2026-07-30 05:11:08,734 16182 INFO ? odoo.modules.loading: 252 modules loaded in 0.11s, 0 queries (+0 extra) 
+2026-07-30 05:11:08,908 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:08,932 16182 WARNING ? odoo.fields: Field hr.announcement.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,938 16182 WARNING ? odoo.fields: Field hr.employee.family.employee_id: unknown parameter 'invisible', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,938 16182 WARNING ? odoo.fields: Field hr.employee.family.birth_date: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,947 16182 WARNING ? odoo.fields: Field account.asset.category.currency_id: unknown parameter 'hide', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,949 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:08,951 16182 WARNING ? odoo.fields: Field res.branch.essl_serial_number: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:08,951 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:08,952 16182 WARNING ? odoo.fields: Redundant default on jewellery.receive.voucher.currency_id 
+2026-07-30 05:11:08,953 16182 WARNING ? odoo.fields: Field jewellery.scheme.enrollment.user_id: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,018 16182 ERROR ? odoo.modules.loading: Some modules are not loaded, some dependencies or manifest may be missing: ['custom_product_import'] 
+2026-07-30 05:11:09,019 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:09,025 16182 INFO ? odoo.modules.registry: Registry loaded in 0.440s 
+2026-07-30 05:11:09,100 16182 ERROR ? odoo.sql_db: bad query: 
+            SELECT 
+                d.name,
+                COUNT(e.id) AS emp_count
+            FROM hr_department d
+            LEFT JOIN (
+                SELECT emp.id, emp.department_id, emp.joining_date, emp.departure_date, emp.active,
+                       u.branch_id AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_location_id
+                FROM hr_employee emp
+                LEFT JOIN res_users u ON u.id = emp.user_id
+                LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
+            ) e ON e.department_id = d.id AND e.active = TRUE
+                AND ('2026-07-30'::date::date IS NULL OR e.joining_date <= '2026-07-30'::date OR e.joining_date IS NULL)
+                AND ('2026-07-01'::date::date IS NULL OR e.departure_date >= '2026-07-01'::date OR e.departure_date IS NULL)
+                AND (NULL::integer IS NULL OR COALESCE(e.essl_location_id, e.user_branch_id, e.loc_branch_id) = NULL)
+            WHERE d.active = TRUE
+            GROUP BY d.id, d.name
+            ORDER BY emp_count DESC
+        
+ERROR: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+ 
+2026-07-30 05:11:09,124 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:09,129 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.00s, 0 queries (+0 extra) 
+2026-07-30 05:11:09,132 16182 WARNING ? odoo.modules.module: Missing `license` key in manifest for 'salary_adjustment', defaulting to LGPL-3 
+2026-07-30 05:11:09,142 16182 INFO ? odoo.modules.loading: loading 122 modules... 
+2026-07-30 05:11:09,188 16182 WARNING ? odoo.api.create: The model odoo.addons.hr_payroll_account_community.models.hr_payslip is not overriding the create method in batch 
+2026-07-30 05:11:09,194 16182 WARNING ? odoo.api.create: The model odoo.addons.ohrms_loan.models.hr_loan is not overriding the create method in batch 
+2026-07-30 05:11:09,208 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:09,208 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:09,209 16182 WARNING ? odoo.models: The model old.gold.refinery.issue.line has no _description 
+2026-07-30 05:11:09,209 16182 WARNING ? odoo.models: The model old.gold.purchase has no _description 
+2026-07-30 05:11:09,209 16182 WARNING ? odoo.models: The model sale.old.gold.line has no _description 
+2026-07-30 05:11:09,217 16182 INFO ? odoo.modules.loading: 122 modules loaded in 0.08s, 0 queries (+0 extra) 
+2026-07-30 05:11:09,393 16182 WARNING ? odoo.fields: hr.loan.state: selection=[('draft', 'Draft'), ('waiting_approval_1', 'Submitted'), ('waiting_approval_2', 'Waiting Approval'), ('approve', 'Approved'), ('refuse', 'Refused'), ('cancel', 'Canceled')] overrides existing selection; use selection_add instead 
+2026-07-30 05:11:09,397 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:09,418 16182 WARNING ? odoo.fields: Field hr.employee.family.employee_id: unknown parameter 'invisible', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,418 16182 WARNING ? odoo.fields: Field hr.employee.family.birth_date: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,423 16182 WARNING ? odoo.fields: Field hr.loan.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,425 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:09,425 16182 WARNING ? odoo.fields: Field res.branch.essl_serial_number: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,425 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:09,426 16182 WARNING ? odoo.fields: Field jewellery.scheme.enrollment.user_id: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,465 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:09,469 16182 INFO ? odoo.modules.registry: Registry loaded in 0.368s 
+2026-07-30 05:11:09,534 16182 INFO ? odoo.modules.loading: loading 1 modules... 
+2026-07-30 05:11:09,538 16182 INFO ? odoo.modules.loading: 1 modules loaded in 0.00s, 0 queries (+0 extra) 
+2026-07-30 05:11:09,545 16182 WARNING ? odoo.modules.graph: module custom_product_import: not installable, skipped 
+2026-07-30 05:11:09,562 16182 INFO ? odoo.modules.loading: loading 255 modules... 
+2026-07-30 05:11:09,583 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,584 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,586 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,589 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,590 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,607 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,609 16182 WARNING ? odoo.models: The model report.customer_xlsx_report.contact_xlsx has no _description 
+2026-07-30 05:11:09,631 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.po_fine_rate_xlsx has no _description 
+2026-07-30 05:11:09,632 16182 WARNING ? odoo.models: The model report.purchase_fine_rate_variance_report.capital_gain_xlsx has no _description 
+2026-07-30 05:11:09,636 16182 WARNING ? odoo.models: The model account.account.type has no _description 
+2026-07-30 05:11:09,646 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_template has no _description 
+2026-07-30 05:11:09,646 16182 WARNING ? odoo.models: The model report.product_movement_report_pdf.product_movement_xlsx has no _description 
+2026-07-30 05:11:09,651 16182 WARNING ? odoo.models: The model report.expense_xlsx_report.expense_xlsx has no _description 
+2026-07-30 05:11:09,654 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:09,654 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:09,654 16182 WARNING ? odoo.models: The model old.gold.refinery.issue.line has no _description 
+2026-07-30 05:11:09,655 16182 WARNING ? odoo.models: The model old.gold.purchase has no _description 
+2026-07-30 05:11:09,655 16182 WARNING ? odoo.models: The model sale.old.gold.line has no _description 
+2026-07-30 05:11:09,658 16182 WARNING ? odoo.models: The model jewellery.issue.voucher.line has no _description 
+2026-07-30 05:11:09,658 16182 WARNING ? odoo.models: The model jewellery.receive.voucher.line has no _description 
+2026-07-30 05:11:09,659 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_redeem_margin_xlsx has no _description 
+2026-07-30 05:11:09,659 16182 WARNING ? odoo.models: The model report.em_jewellery_customisation.scheme_margin_list_xlsx has no _description 
+2026-07-30 05:11:09,659 16182 WARNING ? odoo.models: The model report.em_jewellery_reports.jewellery_report_xlsx has no _description 
+2026-07-30 05:11:09,660 16182 WARNING ? odoo.models: The model report.em_metal_ledger.metal_ledger_xlsx has no _description 
+2026-07-30 05:11:09,660 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_margin_xlsx has no _description 
+2026-07-30 05:11:09,660 16182 WARNING ? odoo.models: The model report.em_metal_ledger.refinery_lab_xlsx has no _description 
+2026-07-30 05:11:09,661 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.old_gold_margin_xlsx has no _description 
+2026-07-30 05:11:09,661 16182 WARNING ? odoo.models: The model report.old_gold_xlsx_report.og_refine_margin_xlsx has no _description 
+2026-07-30 05:11:09,663 16182 WARNING ? odoo.models: The model report.sale_below_max_report.sale_below_max_xlsx has no _description 
+2026-07-30 05:11:09,664 16182 WARNING ? odoo.models: The model report.scheme_due_xlsx.scheme_due_xlsx has no _description 
+2026-07-30 05:11:09,664 16182 WARNING ? odoo.models: The model report.job_work_xlsx.job_work_xlsx has no _description 
+2026-07-30 05:11:09,665 16182 INFO ? odoo.modules.loading: 255 modules loaded in 0.10s, 0 queries (+0 extra) 
+2026-07-30 05:11:09,824 16182 WARNING ? odoo.fields: material.purchase.requisition.request_type: selection attribute will be ignored as the field is related 
+2026-07-30 05:11:09,850 16182 WARNING ? odoo.fields: Field hr.announcement.state: unknown parameter 'track_visibility', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,856 16182 WARNING ? odoo.fields: Field hr.employee.family.employee_id: unknown parameter 'invisible', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,856 16182 WARNING ? odoo.fields: Field hr.employee.family.birth_date: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,864 16182 WARNING ? odoo.fields: Field account.asset.category.currency_id: unknown parameter 'hide', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,867 16182 WARNING ? odoo.fields: Redundant default on sale.order.line.branch_id 
+2026-07-30 05:11:09,868 16182 WARNING ? odoo.fields: Field res.branch.essl_serial_number: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,869 16182 WARNING ? odoo.fields: Redundant default on material.purchase.requisition.request_type 
+2026-07-30 05:11:09,870 16182 WARNING ? odoo.fields: Redundant default on jewellery.receive.voucher.currency_id 
+2026-07-30 05:11:09,870 16182 WARNING ? odoo.fields: Field jewellery.scheme.enrollment.user_id: unknown parameter 'tracking', if this is an actual parameter you may want to override the method _valid_field_parameter on the relevant model in order to allow it 
+2026-07-30 05:11:09,930 16182 ERROR ? odoo.modules.loading: Some modules are not loaded, some dependencies or manifest may be missing: ['custom_product_import'] 
+2026-07-30 05:11:09,931 16182 INFO ? odoo.modules.loading: Modules loaded. 
+2026-07-30 05:11:09,937 16182 INFO ? odoo.modules.registry: Registry loaded in 0.419s 
+
+================ Testing database: db_1 ================
+Traceback (most recent call last):
+  File "/home/sinan/.gemini/antigravity/brain/9e527cb8-057c-4f64-affd-053cb0379e9f/scratch/test_dashboards.py", line 17, in <module>
+    data = env['jw.business.dashboard'].get_dashboard_data()
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 92, in get_dashboard_data
+    'employees_by_department': self._get_employees_by_department(d_from, d_to, b_id),
+                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 1434, in _get_employees_by_department
+    cr.execute(q, [d_to, d_to, d_from, d_from, branch_id, branch_id])
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/odoo/sql_db.py", line 342, in execute
+    res = self._obj.execute(query, params)
+psycopg2.errors.UndefinedColumn: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+
+
+================ Testing database: db_11 ================
+Traceback (most recent call last):
+  File "/home/sinan/.gemini/antigravity/brain/9e527cb8-057c-4f64-affd-053cb0379e9f/scratch/test_dashboards.py", line 17, in <module>
+    data = env['jw.business.dashboard'].get_dashboard_data()
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 61, in get_dashboard_data
+    'kpis': self._get_kpis(d_from, d_to, b_id),
+            ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 291, in _get_kpis
+    cr.execute(q, params)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/sinan/odoo/odoo/sql_db.py", line 342, in execute
+    res = self._obj.execute(query, params)
+psycopg2.errors.UndefinedColumn: column emp.label_location_id does not exist
+LINE 6: ...           LEFT JOIN stock_location sl ON sl.id = emp.label_...
+                                                             ^
+
+
+================ Testing database: db_22 ================
+Traceback (most recent call last):
+  File "/home/sinan/.gemini/antigravity/brain/9e527cb8-057c-4f64-affd-053cb0379e9f/scratch/test_dashboards.py", line 17, in <module>
+    data = env['jw.business.dashboard'].get_dashboard_data()
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 92, in get_dashboard_data
+    'employees_by_department': self._get_employees_by_department(d_from, d_to, b_id),
+                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 1434, in _get_employees_by_department
+    cr.execute(q, [d_to, d_to, d_from, d_from, branch_id, branch_id])
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/odoo/sql_db.py", line 342, in execute
+    res = self._obj.execute(query, params)
+psycopg2.errors.UndefinedColumn: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+
+
+================ Testing database: db_33 ================
+Traceback (most recent call last):
+  File "/home/sinan/.gemini/antigravity/brain/9e527cb8-057c-4f64-affd-053cb0379e9f/scratch/test_dashboards.py", line 17, in <module>
+    data = env['jw.business.dashboard'].get_dashboard_data()
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 92, in get_dashboard_data
+    'employees_by_department': self._get_employees_by_department(d_from, d_to, b_id),
+                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/custom_addons/em_nakshathra-main/em_nakshathra_jewellery/jw_business_dashboard/models/jw_dashboard.py", line 1434, in _get_employees_by_department
+    cr.execute(q, [d_to, d_to, d_from, d_from, branch_id, branch_id])
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sinan/odoo/odoo/sql_db.py", line 342, in execute
+    res = self._obj.execute(query, params)
+psycopg2.errors.UndefinedColumn: column emp.essl_location_id does not exist
+LINE 8: ...AS user_branch_id, sl.branch_id AS loc_branch_id, emp.essl_l...
+                                                             ^
+
+
+================ Testing database: nakshathra ================
+Success for nakshathra!
+
+================ Testing database: new ================
+Success for new!
