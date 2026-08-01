@@ -167,16 +167,17 @@ class ProductLabel(models.Model):
 
     unlabelled_weight = fields.Float(
         string="Unlabelled Weight",
-        related="purchase_id.total_unlabelled",
+        compute="_compute_unlabelled_weight",
         store=False,
-        readonly=True
     )
-    unlabelled_weight_jw= fields.Float(
+    unlabelled_weight_jw = fields.Float(
         string="Unlabelled Weight",
-        related="job_work_id.total_unlabelled",
+        compute="_compute_unlabelled_weight",
         store=False,
-        readonly=True
     )
+
+
+
     age = fields.Integer(
         string="Age (Days)",
         compute="_compute_age",
@@ -193,12 +194,34 @@ class ProductLabel(models.Model):
     other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
     other_weight_amount = fields.Float(string="Other Weight Amount")
 
+
+    @api.depends('purchase_id', 'job_work_id', 'sale_gross_weight')
+    def _compute_unlabelled_weight(self):
+        for rec in self:
+            rec.unlabelled_weight = 0.0
+            rec.unlabelled_weight_jw = 0.0
+
+            if rec.purchase_id:
+                po = rec.purchase_id
+                # Deduct all other labels on this PO, then deduct current label's live weight
+                other_labels = po.label_ids - rec
+                total_other = sum(other_labels.mapped('sale_gross_weight'))
+                rec.unlabelled_weight = po.total_weight - total_other - (rec.sale_gross_weight or 0.0)
+
+            if rec.job_work_id:
+                jw = rec.job_work_id
+                # Deduct all other labels on this Job Work, then deduct current label's live weight
+                other_labels = jw.label_ids - rec
+                total_other = sum(other_labels.mapped('sale_gross_weight'))
+                rec.unlabelled_weight_jw = jw.total_weight - total_other - (rec.sale_gross_weight or 0.0)
+
+
     def _compute_stock_move_count(self):
         for rec in self:
             rec.stock_move_count = self.env['stock.move'].search_count([('label_id', '=', rec.id)])
 
     # un comment the code if import the product label
-    @api.depends('age_import','create_date')
+    @api.depends('age_import', 'create_date')
     def _compute_age(self):
         today = fields.Date.today()
         for rec in self:
@@ -475,6 +498,14 @@ class ProductLabel(models.Model):
         res = super(ProductLabel, self).create(vals)
         ean = generate_ean(str(res.id))
         res.barcode = '21' + ean[2:]
+
+        if res.purchase_id:
+            res.purchase_id._compute_total_labelled()
+            res.purchase_id._compute_unlabelled_totals()
+        if res.job_work_id:
+            res.job_work_id._compute_total_labelled()
+            res.job_work_id._compute_unlabelled_totals()
+
         return res
 
     @api.depends('purchase_price_per_gram', 'purchase_fine_weight')
@@ -542,13 +573,15 @@ class ProductLabel(models.Model):
     def write(self, vals):
         res = super().write(vals)
 
-        if 'purchase_gross_weight' in vals:
+        if 'sale_gross_weight' in vals or 'purchase_id' in vals or 'job_work_id' in vals:
             purchases = self.mapped('purchase_id')
             if purchases:
                 purchases._compute_total_labelled()
+                purchases._compute_unlabelled_totals()
             job_work = self.mapped('job_work_id')
             if job_work:
                 job_work._compute_total_labelled()
+                job_work._compute_unlabelled_totals()
 
         return res
 

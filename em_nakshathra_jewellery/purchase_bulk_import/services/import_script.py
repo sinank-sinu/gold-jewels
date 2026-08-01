@@ -571,55 +571,67 @@ class ImportLabelService:
 
         for attr_name, attr_val in attrs.items():
 
+            # Find the attribute line on the template
             ptal = template.attribute_line_ids.filtered(
-                lambda l: l.attribute_id.name.strip().upper() == attr_name.upper()
-            )
+                lambda l: (l.attribute_id.name or "").strip().lower() ==
+                          (attr_name or "").strip().lower()
+            )[:1]
 
             if not ptal:
                 raise UserError(
-                    f"Attribute '{attr_name}' is not configured on template '{template.name}'."
+                    _("Attribute '%s' is not configured on template '%s'.")
+                    % (attr_name, template.display_name)
                 )
 
-            # ------------------------------------------------------------
-            # Find/Create Attribute Value
-            # ------------------------------------------------------------
-            value = ptal.value_ids.filtered(
-                lambda v: (v.name or "").strip().upper() == (attr_val or "").strip().upper()
+            # Find the existing attribute value (EXACT match)
+            values = self.env["product.attribute.value"].search([
+                ("attribute_id", "=", ptal.attribute_id.id),
+            ])
+
+            # value = values.filtered(
+            #     lambda v: (v.name or "").strip().lower() ==
+            #               (attr_val or "").strip().lower()
+            # )[:1]
+            def normalize_attr(val):
+                val = str(val or "").strip().lower()
+
+                # Normalize multiple spaces
+                val = re.sub(r"\s+", " ", val)
+
+                # Normalize hyphens
+                val = re.sub(r"\s*-\s*", "-", val)
+
+                # Normalize double quotes
+                val = val.replace("“", '"').replace("”", '"')
+
+                # Remove spaces before/after quotes
+                val = re.sub(r'\s*"\s*', '"', val)
+
+                return val
+            value = values.filtered(
+                lambda v: normalize_attr(v.name) == normalize_attr(attr_val)
             )[:1]
 
             if not value:
-
-                _logger.info(
-                    "Adding missing value '%s' to attribute '%s' on template '%s'",
-                    attr_val,
-                    attr_name,
-                    template.display_name,
+                raise UserError(
+                    _("Attribute value '%s' does not exist for attribute '%s'.")
+                    % (attr_val, attr_name)
                 )
 
-                value = self.env["product.attribute.value"].search([
-                    ("attribute_id", "=", ptal.attribute_id.id),
-                    ("name", "=ilike", attr_val),
-                ], limit=1)
-
-                if not value:
-                    value = self.env["product.attribute.value"].create({
-                        "attribute_id": ptal.attribute_id.id,
-                        "name": attr_val,
-                    })
-
-                # Add value to template
+            # Configure the template to use this value if needed
+            if value not in ptal.value_ids:
+                _logger.info(
+                    "Configuring existing value '%s' on template '%s'",
+                    value.name,
+                    template.display_name,
+                )
                 ptal.write({
                     "value_ids": [(4, value.id)]
                 })
-
                 self.env.flush_all()
-
-                # Reload
                 ptal.invalidate_recordset()
 
-            # ------------------------------------------------------------
-            # Find PTAV
-            # ------------------------------------------------------------
+            # Get the PTAV record
             ptav = self.env["product.template.attribute.value"].search([
                 ("attribute_line_id", "=", ptal.id),
                 ("product_attribute_value_id", "=", value.id),
