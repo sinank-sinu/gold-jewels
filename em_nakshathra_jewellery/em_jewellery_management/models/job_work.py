@@ -125,6 +125,7 @@ class JewelleryJobWork(models.Model):
         'purchase_id',
         string="Labels"
     )
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
 
     @api.depends(
         'job_work_line_ids.quantity',

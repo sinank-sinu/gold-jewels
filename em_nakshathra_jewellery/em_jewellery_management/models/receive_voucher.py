@@ -106,6 +106,10 @@ class JewelleryReceiveVoucher(models.Model):
         string="Order Date",
         default=fields.Date.today
     )
+
+    company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
+
+
     @api.depends('total_net_weight', 'mc_percent', 'making_charge_type')
     def _compute_mc_fine(self):
         for voucher in self:
