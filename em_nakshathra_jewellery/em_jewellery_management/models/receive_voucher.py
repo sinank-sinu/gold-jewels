@@ -213,8 +213,12 @@ class JewelleryReceiveVoucher(models.Model):
             return
 
         # ── First-time confirm: create a new picking ───────────────────────
+        picking_type = self.env['stock.picking.type'].search([
+            ('code', '=', 'internal'), 
+            ('company_id', 'in', (self.company_id.id, False))
+        ], limit=1)
         picking = self.env['stock.picking'].create({
-            'picking_type_id': self.env.ref('stock.picking_type_internal').id,
+            'picking_type_id': picking_type.id or self.env.ref('stock.picking_type_internal').sudo().id,
             'location_id': self.source_location_id.id,
             'location_dest_id': self.received_location_id.id,
             'origin': self.name,

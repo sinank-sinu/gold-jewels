@@ -131,7 +131,7 @@ class JobWorkImportController(http.Controller):
                 <div id="error-ui" style="display: none;">
                     <h2 class="text-danger mb-3">⚠️ Import Failed</h2>
                     <p>The import was aborted to protect database integrity. No partial records were created.</p>
-                    <div class="alert alert-danger text-start mt-3" id="error-reason"></div>
+                    <div class="alert alert-danger text-start mt-3" id="error-reason" style="white-space: pre-wrap;"></div>
                     <a href="/jewellery_job_work_import" class="btn btn-outline-primary px-4 py-2 mt-3">Try Again</a>
                 </div>
             </div>
