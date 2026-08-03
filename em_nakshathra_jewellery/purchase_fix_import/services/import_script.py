@@ -545,6 +545,8 @@ class ImportLabelService:
                     "ROUND OFF",
                     "HALLMARKING EXPENSES",
                     "FREIGHT CHARGES",
+                    "TRANSPORTATION CHARGE",
+                    "CERTIFICATION CHARGE -18%"
                 }
 
                 if template_name.strip().upper() in service_products:
