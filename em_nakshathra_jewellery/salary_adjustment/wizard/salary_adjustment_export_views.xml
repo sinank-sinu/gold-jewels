@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_salary_adjustment_export_wizard_form" model="ir.ui.view">
+        <field name="name">salary.adjustment.export.wizard.form</field>
+        <field name="model">salary.adjustment.export.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Export Salary / WPS File">
+                <field name="state" invisible="1"/>
+                <group invisible="state != 'draft'">
+                    <group>
+                        <field name="salary_adjustment_id" readonly="1"/>
+                        <field name="country"/>
+                    </group>
+                </group>
+                <group invisible="state != 'done'">
+                    <div class="alert alert-success" role="alert" style="margin-bottom: 15px;">
+                        Salary compliance file generated successfully! Click the link below to download the file.
+                    </div>
+                    <group>
+                        <field name="file_name" invisible="1"/>
+                        <field name="file_data" filename="file_name" readonly="1"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_export" string="Generate File" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" invisible="state != 'draft'"/>
+                    <button string="Close" class="btn-primary" special="cancel" invisible="state != 'done'"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_salary_adjustment_export" model="ir.actions.act_window">
+        <field name="name">Salary Adjustment Export</field>
+        <field name="res_model">salary.adjustment.export.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="salary_adjustment.model_salary_adjustment"/>
+    </record>
+</odoo>
