@@ -91,6 +91,8 @@ class JwBusinessDashboard(models.Model):
             'jewellery_purity': self._get_jewellery_purity_breakdown(b_id),
             'top_products': self._get_top_selling_products(d_from, d_to, b_id),
             'sales_by_salesman': self._get_sales_by_salesman(d_from, d_to, b_id),
+            'date_branch_collection': self._get_date_branch_collection(d_from, d_to, b_id),
+            'branch_wise_target': self._get_branch_wise_target(d_from, d_to, b_id),
             'top_sale_orders': self._get_top_sale_orders(d_from, d_to, b_id),
             'invoiced_kpis': self._get_invoiced_kpis(d_from, d_to, b_id),
             'invoiced_monthly': self._get_invoiced_monthly(d_from, d_to, b_id),
@@ -105,6 +107,8 @@ class JwBusinessDashboard(models.Model):
             'top_purchase_orders': self._get_top_purchase_orders(d_from, d_to, b_id),
             'top_vendors': self._get_top_vendors(d_from, d_to, b_id),
             'top_buyers': self._get_top_buyers(d_from, d_to, b_id),
+            'least_purchase_orders': self._get_least_purchase_orders(d_from, d_to, b_id),
+            'least_vendors': self._get_least_vendors(d_from, d_to, b_id),
             'best_sellers_by_revenue': self._get_top_selling_products(d_from, d_to, b_id),
             'best_sellers_by_qty': self._get_best_sellers_by_qty(d_from, d_to, b_id),
             'best_selling_categories': self._get_best_selling_categories(d_from, d_to, b_id),
@@ -113,6 +117,12 @@ class JwBusinessDashboard(models.Model):
             'top_expense_categories': self._get_top_expense_categories(d_from, d_to, b_id, essl),
             'top_expense_employees': self._get_top_expense_employees(d_from, d_to, b_id, essl),
             'expense_bullet_data': self._get_expense_bullet_data(d_from, d_to, b_id, essl),
+            'schemes_kpis': self._get_schemes_kpis(d_from, d_to, b_id),
+            'schemes_monthly_trend': self._get_schemes_monthly_trend(d_from, d_to, b_id),
+            'schemes_running': self._get_schemes_by_state('running', d_from, d_to, b_id),
+            'schemes_completed': self._get_schemes_by_state('completed', d_from, d_to, b_id),
+            'schemes_redeemed': self._get_schemes_by_state('redeemed', d_from, d_to, b_id),
+            'employee_data': self._get_employee_attendance_data(d_from, d_to, b_id),
 
             'period': {'from': str(d_from), 'to': str(d_to)},
             'branches': branches,
@@ -589,13 +599,13 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT
-                COALESCE(pc.complete_name, 'Uncategorized') AS category,
+                COALESCE(p.name, 'Unknown') AS purity,
                 COALESCE(SUM(sq.quantity), 0) AS qty
             FROM stock_quant sq
             JOIN product_product pp ON pp.id = sq.product_id
             JOIN product_template pt ON pt.id = pp.product_tmpl_id
             JOIN stock_location sl ON sl.id = sq.location_id
-            LEFT JOIN product_category pc ON pc.id = pt.categ_id
+            LEFT JOIN gold_purity p ON p.id = pt.purity_id
             WHERE sl.usage = 'internal'
         """
         params = []
@@ -603,13 +613,23 @@ class JwBusinessDashboard(models.Model):
             q += " AND sl.branch_id = %s"
             params.append(branch_id)
         q += """
-            GROUP BY pc.complete_name
+            GROUP BY p.name
             ORDER BY qty DESC
             LIMIT 10
         """
         cr.execute(q, params)
         rows = cr.fetchall()
-        return [{'label': r[0], 'value': round(float(r[1]), 3)} for r in rows]
+        result = []
+        for r in rows:
+            label = r[0]
+            if isinstance(label, dict):
+                label = list(label.values())[0] if label else 'Unknown'
+            result.append({
+                'label': str(label or 'Unknown'),
+                'value': round(float(r[1]), 3)
+            })
+        return result
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # Product Category Distribution – Doughnut
@@ -962,13 +982,14 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT
-                pt.id AS pt_id,
-                pt.name AS product_name,
+                p.id AS purity_id,
+                COALESCE(p.name, 'Unknown') AS purity_name,
                 SUM(sq.quantity) AS stock_qty
             FROM stock_quant sq
             JOIN product_product pp ON pp.id = sq.product_id
             JOIN product_template pt ON pt.id = pp.product_tmpl_id
             JOIN stock_location sl ON sl.id = sq.location_id
+            LEFT JOIN gold_purity p ON p.id = pt.purity_id
             WHERE sl.usage = 'internal'
         """
         params = []
@@ -976,7 +997,7 @@ class JwBusinessDashboard(models.Model):
             q += " AND sl.branch_id = %s"
             params.append(branch_id)
         q += """
-            GROUP BY pt.id, pt.name
+            GROUP BY p.id, p.name
             HAVING SUM(sq.quantity) > 0
             ORDER BY stock_qty DESC
             LIMIT 10
@@ -989,8 +1010,8 @@ class JwBusinessDashboard(models.Model):
             if isinstance(name, dict):
                 name = list(name.values())[0] if name else 'Unknown'
             result.append({
-                'id': int(r[0]),
-                'name': str(name),
+                'id': int(r[0]) if r[0] else 0,
+                'name': str(name or 'Unknown'),
                 'qty': round(float(r[2]), 2)
             })
         return result
@@ -1130,6 +1151,44 @@ class JwBusinessDashboard(models.Model):
         rows = cr.fetchall()
         return [{'id': r[0], 'name': r[1], 'total': round(float(r[2]), 3)} for r in rows]
 
+    def _get_least_purchase_orders(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT po.id, po.name, rp.name, po.date_order::DATE, COALESCE(SUM(pol.product_qty), 0) AS total_weight
+            FROM purchase_order po
+            JOIN res_partner rp ON rp.id = po.partner_id
+            LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
+            WHERE po.state IN ('purchase','done')
+              AND po.date_order::DATE BETWEEN %s AND %s
+        """
+        params = [d_from, d_to]
+        if branch_id:
+            q += " AND po.branch_id = %s"
+            params.append(branch_id)
+        q += " GROUP BY po.id, po.name, rp.name, po.date_order HAVING COALESCE(SUM(pol.product_qty), 0) > 0 ORDER BY total_weight ASC LIMIT 10"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{'id': r[0], 'ref': r[1], 'vendor': r[2], 'date': str(r[3]), 'total': round(float(r[4]), 3)} for r in rows]
+
+    def _get_least_vendors(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT rp.id, rp.name, COALESCE(SUM(pol.product_qty), 0) AS total_weight
+            FROM purchase_order po
+            JOIN purchase_order_line pol ON pol.order_id = po.id
+            JOIN res_partner rp ON rp.id = po.partner_id
+            WHERE po.state IN ('purchase','done')
+              AND po.date_order::DATE BETWEEN %s AND %s
+        """
+        params = [d_from, d_to]
+        if branch_id:
+            q += " AND po.branch_id = %s"
+            params.append(branch_id)
+        q += " GROUP BY rp.id, rp.name HAVING COALESCE(SUM(pol.product_qty), 0) > 0 ORDER BY total_weight ASC LIMIT 10"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{'id': r[0], 'vendor': r[1], 'name': r[1], 'total': round(float(r[2]), 3)} for r in rows]
+
     def _get_best_sellers_by_qty(self, d_from, d_to, branch_id=None):
         cr = self._cr
         q = """
@@ -1171,15 +1230,15 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT
-                pc.id AS category_id,
-                pc.name AS category_name,
+                gp.id AS category_id,
+                COALESCE(gp.name, 'Unknown Purity') AS category_name,
                 COALESCE(SUM(sol.product_uom_qty), 0) AS qty_sold,
                 COALESCE(SUM(sol.price_subtotal), 0) AS revenue
             FROM sale_order_line sol
             JOIN sale_order so ON so.id = sol.order_id
             JOIN product_product pp ON pp.id = sol.product_id
             JOIN product_template pt ON pt.id = pp.product_tmpl_id
-            LEFT JOIN product_category pc ON pc.id = pt.categ_id
+            LEFT JOIN gold_purity gp ON gp.id = COALESCE(sol.purity_id, pt.purity_id)
             WHERE so.state IN ('sale','done')
               AND so.date_order::DATE BETWEEN %s AND %s
         """
@@ -1188,7 +1247,7 @@ class JwBusinessDashboard(models.Model):
             q += " AND so.branch_id = %s"
             params.append(branch_id)
         q += """
-            GROUP BY pc.id, pc.name
+            GROUP BY gp.id, gp.name
             ORDER BY qty_sold DESC
             LIMIT 10
         """
@@ -1198,7 +1257,7 @@ class JwBusinessDashboard(models.Model):
         for r in rows:
             name = r[1]
             if isinstance(name, dict):
-                name = list(name.values())[0] if name else 'Category'
+                name = list(name.values())[0] if name else 'Purity'
             result.append({
                 'id': int(r[0]) if r[0] else 0,
                 'name': str(name or 'Other'),
@@ -1249,9 +1308,13 @@ class JwBusinessDashboard(models.Model):
             SELECT 
                 to_char(am.invoice_date, 'Mon YYYY') AS month,
                 date_trunc('month', am.invoice_date) AS month_start,
+                COALESCE(gp.name, 'Unknown') AS purity,
                 COALESCE(sum(aml.quantity), 0) AS total
             FROM account_move am
             JOIN account_move_line aml ON aml.move_id = am.id
+            LEFT JOIN product_product pp ON pp.id = aml.product_id
+            LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
+            LEFT JOIN gold_purity gp ON gp.id = pt.purity_id
             WHERE am.move_type = 'out_invoice' 
               AND am.state = 'posted'
               AND aml.display_type = 'product'
@@ -1263,12 +1326,12 @@ class JwBusinessDashboard(models.Model):
             q += " AND am.branch_id = %s"
             params.append(branch_id)
         q += """
-            GROUP BY to_char(am.invoice_date, 'Mon YYYY'), date_trunc('month', am.invoice_date)
-            ORDER BY month_start
+            GROUP BY to_char(am.invoice_date, 'Mon YYYY'), date_trunc('month', am.invoice_date), COALESCE(gp.name, 'Unknown')
+            ORDER BY month_start, purity
         """
         cr.execute(q, params)
         rows = cr.fetchall()
-        return [{'label': r[0], 'value': round(float(r[2]), 3)} for r in rows]
+        return [{'month': r[0], 'purity': r[2], 'weight': round(float(r[3]), 3)} for r in rows]
 
     def _get_invoiced_top_invoices(self, d_from, d_to, branch_id=None):
         cr = self._cr
@@ -1378,4 +1441,342 @@ class JwBusinessDashboard(models.Model):
             'name': r[1] or 'Unknown',
             'value': round(float(r[2]), 3)
         } for r in rows]
+
+    def _get_date_branch_collection(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT 
+                TO_CHAR(so.date_order, 'YYYY-MM') AS month_key,
+                TO_CHAR(so.date_order, 'Mon') AS month_name,
+                rb.name AS branch_name,
+                SUM(so.amount_total) AS total_amount,
+                SUM(COALESCE((SELECT SUM(product_uom_qty) FROM sale_order_line WHERE order_id = so.id), 0)) AS total_weight
+            FROM sale_order so
+            JOIN res_branch rb ON rb.id = so.branch_id
+            WHERE so.state IN ('sale','done')
+              AND so.date_order::DATE BETWEEN %s AND %s
+        """
+        params = [d_from, d_to]
+        if branch_id:
+            q += " AND so.branch_id = %s"
+            params.append(branch_id)
+        q += """
+            GROUP BY TO_CHAR(so.date_order, 'YYYY-MM'), TO_CHAR(so.date_order, 'Mon'), rb.name
+            ORDER BY month_key ASC, rb.name ASC
+        """
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        result = []
+        for r in rows:
+            month_key = str(r[0])
+            month_name = str(r[1])
+            branch = r[2]
+            if isinstance(branch, dict):
+                branch = list(branch.values())[0] if branch else 'Unknown'
+            result.append({
+                'month_key': month_key,
+                'date': month_name,
+                'branch': str(branch or 'Unknown'),
+                'amount': round(float(r[3]), 2),
+                'weight': round(float(r[4]), 3)
+            })
+        return result
+
+    def _get_branch_wise_target(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT 
+                rb.id,
+                rb.name,
+                COALESCE(act.actual_weight, 0.0) AS actual_weight,
+                COALESCE(tgt.target_weight, 0.0) AS target_weight
+            FROM res_branch rb
+            LEFT JOIN (
+                SELECT
+                    so.branch_id,
+                    COALESCE(SUM(sol.product_uom_qty), 0) AS actual_weight
+                FROM sale_order so
+                JOIN sale_order_line sol ON sol.order_id = so.id
+                LEFT JOIN gold_purity gp ON gp.id = sol.purity_id
+                WHERE so.state IN ('sale','done')
+                  AND so.date_order::DATE BETWEEN %s AND %s
+                  AND UPPER(TRIM(gp.name)) IN ('22K', '18CT', '22KT')
+                GROUP BY so.branch_id
+            ) act ON act.branch_id = rb.id
+            LEFT JOIN (
+                SELECT
+                    branch_id,
+                    COALESCE(SUM(target_gms_22k + target_gms_18ct + target_gms_22kt), 0) AS target_weight
+                FROM salesman_target
+                WHERE (date_from <= %s AND date_to >= %s)
+                GROUP BY branch_id
+            ) tgt ON tgt.branch_id = rb.id
+            WHERE 1=1
+        """
+        params = [d_from, d_to, d_to, d_from]
+        if branch_id:
+            q += " AND rb.id = %s"
+            params.append(branch_id)
+        q += " ORDER BY actual_weight DESC"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        result = []
+        for r in rows:
+            branch = r[1]
+            if isinstance(branch, dict):
+                branch = list(branch.values())[0] if branch else 'Unknown'
+            result.append({
+                'branch_id': int(r[0]),
+                'branch': str(branch or 'Unknown'),
+                'actual': round(float(r[2]), 3),
+                'target': round(float(r[3]), 3),
+            })
+        return result
+
+    def _get_schemes_kpis(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT 
+                state,
+                COUNT(*),
+                COALESCE(SUM(total_paid), 0)
+            FROM jewellery_scheme_enrollment
+            WHERE date_of_joining BETWEEN %s AND %s
+        """
+        params = [d_from, d_to]
+        if branch_id:
+            q += " AND branch_id = %s"
+            params.append(branch_id)
+        q += " GROUP BY state"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        
+        kpis = {
+            'running': {'count': 0, 'total_paid': 0.0},
+            'completed': {'count': 0, 'total_paid': 0.0},
+            'redeemed': {'count': 0, 'total_paid': 0.0},
+            'total': {'count': 0, 'total_paid': 0.0}
+        }
+        for r in rows:
+            state = r[0]
+            count = int(r[1] or 0)
+            total_paid = float(r[2] or 0.0)
+            if state in kpis:
+                kpis[state] = {'count': count, 'total_paid': round(total_paid, 2)}
+            kpis['total']['count'] += count
+            kpis['total']['total_paid'] += total_paid
+        kpis['total']['total_paid'] = round(kpis['total']['total_paid'], 2)
+        return kpis
+
+    def _get_schemes_monthly_trend(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        q = """
+            SELECT 
+                to_char(date_of_joining, 'Mon YYYY') AS month,
+                date_trunc('month', date_of_joining) AS month_start,
+                COUNT(*) AS count
+            FROM jewellery_scheme_enrollment
+            WHERE date_of_joining BETWEEN %s AND %s
+        """
+        params = [d_from, d_to]
+        if branch_id:
+            q += " AND branch_id = %s"
+            params.append(branch_id)
+        q += """
+            GROUP BY to_char(date_of_joining, 'Mon YYYY'), date_trunc('month', date_of_joining)
+            ORDER BY month_start
+        """
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{'label': r[0], 'value': int(r[2] or 0)} for r in rows]
+
+    def _get_schemes_by_state(self, state, d_from, d_to, branch_id=None):
+        cr = self._cr
+        if state == 'running':
+            from datetime import date
+            d_from = d_to = date.today()
+
+        q = """
+            SELECT 
+                e.id,
+                e.name,
+                COALESCE(rp.name, 'Unknown') AS customer,
+                e.date_of_joining,
+                COALESCE(e.total_paid, 0) AS total_paid,
+                COALESCE(e.balance_amount, 0) AS balance_amount
+            FROM jewellery_scheme_enrollment e
+            LEFT JOIN res_partner rp ON rp.id = e.partner_id
+            WHERE e.state = %s 
+              AND e.date_of_joining BETWEEN %s AND %s
+        """
+        params = [state, d_from, d_to]
+        if branch_id:
+            q += " AND e.branch_id = %s"
+            params.append(branch_id)
+        q += " ORDER BY e.date_of_joining DESC LIMIT 10"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{
+            'id': r[0],
+            'ref': r[1],
+            'customer': r[2],
+            'date': str(r[3]),
+            'total_paid': round(float(r[4]), 2),
+            'balance': round(float(r[5]), 2)
+        } for r in rows]
+
+    def _get_employee_attendance_data(self, d_from, d_to, branch_id=None):
+        import pytz
+        from datetime import datetime, timedelta, date
+
+        # Get active employees
+        domain = [('active', '=', True)]
+        if branch_id:
+            domain.extend([
+                '|',
+                ('essl_location_id', '=', branch_id),
+                '|',
+                ('user_id.branch_id', '=', branch_id),
+                ('label_location_id.branch_id', '=', branch_id)
+            ])
+        employees = self.env['hr.employee'].sudo().search(domain)
+        total_employees = len(employees)
+        if not employees:
+            return {
+                'kpis': {
+                    'total': 0,
+                    'present': 0,
+                    'absent': 0,
+                    'leave': 0,
+                    'half_day': 0
+                },
+                'summary': []
+            }
+
+        # Timezone settings
+        timezone_name = self.env['ir.config_parameter'].sudo().get_param('em_essl_attendance.timezone') or 'Asia/Kolkata'
+        try:
+            local_tz = pytz.timezone(timezone_name)
+        except Exception:
+            local_tz = pytz.timezone('Asia/Kolkata')
+
+        # Widen search to cover local/UTC boundaries
+        start_utc = local_tz.localize(datetime.combine(d_from, datetime.min.time())).astimezone(pytz.utc).replace(tzinfo=None)
+        end_utc = local_tz.localize(datetime.combine(d_to, datetime.max.time())).astimezone(pytz.utc).replace(tzinfo=None)
+
+        # Retrieve attendances
+        attendances = self.env['hr.attendance'].sudo().search([
+            ('employee_id', 'in', employees.ids),
+            ('check_in', '>=', start_utc),
+            ('check_in', '<=', end_utc)
+        ])
+
+        # Map to dict: { (employee_id, local_date): attendance }
+        att_by_emp_date = {}
+        for att in attendances:
+            check_in_local = pytz.utc.localize(att.check_in).astimezone(local_tz)
+            local_date = check_in_local.date()
+            existing_att = att_by_emp_date.get((att.employee_id.id, local_date))
+            if not existing_att or att.worked_hours > existing_att.worked_hours:
+                att_by_emp_date[(att.employee_id.id, local_date)] = att
+
+        # Retrieve approved leaves
+        leaves = self.env['hr.leave'].sudo().search([
+            ('employee_id', 'in', employees.ids),
+            ('state', '=', 'validate'),
+            ('request_date_from', '<=', d_to),
+            ('request_date_to', '>=', d_from)
+        ])
+
+        # Map to dict: { (employee_id, date): 'leave' / 'half_day' }
+        leave_by_emp_date = {}
+        for leave in leaves:
+            curr_date = max(leave.request_date_from, d_from)
+            end_date = min(leave.request_date_to, d_to)
+            while curr_date <= end_date:
+                key = (leave.employee_id.id, curr_date)
+                if not leave.request_unit_half:
+                    leave_by_emp_date[key] = 'leave'
+                else:
+                    if leave_by_emp_date.get(key) != 'leave':
+                        leave_by_emp_date[key] = 'half_day'
+                curr_date += timedelta(days=1)
+
+        # Track summaries per employee
+        emp_summary = {
+            emp.id: {
+                'id': emp.id,
+                'name': emp.name,
+                'code': emp.essl_emp_code or emp.identification_id or emp.barcode or '',
+                'department': emp.department_id.name or 'Not Specified',
+                'present': 0,
+                'absent': 0,
+                'leave': 0,
+                'half_day': 0,
+                'worked_hours': 0.0
+            } for emp in employees
+        }
+
+        days_count = 0
+        total_present = 0
+        total_absent = 0
+        total_leave = 0
+        total_half_day = 0
+
+        curr_date = d_from
+        while curr_date <= d_to:
+            days_count += 1
+            for emp in employees:
+                att = att_by_emp_date.get((emp.id, curr_date))
+                leave_status = leave_by_emp_date.get((emp.id, curr_date))
+
+                summary = emp_summary[emp.id]
+                if att:
+                    summary['worked_hours'] += att.worked_hours
+                    if att.half_day_leave or leave_status == 'half_day':
+                        total_half_day += 1
+                        summary['half_day'] += 1
+                    else:
+                        total_present += 1
+                        summary['present'] += 1
+                else:
+                    if leave_status == 'leave':
+                        total_leave += 1
+                        summary['leave'] += 1
+                    elif leave_status == 'half_day':
+                        total_half_day += 1
+                        summary['half_day'] += 1
+                        summary['worked_hours'] += 4.0
+                    else:
+                        total_absent += 1
+                        summary['absent'] += 1
+
+            curr_date += timedelta(days=1)
+
+        # Average counts per day
+        avg_present = round(total_present / days_count, 1) if days_count > 0 else 0
+        avg_absent = round(total_absent / days_count, 1) if days_count > 0 else 0
+        avg_leave = round(total_leave / days_count, 1) if days_count > 0 else 0
+        avg_half_day = round(total_half_day / days_count, 1) if days_count > 0 else 0
+
+        # Sort summary by employee name
+        summary_list = list(emp_summary.values())
+        summary_list.sort(key=lambda x: x['name'])
+
+        # Round worked hours to 2 decimals
+        for s in summary_list:
+            s['worked_hours'] = round(s['worked_hours'], 2)
+
+        return {
+            'kpis': {
+                'total': total_employees,
+                'present': avg_present,
+                'absent': avg_absent,
+                'leave': avg_leave,
+                'half_day': avg_half_day
+            },
+            'summary': summary_list
+        }
+
+
 

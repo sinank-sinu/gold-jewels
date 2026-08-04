@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Wizard Form View -->
+    <record id="view_essl_attendance_report_wizard_form" model="ir.ui.view">
+        <field name="name">essl.attendance.report.wizard.form</field>
+        <field name="model">essl.attendance.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Detailed Attendance Report">
+                <header>
+                    <button name="action_generate_report" string="Generate Report" type="object" class="btn-primary"/>
+                    <button name="action_print_pdf" string="Print PDF" type="object" class="btn-primary"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Date Range">
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                        </group>
+                        <group string="Filters">
+                            <field name="department_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                            <field name="essl_location_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        </group>
+                    </group>
+                    <group string="Statuses to Include">
+                        <group>
+                            <field name="filter_present"/>
+                            <field name="filter_half_day"/>
+                        </group>
+                        <group>
+                            <field name="filter_on_leave"/>
+                            <field name="filter_absent"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Report Lines">
+                            <field name="line_ids" readonly="1">
+                                <tree string="Detailed Attendance Report Lines" create="false" edit="false" delete="false" default_order="department_id, date desc">
+                                    <field name="date"/>
+                                    <field name="employee_id"/>
+                                    <field name="department_id"/>
+                                    <field name="essl_location_id"/>
+                                    <field name="essl_shift_id"/>
+                                    <field name="status" widget="badge" 
+                                           decoration-success="status == 'present'" 
+                                           decoration-danger="status == 'absent'" 
+                                           decoration-warning="status == 'half_day'" 
+                                           decoration-info="status == 'leave'"/>
+                                    <field name="check_in"/>
+                                    <field name="check_out"/>
+                                    <field name="worked_hours" sum="Total Worked Hours"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard Action -->
+    <record id="action_essl_attendance_report_wizard" model="ir.actions.act_window">
+        <field name="name">Detailed Attendance Report</field>
+        <field name="res_model">essl.attendance.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+
+    <!-- Report Line Tree View -->
+    <record id="view_essl_attendance_report_line_tree" model="ir.ui.view">
+        <field name="name">essl.attendance.report.line.tree</field>
+        <field name="model">essl.attendance.report.line</field>
+        <field name="arch" type="xml">
+            <tree string="Detailed Attendance Report Lines" create="false" edit="false" delete="false">
+                <field name="date"/>
+                <field name="employee_id"/>
+                <field name="department_id"/>
+                <field name="essl_location_id"/>
+                <field name="essl_shift_id"/>
+                <field name="status" widget="badge" 
+                       decoration-success="status == 'present'" 
+                       decoration-danger="status == 'absent'" 
+                       decoration-warning="status == 'half_day'" 
+                       decoration-info="status == 'leave'"/>
+                <field name="check_in"/>
+                <field name="check_out"/>
+                <field name="worked_hours" sum="Total Worked Hours"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Report Line Pivot View -->
+    <record id="view_essl_attendance_report_line_pivot" model="ir.ui.view">
+        <field name="name">essl.attendance.report.line.pivot</field>
+        <field name="model">essl.attendance.report.line</field>
+        <field name="arch" type="xml">
+            <pivot string="Detailed Attendance Report Analysis">
+                <field name="department_id" type="row"/>
+                <field name="employee_id" type="row"/>
+                <field name="date" interval="day" type="col"/>
+                <field name="worked_hours" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- Report Line Search View -->
+    <record id="view_essl_attendance_report_line_search" model="ir.ui.view">
+        <field name="name">essl.attendance.report.line.search</field>
+        <field name="model">essl.attendance.report.line</field>
+        <field name="arch" type="xml">
+            <search string="Search Report Lines">
+                <field name="employee_id"/>
+                <field name="department_id"/>
+                <field name="essl_location_id"/>
+                <field name="date"/>
+                <separator/>
+                <filter string="Present" name="filter_present" domain="[('status', '=', 'present')]"/>
+                <filter string="Absent" name="filter_absent" domain="[('status', '=', 'absent')]"/>
+                <filter string="Half Day" name="filter_half_day" domain="[('status', '=', 'half_day')]"/>
+                <filter string="On Leave" name="filter_leave" domain="[('status', '=', 'leave')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Employee" name="group_by_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="Department" name="group_by_department" context="{'group_by': 'department_id'}"/>
+                    <filter string="Location" name="group_by_location" context="{'group_by': 'essl_location_id'}"/>
+                    <filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Report Line Action -->
+    <record id="action_essl_attendance_report_line" model="ir.actions.act_window">
+        <field name="name">Detailed Attendance Report Lines</field>
+        <field name="res_model">essl.attendance.report.line</field>
+        <field name="view_mode">tree,pivot</field>
+        <field name="search_view_id" ref="view_essl_attendance_report_line_search"/>
+    </record>
+
+    <!-- Menu Item for Wizard -->
+    <menuitem id="menu_essl_attendance_report_wizard"
+              name="Detailed Attendance Report"
+              parent="hr_attendance.menu_hr_attendance_reporting"
+              sequence="30"
+              action="action_essl_attendance_report_wizard"
+              groups="hr_attendance.group_hr_attendance_officer"/>
+</odoo>

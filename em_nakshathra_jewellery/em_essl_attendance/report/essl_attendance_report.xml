@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Report Action -->
+    <record id="action_report_essl_attendance" model="ir.actions.report">
+        <field name="name">Detailed Attendance Report</field>
+        <field name="model">essl.attendance.report.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_essl_attendance.report_essl_attendance_template</field>
+        <field name="report_file">em_essl_attendance.report_essl_attendance_template</field>
+        <field name="binding_model_id" ref="model_essl_attendance_report_wizard"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <!-- Report Template -->
+    <template id="report_essl_attendance_template">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-set="doc_sudo" t-value="doc.sudo()"/>
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <div class="text-center" style="border-bottom: 2px solid #ccc; margin-bottom: 20px; padding-bottom: 10px;">
+                            <h2>Detailed Attendance Report</h2>
+                            <p style="font-size: 14px; color: #555;">
+                                <strong>Period:</strong> <span t-field="doc_sudo.date_from"/> to <span t-field="doc_sudo.date_to"/>
+                            </p>
+                        </div>
+
+                        <!-- Filter Summary -->
+                        <div style="margin-bottom: 20px; font-size: 12px;">
+                            <div class="row">
+                                <div class="col-4">
+                                    <strong>Departments:</strong>
+                                    <t t-if="doc_sudo.department_ids">
+                                        <span t-esc="', '.join(doc_sudo.department_ids.sudo().mapped('name'))"/>
+                                    </t>
+                                    <t t-else="">
+                                        All Departments
+                                    </t>
+                                </div>
+                                <div class="col-4">
+                                    <strong>Locations:</strong>
+                                    <t t-if="doc_sudo.essl_location_ids">
+                                        <span t-esc="', '.join(doc_sudo.essl_location_ids.sudo().mapped('name'))"/>
+                                    </t>
+                                    <t t-else="">
+                                        All Locations
+                                    </t>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <strong>Statuses:</strong>
+                                    <t t-if="doc_sudo.filter_present">Present </t>
+                                    <t t-if="doc_sudo.filter_absent">Absent </t>
+                                    <t t-if="doc_sudo.filter_half_day">Half-Day </t>
+                                    <t t-if="doc_sudo.filter_on_leave">Leave </t>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Grouped by Department -->
+                        <t t-set="departments" t-value="doc_sudo.line_ids.sudo().mapped('department_id')"/>
+                        <t t-set="has_no_dept" t-value="any(not l.department_id for l in doc_sudo.line_ids.sudo())"/>
+
+                        <t t-foreach="departments" t-as="dept">
+                            <t t-set="dept_lines" t-value="doc_sudo.line_ids.sudo().filtered(lambda l: l.department_id == dept).sorted(key=lambda l: (l.date, l.employee_id.sudo().name))"/>
+                            <t t-if="dept_lines">
+                                <div style="margin-top: 25px; page-break-inside: avoid;">
+                                    <h4 style="color: #2c3e50; border-bottom: 2px solid #34495e; padding-bottom: 5px; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px;">
+                                        Department: <span t-field="dept.sudo().name"/>
+                                    </h4>
+                                    <table class="table table-bordered table-sm" style="font-size: 11px; width: 100%;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 10%;">Date</th>
+                                                <th style="width: 20%;">Employee</th>
+                                                <th style="width: 15%;">Location</th>
+                                                <th style="width: 13%;">Shift</th>
+                                                <th style="width: 10%;">Status</th>
+                                                <th style="width: 13%;">Check In</th>
+                                                <th style="width: 13%;">Check Out</th>
+                                                <th style="width: 6%; text-align: right;">Hours</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-foreach="dept_lines" t-as="line">
+                                                <tr>
+                                                    <td>
+                                                        <span t-field="line.date" t-options='{"widget": "date"}'/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.employee_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.essl_location_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.essl_shift_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <t t-if="line.status == 'present'">
+                                                            <span class="badge bg-success" style="padding: 3px 6px; font-size: 9px; color: white;">Present</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'absent'">
+                                                            <span class="badge bg-danger" style="padding: 3px 6px; font-size: 9px; color: white;">Absent</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'half_day'">
+                                                            <span class="badge bg-warning text-dark" style="padding: 3px 6px; font-size: 9px;">Half Day</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'leave'">
+                                                            <span class="badge bg-info text-dark" style="padding: 3px 6px; font-size: 9px;">On Leave</span>
+                                                        </t>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.check_in" t-options='{"widget": "datetime", "format": "dd/MM/yyyy HH:mm:ss"}'/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.check_out" t-options='{"widget": "datetime", "format": "dd/MM/yyyy HH:mm:ss"}'/>
+                                                    </td>
+                                                    <td style="text-align: right;">
+                                                        <span t-esc="'%.2f' % line.worked_hours"/>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="7" class="text-end"><strong><span t-esc="dept.sudo().name"/> Subtotal Hours:</strong></td>
+                                                <td style="text-align: right;">
+                                                    <strong><span t-esc="'%.2f' % sum(dept_lines.mapped('worked_hours'))"/></strong>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </t>
+                        </t>
+
+                        <!-- Lines with no department -->
+                        <t t-if="has_no_dept">
+                            <t t-set="no_dept_lines" t-value="doc_sudo.line_ids.sudo().filtered(lambda l: not l.department_id).sorted(key=lambda l: (l.date, l.employee_id.sudo().name))"/>
+                            <t t-if="no_dept_lines">
+                                <div style="margin-top: 25px; page-break-inside: avoid;">
+                                    <h4 style="color: #2c3e50; border-bottom: 2px solid #34495e; padding-bottom: 5px; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px;">
+                                        Department: Not Specified
+                                    </h4>
+                                    <table class="table table-bordered table-sm" style="font-size: 11px; width: 100%;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 10%;">Date</th>
+                                                <th style="width: 20%;">Employee</th>
+                                                <th style="width: 15%;">Location</th>
+                                                <th style="width: 13%;">Shift</th>
+                                                <th style="width: 10%;">Status</th>
+                                                <th style="width: 13%;">Check In</th>
+                                                <th style="width: 13%;">Check Out</th>
+                                                <th style="width: 6%; text-align: right;">Hours</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-foreach="no_dept_lines" t-as="line">
+                                                <tr>
+                                                    <td>
+                                                        <span t-field="line.date" t-options='{"widget": "date"}'/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.employee_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.essl_location_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.essl_shift_id.sudo().name"/>
+                                                    </td>
+                                                    <td>
+                                                        <t t-if="line.status == 'present'">
+                                                            <span class="badge bg-success" style="padding: 3px 6px; font-size: 9px; color: white;">Present</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'absent'">
+                                                            <span class="badge bg-danger" style="padding: 3px 6px; font-size: 9px; color: white;">Absent</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'half_day'">
+                                                            <span class="badge bg-warning text-dark" style="padding: 3px 6px; font-size: 9px;">Half Day</span>
+                                                        </t>
+                                                        <t t-if="line.status == 'leave'">
+                                                            <span class="badge bg-info text-dark" style="padding: 3px 6px; font-size: 9px;">On Leave</span>
+                                                        </t>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.check_in" t-options='{"widget": "datetime", "format": "dd/MM/yyyy HH:mm:ss"}'/>
+                                                    </td>
+                                                    <td>
+                                                        <span t-field="line.check_out" t-options='{"widget": "datetime", "format": "dd/MM/yyyy HH:mm:ss"}'/>
+                                                    </td>
+                                                    <td style="text-align: right;">
+                                                        <span t-esc="'%.2f' % line.worked_hours"/>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="7" class="text-end"><strong>Unspecified Subtotal Hours:</strong></td>
+                                                <td style="text-align: right;">
+                                                    <strong><span t-esc="'%.2f' % sum(no_dept_lines.mapped('worked_hours'))"/></strong>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </t>
+                        </t>
+
+                        <!-- Grand Total -->
+                        <div style="margin-top: 30px; text-align: right; font-size: 14px; font-weight: bold; border-top: 2px solid #ccc; padding-top: 10px;">
+                            Grand Total Worked Hours: <span t-esc="'%.2f' % sum(doc_sudo.line_ids.sudo().mapped('worked_hours'))"/>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

@@ -14,6 +14,7 @@
             name="JW Dashboard"
             web_icon="jw_business_dashboard,static/description/icon.png"
             sequence="3"
+            groups="jw_business_dashboard.group_jw_business_dashboard_user"
         />
 
         <!-- Main Dashboard Sub-menu -->

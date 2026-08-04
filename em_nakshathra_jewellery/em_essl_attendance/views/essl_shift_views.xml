@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Shift Views -->
+    <record id="view_essl_shift_tree" model="ir.ui.view">
+        <field name="name">essl.shift.tree</field>
+        <field name="model">essl.shift</field>
+        <field name="arch" type="xml">
+            <tree string="Shifts">
+                <field name="name"/>
+                <field name="start_time" widget="float_time"/>
+                <field name="end_time" widget="float_time"/>
+                <field name="extra_minutes"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_essl_shift_form" model="ir.ui.view">
+        <field name="name">essl.shift.form</field>
+        <field name="model">essl.shift</field>
+        <field name="arch" type="xml">
+            <form string="Shift">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Shift Name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. General Shift"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="start_time" widget="float_time"/>
+                            <field name="end_time" widget="float_time"/>
+                        </group>
+                        <group>
+                            <field name="extra_minutes"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Departments" name="departments">
+                            <field name="department_ids" placeholder="Select departments..." widget="many2many_tags"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Shift Assignment Views -->
+    <record id="view_essl_shift_assignment_tree" model="ir.ui.view">
+        <field name="name">essl.shift.assignment.tree</field>
+        <field name="model">essl.shift.assignment</field>
+        <field name="arch" type="xml">
+            <tree string="Shift Assignments" editable="top">
+                <field name="employee_id"/>
+                <field name="shift_id"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_essl_shift_assignment_form" model="ir.ui.view">
+        <field name="name">essl.shift.assignment.form</field>
+        <field name="model">essl.shift.assignment</field>
+        <field name="arch" type="xml">
+            <form string="Shift Assignment">
+                <sheet>
+                    <group>
+                        <field name="employee_id"/>
+                        <field name="shift_id"/>
+                        <field name="active" widget="boolean_toggle"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Actions -->
+    <record id="action_essl_shift" model="ir.actions.act_window">
+        <field name="name">Create Shift</field>
+        <field name="res_model">essl.shift</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create shifts and define their operating hours.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_essl_shift_assignment" model="ir.actions.act_window">
+        <field name="name">Assign Shift</field>
+        <field name="res_model">essl.shift.assignment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Assign shifts to employees.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Items -->
+    <menuitem id="menu_essl_shift_root"
+              name="Shifts"
+              parent="hr_attendance.menu_hr_attendance_root"
+              sequence="15"
+              groups="hr_attendance.group_hr_attendance_manager"/>
+
+    <menuitem id="menu_essl_shift_create"
+              name="Create Shift"
+              parent="menu_essl_shift_root"
+              sequence="10"
+              action="action_essl_shift"/>
+
+    <menuitem id="menu_essl_shift_assign"
+              name="Assign Shift"
+              parent="menu_essl_shift_root"
+              sequence="20"
+              action="action_essl_shift_assignment"/>
+</odoo>

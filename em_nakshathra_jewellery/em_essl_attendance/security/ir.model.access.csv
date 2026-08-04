@@ -1,3 +1,10 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_essl_sync_wizard,essl.sync.wizard,model_essl_sync_wizard,hr_attendance.group_hr_attendance_manager,1,1,1,1
 access_essl_location,essl.location,model_essl_location,hr_attendance.group_hr_attendance_manager,1,1,1,1
+access_essl_shift,essl.shift,model_essl_shift,hr_attendance.group_hr_attendance_manager,1,1,1,1
+access_essl_shift_assignment,essl.shift.assignment,model_essl_shift_assignment,hr_attendance.group_hr_attendance_manager,1,1,1,1
+access_essl_attendance_report_wizard,essl.attendance.report.wizard,model_essl_attendance_report_wizard,hr_attendance.group_hr_attendance_officer,1,1,1,1
+access_essl_attendance_report_line,essl.attendance.report.line,model_essl_attendance_report_line,hr_attendance.group_hr_attendance_officer,1,1,1,1
+
+
+
