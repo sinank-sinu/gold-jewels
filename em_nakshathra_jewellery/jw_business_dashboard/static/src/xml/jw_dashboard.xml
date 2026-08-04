@@ -3,12 +3,22 @@
 
 <t t-name="jw_business_dashboard.MainDashboard">
     <div class="jw-dashboard-wrapper">
+        <!-- Backdrop overlay for mobile sidebar -->
+        <t t-if="state.mobileSidebarOpen">
+            <div class="jw-sidebar-overlay" t-on-click="closeMobileSidebar"></div>
+        </t>
 
         <!-- ═══════════════ SIDEBAR ═══════════════ -->
-        <div class="jw-sidebar">
+        <div t-attf-class="jw-sidebar #{state.mobileSidebarOpen ? 'open' : ''}">
             <div class="jw-sidebar-brand">
                 <img src="/jw_business_dashboard/static/src/img/jw_dashboard_logo.png" class="jw-brand-icon" style="object-fit: contain; width: 32px; height: 32px; border-radius: 4px;"/>
                 <span>Analytics</span>
+                <button class="jw-sidebar-close-btn" t-on-click="closeMobileSidebar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
             </div>
             <div class="jw-sidebar-menu">
                 <!-- Overview Tab Link -->
@@ -39,6 +49,16 @@
                         <path d="M16 10a4 4 0 0 1-8 0"/>
                     </svg>
                     Purchase
+                </button>
+                <!-- Schemes Tab Link -->
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'schemes' ? 'active' : ''}" t-on-click="() => this.switchTab('schemes')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Schemes
                 </button>
                 <!-- Product Tab Link -->
                 <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'product' ? 'active' : ''}" t-on-click="() => this.switchTab('product')">
@@ -86,6 +106,15 @@
                     </svg>
                     Invoicing
                 </button>
+                <button t-attf-class="jw-sidebar-btn #{state.currentTab === 'employees' ? 'active' : ''}" t-on-click="() => this.switchTab('employees')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Employees
+                </button>
 
             </div>
         </div>
@@ -95,6 +124,21 @@
 
             <!-- ═══════════════ HEADER ═══════════════ -->
             <div class="jw-header">
+                <!-- Hamburger and brand for mobile/tablet -->
+                <div class="jw-mobile-header-bar">
+                    <button class="jw-hamburger-btn" t-on-click="toggleMobileSidebar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="3" y1="6" x2="21" y2="6"/>
+                            <line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
+                    <div class="jw-mobile-brand">
+                        <img src="/jw_business_dashboard/static/src/img/jw_dashboard_logo.png" class="jw-mobile-logo" style="object-fit: contain; width: 28px; height: 28px; border-radius: 4px;"/>
+                        <span class="jw-mobile-title">Analytics</span>
+                    </div>
+                </div>
+
                 <div class="jw-header-right">
                     <div class="jw-filter-group">
                         <select class="jw-select" t-on-change="onBranchChange">
@@ -113,9 +157,11 @@
                             <option value="custom">Custom Range</option>
                         </select>
                         <t t-if="state.period === 'custom'">
-                            <input type="date" class="jw-date-input" t-model="state.dateFrom" t-on-change="onDateChange"/>
-                            <span class="jw-date-sep">→</span>
-                            <input type="date" class="jw-date-input" t-model="state.dateTo" t-on-change="onDateChange"/>
+                            <div class="jw-custom-date-container">
+                                <input type="date" class="jw-date-input" t-model="state.dateFrom" t-on-change="onDateChange"/>
+                                <span class="jw-date-sep">→</span>
+                                <input type="date" class="jw-date-input" t-model="state.dateTo" t-on-change="onDateChange"/>
+                            </div>
                         </t>
                         <button class="jw-btn-refresh" t-on-click="loadData">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -247,9 +293,16 @@
                                     <div class="jw-chart-dot jw-dot-blue"/>
                                     <h3>Monthly Sales (Gross Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">12 Months</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">12 Months</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('salesLineChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('salesLineChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="salesLineChart"/>
                             </div>
                         </div>
@@ -260,9 +313,16 @@
                                     <div class="jw-chart-dot jw-dot-amber"/>
                                     <h3>Monthly Purchase (Gross Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">12 Months</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">12 Months</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('purchaseBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('purchaseBarChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="purchaseBarChart"/>
                             </div>
                         </div>
@@ -274,11 +334,18 @@
                             <div class="jw-chart-header">
                                 <div class="jw-chart-title-group">
                                     <div class="jw-chart-dot jw-dot-purple"/>
-                                    <h3>Stock Balance by Product (Top 10 in gms)</h3>
+                                    <h3>Stock Balance by Purity (gms)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('stockBalanceBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 300px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('stockBalanceBarChart')" style="cursor: pointer; height: 300px;" title="Click to view full screen">
                                 <canvas id="stockBalanceBarChart"/>
                             </div>
                         </div>
@@ -289,9 +356,16 @@
                                     <div class="jw-chart-dot jw-dot-amber"/>
                                     <h3>Sales by Branch (Gross Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('salesByBranchBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 300px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('salesByBranchBarChart')" style="cursor: pointer; height: 300px;" title="Click to view full screen">
                                 <canvas id="salesByBranchBarChart"/>
                             </div>
                         </div>
@@ -303,10 +377,17 @@
                             <div class="jw-chart-header">
                                 <div class="jw-chart-title-group">
                                     <div class="jw-chart-dot jw-dot-green"/>
-                                    <h3>Inventory by Category (Gross Weight)</h3>
+                                    <h3>Inventory by Purity (Gross Weight)</h3>
+                                </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('inventoryPieChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('inventoryPieChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="inventoryPieChart"/>
                             </div>
                             <div class="jw-legend" id="inventoryLegend"/>
@@ -318,8 +399,15 @@
                                     <div class="jw-chart-dot jw-dot-purple"/>
                                     <h3>Product Distribution (Gross Weight)</h3>
                                 </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('productDoughnutChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('productDoughnutChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="productDoughnutChart"/>
                             </div>
                             <div class="jw-legend" id="productLegend"/>
@@ -331,11 +419,77 @@
                                     <div class="jw-chart-dot jw-dot-gold"/>
                                     <h3>Jewellery Purity Breakdown (Gross Weight)</h3>
                                 </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('purityPieChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('purityPieChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="purityPieChart"/>
                             </div>
                             <div class="jw-legend" id="purityLegend"/>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ OVERVIEW CHARTS ROW 4 (TABLES) ═══════════════ -->
+                    <div class="jw-charts-grid-2">
+                        <!-- Best Selling Products Table -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Best Selling Products</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-scroll" style="max-height: 350px;">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product</th>
+                                            <th>Weight (gms)</th>
+                                            <th>Revenue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.topProducts" t-as="p" t-key="p_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductTemplate(p.id)">
+                                                <td class="jw-rank"><t t-esc="p_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="p.name"><t t-esc="p.name"/></td>
+                                                <td><t t-esc="formatWeight(p.qty)"/></td>
+                                                <td><t t-esc="formatCurrency(p.revenue)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.topProducts.length">
+                                            <tr><td colspan="4" class="jw-empty">No products sold in this period</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Date & Branch-Wise Collection Chart -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Branch Collection</h3>
+                                </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('dateBranchCollectionChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('dateBranchCollectionChart')" style="cursor: pointer;" title="Click to view full screen">
+                                <canvas id="dateBranchCollectionChart"/>
+                            </div>
                         </div>
                     </div>
                 </t>
@@ -409,7 +563,7 @@
                     </div>
 
                     <!-- ═══════════════ SALES CHARTS ═══════════════ -->
-                    <div class="jw-charts-grid-3">
+                    <div class="jw-charts-grid-2-sym">
                         <!-- Monthly Sale line graph -->
                         <div class="jw-chart-card">
                             <div class="jw-chart-header">
@@ -417,8 +571,15 @@
                                     <div class="jw-chart-dot jw-dot-blue"/>
                                     <h3>Monthly Sales (Gross Weight)</h3>
                                 </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('salesLineChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('salesLineChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="salesLineChart"/>
                             </div>
                         </div>
@@ -430,12 +591,21 @@
                                     <div class="jw-chart-dot jw-dot-teal"/>
                                     <h3>Sales by Salesman (Target Achievement)</h3>
                                 </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('salesmanBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('salesmanBarChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="salesmanBarChart"/>
                             </div>
                         </div>
+                    </div>
 
+                    <div class="jw-charts-grid-2-sym">
                         <!-- Order State Distribution -->
                         <div class="jw-chart-card">
                             <div class="jw-chart-header">
@@ -443,11 +613,38 @@
                                     <div class="jw-chart-dot jw-dot-orange"/>
                                     <h3>Order State Distribution</h3>
                                 </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('salesStatePieChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('salesStatePieChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="salesStatePieChart"/>
                             </div>
                             <div class="jw-legend" id="salesStateLegend"/>
+                        </div>
+
+                        <!-- Branch Target Achievement -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple" style="background: #a855f7;"/>
+                                    <h3>Branch Target Achievement</h3>
+                                </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('branchTargetBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('branchTargetBarChart')" style="cursor: pointer;" title="Click to view full screen">
+                                <canvas id="branchTargetBarChart"/>
+                            </div>
                         </div>
                     </div>
 
@@ -617,9 +814,16 @@
                                     <div class="jw-chart-dot jw-dot-amber"/>
                                     <h3>Gross Weight Purchased Trend</h3>
                                 </div>
-                                <span class="jw-chart-badge">Line Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Line Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('purchaseLineChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 320px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('purchaseLineChart')" style="cursor: pointer; height: 320px;" title="Click to view full screen">
                                 <canvas id="purchaseLineChart"/>
                             </div>
                         </div>
@@ -740,10 +944,236 @@
                                     <div class="jw-chart-dot jw-dot-gold"/>
                                     <h3>Top Buyers</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('topBuyersBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 280px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('topBuyersBarChart')" style="cursor: pointer; height: 280px;" title="Click to view full screen">
                                 <canvas id="topBuyersBarChart"/>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- SCHEMES TAB CONTENT -->
+                <t t-if="state.currentTab === 'schemes'">
+                    <!-- ═══════════════ SCHEMES KPI CARDS ═══════════════ -->
+                    <div class="jw-kpi-grid">
+                        <!-- Running Schemes -->
+                        <div class="jw-kpi-card jw-kpi-sales">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <div class="jw-kpi-label">Running Schemes</div>
+                                <div class="jw-kpi-value"><t t-esc="state.schemesKpis.running.count"/></div>
+                                <div class="jw-kpi-subtext">Total Paid: <t t-esc="state.schemesKpis.running.total_paid.toLocaleString()"/> INR</div>
+                            </div>
+                        </div>
+
+                        <!-- Completed Schemes -->
+                        <div class="jw-kpi-card jw-kpi-purchase">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <div class="jw-kpi-label">Completed Schemes</div>
+                                <div class="jw-kpi-value"><t t-esc="state.schemesKpis.completed.count"/></div>
+                                <div class="jw-kpi-subtext">Total Paid: <t t-esc="state.schemesKpis.completed.total_paid.toLocaleString()"/> INR</div>
+                            </div>
+                        </div>
+
+                        <!-- Redeemed Schemes -->
+                        <div class="jw-kpi-card jw-kpi-expense">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                                    <line x1="12" y1="4" x2="12" y2="20"/>
+                                    <line x1="2" y1="12" x2="22" y2="12"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <div class="jw-kpi-label">Redeemed Schemes</div>
+                                <div class="jw-kpi-value"><t t-esc="state.schemesKpis.redeemed.count"/></div>
+                                <div class="jw-kpi-subtext">Total Paid: <t t-esc="state.schemesKpis.redeemed.total_paid.toLocaleString()"/> INR</div>
+                            </div>
+                        </div>
+
+                        <!-- Total Schemes -->
+                        <div class="jw-kpi-card jw-kpi-inventory">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"/>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <div class="jw-kpi-label">Total Schemes</div>
+                                <div class="jw-kpi-value"><t t-esc="state.schemesKpis.total.count"/></div>
+                                <div class="jw-kpi-subtext">Total Paid: <t t-esc="state.schemesKpis.total.total_paid.toLocaleString()"/> INR</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ SCHEMES CHARTS ═══════════════ -->
+                    <div class="jw-charts-grid-2-sym" style="margin-bottom: 24px;">
+                        <!-- Enrollment Trend -->
+                        <div class="jw-chart-card" style="grid-column: span 2;">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-cyan"/>
+                                    <h3>Monthly Schemes Enrollment Trend</h3>
+                                </div>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('schemesTrendChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('schemesTrendChart')" style="cursor: pointer; height: 320px;" title="Click to view full screen">
+                                <canvas id="schemesTrendChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════ SCHEMES TABLES ═══════════════ -->
+                    <!-- Running Schemes Table -->
+                    <div class="jw-chart-card" style="margin-bottom: 24px;">
+                        <div class="jw-chart-header">
+                            <div class="jw-chart-title-group">
+                                <div class="jw-chart-dot jw-dot-blue"/>
+                                <h3>Recently Added Running Schemes (Today)</h3>
+                            </div>
+                            <span class="jw-chart-badge">Table View</span>
+                        </div>
+                        <div class="jw-table-container">
+                            <table class="jw-table">
+                                <thead>
+                                    <tr>
+                                        <th>Scheme Ref</th>
+                                        <th>Customer</th>
+                                        <th>Joining Date</th>
+                                        <th class="text-right">Total Paid</th>
+                                        <th class="text-right">Balance Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="state.schemesRunning.length === 0">
+                                        <tr>
+                                            <td colspan="5" class="text-center" style="color: #64748b; padding: 32px;">No running schemes found for today.</td>
+                                        </tr>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-foreach="state.schemesRunning" t-as="item" t-key="item.id">
+                                            <tr t-on-click="() => this.openSchemeEnrollment(item.id)" style="cursor: pointer;" title="Click to open scheme">
+                                                <td class="jw-table-highlight"><t t-esc="item.ref"/></td>
+                                                <td><t t-esc="item.customer"/></td>
+                                                <td><t t-esc="item.date"/></td>
+                                                <td class="text-right font-medium"><t t-esc="item.total_paid.toLocaleString()"/> INR</td>
+                                                <td class="text-right font-medium text-rose-500"><t t-esc="item.balance.toLocaleString()"/> INR</td>
+                                            </tr>
+                                        </t>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Completed & Redeemed Schemes Grid -->
+                    <div class="jw-tables-grid-2" style="margin-bottom: 24px;">
+                        <!-- Completed Schemes -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-green"/>
+                                    <h3>Completed Schemes</h3>
+                                </div>
+                                <span class="jw-chart-badge">Table View</span>
+                            </div>
+                            <div class="jw-table-container">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Scheme Ref</th>
+                                            <th>Customer</th>
+                                            <th>Joining Date</th>
+                                            <th class="text-right">Total Paid</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="state.schemesCompleted.length === 0">
+                                            <tr>
+                                                <td colspan="4" class="text-center" style="color: #64748b; padding: 32px;">No completed schemes found.</td>
+                                            </tr>
+                                        </t>
+                                        <t t-else="">
+                                            <t t-foreach="state.schemesCompleted" t-as="item" t-key="item.id">
+                                                <tr t-on-click="() => this.openSchemeEnrollment(item.id)" style="cursor: pointer;" title="Click to open scheme">
+                                                    <td class="jw-table-highlight"><t t-esc="item.ref"/></td>
+                                                    <td><t t-esc="item.customer"/></td>
+                                                    <td><t t-esc="item.date"/></td>
+                                                    <td class="text-right font-medium text-emerald-500"><t t-esc="item.total_paid.toLocaleString()"/> INR</td>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Redeemed Schemes -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-purple"/>
+                                    <h3>Redeemed Schemes</h3>
+                                </div>
+                                <span class="jw-chart-badge">Table View</span>
+                            </div>
+                            <div class="jw-table-container">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Scheme Ref</th>
+                                            <th>Customer</th>
+                                            <th>Joining Date</th>
+                                            <th class="text-right">Total Paid</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="state.schemesRedeemed.length === 0">
+                                            <tr>
+                                                <td colspan="4" class="text-center" style="color: #64748b; padding: 32px;">No redeemed schemes found.</td>
+                                            </tr>
+                                        </t>
+                                        <t t-else="">
+                                            <t t-foreach="state.schemesRedeemed" t-as="item" t-key="item.id">
+                                                <tr t-on-click="() => this.openSchemeEnrollment(item.id)" style="cursor: pointer;" title="Click to open scheme">
+                                                    <td class="jw-table-highlight"><t t-esc="item.ref"/></td>
+                                                    <td><t t-esc="item.customer"/></td>
+                                                    <td><t t-esc="item.date"/></td>
+                                                    <td class="text-right font-medium text-indigo-500"><t t-esc="item.total_paid.toLocaleString()"/> INR</td>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -834,11 +1264,18 @@
                             <div class="jw-chart-header">
                                 <div class="jw-chart-title-group">
                                     <div class="jw-chart-dot jw-dot-blue"/>
-                                    <h3>Best Selling Categories (Weight)</h3>
+                                    <h3>Best Selling Purity (Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('bestSellingCategoriesChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 320px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('bestSellingCategoriesChart')" style="cursor: pointer; height: 320px;" title="Click to view full screen">
                                 <canvas id="bestSellingCategoriesChart"/>
                             </div>
                         </div>
@@ -850,9 +1287,16 @@
                                     <div class="jw-chart-dot jw-dot-green"/>
                                     <h3>Best Sellers by Weight (gms)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('bestSellersByQtyChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body" style="height: 320px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('bestSellersByQtyChart')" style="cursor: pointer; height: 320px;" title="Click to view full screen">
                                 <canvas id="bestSellersByQtyChart"/>
                             </div>
                         </div>
@@ -893,12 +1337,12 @@
                             </div>
                         </div>
 
-                        <!-- Best Selling Categories Details Table -->
+                        <!-- Best Selling Purity Details Table -->
                         <div class="jw-table-card">
                             <div class="jw-chart-header">
                                 <div class="jw-chart-title-group">
                                     <div class="jw-chart-dot jw-dot-amber"/>
-                                    <h3>Best Selling Categories</h3>
+                                    <h3>Best Selling Purity</h3>
                                 </div>
                             </div>
                             <div class="jw-table-scroll" style="max-height: 350px;">
@@ -906,20 +1350,20 @@
                                     <thead>
                                         <tr>
                                             <th>#</th>
-                                            <th>Category</th>
+                                            <th>Purity</th>
                                             <th>Weight (gms)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <t t-foreach="state.bestSellingCategories" t-as="c" t-key="c_index">
-                                            <tr class="jw-clickable-row" t-on-click="() => this.openProductCategory(c.id)">
+                                            <tr>
                                                 <td class="jw-rank"><t t-esc="c_index + 1"/></td>
                                                 <td class="jw-product-name" t-att-title="c.name"><t t-esc="c.name"/></td>
                                                 <td><t t-esc="formatWeight(c.qty)"/></td>
                                             </tr>
                                         </t>
                                         <t t-if="!state.bestSellingCategories.length">
-                                            <tr><td colspan="3" class="jw-empty">No categories sold in this period</td></tr>
+                                            <tr><td colspan="3" class="jw-empty">No purity data sold in this period</td></tr>
                                         </t>
                                     </tbody>
                                 </table>
@@ -1013,9 +1457,16 @@
                                     <div class="jw-chart-dot jw-dot-blue"/>
                                     <h3>Stock by Location</h3>
                                 </div>
-                                <span class="jw-chart-badge">Pie Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Pie Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('stockByLocationChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie" style="height: 320px;">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('stockByLocationChart')" style="cursor: pointer; height: 320px;" title="Click to view full screen">
                                 <canvas id="stockByLocationChart"/>
                             </div>
                             <div class="jw-legend" id="stockByLocationLegend"/>
@@ -1180,9 +1631,16 @@
                                     <div class="jw-chart-dot jw-dot-purple"/>
                                     <h3>Expense Budget Analysis</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bullet Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bullet Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('expenseBulletChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div style="padding: 24px 20px; position: relative; min-height: 320px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('expenseBulletChart')" style="cursor: pointer; padding: 24px 20px; position: relative; min-height: 320px;" title="Click to view full screen">
                                 <canvas id="expenseBulletChart"/>
                             </div>
                         </div>
@@ -1315,9 +1773,16 @@
                                     <div class="jw-chart-dot jw-dot-blue"/>
                                     <h3>Top Vendors by Gross Weight</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('vendorAmountBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div style="padding: 24px 20px; position: relative; min-height: 350px;">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('vendorAmountBarChart')" style="cursor: pointer; padding: 24px 20px; position: relative; min-height: 350px;" title="Click to view full screen">
                                 <canvas id="vendorAmountBarChart"/>
                             </div>
                         </div>
@@ -1426,6 +1891,77 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Least Tables Row -->
+                    <div class="jw-tables-grid-2" style="margin-top: 1.5rem;">
+                        <!-- Least Purchase Orders Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-table-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-rose"/>
+                                    <h3>Least Purchase Orders</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-wrapper">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Vendor</th>
+                                            <th>Date</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.leastPurchaseOrders" t-as="order" t-key="order_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPurchaseOrder(order.id)">
+                                                <td class="jw-rank"><span class="jw-badge" t-esc="order.ref"/></td>
+                                                <td class="jw-product-name" t-att-title="order.vendor"><t t-esc="order.vendor"/></td>
+                                                <td><t t-esc="order.date"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(order.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.leastPurchaseOrders.length">
+                                            <tr><td colspan="4" class="jw-empty">No orders found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Least Vendors Table -->
+                        <div class="jw-table-card">
+                            <div class="jw-table-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-orange"/>
+                                    <h3>Least Vendors</h3>
+                                </div>
+                            </div>
+                            <div class="jw-table-wrapper">
+                                <table class="jw-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Vendor Name</th>
+                                            <th class="jw-revenue">Weight (gms)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.leastVendors" t-as="vendor" t-key="vendor_index">
+                                            <tr class="jw-clickable-row" t-on-click="() => this.openPartner(vendor.id)">
+                                                <td class="jw-rank"><t t-esc="vendor_index + 1"/></td>
+                                                <td class="jw-product-name" t-att-title="vendor.vendor"><t t-esc="vendor.vendor"/></td>
+                                                <td class="jw-revenue"><t t-esc="formatWeight(vendor.total)"/></td>
+                                            </tr>
+                                        </t>
+                                        <t t-if="!state.leastVendors.length">
+                                            <tr><td colspan="3" class="jw-empty">No vendors found</td></tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </t>
 
                 <!-- INVOICING TAB CONTENT -->
@@ -1497,11 +2033,18 @@
                             <div class="jw-chart-header">
                                 <div class="jw-chart-title-group">
                                     <div class="jw-chart-dot jw-dot-blue"/>
-                                    <h3>Invoiced by Month (Gross Weight)</h3>
+                                    <h3>Invoiced by Month (Purity-Wise Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Bar Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('invoicedMonthlyBarChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body">
+                            <div class="jw-chart-body" t-on-click="() => this.toggleChartMaximize('invoicedMonthlyBarChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="invoicedMonthlyBarChart"/>
                             </div>
                         </div>
@@ -1512,9 +2055,16 @@
                                     <div class="jw-chart-dot jw-dot-purple"/>
                                     <h3>Invoiced by Category (Gross Weight)</h3>
                                 </div>
-                                <span class="jw-chart-badge">Doughnut Chart</span>
+                                <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="jw-chart-badge">Doughnut Chart</span>
+                                    <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('invoicedCategoryChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="jw-chart-body jw-chart-body-pie">
+                            <div class="jw-chart-body jw-chart-body-pie" t-on-click="() => this.toggleChartMaximize('invoicedCategoryChart')" style="cursor: pointer;" title="Click to view full screen">
                                 <canvas id="invoicedCategoryChart"/>
                             </div>
                             <div class="jw-legend" id="invoicedCategoryLegend"/>
@@ -1599,6 +2149,146 @@
                     </div>
                 </t>
 
+                <!-- ═══════════════ EMPLOYEES TAB ═══════════════ -->
+                <t t-if="state.currentTab === 'employees'">
+                    <!-- KPI Cards Grid -->
+                    <div class="jw-kpi-grid">
+                        <div class="jw-kpi-card jw-kpi-emp-total">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Total Employees</span>
+                                <span class="jw-kpi-value" t-esc="state.employeeKpis.total"/>
+                                <span class="jw-kpi-sub">Active Workforce</span>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-emp-present">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Present (Avg/Day)</span>
+                                <span class="jw-kpi-value" t-esc="state.employeeKpis.present"/>
+                                <span class="jw-kpi-sub">On-duty Attendance</span>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-emp-absent">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Absent (Avg/Day)</span>
+                                <span class="jw-kpi-value" t-esc="state.employeeKpis.absent"/>
+                                <span class="jw-kpi-sub">Unexcused Absence</span>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-emp-leave">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                    <line x1="16" y1="2" x2="16" y2="6"/>
+                                    <line x1="8" y1="2" x2="8" y2="6"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">On Leave (Avg/Day)</span>
+                                <span class="jw-kpi-value" t-esc="state.employeeKpis.leave"/>
+                                <span class="jw-kpi-sub">Excused Time Off</span>
+                            </div>
+                        </div>
+
+                        <div class="jw-kpi-card jw-kpi-emp-halfday">
+                            <div class="jw-kpi-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                </svg>
+                            </div>
+                            <div class="jw-kpi-body">
+                                <span class="jw-kpi-label">Half Day (Avg/Day)</span>
+                                <span class="jw-kpi-value" t-esc="state.employeeKpis.half_day"/>
+                                <span class="jw-kpi-sub">Half-Day Leaves</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consolidated Attendance Summary Table -->
+                    <div class="jw-table-card" style="margin-top: 24px;">
+                        <div class="jw-chart-header">
+                            <div class="jw-chart-title-group">
+                                <div class="jw-chart-dot jw-dot-blue"/>
+                                <h3>Employee Attendance &amp; Leave Consolidation Summary</h3>
+                            </div>
+                        </div>
+                        <div class="jw-table-scroll">
+                            <table class="jw-table">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Employee Name</th>
+                                        <th>Department</th>
+                                        <th class="text-center">Present (Days)</th>
+                                        <th class="text-center">Absent (Days)</th>
+                                        <th class="text-center">On Leave (Days)</th>
+                                        <th class="text-center">Half Day (Days)</th>
+                                        <th class="jw-revenue">Worked Hours</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="state.employeeSummary" t-as="emp" t-key="emp.id">
+                                        <tr>
+                                            <td style="font-weight: bold; color: #64748b;"><t t-esc="emp.code or '-'"/></td>
+                                            <td class="jw-product-name" style="font-weight: 600;"><t t-esc="emp.name"/></td>
+                                            <td><t t-esc="emp.department"/></td>
+                                            <td class="text-center">
+                                                <span t-attf-class="jw-badge #{emp.present > 0 ? 'jw-badge-green' : 'jw-badge-gray'}">
+                                                    <t t-esc="emp.present"/>
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                <span t-attf-class="jw-badge #{emp.absent > 0 ? 'jw-badge-red' : 'jw-badge-gray'}">
+                                                    <t t-esc="emp.absent"/>
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                <span t-attf-class="jw-badge #{emp.leave > 0 ? 'jw-badge-orange' : 'jw-badge-gray'}">
+                                                    <t t-esc="emp.leave"/>
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                <span t-attf-class="jw-badge #{emp.half_day > 0 ? 'jw-badge-purple' : 'jw-badge-gray'}">
+                                                    <t t-esc="emp.half_day"/>
+                                                </span>
+                                            </td>
+                                            <td class="jw-revenue" style="font-weight: bold;"><t t-esc="emp.worked_hours"/> hrs</td>
+                                        </tr>
+                                    </t>
+                                    <t t-if="!state.employeeSummary.length">
+                                        <tr>
+                                            <td colspan="8" class="jw-empty">No active employees found matching filters</td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </t>
+
+
 
             </t><!-- end !loading -->
 
@@ -1606,6 +2296,26 @@
             <div class="jw-footer">
                 <span>JW Business Dashboard • Powered by Chart.js • Last updated: <t t-esc="state.lastUpdated"/></span>
             </div>
+
+            <!-- Generic Chart Full Screen Modal -->
+            <t t-if="state.maximizedChartId">
+                <div class="jw-modal-overlay" t-on-click="() => this.toggleChartMaximize(state.maximizedChartId)">
+                    <div class="jw-modal-content" t-on-click.stop="">
+                        <div class="jw-modal-header">
+                            <h3><t t-esc="getMaximizedChartTitle()"/></h3>
+                            <button class="jw-modal-close" t-on-click="() => this.toggleChartMaximize(state.maximizedChartId)">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="jw-modal-body">
+                            <canvas id="maximizedChartCanvas"/>
+                        </div>
+                    </div>
+                </div>
+            </t>
 
         </div><!-- end main content area -->
 

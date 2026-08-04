@@ -8,6 +8,8 @@
             <xpath expr="//field[@name='check_out']" position="after">
                 <field name="essl_location_id"/>
                 <field name="essl_checkout_location_id"/>
+                <field name="essl_shift_id"/>
+                <field name="half_day_leave"/>
             </xpath>
         </field>
     </record>
@@ -20,13 +22,31 @@
             <xpath expr="//field[@name='check_out']" position="after">
                 <field name="essl_location_id"/>
                 <field name="essl_checkout_location_id"/>
+                <field name="essl_shift_id"/>
+                <field name="half_day_leave"/>
             </xpath>
         </field>
     </record>
 
+
     <!-- Clear direct action from the parent Reporting menu so it acts as a dropdown container -->
     <record id="hr_attendance.menu_hr_attendance_reporting" model="ir.ui.menu">
         <field name="action" eval="False"/>
+    </record>
+
+    <!-- Today Report action -->
+    <record id="action_hr_attendance_report_today" model="ir.actions.act_window">
+        <field name="name">Today Attendance Report</field>
+        <field name="res_model">hr.attendance</field>
+        <field name="view_mode">pivot,graph</field>
+        <field name="search_view_id" ref="hr_attendance.hr_attendance_view_filter"/>
+        <field name="domain">[('check_in', '&gt;=', context_today().strftime('%Y-%m-%d 00:00:00')), ('check_in', '&lt;=', context_today().strftime('%Y-%m-%d 23:59:59'))]</field>
+        <field name="context">{
+            'search_default_employee': 1,
+            'pivot_row_groupby': ['employee_id'],
+            'pivot_column_groupby': ['check_in:day'],
+            'pivot_measures': ['worked_hours', 'overtime_hours']
+        }</field>
     </record>
 
     <!-- Weekly Report action -->
@@ -57,6 +77,14 @@
             'pivot_measures': ['worked_hours', 'overtime_hours']
         }</field>
     </record>
+
+    <!-- Today Report menu item -->
+    <menuitem id="menu_hr_attendance_report_today"
+              name="Today Report"
+              parent="hr_attendance.menu_hr_attendance_reporting"
+              sequence="5"
+              action="action_hr_attendance_report_today"
+              groups="hr_attendance.group_hr_attendance_officer"/>
 
     <!-- Weekly Report menu item -->
     <menuitem id="menu_hr_attendance_report_weekly"
