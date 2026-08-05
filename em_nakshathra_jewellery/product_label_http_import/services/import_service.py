@@ -459,9 +459,9 @@ class ProductLabelImportService:
             'company_id': excel_company.id,
             'source_location_id': src_loc.id if src_loc else False,
             'branch_location_id': dest_loc.id if dest_loc else False,
-            'purchase_id': po.id if po else False,
+            # 'purchase_id': po.id if po else False,
 
-            'barcode': normalized_barcode,
+            # 'barcode': normalized_barcode,
             'age_import': age_import_val,
             'tag_weight': get_float('Tag Weight (g)'),
             'purity_id': purity.id if purity else False,
