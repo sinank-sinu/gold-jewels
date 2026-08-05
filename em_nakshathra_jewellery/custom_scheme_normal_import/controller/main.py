@@ -108,6 +108,7 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
                                     'whatsapp_number': str(get_v(row_idx, 'Whatsapp Number')).replace('.0', '') if get_v(row_idx, 'Whatsapp Number') else False,
                                     'address':         str(get_v(row_idx, 'Address')) if get_v(row_idx, 'Address') else False,
                                     'nominee':         str(get_v(row_idx, 'Nominee')) if get_v(row_idx, 'Nominee') else False,
+                                    'name': str(get_v(row_idx, 'Name')).strip() if get_v(row_idx, 'Name') else False,
                                 })
                                 scheme_id = scheme_record.id
 
