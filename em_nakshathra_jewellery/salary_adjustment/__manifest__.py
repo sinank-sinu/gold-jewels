@@ -1,0 +1,26 @@
+{
+    'name': 'Salary Adjustment',
+    'version': '17.0.1.0.0',
+    'summary': 'Standalone Salary Adjustment and WPS compliance file generation for UAE, Oman, Bahrain, Kuwait, Malaysia, Saudi Arabia, and Qatar',
+    'category': 'Human Resources',
+    'author': 'Antigravity',
+    'depends': [
+        'hr',
+        'hr_payroll_community',
+        'salesman_target_incentive',
+        'hr_employee_updation',
+        'hr_payroll_account_community',
+    ],
+    'data': [
+        'security/ir.model.access.csv',
+        'data/salary_rule_data.xml',
+        'wizard/salary_adjustment_export_views.xml',
+        'views/salary_adjustment_views.xml',
+        'views/res_company_views.xml',
+        'views/hr_employee_views.xml',
+        'views/res_partner_bank_views.xml',
+    ],
+    'installable': True,
+    'application': True,
+    'auto_install': False,
+}

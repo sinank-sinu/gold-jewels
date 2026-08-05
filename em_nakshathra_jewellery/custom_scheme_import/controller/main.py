@@ -1,7 +1,9 @@
 import openpyxl
 import logging
 import os
-from datetime import datetime, date
+import threading
+import odoo
+from datetime import datetime, date, timedelta
 from odoo import http, fields
 from odoo.http import request
 from odoo.modules.module import get_module_resource
@@ -17,97 +19,98 @@ def parse_date(value):
     if isinstance(value, date):
         return value
     value = str(value).strip()
-    for fmt in ('%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d', '%Y/%m/%d', '%m-%d-%Y', '%m/%d/%Y'):
+    
+    # Try parsing Excel serial dates (e.g., 45312)
+    try:
+        serial = float(value)
+        if 30000 < serial < 60000:
+            return (datetime(1899, 12, 30) + timedelta(days=serial)).date()
+    except ValueError:
+        pass
+
+    # Extended formats to handle timestamps and 2-digit years
+    formats = (
+        '%m/%d/%Y', '%m-%d-%Y', '%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%Y/%m/%d',
+        '%m/%d/%y', '%m-%d-%y', '%d/%m/%y', '%d-%m-%y', '%y-%m-%d', '%y/%m/%d',
+        '%Y-%m-%d %H:%M:%S', '%m/%d/%Y %H:%M:%S', '%d/%m/%Y %H:%M:%S'
+    )
+    for fmt in formats:
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
             continue
-    _logger.warning("parse_date: Could not parse date value '%s'", value)
+            
+    _logger.warning("parse_date could not parse: '%s'", value)
     return False
 
-
 def safe_float(value):
-    """Safely convert a value to float, return 0.0 on failure."""
     try:
         return float(value) if value not in (None, False, '') else 0.0
     except (TypeError, ValueError):
         return 0.0
 
+def _find_or_create_partner(env, name, phone):
+    if not name:
+        return False
+    partner = env['res.partner'].search([('name', '=', name)], limit=1)
+    if not partner:
+        partner = env['res.partner'].create({
+            'name': name,
+            'phone': str(phone) if phone else False,
+            'customer_rank': 1,
+        })
+    return partner
 
-class SchemeImportController(http.Controller):
 
-    @http.route('/import/schemes/now', type='http', auth='user')
-    def trigger_scheme_import(self, **kwargs):
-        file_name = 'SCHEME 8.xlsx'
-        file_path = get_module_resource('custom_scheme_import', 'data', file_name)
-
-        if not file_path or not os.path.exists(file_path):
-            return f"<h1>Error</h1><p>File not found at {file_path}</p>"
-
-        errors = []
-
+def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=500):
+    registry = odoo.registry(db_name)
+    with registry.cursor() as cr:
+        env = odoo.api.Environment(cr, uid, {})
+        
         try:
             workbook = openpyxl.load_workbook(file_path, data_only=True)
             sheet = workbook.active
-
+            
             h_map = {str(sheet.cell(row=1, column=i).value).strip(): i
                      for i in range(1, sheet.max_column + 1)
                      if sheet.cell(row=1, column=i).value}
-
-            last_valid_ticket = False
-            scheme_tracker = {}
-            count_scheme = 0
-            count_lines = 0
-
-            # ── Account cache: keyed by journal.id so we look up once per journal ──
-            # Structure: { journal_id: (opening_balance_account, debtors_account) }
+                     
+            max_row = sheet.max_row
+            end_row = min(start_row + chunk_size, max_row + 1)
+            
             _account_cache = {}
-
-            for row_idx in range(2, sheet.max_row + 1):
-
-                # ── Guard: if the DB cursor was killed by a PG-level error, stop now ──
-                if request.env.cr.closed:
-                    _logger.error("Cursor closed unexpectedly – stopping import at row %s", row_idx)
-                    errors.append(f"Row {row_idx}: cursor closed – import stopped early")
-                    break
-
+            scheme_tracker = {}
+            last_valid_ticket = False
+            
+            for row_idx in range(start_row, end_row):
                 def get_v(col_name, _row=row_idx):
                     idx = h_map.get(col_name)
                     return sheet.cell(row=_row, column=idx).value if idx else False
-
-                # ── PER-ROW SAVEPOINT ──────────────────────────────────────────
+                    
                 try:
-                    with request.env.cr.savepoint():
-
+                    with env.cr.savepoint():
                         current_ticket_raw = get_v('Ticket Number')
                         if current_ticket_raw:
                             last_valid_ticket = str(current_ticket_raw).strip()
-
                         if not last_valid_ticket:
                             continue
 
-                        # --------------------------------------------------------
-                        # 1.  Enrollment Logic
-                        # --------------------------------------------------------
+                        line_date = parse_date(get_v('Scheme Line/Date') or get_v('Date') or get_v('Payment date') or get_v('Payment Date'))
+                        line_amount_f = safe_float(get_v('Scheme Line/Amount') or get_v('Amount') or get_v('Installment Amount'))
+
+                        # 1. Enrollment Logic
                         scheme_id = scheme_tracker.get(last_valid_ticket)
                         if not scheme_id:
-                            existing_scheme = request.env['jewellery.scheme.enrollment'].search([
-                                ('ticket_number', '=', last_valid_ticket)
-                            ], limit=1)
-
-                            if existing_scheme:
-                                scheme_id = existing_scheme.id
+                            existing = env['jewellery.scheme.enrollment'].search([('ticket_number', '=', last_valid_ticket)], limit=1)
+                            if existing:
+                                scheme_id = existing.id
                             else:
-                                partner_name = str(get_v('Partner')).strip() if get_v('Partner') else False
+                                partner_name = str(get_v('Partner') or get_v('Customer')).strip() if (get_v('Partner') or get_v('Customer')) else False
                                 if partner_name:
-                                    partner = self._find_or_create_partner(partner_name, get_v('Phone'))
-                                    if not partner:
-                                        raise ValueError(f"Could not find/create partner '{partner_name}'")
-
+                                    partner = _find_or_create_partner(env, partner_name, get_v('Phone'))
                                     active_raw = get_v('Active')
                                     is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
-
-                                    scheme_id = request.env['jewellery.scheme.enrollment'].create({
+                                    scheme_id = env['jewellery.scheme.enrollment'].create({
                                         'name': get_v('Name'),
                                         'ticket_number': last_valid_ticket,
                                         'partner_id': partner.id,
@@ -121,150 +124,104 @@ class SchemeImportController(http.Controller):
                                         'state': str(get_v('State')).lower() if get_v('State') else 'draft',
                                         'active': is_active,
                                         'nominee': get_v('Nominee'),
+                                        'date_of_joining': line_date or fields.Date.today(),
+                                        'branch_id': False,
                                     }).id
-                                    count_scheme += 1
-
                             if scheme_id:
                                 scheme_tracker[last_valid_ticket] = scheme_id
 
-                        # --------------------------------------------------------
-                        # 2.  Installment + Journal Entry Logic
-                        # --------------------------------------------------------
-                        line_date_raw = get_v('Scheme Line/Date')
-                        line_amount   = get_v('Scheme Line/Amount')
-                        line_date     = parse_date(line_date_raw)
-                        line_amount_f = safe_float(line_amount)
-
+                        # 2. Installment + Journal Entry Logic
                         if not scheme_id or not (line_date or line_amount_f):
                             continue
 
-                        journal_name      = get_v('Scheme Line/Journal')
-                        journal           = self._find_m2o('account.journal', journal_name)
-                        excel_move_id     = self._find_m2o('account.move', get_v('Scheme Line/Move'))
+                        journal_name = get_v('Scheme Line/Journal')
+                        journal = env['account.journal'].search([('name', '=', str(journal_name).strip())], limit=1) if journal_name else False
+                        
+                        excel_move_name = get_v('Scheme Line/Move')
+                        excel_move_id = env['account.move'].search([('name', '=', str(excel_move_name).strip())], limit=1) if excel_move_name else False
                         generated_move_id = False
 
                         if not excel_move_id and journal and line_amount_f:
-                            # ── Resolve accounts once per journal (cached) ──────
                             if journal.id not in _account_cache:
-                                ob_acc = request.env['account.account'].search([
-                                    ('company_id', '=', journal.company_id.id),
-                                    '|',
-                                    ('name', 'ilike', 'opening balance'),
-                                    ('account_type', '=', 'current_assets'),
-                                ], limit=1)
-                                dr_acc = request.env['account.account'].search([
-                                    ('company_id', '=', journal.company_id.id),
-                                    '|',
-                                    ('name', 'ilike', 'debtor'),
-                                    ('account_type', '=', 'asset_receivable'),
-                                ], limit=1)
-                                _account_cache[journal.id] = (ob_acc, dr_acc)
-                                _logger.info(
-                                    "Account cache populated for journal '%s' (id=%s): OB=%s, DR=%s",
-                                    journal.name, journal.id,
-                                    ob_acc.name if ob_acc else 'NOT FOUND',
-                                    dr_acc.name if dr_acc else 'NOT FOUND',
-                                )
-
-                            opening_balance_account, debtors_account = _account_cache[journal.id]
-
-                            if not opening_balance_account:
-                                _logger.warning(
-                                    "Row %s: Opening Balance account not found for company '%s' – skipping journal entry",
-                                    row_idx, journal.company_id.name,
-                                )
-                                errors.append(f"Row {row_idx} move: Opening Balance account not found for company '{journal.company_id.name}'")
-                            elif not debtors_account:
-                                _logger.warning(
-                                    "Row %s: Debtors account not found for company '%s' – skipping journal entry",
-                                    row_idx, journal.company_id.name,
-                                )
-                                errors.append(f"Row {row_idx} move: Debtors account not found for company '{journal.company_id.name}'")
-                            else:
-                                scheme_record = request.env['jewellery.scheme.enrollment'].browse(scheme_id)
-                                line_partner_id = scheme_record.partner_id.id if scheme_record else False
-
-                                move_vals = {
+                                ob = env['account.account'].search([('company_id', '=', journal.company_id.id), '|', ('name', 'ilike', 'opening balance'), ('account_type', '=', 'current_assets')], limit=1)
+                                dr = env['account.account'].search([('company_id', '=', journal.company_id.id), '|', ('name', 'ilike', 'debtor'), ('account_type', '=', 'asset_receivable')], limit=1)
+                                _account_cache[journal.id] = (ob, dr)
+                            ob_acc, dr_acc = _account_cache[journal.id]
+                            if ob_acc and dr_acc:
+                                scheme_record = env['jewellery.scheme.enrollment'].browse(scheme_id)
+                                new_move = env['account.move'].create({
                                     'journal_id': journal.id,
                                     'date': line_date or fields.Date.today(),
                                     'ref': f"Scheme Payment: {last_valid_ticket}",
                                     'move_type': 'entry',
                                     'line_ids': [
-                                        (0, 0, {
-                                            'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
-                                            'account_id': opening_balance_account.id,
-                                            'debit': line_amount_f,
-                                            'credit': 0.0,
-                                            'partner_id': line_partner_id,
-                                        }),
-                                        (0, 0, {
-                                            'name': f'Scheme Payment - {last_valid_ticket}',
-                                            'account_id': debtors_account.id,
-                                            'debit': 0.0,
-                                            'credit': line_amount_f,
-                                            'partner_id': line_partner_id,
-                                        }),
+                                        (0, 0, {'name': f'Scheme Liability (Opening) - {last_valid_ticket}', 'account_id': ob_acc.id, 'debit': line_amount_f, 'credit': 0.0, 'partner_id': scheme_record.partner_id.id}),
+                                        (0, 0, {'name': f'Scheme Payment - {last_valid_ticket}', 'account_id': dr_acc.id, 'debit': 0.0, 'credit': line_amount_f, 'partner_id': scheme_record.partner_id.id}),
                                     ],
-                                }
-                                new_move = request.env['account.move'].create(move_vals)
+                                })
                                 new_move.action_post()
                                 generated_move_id = new_move.id
-                                _logger.info(
-                                    "Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f",
-                                    row_idx, generated_move_id, last_valid_ticket, line_amount_f
-                                )
-
-                        request.env['jewellery.scheme.installment'].create({
-                            'enrollment_id':  scheme_id,
-                            'date':           line_date or fields.Date.today(),
-                            'amount':         line_amount_f,
-                            'journal_id':     journal.id if journal else False,
-                            'state':          str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'draft',
-                            'move_id':        excel_move_id.id if excel_move_id else generated_move_id,
+                                
+                        env['jewellery.scheme.installment'].create({
+                            'enrollment_id': scheme_id, 'date': line_date or fields.Date.today(), 'amount': line_amount_f,
+                            'journal_id': journal.id if journal else False,
+                            'state': str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'paid',
+                            'move_id': excel_move_id.id if excel_move_id else generated_move_id,
                             'transaction_id': get_v('Scheme Line/Transaction ID'),
                         })
-                        count_lines += 1
-
+                        _logger.info("Row %s: Imported Installment - Ticket: %s | Amount: %s | Move: %s", row_idx, last_valid_ticket, line_amount_f, generated_move_id or excel_move_id.id or 'None')
                 except Exception as row_err:
                     _logger.error("Row %s skipped - %s", row_idx, str(row_err))
-                    errors.append(f"Row {row_idx}: {row_err}")
-                    continue   # transaction is still alive; move to next row
-
-            request.env.cr.commit()
-
-            error_html = ""
-            if errors:
-                error_items = "".join(f"<li>{e}</li>" for e in errors)
-                error_html = f"<h3>Skipped rows ({len(errors)}):</h3><ul>{error_items}</ul>"
-
-            return (
-                f"<h1>Import Complete</h1>"
-                f"<p>Enrollments created: {count_scheme} | Installments created: {count_lines}</p>"
-                f"{error_html}"
-            )
-
+                    
+            _logger.info("Successfully committed chunk from row %s to %s.", start_row, end_row - 1)
+            env.cr.commit()
+            return end_row, max_row
+            
         except Exception as e:
-            request.env.cr.rollback()
+            env.cr.rollback()
             _logger.error("Import Failure: %s", str(e))
-            return f"<h1>Error</h1><p>{str(e)}</p>"
+            return -1, -1
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+class SchemeImportController(http.Controller):
+    @http.route('/import/schemes/opening', type='http', auth='user')
+    def trigger_scheme_import(self, **kwargs):
+        file_name = 'SCHEME - ONE OPENING ENTRY 03-08-2026.xlsx'
+        file_path = get_module_resource('custom_scheme_import', 'data', file_name)
+        
+        if not file_path or not os.path.exists(file_path):
+            return request.make_response(f"<h1>Error</h1><p>File not found at {file_path}</p>", headers=[('Content-Type', 'text/html')])
 
-    def _find_m2o(self, model, name):
-        if not name:
-            return False
-        return request.env[model].search([('name', '=', str(name).strip())], limit=1)
+        start_row = int(kwargs.get('start_row', 2))
+        db_name = request.env.cr.dbname
+        uid = request.env.uid
 
-    def _find_or_create_partner(self, name, phone):
-        if not name:
-            return False
-        partner = request.env['res.partner'].search([('name', '=', name)], limit=1)
-        if not partner:
-            partner = request.env['res.partner'].create({
-                'name': name,
-                'phone': str(phone) if phone else False,
-                'customer_rank': 1,
-            })
-        return partner
+        end_row, max_row = process_import_chunk(db_name, uid, file_path, start_row, chunk_size=500)
+        
+        if end_row == -1:
+            return request.make_response("<h1>Import Failed</h1><p>Check terminal logs for errors.</p>", headers=[('Content-Type', 'text/html')])
+
+        if end_row > max_row:
+            html = "<html><head><style>body{font-family:Arial;text-align:center;margin-top:50px;background:#f9f9f9;}h1{color:#28a745;}</style></head><body><h1>Import Completed Successfully!</h1><p>All rows have been imported.</p></body></html>"
+        else:
+            progress = min(100, int((end_row / max_row) * 100))
+            html = f"""
+            <html>
+                <head>
+                    <meta http-equiv="refresh" content="0; url=/import/schemes/opening?start_row={end_row}" />
+                    <style>
+                        body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f9f9f9; }}
+                        h1 {{ color: #007bff; }}
+                        .progress-bar {{ width: 50%; height: 30px; background: #ddd; margin: 20px auto; border-radius: 15px; overflow: hidden; }}
+                        .progress-fill {{ width: {progress}%; height: 100%; background: #28a745; transition: width 0.5s; align-items: center; justify-content: center; color: white; display: flex; font-weight: bold; }}
+                        .msg {{ font-size: 18px; color: #555; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>Importing Data... Please Wait</h1>
+                    <div class="progress-bar"><div class="progress-fill">{progress}%</div></div>
+                    <p class="msg">Processed up to row {end_row - 1} of {max_row}</p>
+                    <p class="msg" style="color:#dc3545;"><strong>Do not close this tab! It will auto-refresh until completed.</strong></p>
+                </body>
+            </html>
+            """
+        return request.make_response(html, headers=[('Content-Type', 'text/html')])

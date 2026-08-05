@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_company_form_inherit_salary_adjustment" model="ir.ui.view">
+        <field name="name">res.company.form.inherit.salary.adjustment</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Salary Adjustment Info" name="salary_adjustment_info">
+                    <group>
+                        <group string="GCC Identification">
+                            <field name="mol_est_id"/>
+                            <field name="cr_number"/>
+                            <field name="employer_civil_id"/>
+                        </group>
+                        <group string="Bank Information">
+                            <field name="company_bank_code"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,36 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="view_essl_location_tree" model="ir.ui.view">
-        <field name="name">essl.location.tree</field>
-        <field name="model">essl.location</field>
+    <record id="view_res_branch_essl_tree" model="ir.ui.view">
+        <field name="name">res.branch.essl.tree</field>
+        <field name="model">res.branch</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
-            <tree string="eSSL Locations">
-                <field name="name" string="Location"/>
-                <field name="serial_number"/>
-                <field name="active" widget="boolean_toggle"/>
+            <tree string="eSSL Locations (Branches)" create="false" delete="false">
+                <field name="name" string="Branch"/>
+                <field name="essl_serial_number" string="Serial Number"/>
             </tree>
         </field>
     </record>
 
-    <record id="view_essl_location_form" model="ir.ui.view">
-        <field name="name">essl.location.form</field>
-        <field name="model">essl.location</field>
+    <record id="view_res_branch_essl_form" model="ir.ui.view">
+        <field name="name">res.branch.essl.form</field>
+        <field name="model">res.branch</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
-            <form string="eSSL Location">
+            <form string="eSSL Location (Branch)" create="false" delete="false">
                 <sheet>
                     <div class="oe_title">
-                        <label for="name" class="oe_edit_only" string="Location"/>
+                        <label for="name" string="Branch"/>
                         <h1>
-                            <field name="name" placeholder="e.g. Main Office Gate"/>
+                            <field name="name" readonly="1"/>
                         </h1>
                     </div>
                     <group>
-                        <group>
-                            <field name="serial_number" placeholder="e.g. CGKK212060817"/>
-                        </group>
-                        <group>
-                            <field name="active"/>
-                        </group>
+                        <field name="essl_serial_number" placeholder="e.g. CGKK212060823"/>
                     </group>
                 </sheet>
             </form>
@@ -39,16 +35,30 @@
 
     <record id="action_essl_location" model="ir.actions.act_window">
         <field name="name">eSSL Location</field>
-        <field name="res_model">essl.location</field>
+        <field name="res_model">res.branch</field>
         <field name="view_mode">tree,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Register a new eSSL Location
+                eSSL Locations (Branches)
             </p>
             <p>
-                Configure the locations and serial numbers of biometric devices to pull attendance.
+                Configure the eSSL serial numbers of biometric devices directly on company branches.
             </p>
         </field>
+    </record>
+
+    <record id="action_essl_location_tree" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_res_branch_essl_tree"/>
+        <field name="act_window_id" ref="action_essl_location"/>
+    </record>
+
+    <record id="action_essl_location_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_res_branch_essl_form"/>
+        <field name="act_window_id" ref="action_essl_location"/>
     </record>
 
     <!-- Clear direct action from the parent Configuration menu so it acts as a dropdown container -->

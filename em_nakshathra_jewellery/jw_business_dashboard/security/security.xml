@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Category for Dashboard Settings -->
+        <record id="module_category_jw_business_dashboard" model="ir.module.category">
+            <field name="name">JW Dashboard Access</field>
+            <field name="sequence">50</field>
+        </record>
+
+        <!-- Group for Dashboard Access -->
+        <record id="group_jw_business_dashboard_user" model="res.groups">
+            <field name="name">User</field>
+            <field name="category_id" ref="module_category_jw_business_dashboard"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+
+        <!-- Group for Dashboard Administrator Access -->
+        <record id="group_jw_business_dashboard_admin" model="res.groups">
+            <field name="name">Administrator</field>
+            <field name="category_id" ref="module_category_jw_business_dashboard"/>
+            <field name="implied_ids" eval="[(4, ref('group_jw_business_dashboard_user'))]"/>
+        </record>
+    </data>
+</odoo>

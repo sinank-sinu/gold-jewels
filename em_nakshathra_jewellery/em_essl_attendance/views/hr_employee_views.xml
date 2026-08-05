@@ -7,6 +7,7 @@
         <field name="arch" type="xml">
             <xpath expr="//notebook/page[@name='hr_settings']/group/group[@name='active_group']" position="inside">
                 <field name="essl_emp_code"/>
+                <field name="essl_location_id"/>
             </xpath>
         </field>
     </record>
