@@ -92,7 +92,7 @@ export class SalesmanCartDashboard extends Component {
                 "stock.move.line",
                 smlDomain,
                 ["id", "label_id", "product_id", "quantity", "location_dest_id"],
-                { limit: 200 }
+                { limit: 200, order: "id desc" }
             );
             console.log("All stock.move.line in branch (done):", allMoveLines.length);
 
@@ -114,12 +114,20 @@ export class SalesmanCartDashboard extends Component {
                 }
             }
 
+            const allProductIds = [...new Set(allMoveLines.filter(ml => ml.product_id && ml.product_id[0]).map(ml => ml.product_id[0]))];
+
             // 6. Fetch current on-hand stock from stock.quant to verify stock still exists
+            let quantDomain = [
+                ["location_id", "in", branchLocationIds],
+                ["quantity", ">", 0]
+            ];
+            if (allProductIds.length > 0) {
+                quantDomain.push(["product_id", "in", allProductIds]);
+            }
             let quants = await this.orm.searchRead(
                 "stock.quant",
-                [["location_id", "in", branchLocationIds], ["quantity", ">", 0]],
-                ["product_id", "quantity", "location_id"],
-                { limit: 200 }
+                quantDomain,
+                ["product_id", "quantity", "location_id"]
             );
             const inStockProductIds = new Set(quants.map(q => q.product_id[0]));
             const inStockLabelIds = new Set();
