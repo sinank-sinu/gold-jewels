@@ -965,7 +965,7 @@
                     <!-- ═══════════════ SCHEMES KPI CARDS ═══════════════ -->
                     <div class="jw-kpi-grid">
                         <!-- Running Schemes -->
-                        <div class="jw-kpi-card jw-kpi-sales">
+                        <div class="jw-kpi-card jw-kpi-sales jw-clickable-card" t-on-click="() => this.openSchemeEnrollmentsByState('running')" title="View Running Schemes List">
                             <div class="jw-kpi-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -982,7 +982,7 @@
                         </div>
 
                         <!-- Completed Schemes -->
-                        <div class="jw-kpi-card jw-kpi-purchase">
+                        <div class="jw-kpi-card jw-kpi-purchase jw-clickable-card" t-on-click="() => this.openSchemeEnrollmentsByState('completed')" title="View Completed Schemes List">
                             <div class="jw-kpi-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
@@ -997,7 +997,7 @@
                         </div>
 
                         <!-- Redeemed Schemes -->
-                        <div class="jw-kpi-card jw-kpi-expense">
+                        <div class="jw-kpi-card jw-kpi-expense jw-clickable-card" t-on-click="() => this.openSchemeEnrollmentsByState('redeemed')" title="View Redeemed Schemes List">
                             <div class="jw-kpi-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="2" y="4" width="20" height="16" rx="2"/>
@@ -1013,7 +1013,7 @@
                         </div>
 
                         <!-- Total Schemes -->
-                        <div class="jw-kpi-card jw-kpi-inventory">
+                        <div class="jw-kpi-card jw-kpi-inventory jw-clickable-card" t-on-click="() => this.openSchemeEnrollmentsByState('all')" title="View All Schemes List">
                             <div class="jw-kpi-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="12" y1="1" x2="12" y2="23"/>
@@ -1038,7 +1038,7 @@
                                     <h3>Monthly Schemes Enrollment Trend</h3>
                                 </div>
                                 <div class="jw-chart-actions" style="display: flex; align-items: center; gap: 8px;">
-                                    <span class="jw-chart-badge">Bar Chart</span>
+                                    <span class="jw-chart-badge">Line Chart</span>
                                     <button class="jw-chart-btn" t-on-click="() => this.toggleChartMaximize('schemesTrendChart')" title="Full Screen" style="background: none; border: none; color: #64748b; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
@@ -1053,50 +1053,49 @@
                     </div>
 
                     <!-- ═══════════════ SCHEMES TABLES ═══════════════ -->
-                    <!-- Running Schemes Table -->
-                    <div class="jw-chart-card" style="margin-bottom: 24px;">
-                        <div class="jw-chart-header">
-                            <div class="jw-chart-title-group">
-                                <div class="jw-chart-dot jw-dot-blue"/>
-                                <h3>Recently Added Running Schemes (Today)</h3>
+
+                    <!-- Running, Completed & Redeemed Schemes Grid -->
+                    <div class="jw-tables-grid" style="margin-bottom: 24px;">
+                        <!-- Running Schemes -->
+                        <div class="jw-chart-card">
+                            <div class="jw-chart-header">
+                                <div class="jw-chart-title-group">
+                                    <div class="jw-chart-dot jw-dot-blue"/>
+                                    <h3>Running Schemes</h3>
+                                </div>
+                                <span class="jw-chart-badge">Table View</span>
                             </div>
-                            <span class="jw-chart-badge">Table View</span>
-                        </div>
-                        <div class="jw-table-container">
-                            <table class="jw-table">
-                                <thead>
-                                    <tr>
-                                        <th>Scheme Ref</th>
-                                        <th>Customer</th>
-                                        <th>Joining Date</th>
-                                        <th class="text-right">Total Paid</th>
-                                        <th class="text-right">Balance Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="state.schemesRunning.length === 0">
+                            <div class="jw-table-container">
+                                <table class="jw-table">
+                                    <thead>
                                         <tr>
-                                            <td colspan="5" class="text-center" style="color: #64748b; padding: 32px;">No running schemes found for today.</td>
+                                            <th>Scheme Ref</th>
+                                            <th>Customer</th>
+                                            <th>Joining Date</th>
+                                            <th class="text-right">Total Paid</th>
                                         </tr>
-                                    </t>
-                                    <t t-else="">
-                                        <t t-foreach="state.schemesRunning" t-as="item" t-key="item.id">
-                                            <tr t-on-click="() => this.openSchemeEnrollment(item.id)" style="cursor: pointer;" title="Click to open scheme">
-                                                <td class="jw-table-highlight"><t t-esc="item.ref"/></td>
-                                                <td><t t-esc="item.customer"/></td>
-                                                <td><t t-esc="item.date"/></td>
-                                                <td class="text-right font-medium"><t t-esc="item.total_paid.toLocaleString()"/> INR</td>
-                                                <td class="text-right font-medium text-rose-500"><t t-esc="item.balance.toLocaleString()"/> INR</td>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="!state.schemesRunning || state.schemesRunning.length === 0">
+                                            <tr>
+                                                <td colspan="4" class="text-center" style="color: #64748b; padding: 32px;">No running schemes found.</td>
                                             </tr>
                                         </t>
-                                    </t>
-                                </tbody>
-                            </table>
+                                        <t t-else="">
+                                            <t t-foreach="state.schemesRunning" t-as="item" t-key="item.id">
+                                                <tr t-on-click="() => this.openSchemeEnrollment(item.id)" style="cursor: pointer;" title="Click to open scheme">
+                                                    <td class="jw-table-highlight"><t t-esc="item.ref"/></td>
+                                                    <td><t t-esc="item.customer"/></td>
+                                                    <td><t t-esc="item.date"/></td>
+                                                    <td class="text-right font-medium" style="color: var(--jw-accent2);"><t t-esc="item.total_paid.toLocaleString()"/> INR</td>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Completed & Redeemed Schemes Grid -->
-                    <div class="jw-tables-grid-2" style="margin-bottom: 24px;">
                         <!-- Completed Schemes -->
                         <div class="jw-chart-card">
                             <div class="jw-chart-header">
