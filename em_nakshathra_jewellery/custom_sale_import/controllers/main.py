@@ -39,6 +39,90 @@ def _str(val):
     return str(val).strip() if val is not None else ''
 
 
+# Ensure company-aware internal picking type during old gold stock transfer
+try:
+    from odoo.addons.em_jewellery_management.models.sale_order import SaleOrder
+    orig_create_old_gold_stock = getattr(SaleOrder, '_create_old_gold_stock', None)
+
+    def _company_aware_create_old_gold_stock(self, og):
+        product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+        picking_type = (self.warehouse_id and self.warehouse_id.int_type_id) or self.env['stock.picking.type'].search([
+            ('code', '=', 'internal'),
+            ('company_id', '=', self.company_id.id),
+        ], limit=1) or self.env.ref('stock.picking_type_internal', raise_if_not_found=False)
+        
+        # Resolve company-scoped source location for old gold
+        source_location = self.env['stock.location'].search([
+            ('name', 'ilike', 'Old Gold'),
+            ('company_id', '=', self.company_id.id),
+        ], limit=1)
+        if not source_location:
+            parent_loc = (self.warehouse_id and self.warehouse_id.lot_stock_id) or self.branch_location_id
+            if parent_loc:
+                source_location = self.env['stock.location'].search([
+                    ('name', '=', 'Old Gold'),
+                    ('location_id', '=', parent_loc.id),
+                    ('company_id', '=', self.company_id.id),
+                ], limit=1)
+                if not source_location:
+                    source_location = self.env['stock.location'].sudo().create({
+                        'name': 'Old Gold',
+                        'location_id': parent_loc.id,
+                        'usage': 'internal',
+                        'company_id': self.company_id.id,
+                    })
+        if not source_location:
+            source_location = self.branch_location_id or (self.warehouse_id and self.warehouse_id.lot_stock_id) or self.env.ref('em_jewellery_management.loc_branch_old_gold', raise_if_not_found=False)
+        
+        uom = self.env.ref('uom.product_uom_gram', raise_if_not_found=False)
+
+        if not product or not picking_type or not source_location or not uom:
+            if orig_create_old_gold_stock:
+                return orig_create_old_gold_stock(self, og)
+            return
+
+        dest_location = self.branch_location_id or (self.warehouse_id and self.warehouse_id.lot_stock_id)
+        picking = self.env['stock.picking'].create({
+            'picking_type_id': picking_type.id,
+            'location_id': source_location.id,
+            'location_dest_id': dest_location.id if dest_location else source_location.id,
+            'origin': self.name,
+            'is_old_gold': True,
+            'sale_old_id': self.id,
+            'branch_id': self.branch_id.id if (hasattr(self, 'branch_id') and self.branch_id) else False,
+            'company_id': self.company_id.id,
+        })
+
+        move = self.env['stock.move'].create({
+            'product_id': product.id,
+            'name': f'Old Gold ({og.purity_id.name})' if og.purity_id else 'Old Gold',
+            'quantity': og.net_weight,
+            'purity_id': og.purity_id.id if og.purity_id else False,
+            'product_uom': uom.id,
+            'location_id': source_location.id,
+            'location_dest_id': dest_location.id if dest_location else source_location.id,
+            'picking_id': picking.id,
+            'company_id': self.company_id.id,
+        })
+
+        try:
+            picking.action_confirm()
+            picking.action_assign()
+            for move in picking.move_ids:
+                move.product_uom_qty = og.net_weight
+                move.quantity = og.net_weight
+                if hasattr(move, 'picked'):
+                    move.picked = True
+            picking.button_validate()
+        except Exception as e:
+            _logger.warning("Old gold picking validation warning: %s", e)
+        og.stock_move_id = move.id
+
+    SaleOrder._create_old_gold_stock = _company_aware_create_old_gold_stock
+except Exception as e:
+    _logger.warning("Could not patch SaleOrder._create_old_gold_stock: %s", e)
+
+
 class SaleImportController(http.Controller):
 
     @http.route('/import/sales_migration/form', type='http', auth='user')
@@ -81,7 +165,8 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
 
             c_m = {}
             for i, h in enumerate(headers):
-                if 'branch' in h: c_m['branch'] = i
+                if 'company' in h: c_m['company'] = i
+                elif 'branch' in h: c_m['branch'] = i
                 elif 'vou' in h and 'no' in h: c_m['vou_no'] = i
                 elif 'party' in h or 'cust' in h: c_m['party'] = i
                 elif 'date' in h: c_m['vou_date'] = i
@@ -141,6 +226,7 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
 
                 entry = {
                     'row_idx':          row_idx,
+                    'company_name':     _str(r[c_m.get('company', 38)]),
                     'branch_name':      _str(r[c_m.get('branch', 0)]),
                     'party_name':       _str(r[c_m.get('party', 2)]),
                     'vou_date':         vou_date,
@@ -357,42 +443,12 @@ if(tot>0)run(); else log('No records found.');
 
     # ── Bulk Lookup Cache ────────────────────────────────────────────────────
     def _build_cache(self, env, chunk, sales_data, og_data):
-        partner_names, salesman_names, branch_names = set(), set(), set()
-        barcodes, label_names, product_names = set(), set(), set()
-        purity_names, location_names = set(), set()
-
-        for vou in chunk:
-            for r in sales_data.get(vou, []):
-                if r.get('party_name'):       partner_names.add(r['party_name'].strip())
-                if r.get('salesman'):         salesman_names.add(r['salesman'].strip())
-                if r.get('branch_name'):      branch_names.add(r['branch_name'].strip())
-                if r.get('barcode_no'):       barcodes.add(r['barcode_no'].strip())
-                if r.get('label_no'):         label_names.add(r['label_no'].strip())
-                if r.get('product_var_name'): product_names.add(r['product_var_name'].strip())
-                if r.get('purity'):           purity_names.add(r['purity'].strip())
-                if r.get('src_loc_name'):     location_names.add(r['src_loc_name'].strip())
-            for og in og_data.get(vou, []):
-                if og.get('carat'):           purity_names.add(og['carat'].strip())
-                if og.get('branch_location'): location_names.add(og['branch_location'].strip())
-
-        partners  = env['res.partner'].search([('name', 'in', list(partner_names))]) if partner_names else env['res.partner'].browse()
-        salesmen  = env['res.users'].search([('name', 'in', list(salesman_names))]) if salesman_names else env['res.users'].browse()
-        branches  = env['res.branch'].search([('name', 'in', list(branch_names))]) if branch_names else env['res.branch'].browse()
+        companies = env['res.company'].search([])
         purities  = env['gold.purity'].search([])
-        labels_bc = env['product.label'].search([('barcode', 'in', list(barcodes))]) if barcodes else env['product.label'].browse()
-        labels_nm = env['product.label'].search([('name', 'in', list(label_names))]) if label_names else env['product.label'].browse()
-        all_labels = labels_bc | labels_nm
-        products  = env['product.product'].search([('name', 'in', list(product_names))]) if product_names else env['product.product'].browse()
 
         return {
-            'partners':   {p.name.strip(): p for p in partners},
-            'salesmen':   {u.name.strip(): u for u in salesmen},
-            'branches':   {b.name.strip(): b for b in branches},
+            'companies':  {c.name.strip(): c for c in companies},
             'purities':   {p.name.strip(): p for p in purities},
-            'labels_bc':  {l.barcode: l for l in all_labels if l.barcode},
-            'labels_nm':  {l.name: l for l in all_labels},
-            'products':   {p.name.strip(): p for p in products},
-            'locations':  {},
             '_journals':  {},
         }
 
@@ -416,13 +472,40 @@ if(tot>0)run(); else log('No records found.');
             raise UserError(f"No SALES rows for voucher {vou_no}")
 
         hdr_row = rows[0]
+        company_name    = hdr_row.get('company_name', '').strip()
         branch_name     = hdr_row.get('branch_name', '').strip()
         cust_name       = hdr_row.get('party_name', '').strip() or 'Unknown'
         date_str        = next((r.get('vou_date') for r in rows if r.get('vou_date')), '')
         source_loc_name = hdr_row.get('src_loc_name', '').strip()
         salesman_name   = hdr_row.get('salesman', '').strip()
 
-        # 1. Parse Date
+        # 1. Resolve Company from Excel
+        excel_company = self._find(cache['companies'], company_name)
+        if not excel_company and company_name:
+            excel_company = env['res.company'].search([
+                '|', ('name', '=ilike', company_name), ('name', 'ilike', company_name)
+            ], limit=1)
+            if excel_company:
+                cache['companies'][company_name] = excel_company
+
+        if not excel_company:
+            _logger.error("Voucher %s: Company '%s' could not be resolved in database. Voucher skipped.", vou_no, company_name)
+            skipped_list.append({
+                'row': hdr_row.get('row_idx', 0),
+                'customer': cust_name,
+                'label': vou_no,
+                'reason': f"Company '{company_name}' not found"
+            })
+            raise ValidationError(f"Company '{company_name}' not found in database for voucher {vou_no}")
+
+        # Set environment with the resolved company context
+        c_env = excel_company.with_company(excel_company).with_context(
+            allowed_company_ids=[excel_company.id],
+            company_id=excel_company.id,
+            default_company_id=excel_company.id,
+        ).env
+
+        # 2. Parse Date
         order_date = fields.Datetime.now()
         if date_str:
             try:
@@ -431,62 +514,134 @@ if(tot>0)run(); else log('No records found.');
             except Exception:
                 order_date = fields.Datetime.now()
 
-        # 2. Header Lookups
-        branch = self._find(cache['branches'], branch_name)
-        if not branch and branch_name:
-            branch = env['res.branch'].search([('name', 'ilike', branch_name)], limit=1)
-            if branch:
-                cache['branches'][branch_name] = branch
+        # 3. Company-Dependent Header Lookups
+        # Branch
+        branch = None
+        if branch_name:
+            branch_cache = cache.setdefault(f'branches_{excel_company.id}', {})
+            branch = self._find(branch_cache, branch_name)
+            if not branch:
+                branch = c_env['res.branch'].search([
+                    ('name', '=ilike', branch_name),
+                    ('company_id', '=', excel_company.id)
+                ], limit=1)
+                if not branch:
+                    branch = c_env['res.branch'].search([
+                        ('name', 'ilike', branch_name),
+                        ('company_id', '=', excel_company.id)
+                    ], limit=1)
+                if branch:
+                    branch_cache[branch_name] = branch
 
-        partner = self._find(cache['partners'], cust_name)
-        if not partner and cust_name:
-            partner = env['res.partner'].search([('name', '=ilike', cust_name)], limit=1)
-            if not partner:
-                partner = env['res.partner'].sudo().create({'name': cust_name, 'customer_rank': 1})
-            cache['partners'][cust_name] = partner
-
-        salesman = self._find(cache['salesmen'], salesman_name)
-        if not salesman and salesman_name:
-            salesman = env['res.users'].search([('name', '=ilike', salesman_name)], limit=1)
-            if not salesman:
-                login = salesman_name.strip().lower().replace(' ', '_')
-                if env['res.users'].search([('login', '=', login)]):
-                    login = f"{login}_{str(uuid.uuid4())[:4]}"
-                salesman = env['res.users'].sudo().create({
-                    'name': salesman_name,
-                    'login': login,
-                })
-            cache['salesmen'][salesman_name] = salesman
-
-        source_loc = self._find(cache['locations'], source_loc_name)
-        if not source_loc and source_loc_name:
-            source_loc = env['stock.location'].search([
-                '|', ('complete_name', 'ilike', source_loc_name), ('name', 'ilike', source_loc_name),
-                ('usage', '=', 'internal')
+        # Warehouse
+        warehouse = None
+        if branch:
+            warehouse = c_env['stock.warehouse'].sudo().search([
+                ('branch_id', '=', branch.id),
+                ('company_id', '=', excel_company.id),
             ], limit=1)
-            if source_loc:
-                cache['locations'][source_loc_name] = source_loc
-        if not source_loc and branch:
-            source_loc = branch.branch_location_id
+        if not warehouse:
+            warehouse = c_env['stock.warehouse'].sudo().search([
+                ('company_id', '=', excel_company.id),
+            ], limit=1)
 
-        # 3. Create Sale Order
+        # Partner
+        partner_cache = cache.setdefault(f'partners_{excel_company.id}', {})
+        partner = self._find(partner_cache, cust_name)
+        if partner:
+            partner = partner.with_env(c_env)
+            if not partner.exists():
+                partner = None
+        if not partner and cust_name:
+            partner = c_env['res.partner'].search([
+                ('name', '=ilike', cust_name),
+                ('company_id', 'in', [excel_company.id, False])
+            ], limit=1)
+            if not partner:
+                partner = c_env['res.partner'].sudo().create({
+                    'name': cust_name,
+                    'customer_rank': 1,
+                    'company_id': False
+                })
+            partner_cache[cust_name] = partner
+
+        # Salesman
+        salesman_cache = cache.setdefault(f'salesmen_{excel_company.id}', {})
+        salesman = self._find(salesman_cache, salesman_name)
+        if salesman:
+            salesman = salesman.with_env(c_env)
+            if not salesman.exists():
+                salesman = None
+        if not salesman and salesman_name:
+            salesman = c_env['res.users'].search([
+                ('name', '=ilike', salesman_name),
+                ('company_ids', 'in', [excel_company.id])
+            ], limit=1)
+            if not salesman:
+                salesman = c_env['res.users'].search([('name', '=ilike', salesman_name)], limit=1)
+                if salesman:
+                    if excel_company.id not in salesman.company_ids.ids:
+                        salesman.sudo().write({'company_ids': [(4, excel_company.id)]})
+                else:
+                    login = salesman_name.strip().lower().replace(' ', '_')
+                    if c_env['res.users'].search([('login', '=', login)]):
+                        login = f"{login}_{str(uuid.uuid4())[:4]}"
+                    salesman = c_env['res.users'].sudo().create({
+                        'name': salesman_name,
+                        'login': login,
+                        'company_id': excel_company.id,
+                        'company_ids': [(4, excel_company.id)],
+                    })
+            salesman_cache[salesman_name] = salesman
+
+        # Source Location
+        loc_cache = cache.setdefault(f'locations_{excel_company.id}', {})
+        source_loc = self._find(loc_cache, source_loc_name)
+        if not source_loc and source_loc_name:
+            source_loc = c_env['stock.location'].search([
+                ('complete_name', '=ilike', source_loc_name),
+                ('usage', '=', 'internal'),
+                ('company_id', '=', excel_company.id)
+            ], limit=1)
+            if not source_loc:
+                source_loc = c_env['stock.location'].search([
+                    ('name', '=ilike', source_loc_name),
+                    ('usage', '=', 'internal'),
+                    ('company_id', '=', excel_company.id)
+                ], limit=1)
+            if not source_loc:
+                source_loc = c_env['stock.location'].search([
+                    '|', ('complete_name', 'ilike', source_loc_name), ('name', 'ilike', source_loc_name),
+                    ('usage', '=', 'internal'),
+                    ('company_id', '=', excel_company.id)
+                ], limit=1)
+            if not source_loc:
+                source_loc = c_env['stock.location'].search([
+                    '|', ('complete_name', 'ilike', source_loc_name), ('name', 'ilike', source_loc_name),
+                    ('usage', '=', 'internal'),
+                    ('company_id', '=', False)
+                ], limit=1)
+            if source_loc:
+                loc_cache[source_loc_name] = source_loc
+
+        if not source_loc and branch and branch.branch_location_id:
+            if not branch.branch_location_id.company_id or branch.branch_location_id.company_id.id == excel_company.id:
+                source_loc = branch.branch_location_id
+
+        if not source_loc and warehouse and warehouse.lot_stock_id:
+            source_loc = warehouse.lot_stock_id
+
+        # 4. Create Sale Order
         order_vals = {
-            'partner_id': partner.id if partner else False,
-            'date_order': order_date,
-            'origin':     vou_no,
+            'partner_id':  partner.id if partner else False,
+            'date_order':  order_date,
+            'origin':      vou_no,
+            'company_id':  excel_company.id,
         }
         if branch:
             order_vals['branch_id'] = branch.id
-            warehouse = env['stock.warehouse'].sudo().search([
-                ('branch_id', '=', branch.id),
-                ('company_id', '=', env.company.id),
-            ], limit=1)
-            if not warehouse:
-                warehouse = env['stock.warehouse'].sudo().search([
-                    ('company_id', '=', env.company.id),
-                ], limit=1)
-            if warehouse:
-                order_vals['warehouse_id'] = warehouse.id
+        if warehouse:
+            order_vals['warehouse_id'] = warehouse.id
         if salesman:
             order_vals['user_id'] = salesman.id
         if source_loc:
@@ -508,9 +663,13 @@ if(tot>0)run(); else log('No records found.');
         if og_amt > 0:
             order_vals['has_old_gold'] = True
 
-        order = env['sale.order'].sudo().create(order_vals)
+        order = c_env['sale.order'].sudo().create(order_vals)
 
-        # 4. Create Sale Order Lines
+        # 5. Create Sale Order Lines
+        label_bc_cache = cache.setdefault(f'labels_bc_{excel_company.id}', {})
+        label_nm_cache = cache.setdefault(f'labels_nm_{excel_company.id}', {})
+        prod_cache = cache.setdefault(f'products_{excel_company.id}', {})
+
         for row in rows:
             product_var_name = row.get('product_var_name', '').strip()
             label_ref        = row.get('label_no', '').strip()
@@ -529,29 +688,78 @@ if(tot>0)run(); else log('No records found.');
             if not label_ref and not barcode_no and not product_var_name:
                 continue
 
-            label = (cache['labels_bc'].get(barcode_no) or cache['labels_nm'].get(label_ref))
+            # Search Label scoped to excel_company
+            label = None
+            if barcode_no:
+                label = label_bc_cache.get(barcode_no)
+                if not label:
+                    label = c_env['product.label'].search([
+                        ('barcode', '=', barcode_no),
+                        ('company_id', 'in', [excel_company.id, False])
+                    ], limit=1)
+                    if label:
+                        label_bc_cache[barcode_no] = label
+
             if not label and label_ref:
-                label = env['product.label'].search(['|', ('name', '=ilike', label_ref), ('barcode', '=ilike', label_ref)], limit=1)
-                if label:
-                    cache['labels_nm'][label_ref] = label
+                label = label_nm_cache.get(label_ref)
+                if not label:
+                    label = c_env['product.label'].search([
+                        ('name', '=ilike', label_ref),
+                        ('company_id', 'in', [excel_company.id, False])
+                    ], limit=1)
+                    if not label:
+                        label = c_env['product.label'].search([
+                            ('barcode', '=ilike', label_ref),
+                            ('company_id', 'in', [excel_company.id, False])
+                        ], limit=1)
+                    if label:
+                        label_nm_cache[label_ref] = label
 
             purity = cache['purities'].get(purity_name)
             if not purity and purity_name:
-                purity = env['gold.purity'].search([('name', 'ilike', purity_name)], limit=1)
+                purity = c_env['gold.purity'].search([('name', 'ilike', purity_name)], limit=1)
                 if purity:
                     cache['purities'][purity_name] = purity
             if not purity and label:
                 purity = label.purity_id
 
+            # Resolve product strictly scoped to excel_company
             line_product = None
-            if label:
-                line_product = label.product_id or (label.product_tmpl_id.product_variant_id if label.product_tmpl_id else None)
+            if label and label.product_id:
+                if not label.product_id.company_id or label.product_id.company_id.id == excel_company.id:
+                    line_product = label.product_id
+            if not line_product and label and label.product_tmpl_id:
+                var = label.product_tmpl_id.product_variant_id
+                if var and (not var.company_id or var.company_id.id == excel_company.id):
+                    line_product = var
+
             if not line_product and product_var_name:
-                line_product = cache['products'].get(product_var_name)
+                line_product = self._find(prod_cache, product_var_name)
                 if not line_product:
-                    line_product = env['product.product'].search(['|', ('name', 'ilike', product_var_name), ('display_name', 'ilike', product_var_name)], limit=1)
+                    line_product = c_env['product.product'].search([
+                        ('name', '=ilike', product_var_name),
+                        ('company_id', 'in', [excel_company.id, False])
+                    ], limit=1)
+                    if not line_product:
+                        line_product = c_env['product.product'].search([
+                            ('default_code', '=ilike', product_var_name),
+                            ('company_id', 'in', [excel_company.id, False])
+                        ], limit=1)
+                    if not line_product:
+                        line_product = c_env['product.product'].search([
+                            '|', ('name', 'ilike', product_var_name), ('default_code', 'ilike', product_var_name),
+                            ('company_id', 'in', [excel_company.id, False])
+                        ], limit=1)
                     if line_product:
-                        cache['products'][product_var_name] = line_product
+                        prod_cache[product_var_name] = line_product
+
+            if not line_product and label:
+                prod_name_to_search = label.product_id.name if label.product_id else (label.product_tmpl_id.name if label.product_tmpl_id else None)
+                if prod_name_to_search:
+                    line_product = c_env['product.product'].search([
+                        ('name', '=ilike', prod_name_to_search),
+                        ('company_id', 'in', [excel_company.id, False])
+                    ], limit=1)
 
             if label_ref and not label and not line_product:
                 skipped_list.append({
@@ -562,7 +770,7 @@ if(tot>0)run(); else log('No records found.');
                 })
 
             if not line_product:
-                _logger.warning("Voucher %s row %s: Label %s / product %s could not be resolved", vou_no, row.get('row_idx', 0), label_ref or barcode_no, product_var_name)
+                _logger.warning("Voucher %s row %s: Label %s / product %s could not be resolved for Company %s", vou_no, row.get('row_idx', 0), label_ref or barcode_no, product_var_name, excel_company.id)
                 continue
 
             if label and not label.product_id and line_product:
@@ -572,15 +780,15 @@ if(tot>0)run(); else log('No records found.');
                     pass
 
             excel_tax_str = _str(row.get('taxes', ''))
-            taxes = env['account.tax']
+            taxes = c_env['account.tax']
             if excel_tax_str:
-                taxes = env['account.tax'].search([
+                taxes = c_env['account.tax'].search([
                     ('name', 'ilike', excel_tax_str),
                     ('type_tax_use', '=', 'sale'),
-                    ('company_id', '=', env.company.id)
+                    ('company_id', '=', excel_company.id)
                 ], limit=1)
             if not taxes:
-                taxes = line_product.taxes_id.filtered(lambda t: t.company_id == env.company)
+                taxes = line_product.taxes_id.filtered(lambda t: t.company_id.id in (excel_company.id, False))
 
             line_vals = {
                 'order_id':               order.id,
@@ -599,7 +807,7 @@ if(tot>0)run(); else log('No records found.');
                 'other_weight_amount':    other_charge,
                 'tax_id':                 [(6, 0, taxes.ids)] if taxes else [],
             }
-            line = env['sale.order.line'].sudo().create(line_vals)
+            line = c_env['sale.order.line'].sudo().create(line_vals)
 
             if hasattr(line, '_onchange_label_id'):
                 line._onchange_label_id()
@@ -617,7 +825,7 @@ if(tot>0)run(); else log('No records found.');
                 line.sudo().write(line_updates)
 
             if metal_amt > 0:
-                env.cr.execute("UPDATE sale_order_line SET metal_amount = %s WHERE id = %s", (metal_amt, line.id))
+                c_env.cr.execute("UPDATE sale_order_line SET metal_amount = %s WHERE id = %s", (metal_amt, line.id))
                 line.invalidate_recordset(['metal_amount'])
 
             if hasattr(line, '_compute_subtotal'):
@@ -630,7 +838,7 @@ if(tot>0)run(); else log('No records found.');
                 line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
             except Exception: pass
 
-        # 5. Apply Old Gold
+        # 6. Apply Old Gold
         og_branch_loc_final = source_loc
         if og_amt > 0:
             if not og_infos:
@@ -643,17 +851,17 @@ if(tot>0)run(); else log('No records found.');
                     continue
                 og_purity_name = og_info.get('carat', '') or first_purity_name
 
-                og_purity = env['gold.purity']
+                og_purity = c_env['gold.purity']
                 if og_purity_name:
                     og_purity = cache['purities'].get(og_purity_name)
                     if not og_purity:
-                        og_purity = env['gold.purity'].search([('name', 'ilike', og_purity_name)], limit=1)
+                        og_purity = c_env['gold.purity'].search([('name', 'ilike', og_purity_name)], limit=1)
                         if og_purity:
                             cache['purities'][og_purity_name] = og_purity
                 if not og_purity and order.order_line:
                     og_purity = order.order_line[0].purity_id
                 if not og_purity:
-                    og_purity = env['gold.purity'].search([], limit=1)
+                    og_purity = c_env['gold.purity'].search([], limit=1)
 
                 if not og_purity:
                     _logger.warning("Voucher %s: No purity found for OG – skipping OG line", vou_no)
@@ -668,19 +876,29 @@ if(tot>0)run(); else log('No records found.');
                     og_rate = amt / og_net if og_net > 0 else 0.0
 
                 og_branch_loc_name = og_info.get('branch_location', '')
-                og_branch_loc = env['stock.location']
+                og_branch_loc = c_env['stock.location']
                 if og_branch_loc_name:
-                    og_branch_loc = env['stock.location'].search([
+                    og_branch_loc = c_env['stock.location'].search([
                         ('complete_name', 'ilike', og_branch_loc_name),
                         ('usage', '=', 'internal'),
+                        ('company_id', '=', excel_company.id),
                     ], limit=1)
+                    if not og_branch_loc:
+                        og_branch_loc = c_env['stock.location'].search([
+                            ('complete_name', 'ilike', og_branch_loc_name),
+                            ('usage', '=', 'internal'),
+                            ('company_id', '=', False),
+                        ], limit=1)
                 if not og_branch_loc and source_loc:
                     og_branch_loc = source_loc
+                if not og_branch_loc and warehouse and warehouse.lot_stock_id:
+                    og_branch_loc = warehouse.lot_stock_id
+
                 if og_branch_loc:
                     og_branch_loc_final = og_branch_loc
                     order.branch_location_id = og_branch_loc.id
 
-                env['sale.old.gold.line'].sudo().create({
+                c_env['sale.old.gold.line'].sudo().create({
                     'sale_id':      order.id,
                     'purity_id':    og_purity.id,
                     'gross_weight': og_gross or (amt / og_rate if og_rate else 0.0),
@@ -690,7 +908,12 @@ if(tot>0)run(); else log('No records found.');
                 })
 
             try:
-                order.with_context(skip_old_gold_amount_compute=True).action_apply_old_gold()
+                order.with_company(excel_company).with_context(
+                    skip_old_gold_amount_compute=True,
+                    default_company_id=excel_company.id,
+                    company_id=excel_company.id,
+                    allowed_company_ids=[excel_company.id],
+                ).action_apply_old_gold()
                 if order_date:
                     date_only = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
                     if order.purchase_order_id:
@@ -699,14 +922,14 @@ if(tot>0)run(); else log('No records found.');
                             'date_approve': order_date,
                         })
                     if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
-                        env.cr.execute("""
+                        c_env.cr.execute("""
                             UPDATE account_move 
                             SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
                             WHERE id = %s
                         """, (date_only, date_only, date_only, date_only, order.old_gold_bill_id.id))
                     elif order.purchase_order_id and order.purchase_order_id.invoice_ids:
                         for bill in order.purchase_order_id.invoice_ids:
-                            env.cr.execute("""
+                            c_env.cr.execute("""
                                 UPDATE account_move 
                                 SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
                                 WHERE id = %s
@@ -714,18 +937,18 @@ if(tot>0)run(); else log('No records found.');
             except Exception as e:
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
 
-        # 6. Apply Scheme
+        # 7. Apply Scheme
         if scheme_amt > 0:
             sch_info = scheme_data.get(vou_no, {})
             ticket_no = sch_info.get('ticket_no', '')
-            existing_scheme = env['jewellery.scheme.enrollment'].search([
+            existing_scheme = c_env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', partner.id),
                 ('ticket_number', '=', ticket_no),
                 ('state', '=', 'completed'),
                 ('is_redeemed', '=', False),
             ], limit=1)
             if not existing_scheme and ticket_no:
-                existing_scheme = env['jewellery.scheme.enrollment'].search([
+                existing_scheme = c_env['jewellery.scheme.enrollment'].search([
                     ('partner_id', '=', partner.id),
                     ('ticket_number', '=', ticket_no),
                 ], limit=1)
@@ -734,18 +957,106 @@ if(tot>0)run(); else log('No records found.');
                 order.apply_scheme = True
                 order.active_scheme_id = existing_scheme.id
                 try:
-                    order.action_apply_scheme()
+                    order.with_company(excel_company).with_context(
+                        default_company_id=excel_company.id,
+                        company_id=excel_company.id,
+                        allowed_company_ids=[excel_company.id],
+                    ).action_apply_scheme()
                 except Exception as e:
                     _logger.warning("Voucher %s: Scheme apply failed: %s", vou_no, e)
 
-        # 7. Confirm Order
+        # 8. Strict Pre-Confirmation Company Validation & Logging
+        order_comp = order.company_id.id
+        wh_comp = order.warehouse_id.company_id.id if order.warehouse_id else None
+        picking_type = order.warehouse_id.out_type_id if order.warehouse_id else None
+        picking_type_comp = picking_type.company_id.id if (picking_type and picking_type.company_id) else None
+        src_loc = order.branch_location_id or (order.warehouse_id.lot_stock_id if order.warehouse_id else None)
+        src_loc_comp = src_loc.company_id.id if (src_loc and src_loc.company_id) else None
+        dest_loc = (order.partner_id.property_stock_customer if order.partner_id else None) or c_env.ref('stock.stock_location_customers', raise_if_not_found=False)
+        dest_loc_comp = dest_loc.company_id.id if (dest_loc and dest_loc.company_id) else None
+        branch_comp = order.branch_id.company_id.id if (order.branch_id and order.branch_id.company_id) else None
+
+        invalid_prod_msgs = []
+        prod_names = []
+        for line in order.order_line:
+            p = line.product_id
+            if p:
+                prod_names.append(p.display_name)
+                if p.company_id and p.company_id.id != excel_company.id:
+                    invalid_prod_msgs.append(f"Product '{p.display_name}' belongs to Company '{p.company_id.name}' (ID: {p.company_id.id})")
+
+        # Logging as strictly required
+        _logger.info(
+            "Voucher: %s\n"
+            "Company from Excel: %s\n"
+            "Sale Order Company: %s\n"
+            "Warehouse: %s\n"
+            "Picking Type: %s\n"
+            "Source Location: %s\n"
+            "Destination Location: %s\n"
+            "Product: %s\n"
+            "Current Context Company: %s\n"
+            "Allowed Companies: %s",
+            vou_no,
+            excel_company.name,
+            order.company_id.name if order.company_id else 'None',
+            order.warehouse_id.name if order.warehouse_id else 'None',
+            picking_type.name if picking_type else 'None',
+            src_loc.complete_name if src_loc else 'None',
+            dest_loc.complete_name if dest_loc else 'None',
+            ', '.join(prod_names) if prod_names else 'None',
+            c_env.company.name if c_env.company else 'None',
+            c_env.context.get('allowed_company_ids', [])
+        )
+
+        mismatches = []
+        if not order.warehouse_id:
+            mismatches.append(f"No warehouse found for Company '{excel_company.name}' (ID: {excel_company.id})")
+        elif wh_comp != excel_company.id:
+            mismatches.append(f"Warehouse '{order.warehouse_id.name}' belongs to Company ID {wh_comp}, expected {excel_company.id}")
+
+        if picking_type_comp and picking_type_comp != excel_company.id:
+            mismatches.append(f"Picking Type '{picking_type.name}' belongs to Company ID {picking_type_comp}, expected {excel_company.id}")
+
+        if src_loc_comp and src_loc_comp != excel_company.id:
+            mismatches.append(f"Source Location '{src_loc.complete_name}' belongs to Company ID {src_loc_comp}, expected {excel_company.id}")
+
+        if dest_loc_comp and dest_loc_comp != excel_company.id:
+            mismatches.append(f"Destination Location '{dest_loc.complete_name}' belongs to Company ID {dest_loc_comp}, expected {excel_company.id}")
+
+        if branch_comp and branch_comp != excel_company.id:
+            mismatches.append(f"Branch '{order.branch_id.name}' belongs to Company ID {branch_comp}, expected {excel_company.id}")
+
+        if invalid_prod_msgs:
+            mismatches.extend(invalid_prod_msgs)
+
+        if mismatches:
+            error_details = "\n".join(mismatches)
+            _logger.error(
+                "Company mismatch detected for voucher %s:\n%s\nVoucher skipped.",
+                vou_no, error_details
+            )
+            skipped_list.append({
+                'row': hdr_row.get('row_idx', 0),
+                'customer': cust_name,
+                'label': vou_no,
+                'reason': f"Company mismatch: {'; '.join(mismatches)}"
+            })
+            raise ValidationError(f"Company mismatch on voucher {vou_no}:\n{error_details}")
+
+        # 9. Confirm Order
         original_date = order.date_order
-        order.with_context(mail_notrack=True).action_confirm()
+        order.with_company(excel_company).with_context(
+            mail_notrack=True,
+            default_company_id=excel_company.id,
+            company_id=excel_company.id,
+            allowed_company_ids=[excel_company.id],
+        ).action_confirm()
         if original_date:
             order.sudo().write({'date_order': original_date})
-            env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (original_date, order.id))
+            c_env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (original_date, order.id))
 
-        # 8. Validate Stock Delivery
+        # 10. Validate Stock Delivery
         for picking in order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
             if order_date:
                 picking.sudo().write({'scheduled_date': order_date})
@@ -758,23 +1069,29 @@ if(tot>0)run(); else log('No records found.');
                 if hasattr(move, 'picked'):
                     move.picked = True
             try:
-                res = picking.with_context(skip_backorder=True, cancel_backorder=True).button_validate()
+                res = picking.with_company(excel_company).with_context(
+                    skip_backorder=True,
+                    cancel_backorder=True,
+                    default_company_id=excel_company.id,
+                    company_id=excel_company.id,
+                    allowed_company_ids=[excel_company.id],
+                ).button_validate()
                 if isinstance(res, dict):
                     model = res.get('res_model', '')
                     ctx = res.get('context', {})
                     if model == 'stock.immediate.transfer':
-                        wiz = env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                        wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                         wiz.process()
                     elif model == 'stock.backorder.confirmation':
-                        wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                        wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                         wiz.process()
             except Exception as e:
                 _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
 
             if order_date:
-                env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
-                env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
-                env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
 
         # Validate Old Gold Delivery
         if order.purchase_order_id:
@@ -790,29 +1107,39 @@ if(tot>0)run(); else log('No records found.');
                     if hasattr(move, 'picked'):
                         move.picked = True
                 try:
-                    res = picking.with_context(skip_backorder=True, cancel_backorder=True).button_validate()
+                    res = picking.with_company(excel_company).with_context(
+                        skip_backorder=True,
+                        cancel_backorder=True,
+                        default_company_id=excel_company.id,
+                        company_id=excel_company.id,
+                        allowed_company_ids=[excel_company.id],
+                    ).button_validate()
                     if isinstance(res, dict):
                         model = res.get('res_model', '')
                         ctx = res.get('context', {})
                         if model == 'stock.immediate.transfer':
-                            wiz = env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                             wiz.process()
                         elif model == 'stock.backorder.confirmation':
-                            wiz = env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                             wiz.process()
                 except Exception as e:
                     _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
 
                 if order_date:
-                    env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
-                    env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
-                    env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
 
-        # 9. Invoice
+        # 11. Invoice
         if not order.order_line:
             return f"SO {order.name} OK (No Lines)"
 
-        invoice = order._create_invoices()
+        invoice = order.with_company(excel_company).with_context(
+            default_company_id=excel_company.id,
+            company_id=excel_company.id,
+            allowed_company_ids=[excel_company.id],
+        )._create_invoices()
         if not invoice:
             return f"SO {order.name} OK (No Invoice)"
 
@@ -837,22 +1164,22 @@ if(tot>0)run(); else log('No records found.');
             except Exception as e:
                 _logger.warning("Voucher %s: Customer Payment creation failed: %s", vou_no, e)
 
-        # 10. Payments
-        self._register_payments(env, order, invoice, rows, order_date, cache)
+        # 12. Payments
+        self._register_payments(c_env, order, invoice, rows, order_date, cache, excel_company)
 
         return f"SO {order.name} OK"
 
     # ── Payment Helper ────────────────────────────────────────────────────────
-    def _register_payments(self, env, order, invoice, rows, pay_date, cache):
+    def _register_payments(self, env, order, invoice, rows, pay_date, cache, excel_company):
         branch = order.branch_id
         journal_cache = cache.setdefault('_journals', {})
 
         def find_journal(jtype, hint=''):
-            key = f"{jtype}_{hint}_{branch.id if branch else 0}"
+            key = f"{excel_company.id}_{jtype}_{hint}_{branch.id if branch else 0}"
             if key in journal_cache:
                 return journal_cache[key]
 
-            base_domain = [('type', '=', jtype), ('company_id', '=', env.company.id)]
+            base_domain = [('type', '=', jtype), ('company_id', '=', excel_company.id)]
             hint_domain = [('name', 'ilike', hint)] if hint else []
             branch_domain = [('branch_id', '=', branch.id)] if branch else []
 
@@ -876,7 +1203,7 @@ if(tot>0)run(); else log('No records found.');
                 return
             journal = find_journal(jtype, hint)
             if not journal:
-                _logger.warning("Voucher %s: Journal not found type=%s hint=%s", invoice.ref, jtype, hint)
+                _logger.warning("Voucher %s: Journal not found type=%s hint=%s for Company %s", invoice.ref, jtype, hint, excel_company.id)
                 return
             try:
                 wiz_vals = {
