@@ -67,7 +67,7 @@ def run_import_in_background(db_name, uid, file_path):
     
     registry = odoo.registry(db_name)
     with registry.cursor() as cr:
-        env = odoo.api.Environment(cr, uid, {})
+        env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
         
         try:
                 workbook = openpyxl.load_workbook(file_path, data_only=True)
@@ -82,8 +82,16 @@ def run_import_in_background(db_name, uid, file_path):
                 count_scheme = 0
                 count_lines = 0
                 _account_cache = {}
+                
+                # Initialize Progress Tracking
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', '0')
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', str(sheet.max_row))
 
                 for row_idx in range(2, sheet.max_row + 1):
+                    # Periodically update progress
+                    if row_idx % 100 == 0:
+                        env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', str(row_idx))
+                        
                     # Periodically commit and clear cache to free memory!
                     if row_idx % 500 == 0:
                         env.cr.commit()
@@ -98,7 +106,7 @@ def run_import_in_background(db_name, uid, file_path):
                         with env.cr.savepoint():
                             current_ticket_raw = get_v('Ticket Number')
                             if current_ticket_raw:
-                                last_valid_ticket = str(current_ticket_raw).strip()
+                                last_valid_ticket = str(current_ticket_raw).strip().upper()
 
                             if not last_valid_ticket:
                                 continue
@@ -122,7 +130,13 @@ def run_import_in_background(db_name, uid, file_path):
                                         active_raw = get_v('Active')
                                         is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
 
-                                        scheme_id = env['jewellery.scheme.enrollment'].create({
+                                        journal_name = get_v('Scheme Line/Journal')
+                                        journal = False
+                                        if journal_name:
+                                            journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                            journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+
+                                        scheme_vals = {
                                             'name': get_v('Name'),
                                             'ticket_number': last_valid_ticket,
                                             'partner_id': partner.id,
@@ -136,7 +150,11 @@ def run_import_in_background(db_name, uid, file_path):
                                             'state': str(get_v('State')).lower() if get_v('State') else 'draft',
                                             'active': is_active,
                                             'nominee': get_v('Nominee'),
-                                        }).id
+                                        }
+                                        if journal and hasattr(journal, 'branch_id') and journal.branch_id:
+                                            scheme_vals['branch_id'] = journal.branch_id.id
+                                            
+                                        scheme_id = env['jewellery.scheme.enrollment'].create(scheme_vals).id
                                         count_scheme += 1
 
                                 if scheme_id:
@@ -153,10 +171,25 @@ def run_import_in_background(db_name, uid, file_path):
                                     _logger.warning("Row %s silently skipped! scheme_id: %s, date: %s, amount: %s", row_idx, scheme_id, line_date, line_amount_f)
                                 continue
 
+                            # Duplicate protection
+                            t_id = get_v('Scheme Line/Transaction ID')
+                            dup_domain = [
+                                ('enrollment_id', '=', scheme_id),
+                                ('date', '=', line_date),
+                                ('amount', '=', line_amount_f)
+                            ]
+                            if t_id:
+                                dup_domain.append(('transaction_id', '=', str(t_id)))
+                            
+                            existing_installment = env['jewellery.scheme.installment'].search(dup_domain, limit=1)
+                            if existing_installment:
+                                continue
+
                             journal_name = get_v('Scheme Line/Journal')
                             journal = False
                             if journal_name:
-                                journal = env['account.journal'].search([('name', '=', str(journal_name).strip())], limit=1)
+                                journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
                                 
                             excel_move_name = get_v('Scheme Line/Move')
                             excel_move_id = False
@@ -167,12 +200,14 @@ def run_import_in_background(db_name, uid, file_path):
 
                             if not excel_move_id and journal and line_amount_f:
                                 if journal.id not in _account_cache:
-                                    ob_acc = env['account.account'].search([
-                                        ('company_id', '=', journal.company_id.id),
-                                        '|',
-                                        ('name', 'ilike', 'opening balance'),
-                                        ('account_type', '=', 'current_assets'),
-                                    ], limit=1)
+                                    ob_acc = journal.default_account_id
+                                    if not ob_acc:
+                                        ob_acc = env['account.account'].search([
+                                            ('company_id', '=', journal.company_id.id),
+                                            '|',
+                                            ('name', 'ilike', 'opening balance'),
+                                            ('account_type', '=', 'current_assets'),
+                                        ], limit=1)
                                     dr_acc = env['account.account'].search([
                                         ('company_id', '=', journal.company_id.id),
                                         '|',
@@ -192,7 +227,12 @@ def run_import_in_background(db_name, uid, file_path):
                                         'date': line_date or fields.Date.today(),
                                         'ref': f"Scheme Payment: {last_valid_ticket}",
                                         'move_type': 'entry',
-                                        'line_ids': [
+                                        'company_id': journal.company_id.id,
+                                    }
+                                    if hasattr(journal, 'branch_id') and journal.branch_id:
+                                        move_vals['branch_id'] = journal.branch_id.id
+                                        
+                                    move_vals['line_ids'] = [
                                             (0, 0, {
                                                 'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
                                                 'account_id': opening_balance_account.id,
@@ -207,8 +247,7 @@ def run_import_in_background(db_name, uid, file_path):
                                                 'credit': line_amount_f,
                                                 'partner_id': line_partner_id,
                                             }),
-                                        ],
-                                    }
+                                        ]
                                     new_move = env['account.move'].create(move_vals)
                                     new_move.action_post()
                                     generated_move_id = new_move.id
@@ -230,10 +269,12 @@ def run_import_in_background(db_name, uid, file_path):
                         continue
 
                 env.cr.commit()
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'DONE')
                 _logger.info("Background Import Complete. Enrollments: %s, Installments: %s", count_scheme, count_lines)
 
         except Exception as e:
             env.cr.rollback()
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'ERROR: ' + str(e))
             _logger.error("Background Import Failure: %s", str(e))
 
 
@@ -254,16 +295,81 @@ class SchemeImportController(http.Controller):
         thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path))
         thread.start()
 
-        html_content = (
-            "<html><head><style>"
-            "body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f9f9f9; }"
-            "h1 { color: #28a745; }"
-            ".msg { font-size: 18px; color: #555; }"
-            "</style></head><body>"
-            "<h1>Import Started in Background!</h1>"
-            "<p class='msg'>The 16,000+ rows are now being processed in the background.</p>"
-            "<p class='msg'>You can safely close this tab. The import will not time out.</p>"
-            "<p class='msg'>Check your Odoo terminal logs to see the live progress!</p>"
-            "</body></html>"
-        )
+        html_content = """
+            <html>
+            <head>
+                <style>
+                    body { font-family: 'Inter', Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5; color: #333; }
+                    h1 { color: #2c3e50; font-weight: 600; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                    .msg { font-size: 16px; color: #666; margin-bottom: 20px; }
+                    .progress-wrapper { width: 100%; background-color: #e9ecef; border-radius: 20px; overflow: hidden; margin: 30px 0; height: 30px; position: relative; }
+                    .progress-bar { height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); width: 0%; transition: width 0.5s ease-in-out; }
+                    .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
+                    .status { font-size: 18px; font-weight: bold; color: #007bff; margin-top: 10px; }
+                    .success-msg { display: none; color: #28a745; font-size: 20px; font-weight: bold; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Importing Scheme Receipts</h1>
+                    <p class="msg">The 16,000+ rows are being processed in the background.</p>
+                    
+                    <div class="progress-wrapper">
+                        <div class="progress-bar" id="progressBar"></div>
+                        <div class="progress-text" id="progressText">0%</div>
+                    </div>
+                    
+                    <div class="status" id="statusText">Initializing...</div>
+                    <div class="success-msg" id="successMsg">🎉 Import Completed Successfully!</div>
+                </div>
+
+                <script>
+                    function fetchProgress() {
+                        fetch('/import/schemes/progress')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.progress === 'DONE') {
+                                    document.getElementById('progressBar').style.width = '100%';
+                                    document.getElementById('progressText').innerText = '100%';
+                                    document.getElementById('statusText').innerText = 'Finished';
+                                    document.getElementById('successMsg').style.display = 'block';
+                                } else if (data.progress.startsWith('ERROR')) {
+                                    document.getElementById('statusText').innerText = data.progress;
+                                    document.getElementById('statusText').style.color = '#dc3545';
+                                    document.getElementById('progressBar').style.background = '#dc3545';
+                                } else {
+                                    let current = parseInt(data.progress) || 0;
+                                    let total = parseInt(data.total) || 1;
+                                    let percent = Math.min(100, Math.round((current / total) * 100));
+                                    
+                                    document.getElementById('progressBar').style.width = percent + '%';
+                                    document.getElementById('progressText').innerText = percent + '%';
+                                    document.getElementById('statusText').innerText = 'Processing row ' + current + ' of ' + total;
+                                    
+                                    // Poll again in 2 seconds
+                                    setTimeout(fetchProgress, 2000);
+                                }
+                            })
+                            .catch(err => {
+                                console.error('Error fetching progress:', err);
+                                setTimeout(fetchProgress, 3000);
+                            });
+                    }
+                    // Start polling
+                    setTimeout(fetchProgress, 1000);
+                </script>
+            </body>
+            </html>
+        """
         return request.make_response(html_content, headers=[('Content-Type', 'text/html')])
+
+    @http.route('/import/schemes/progress', type='http', auth='public')
+    def check_import_progress(self, **kwargs):
+        progress = request.env['ir.config_parameter'].sudo().get_param('scheme_receipt_import_progress', '0')
+        total = request.env['ir.config_parameter'].sudo().get_param('scheme_receipt_import_total', '1')
+        
+        # Escape any potential quotes in error messages
+        progress = progress.replace('"', '\\"')
+        
+        return request.make_response(f'{{"progress": "{progress}", "total": "{total}"}}', headers=[('Content-Type', 'application/json')])
