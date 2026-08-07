@@ -1592,10 +1592,6 @@ class JwBusinessDashboard(models.Model):
 
     def _get_schemes_by_state(self, state, d_from, d_to, branch_id=None):
         cr = self._cr
-        if state == 'running':
-            from datetime import date
-            d_from = d_to = date.today()
-
         q = """
             SELECT 
                 e.id,

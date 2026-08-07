@@ -250,6 +250,10 @@
     cursor: default;
 }
 
+.jw-kpi-card.jw-clickable-card {
+    cursor: pointer;
+}
+
 .jw-kpi-card::before {
     content: '';
     position: absolute;
