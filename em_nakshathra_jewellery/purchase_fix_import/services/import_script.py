@@ -193,6 +193,7 @@ class ImportLabelService:
         if not current_company:
             raise UserError(f"Company '{company_name}' from Excel not found in Odoo.")
 
+        company_env = self.env.with_company(current_company)
         # 1. Resolve Vendor
         partner = self.env['res.partner'].search(['|', ('name', '=', vendor_name), ('ref', '=', vendor_name)], limit=1)
         if not partner:
@@ -220,7 +221,10 @@ class ImportLabelService:
             if branch:
                 po_vals['branch_id'] = branch.id
 
-        po = self.env['purchase.order'].create(po_vals)
+
+        po = company_env['purchase.order'].create(po_vals)
+
+        # po = self.env['purchase.order'].create(po_vals)
         print(po)
         print(po.name)
 
@@ -410,7 +414,16 @@ class ImportLabelService:
                     po.branch_id.name
                 )
         self._ensure_chart_of_accounts(po.company_id)
-        # po._prepare_invoice()
+
+        po = po.with_company(po.company_id)
+
+        _logger.info(
+            "Creating vendor bill for PO %s under company %s (%s)",
+            po.name,
+            po.company_id.name,
+            po.company_id.id,
+        )
+
         po.action_create_invoice()
         # f = Form(
         #     self.env["account.move"].with_context(
