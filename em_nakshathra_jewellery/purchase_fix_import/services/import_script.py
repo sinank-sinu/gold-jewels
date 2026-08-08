@@ -88,6 +88,7 @@ class ImportLabelService:
             # Read Headers
             headers = [str(cell.value).strip() if cell.value else '' for cell in sheet[1]]
             _logger.info(f"Headers: {headers}")
+            _logger.info(f"Headers: {headers}")
 
             # Group rows by Purchase Order (Vendor) and Bill Date
             grouped_data = defaultdict(list)
@@ -199,9 +200,9 @@ class ImportLabelService:
             force_company=current_company.id,
         ))
         # 1. Resolve Vendor
-        partner = self.env['res.partner'].search(['|', ('name', '=', vendor_name), ('ref', '=', vendor_name)], limit=1)
+        partner = company_env['res.partner'].search(['|', ('name', '=', vendor_name), ('ref', '=', vendor_name)], limit=1)
         if not partner:
-            partner = self.env['res.partner'].create({
+            partner = company_env['res.partner'].create({
                 'name': vendor_name,
                 'supplier_rank': 1,
                 'company_id': False,
@@ -319,7 +320,7 @@ class ImportLabelService:
             if purity_id:
                 po_line_vals['purity_id'] = purity_id
 
-            self.env['purchase.order.line'].create(po_line_vals)
+            company_env['purchase.order.line'].create(po_line_vals)
 
         # if not po.order_line:
         #     po.unlink()
