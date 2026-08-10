@@ -213,16 +213,29 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                 vou = _str(r[c_m.get('vou_no', 1)])
                 if not vou:
                     continue
-                vou_date = r[c_m.get('vou_date', 3)]
-                if isinstance(vou_date, (datetime.datetime, datetime.date)):
-                    vou_date = vou_date.date().isoformat() if isinstance(vou_date, datetime.datetime) else vou_date.isoformat()
-                elif isinstance(vou_date, (int, float)):
+                raw_excel_val = r[c_m.get('vou_date', 3)]
+                _logger.info("[SALE DATE DEBUG] Raw Excel value: %s, Type: %s", raw_excel_val, type(raw_excel_val))
+                
+                if hasattr(raw_excel_val, "strftime"):
+                    vou_date = raw_excel_val.strftime("%Y-%m-%d")
+                elif isinstance(raw_excel_val, (int, float)):
                     try:
-                        vou_date = (datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(vou_date))).date().isoformat()
+                        vou_date = (datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(raw_excel_val))).strftime("%Y-%m-%d")
                     except Exception:
-                        vou_date = str(vou_date)
+                        vou_date = str(raw_excel_val).strip().split(" ")[0]
+                elif raw_excel_val:
+                    raw_date_str = str(raw_excel_val).strip().split(" ")[0]
+                    vou_date = raw_date_str
+                    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d-%m-%y", "%d/%m/%y"):
+                        try:
+                            vou_date = datetime.datetime.strptime(raw_date_str, fmt).strftime("%Y-%m-%d")
+                            break
+                        except ValueError:
+                            pass
                 else:
-                    vou_date = _str(vou_date)
+                    vou_date = datetime.datetime.now().strftime("%Y-%m-%d")
+                
+                _logger.info("[SALE DATE DEBUG] Converted value: %s", vou_date)
 
                 entry = {
                     'row_idx':          row_idx,
@@ -510,13 +523,19 @@ if(tot>0)run(); else log('No records found.');
         ).env
 
         # 2. Parse Date
-        order_date = fields.Datetime.now()
-        if date_str:
-            try:
-                from dateutil import parser
-                order_date = parser.parse(date_str, dayfirst=True)
-            except Exception:
-                order_date = fields.Datetime.now()
+        if hasattr(date_str, "strftime"):
+            order_date = date_str.strftime("%Y-%m-%d")
+        elif date_str:
+            raw_date = str(date_str).strip().split(" ")[0]
+            order_date = raw_date
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d-%m-%y", "%d/%m/%y"):
+                try:
+                    order_date = datetime.datetime.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    pass
+        else:
+            order_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
         # 3. Company-Dependent Header Lookups
         # Branch
