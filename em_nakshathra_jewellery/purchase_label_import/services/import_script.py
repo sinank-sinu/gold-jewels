@@ -109,7 +109,7 @@ class ImportLabelService:
         if excel_branch:
             _logger.info(f"Excel branch value ignored: '{excel_branch}'")
             
-        fixed_branch_name = 'HEAD OFFICE'
+        fixed_branch_name = excel_branch
         _logger.info(f"Using fixed Purchase Order branch: '{fixed_branch_name}'")
         _logger.info(f"Company: '{current_company.name}'")
         

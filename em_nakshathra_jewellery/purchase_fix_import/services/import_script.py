@@ -193,6 +193,7 @@ class ImportLabelService:
         if not current_company:
             raise UserError(f"Company '{company_name}' from Excel not found in Odoo.")
 
+
         # 1. Resolve Vendor
         partner = self.env['res.partner'].search(['|', ('name', '=', vendor_name), ('ref', '=', vendor_name)], limit=1)
         if not partner:
@@ -201,11 +202,39 @@ class ImportLabelService:
                 'supplier_rank': 1,
                 'company_id': False,
             })
+
+
         elif partner.company_id:
             try:
                 partner.company_id = False
             except Exception:
                 pass
+        # --------------------------------------------------------------
+        # Ensure vendor has the correct Payable account for this company
+        # --------------------------------------------------------------
+        payable_account = self.env['account.account'].search([
+            ('company_id', '=', current_company.id),
+            ('account_type', '=', 'liability_payable'),
+        ], limit=1)
+
+        if not payable_account:
+            raise UserError(
+                "No Payable account found for company '%s'."
+                % current_company.name
+            )
+
+        _logger.info(
+            "Vendor: %s | Company: %s | Payable Account: %s - %s (%s)",
+            partner.name,
+            current_company.name,
+            payable_account.code,
+            payable_account.name,
+            payable_account.id,
+        )
+
+        partner.with_company(
+            current_company
+        ).property_account_payable_id = payable_account.id
 
         # 2. Create PO
         po_vals = {
@@ -547,7 +576,7 @@ class ImportLabelService:
                     "FREIGHT CHARGES",
                     "TRANSPORTATION CHARGE",
                     "CERTIFICATION CHARGE -18%"
-                }
+                                    }
 
                 if template_name.strip().upper() in service_products:
 
@@ -637,16 +666,24 @@ class ImportLabelService:
                 val = re.sub(r'\s*"\s*', '"', val)
 
                 return val
+
             value = values.filtered(
                 lambda v: normalize_attr(v.name) == normalize_attr(attr_val)
             )[:1]
 
             if not value:
-                raise UserError(
-                    _("Attribute value '%s' does not exist for attribute '%s'.")
-                    % (attr_val, attr_name)
+                _logger.info(
+                    "Creating missing attribute value '%s' for attribute '%s'",
+                    attr_val,
+                    attr_name,
                 )
 
+                value = self.env["product.attribute.value"].create({
+                    "name": str(attr_val).strip(),
+                    "attribute_id": ptal.attribute_id.id,
+                })
+
+            # Configure the template to use this value if needed
             # Configure the template to use this value if needed
             if value not in ptal.value_ids:
                 _logger.info(
@@ -654,17 +691,25 @@ class ImportLabelService:
                     value.name,
                     template.display_name,
                 )
+
                 ptal.write({
                     "value_ids": [(4, value.id)]
                 })
+
                 self.env.flush_all()
-                ptal.invalidate_recordset()
+                self.env.invalidate_all()
 
             # Get the PTAV record
             ptav = self.env["product.template.attribute.value"].search([
                 ("attribute_line_id", "=", ptal.id),
                 ("product_attribute_value_id", "=", value.id),
             ], limit=1)
+
+            if not ptav:
+                raise UserError(
+                    _("Unable to configure attribute '%s' value '%s'.")
+                    % (attr_name, attr_val)
+                )
 
             if not ptav:
                 raise UserError(

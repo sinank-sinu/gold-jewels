@@ -264,7 +264,7 @@
                                             <t t-if="sale_line and sale_line.gold_rate">
                                                 <span t-field="sale_line.gold_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
-                                            <t t-elif="purchase_line and hasattr(purchase_line, 'gold_rate') and purchase_line.gold_rate">
+                                            <t t-elif="purchase_line and 'gold_rate' in purchase_line and purchase_line.gold_rate">
                                                 <span t-field="purchase_line.gold_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
                                             <t t-else="">-</t>
