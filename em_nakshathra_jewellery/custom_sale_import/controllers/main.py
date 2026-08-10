@@ -407,6 +407,7 @@ if(tot>0)run(); else log('No records found.');
             has_new_skipped = False
 
             for vou_no in chunk:
+                _logger.info("[SALE IMPORT] Processing voucher: %s", vou_no)
                 rows = sales_data.get(vou_no, [])
                 try:
                     with env.cr.savepoint():
@@ -415,10 +416,13 @@ if(tot>0)run(); else log('No records found.');
                             cache, skipped_list
                         )
                         logs.append(f"✔ {vou_no}: {msg}")
+                        _logger.info("[SALE IMPORT] Voucher %s completed successfully", vou_no)
                     success_count += 1
                 except Exception as e:
                     error_log.append(f"✘ Voucher {vou_no}: {e}")
-                    _logger.exception("Voucher %s failed: %s", vou_no, e)
+                    _logger.error("[SALE IMPORT] Voucher %s failed: %s", vou_no, e, exc_info=True)
+                    _logger.info("[SALE IMPORT] Rolled back voucher %s savepoint", vou_no)
+                    _logger.info("[SALE IMPORT] Continuing with next voucher")
 
             # Persist skipped list changes if any
             if skipped_list != data.get('skipped_list', []):
@@ -632,38 +636,53 @@ if(tot>0)run(); else log('No records found.');
             source_loc = warehouse.lot_stock_id
 
         # 4. Create Sale Order
-        order_vals = {
-            'partner_id':  partner.id if partner else False,
-            'date_order':  order_date,
-            'origin':      vou_no,
-            'company_id':  excel_company.id,
-        }
-        if branch:
-            order_vals['branch_id'] = branch.id
-        if warehouse:
-            order_vals['warehouse_id'] = warehouse.id
-        if salesman:
-            order_vals['user_id'] = salesman.id
-        if source_loc:
-            order_vals['branch_location_id'] = source_loc.id
+        existing_order = c_env['sale.order'].sudo().search([
+            ('origin', '=', vou_no),
+            ('company_id', '=', excel_company.id)
+        ], limit=1)
 
-        og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
-        scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
+        if existing_order:
+            _logger.info("[SALE IMPORT] Voucher: %s", vou_no)
+            _logger.info("[SALE IMPORT] Searching existing sale order...")
+            _logger.info("[SALE IMPORT] Existing sale order found: %s", existing_order.name)
+            order = existing_order
+            has_lines = bool(order.order_line)
+            has_og_lines = bool(c_env['sale.old.gold.line'].sudo().search([('sale_id', '=', order.id)], limit=1))
+        else:
+            order_vals = {
+                'partner_id':  partner.id if partner else False,
+                'date_order':  order_date,
+                'origin':      vou_no,
+                'company_id':  excel_company.id,
+            }
+            if branch:
+                order_vals['branch_id'] = branch.id
+            if warehouse:
+                order_vals['warehouse_id'] = warehouse.id
+            if salesman:
+                order_vals['user_id'] = salesman.id
+            if source_loc:
+                order_vals['branch_location_id'] = source_loc.id
 
-        og_infos = og_data.get(vou_no, [])
-        if og_infos:
-            og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
-            if og_amt_from_sheet > 0:
-                og_amt = og_amt_from_sheet
+            og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
+            scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
 
-        sch_info = scheme_data.get(vou_no, {})
-        if sch_info and sch_info.get('amount', 0.0) > 0:
-            scheme_amt = sch_info.get('amount', 0.0)
+            og_infos = og_data.get(vou_no, [])
+            if og_infos:
+                og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
+                if og_amt_from_sheet > 0:
+                    og_amt = og_amt_from_sheet
 
-        if og_amt > 0:
-            order_vals['has_old_gold'] = True
+            sch_info = scheme_data.get(vou_no, {})
+            if sch_info and sch_info.get('amount', 0.0) > 0:
+                scheme_amt = sch_info.get('amount', 0.0)
 
-        order = c_env['sale.order'].sudo().create(order_vals)
+            if og_amt > 0:
+                order_vals['has_old_gold'] = True
+
+            order = c_env['sale.order'].sudo().create(order_vals)
+            has_lines = False
+            has_og_lines = False
 
         # 5. Create Sale Order Lines
         label_bc_cache = cache.setdefault(f'labels_bc_{excel_company.id}', {})
@@ -671,6 +690,8 @@ if(tot>0)run(); else log('No records found.');
         prod_cache = cache.setdefault(f'products_{excel_company.id}', {})
 
         for row in rows:
+            if has_lines:
+                break
             product_var_name = row.get('product_var_name', '').strip()
             label_ref        = row.get('label_no', '').strip()
             barcode_no       = row.get('barcode_no', '').strip()
@@ -840,7 +861,7 @@ if(tot>0)run(); else log('No records found.');
 
         # 6. Apply Old Gold
         og_branch_loc_final = source_loc
-        if og_amt > 0:
+        if og_amt > 0 and not has_og_lines:
             if not og_infos:
                 og_infos = [{'amount': og_amt}]
 
@@ -908,12 +929,13 @@ if(tot>0)run(); else log('No records found.');
                 })
 
             try:
-                order.with_company(excel_company).with_context(
-                    skip_old_gold_amount_compute=True,
-                    default_company_id=excel_company.id,
-                    company_id=excel_company.id,
-                    allowed_company_ids=[excel_company.id],
-                ).action_apply_old_gold()
+                if not order.purchase_order_id:
+                    order.with_company(excel_company).with_context(
+                        skip_old_gold_amount_compute=True,
+                        default_company_id=excel_company.id,
+                        company_id=excel_company.id,
+                        allowed_company_ids=[excel_company.id],
+                    ).action_apply_old_gold()
                 if order_date:
                     date_only = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
                     if order.purchase_order_id:
@@ -922,20 +944,15 @@ if(tot>0)run(); else log('No records found.');
                             'date_approve': order_date,
                         })
                     if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
-                        c_env.cr.execute("""
-                            UPDATE account_move 
-                            SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
-                            WHERE id = %s
-                        """, (date_only, date_only, date_only, date_only, order.old_gold_bill_id.id))
+                        if order.old_gold_bill_id.state == 'draft':
+                            order.old_gold_bill_id.sudo().write({'invoice_date': date_only, 'date': date_only})
                     elif order.purchase_order_id and order.purchase_order_id.invoice_ids:
                         for bill in order.purchase_order_id.invoice_ids:
-                            c_env.cr.execute("""
-                                UPDATE account_move 
-                                SET invoice_date = %s, date = %s, invoice_date_due = %s, delivery_date = %s 
-                                WHERE id = %s
-                            """, (date_only, date_only, date_only, date_only, bill.id))
+                            if bill.state == 'draft':
+                                bill.sudo().write({'invoice_date': date_only, 'date': date_only})
             except Exception as e:
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
+                raise
 
         # 7. Apply Scheme
         if scheme_amt > 0:
@@ -964,6 +981,7 @@ if(tot>0)run(); else log('No records found.');
                     ).action_apply_scheme()
                 except Exception as e:
                     _logger.warning("Voucher %s: Scheme apply failed: %s", vou_no, e)
+                    raise
 
         # 8. Strict Pre-Confirmation Company Validation & Logging
         order_comp = order.company_id.id
@@ -1087,6 +1105,7 @@ if(tot>0)run(); else log('No records found.');
                         wiz.process()
             except Exception as e:
                 _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
+                raise
 
             if order_date:
                 c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
@@ -1125,6 +1144,7 @@ if(tot>0)run(); else log('No records found.');
                             wiz.process()
                 except Exception as e:
                     _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
+                    raise
 
                 if order_date:
                     c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
@@ -1135,11 +1155,31 @@ if(tot>0)run(); else log('No records found.');
         if not order.order_line:
             return f"SO {order.name} OK (No Lines)"
 
-        invoice = order.with_company(excel_company).with_context(
-            default_company_id=excel_company.id,
-            company_id=excel_company.id,
-            allowed_company_ids=[excel_company.id],
-        )._create_invoices()
+        _logger.info("[SALE IMPORT] Voucher: %s", vou_no)
+        _logger.info("[SALE IMPORT] Searching existing accounting move...")
+        
+        existing_move = order.invoice_ids.filtered(lambda inv: inv.move_type in ('out_invoice', 'out_refund') and inv.state != 'cancel')
+        if not existing_move:
+            existing_move = c_env['account.move'].search([
+                ('ref', '=', vou_no),
+                ('company_id', '=', excel_company.id),
+                ('move_type', 'in', ['out_invoice', 'out_refund', 'in_invoice', 'in_refund'])
+            ], limit=1)
+
+        if existing_move:
+            invoice = existing_move[0]
+            _logger.info("[SALE IMPORT] Journal: %s", invoice.journal_id.id if invoice.journal_id else 'None')
+            _logger.info("[SALE IMPORT] Existing move found: %s", invoice.name)
+            _logger.info("[SALE IMPORT] Reusing existing move. No duplicate created.")
+        else:
+            _logger.info("[SALE IMPORT] No existing move found; using existing Odoo creation logic")
+            invoice = order.with_company(excel_company).with_context(
+                default_company_id=excel_company.id,
+                company_id=excel_company.id,
+                allowed_company_ids=[excel_company.id],
+            )._create_invoices()
+            _logger.info("[SALE IMPORT] Accounting move created: %s", invoice.name if invoice else 'None')
+
         if not invoice:
             return f"SO {order.name} OK (No Invoice)"
 
@@ -1156,13 +1196,15 @@ if(tot>0)run(); else log('No records found.');
         if inv_vals:
             invoice.write(inv_vals)
 
-        invoice.action_post()
+        if invoice.state == 'draft':
+            invoice.action_post()
 
         if hasattr(invoice, 'custom_total') and invoice.custom_total < 0:
             try:
                 invoice.action_create_old_gold_vendor_payment()
             except Exception as e:
                 _logger.warning("Voucher %s: Customer Payment creation failed: %s", vou_no, e)
+                raise
 
         # 12. Payments
         self._register_payments(c_env, order, invoice, rows, order_date, cache, excel_company)
@@ -1227,6 +1269,7 @@ if(tot>0)run(); else log('No records found.');
                     payments.write({'bank_reference': ref})
             except Exception as e:
                 _logger.warning("Voucher %s: Payment failed %s/%s: %s", invoice.ref, jtype, hint, e)
+                raise
 
         try:
             bank_amt  = max([_flt(r.get('bank_amt', 0)) for r in rows] or [0])
@@ -1249,6 +1292,7 @@ if(tot>0)run(); else log('No records found.');
             pay(cash_amt,  'cash', '',     '')
         except Exception as e:
             _logger.warning("Voucher %s: Register payments exception: %s", invoice.ref, e)
+            raise
 
     # ── Skipped PDF Download Route ────────────────────────────────────────────
     @http.route('/import/sales_migration/skipped_pdf', type='http', auth='user')
