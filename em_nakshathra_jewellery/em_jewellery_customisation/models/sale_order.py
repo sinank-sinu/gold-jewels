@@ -35,8 +35,7 @@ class SaleOrder(models.Model):
         return self.env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', self.partner_id.id),
                 ('active', '=', True),
-                # ('state', '=', 'running'),
-                ('balance_amount', '=', 0)
+                ('state', 'in', ('running', 'completed')),
             ])
 
     def action_apply_scheme(self):
@@ -49,18 +48,18 @@ class SaleOrder(models.Model):
                 raise UserError(_("Scheme already applied."))
 
             completed_schemes = order._get_customer_scheme_records().filtered(
-                lambda s: s.state == 'completed' and not s.is_redeemed
+                lambda s: s.state in ('running', 'completed') and not s.is_redeemed
             )
 
             if order.apply_scheme and completed_schemes:
 
                 # pick lowest priority
                 completed_schemes = order._get_customer_scheme_records().filtered(
-                    lambda s: s.state == 'completed' and not s.is_redeemed
+                    lambda s: s.state in ('running', 'completed') and not s.is_redeemed
                 ).sorted(key=lambda s: (s.priority, s.create_date))
             
                 if not completed_schemes:
-                    raise UserError(_("No completed scheme available for this customer."))
+                    raise UserError(_("No active scheme available for this customer."))
                 
                 # Take latest / first scheme
                 scheme = completed_schemes[0]
