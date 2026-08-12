@@ -1,4 +1,4 @@
-from odoo import    models, fields, _, api
+from odoo import models, fields, _, api
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_compare
 from dateutil.relativedelta import relativedelta  # Added for safe month arithmetic
@@ -173,6 +173,10 @@ class AccountPaymentRegister(models.TransientModel):
     # --------------------------------------------------
     def _generate_scheme_installments(self):
         self.ensure_one()
+
+        # If it is paying an invoice (NOT a standalone/outstanding payment), skip scheme allocation
+        if self.line_ids.move_id:
+            return
 
         enrollment = self.env['jewellery.scheme.enrollment'].search([
             ('partner_id', '=', self.partner_id.id)
