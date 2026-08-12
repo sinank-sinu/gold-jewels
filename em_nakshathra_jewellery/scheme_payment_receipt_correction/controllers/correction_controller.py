@@ -33,6 +33,12 @@ class SchemePaymentCorrectionController(http.Controller):
                 <h1>Scheme Payment Receipt Correction</h1>
                 <p>This tool will process EVERY Scheme Payment in the database in small, safe batches to prevent timeouts.</p>
                 
+                <div style="margin-bottom: 15px;">
+                    <label for="startId" style="font-weight: bold; margin-right: 10px;">Start from Installment ID (Optional):</label>
+                    <input type="number" id="startId" value="0" style="padding: 5px; width: 150px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <p style="font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 0;">(If you know where it stopped, you can enter the ID here to skip ahead. Otherwise, leave as 0 to safely re-check everything.)</p>
+                </div>
+
                 <div>
                     <button class="btn" id="startBtn" onclick="startCorrection(false)">Run Real Correction</button>
                     <button class="btn btn-dry" id="dryBtn" onclick="startCorrection(true)">Run Dry Run (Test)</button>
@@ -84,7 +90,7 @@ class SchemePaymentCorrectionController(http.Controller):
                 function startCorrection(dryRun) {
                     isRunning = true;
                     isDryRun = dryRun;
-                    lastId = 0;
+                    lastId = parseInt(document.getElementById('startId').value) || 0;
                     totals = { processed: 0, corrected: 0, already: 0, failed: 0 };
                     updateStats({});
                     document.getElementById('log').innerHTML = "<div>Starting " + (dryRun ? "DRY RUN" : "REAL RUN") + "...</div>";
@@ -109,7 +115,7 @@ class SchemePaymentCorrectionController(http.Controller):
                             
                             if (data.has_more && isRunning) {
                                 lastId = data.last_id;
-                                setTimeout(fetchBatch, 500); // slight pause between batches
+                                setTimeout(fetchBatch, 100); // Reduced pause for much faster processing
                             } else {
                                 logMsg("<strong>Finished checking ALL Scheme Payments!</strong>");
                                 stopCorrection();
