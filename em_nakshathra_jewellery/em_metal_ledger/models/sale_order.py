@@ -200,6 +200,8 @@ class SaleOrderMetalLedger(models.Model):
 
         po = self.purchase_order_id
 
+        if self.origin and not self.unfix:
+            return
         # Skip only if linked PO is old gold
         if po and po.is_old_gold:
             return

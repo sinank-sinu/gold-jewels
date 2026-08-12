@@ -233,7 +233,7 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                         except ValueError:
                             pass
                 else:
-                    vou_date = datetime.datetime.now().strftime("%Y-%m-%d")
+                    vou_date = ""
                 
                 _logger.info("[SALE DATE DEBUG] Converted value: %s", vou_date)
 
@@ -523,19 +523,28 @@ if(tot>0)run(); else log('No records found.');
         ).env
 
         # 2. Parse Date
+        order_date = None
         if hasattr(date_str, "strftime"):
             order_date = date_str.strftime("%Y-%m-%d")
         elif date_str:
             raw_date = str(date_str).strip().split(" ")[0]
-            order_date = raw_date
             for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d-%m-%y", "%d/%m/%y"):
                 try:
                     order_date = datetime.datetime.strptime(raw_date, fmt).strftime("%Y-%m-%d")
                     break
                 except ValueError:
                     pass
-        else:
-            order_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+        if not order_date:
+            reason = "Effective Date is missing" if not date_str else f"Effective Date '{date_str}' is invalid"
+            _logger.error("Voucher %s: %s. Voucher skipped.", vou_no, reason)
+            skipped_list.append({
+                'row': hdr_row.get('row_idx', 0),
+                'customer': cust_name,
+                'label': vou_no,
+                'reason': reason
+            })
+            raise ValidationError(f"{reason} for voucher {vou_no}")
 
         # 3. Company-Dependent Header Lookups
         # Branch
@@ -973,34 +982,6 @@ if(tot>0)run(); else log('No records found.');
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
                 raise
 
-        # 7. Apply Scheme
-        if scheme_amt > 0:
-            sch_info = scheme_data.get(vou_no, {})
-            ticket_no = sch_info.get('ticket_no', '')
-            existing_scheme = c_env['jewellery.scheme.enrollment'].search([
-                ('partner_id', '=', partner.id),
-                ('ticket_number', '=', ticket_no),
-                ('state', '=', 'completed'),
-                ('is_redeemed', '=', False),
-            ], limit=1)
-            if not existing_scheme and ticket_no:
-                existing_scheme = c_env['jewellery.scheme.enrollment'].search([
-                    ('partner_id', '=', partner.id),
-                    ('ticket_number', '=', ticket_no),
-                ], limit=1)
-
-            if existing_scheme:
-                order.apply_scheme = True
-                order.active_scheme_id = existing_scheme.id
-                try:
-                    order.with_company(excel_company).with_context(
-                        default_company_id=excel_company.id,
-                        company_id=excel_company.id,
-                        allowed_company_ids=[excel_company.id],
-                    ).action_apply_scheme()
-                except Exception as e:
-                    _logger.warning("Voucher %s: Scheme apply failed: %s", vou_no, e)
-                    raise
 
         # 8. Strict Pre-Confirmation Company Validation & Logging
         order_comp = order.company_id.id
@@ -1082,64 +1063,28 @@ if(tot>0)run(); else log('No records found.');
             raise ValidationError(f"Company mismatch on voucher {vou_no}:\n{error_details}")
 
         # 9. Confirm Order
-        original_date = order.date_order
         order.with_company(excel_company).with_context(
             mail_notrack=True,
             default_company_id=excel_company.id,
             company_id=excel_company.id,
             allowed_company_ids=[excel_company.id],
         ).action_confirm()
-        if original_date:
-            order.sudo().write({'date_order': original_date})
-            c_env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (original_date, order.id))
+        if order_date:
+            order.sudo().write({'date_order': order_date})
+            c_env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (order_date, order.id))
 
         # 10. Validate Stock Delivery
-        for picking in order.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-            if order_date:
-                picking.sudo().write({'scheduled_date': order_date})
-            if picking.picking_type_code == 'outgoing' and source_loc:
-                picking.location_id = source_loc.id
-                for move in picking.move_ids:
-                    move.location_id = source_loc.id
-            for move in picking.move_ids:
-                move.quantity = move.product_uom_qty
-                if hasattr(move, 'picked'):
-                    move.picked = True
-            try:
-                res = picking.with_company(excel_company).with_context(
-                    skip_backorder=True,
-                    cancel_backorder=True,
-                    default_company_id=excel_company.id,
-                    company_id=excel_company.id,
-                    allowed_company_ids=[excel_company.id],
-                ).button_validate()
-                if isinstance(res, dict):
-                    model = res.get('res_model', '')
-                    ctx = res.get('context', {})
-                    if model == 'stock.immediate.transfer':
-                        wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
-                        wiz.process()
-                    elif model == 'stock.backorder.confirmation':
-                        wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
-                        wiz.process()
-            except Exception as e:
-                _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
-                raise
-
-            if order_date:
-                c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
-                c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
-                c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
-
-        # Validate Old Gold Delivery
-        if order.purchase_order_id:
-            for picking in order.purchase_order_id.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
+        for picking in order.picking_ids:
+            if picking.state == 'cancel':
+                continue
+            
+            if picking.state != 'done':
                 if order_date:
                     picking.sudo().write({'scheduled_date': order_date})
-                if og_branch_loc_final:
-                    picking.location_dest_id = og_branch_loc_final.id
+                if picking.picking_type_code == 'outgoing' and source_loc:
+                    picking.location_id = source_loc.id
                     for move in picking.move_ids:
-                        move.location_dest_id = og_branch_loc_final.id
+                        move.location_id = source_loc.id
                 for move in picking.move_ids:
                     move.quantity = move.product_uom_qty
                     if hasattr(move, 'picked'):
@@ -1162,8 +1107,51 @@ if(tot>0)run(); else log('No records found.');
                             wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
                             wiz.process()
                 except Exception as e:
-                    _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
+                    _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
                     raise
+
+            if order_date:
+                c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+
+        # Validate Old Gold Delivery
+        if order.purchase_order_id:
+            for picking in order.purchase_order_id.picking_ids:
+                if picking.state == 'cancel':
+                    continue
+                
+                if picking.state != 'done':
+                    if order_date:
+                        picking.sudo().write({'scheduled_date': order_date})
+                    if og_branch_loc_final:
+                        picking.location_dest_id = og_branch_loc_final.id
+                        for move in picking.move_ids:
+                            move.location_dest_id = og_branch_loc_final.id
+                    for move in picking.move_ids:
+                        move.quantity = move.product_uom_qty
+                        if hasattr(move, 'picked'):
+                            move.picked = True
+                    try:
+                        res = picking.with_company(excel_company).with_context(
+                            skip_backorder=True,
+                            cancel_backorder=True,
+                            default_company_id=excel_company.id,
+                            company_id=excel_company.id,
+                            allowed_company_ids=[excel_company.id],
+                        ).button_validate()
+                        if isinstance(res, dict):
+                            model = res.get('res_model', '')
+                            ctx = res.get('context', {})
+                            if model == 'stock.immediate.transfer':
+                                wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                                wiz.process()
+                            elif model == 'stock.backorder.confirmation':
+                                wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                                wiz.process()
+                    except Exception as e:
+                        _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
+                        raise
 
                 if order_date:
                     c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
@@ -1223,6 +1211,19 @@ if(tot>0)run(); else log('No records found.');
                 invoice.action_create_old_gold_vendor_payment()
             except Exception as e:
                 _logger.warning("Voucher %s: Customer Payment creation failed: %s", vou_no, e)
+                raise
+
+        # 11.5 Apply Scheme via Invoice (Redeem Scheme)
+        if scheme_amt > 0:
+            try:
+                invoice.with_company(excel_company).with_context(
+                    default_company_id=excel_company.id,
+                    company_id=excel_company.id,
+                    allowed_company_ids=[excel_company.id],
+                ).action_redeem_outstanding_schemes()
+            except Exception as e:
+                _logger.warning("Voucher %s: Scheme redeem failed: %s", vou_no, e)
+                # Following existing migration script's error handling behavior (log and raise)
                 raise
 
         # 12. Payments

@@ -96,7 +96,6 @@ class SaleOrder(models.Model):
                         'list_price': 0.0,
                     })
 
-
                 line = self.env['sale.order.line'].create({
                     'order_id': order.id,
                     'product_id': product.id,
@@ -113,14 +112,6 @@ class SaleOrder(models.Model):
                     'sale_order_id': order.id,
                     'amount': redeem_amount,
                 })
-
-            # else:
-            #     schemes = order._get_customer_scheme_records()
-
-            #     if not schemes:
-            #         raise UserError(_("No active scheme available for this customer."))
-
-            #     total_mc = sum(order.order_line.mapped('mc_amount'))
 
             #     if total_mc <= 0:
             #         raise UserError(_("No Making Charge found to apply scheme."))

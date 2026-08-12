@@ -1,6 +1,6 @@
 import json
 
-from odoo import http
+from odoo import http, fields
 from odoo.http import request, Response
 
 
@@ -64,23 +64,66 @@ class EcommerceCartWishlistAPI(http.Controller):
         return cart
 
     def _format_cart(self, cart):
-        """Serialize a cart record into a dict."""
+        """Serialize a cart record into a dict, with currency conversion support."""
+        customer = cart.customer_id
+        target_currency = None
+        Currency = request.env['res.currency'].sudo()
+        
+        # Check params for currency code
+        params = request.params or {}
+        currency_code = params.get('currency')
+        if not currency_code and hasattr(request.dispatcher, 'jsonrequest') and request.dispatcher.jsonrequest:
+            currency_code = request.dispatcher.jsonrequest.get('params', {}).get('currency')
+            
+        if currency_code:
+            target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            
+        if not target_currency and customer and customer.exists() and customer.currency_id:
+            target_currency = customer.currency_id
+            
+        # Determine the company/currency dynamically
+        company = request.env.company
+        if cart.line_ids:
+            first_prod = cart.line_ids[0].product_id
+            if first_prod.company_id:
+                company = first_prod.company_id
+        company_currency = company.currency_id
+        if not target_currency:
+            target_currency = company_currency
+
         lines = []
         for line in cart.line_ids:
+            price = line.price or 0.0
+            subtotal = line.subtotal or 0.0
+            
+            line_company = line.product_id.company_id or company
+            line_company_currency = line_company.currency_id
+            
+            if target_currency != line_company_currency:
+                price = line_company_currency._convert(price, target_currency, line_company, fields.Date.today())
+                subtotal = line_company_currency._convert(subtotal, target_currency, line_company, fields.Date.today())
+
             lines.append({
                 "cart_line_id": line.id,
                 "product_id": line.product_id.id,
                 "product_name": line.product_id.name,
                 "image_url": f"/web/image/product.template/{line.product_id.id}/image_1920",
                 "quantity": line.quantity,
-                "price": round(line.price, 2) if line.price else 0.0,
-                "subtotal": round(line.subtotal, 2) if line.subtotal else 0.0,
+                "price": round(price, 2),
+                "subtotal": round(subtotal, 2),
             })
+
+        total_amount = cart.total_amount or 0.0
+        if target_currency != company_currency:
+            total_amount = company_currency._convert(total_amount, target_currency, company, fields.Date.today())
+
         return {
             "cart_id": cart.id,
             "customer_id": cart.customer_id.id,
-            "total_amount": round(cart.total_amount, 2) if cart.total_amount else 0.0,
+            "total_amount": round(total_amount, 2),
             "items": lines,
+            "currency": target_currency.name,
+            "currency_symbol": target_currency.symbol or target_currency.name
         }
 
     # ─── Add to Cart (POST + GET) ──────────────────────────────
@@ -470,13 +513,41 @@ class EcommerceCartWishlistAPI(http.Controller):
 
     def _format_wishlist_item(self, item):
         prod = item.product_id
+        customer = item.customer_id
+        
+        # Determine target currency
+        target_currency = None
+        Currency = request.env['res.currency'].sudo()
+        
+        params = request.params or {}
+        currency_code = params.get('currency')
+        if not currency_code and hasattr(request.dispatcher, 'jsonrequest') and request.dispatcher.jsonrequest:
+            currency_code = request.dispatcher.jsonrequest.get('params', {}).get('currency')
+            
+        if currency_code:
+            target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            
+        if not target_currency and customer and customer.exists() and customer.currency_id:
+            target_currency = customer.currency_id
+            
+        company = prod.company_id if prod.company_id else request.env.company
+        company_currency = company.currency_id
+        if not target_currency:
+            target_currency = company_currency
+
+        price = prod.list_price or 0.0
+        if target_currency != company_currency:
+            price = company_currency._convert(price, target_currency, company, fields.Date.today())
+
         return {
             "wishlist_id": item.id,
             "product_id": prod.id,
             "product_name": prod.name,
-            "price": prod.list_price,
+            "price": round(price, 2),
             "image_url": f"/web/image/product.template/{prod.id}/image_1920",
             "added_on": item.added_on.strftime('%Y-%m-%d %H:%M:%S') if item.added_on else None,
+            "currency": target_currency.name,
+            "currency_symbol": target_currency.symbol or target_currency.name
         }
 
     # ─── Add to Wishlist (POST + GET) ──────────────────────────

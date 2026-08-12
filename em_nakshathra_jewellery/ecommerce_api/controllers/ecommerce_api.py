@@ -1,5 +1,6 @@
-from odoo import http
-from odoo.http import request
+import json
+from odoo import http, fields
+from odoo.http import request, Response
 
 
 class EcommerceBranchAPI(http.Controller):
@@ -14,10 +15,22 @@ class EcommerceBranchAPI(http.Controller):
             branch_name = (kwargs.get('branch_name') or '').strip()
             location_id = kwargs.get('location_id')
             location_name = (kwargs.get('location_name') or '').strip()
+            currency_code = kwargs.get('currency')
+            customer_id = kwargs.get('customer_id')
 
             if not branch_id and not branch_name:
                 return {"status": "error", "message": "branch_id or branch_name is required"}
 
+            # ── Resolve target currency for price conversion ──
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+            
             # ── Resolve branch_name → branch_id if name was given ──
             Branch = request.env['res.branch'].sudo()
             if branch_name and not branch_id:
@@ -29,6 +42,11 @@ class EcommerceBranchAPI(http.Controller):
             else:
                 branch = Branch.browse(int(branch_id))
                 resolved_branch_name = branch.name if branch else str(branch_id)
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
 
             domain = [
                 ('sale_ok', '=', True),
@@ -93,12 +111,16 @@ class EcommerceBranchAPI(http.Controller):
                                 "purity_percentage": label.purity_id.percentage if label.purity_id else purity_percentage
                             })
                         
+                        loc_price = prod.list_price or 0.0
+                        if target_currency != company_currency:
+                            loc_price = company_currency._convert(loc_price, target_currency, company, fields.Date.today())
+
                         location_stocks.append({
                             "location_id": loc.id,
                             "location_name": loc.name,
                             "location_complete_name": loc.complete_name,
                             "product_name": prod.name,
-                            "price": prod.list_price,
+                            "price": round(loc_price, 2),
                             "description": description,
                             "image_url": f"/web/image/product.template/{prod.id}/image_1920",
                             "quantity": total_qty,
@@ -109,10 +131,14 @@ class EcommerceBranchAPI(http.Controller):
                 
                 # ── Only include products with stock ──
                 if total_stock > 0:
+                    prod_price = prod.list_price or 0.0
+                    if target_currency != company_currency:
+                        prod_price = company_currency._convert(prod_price, target_currency, company, fields.Date.today())
+
                     product_data.append({
                         "id": prod.id,
                         "name": prod.name,
-                        "price": prod.list_price,
+                        "price": round(prod_price, 2),
                         "description": description,
                         "image_url": f"/web/image/product.template/{prod.id}/image_1920",
                         "branch_id": prod.branch_id.id if prod.branch_id else None,
@@ -129,7 +155,9 @@ class EcommerceBranchAPI(http.Controller):
                 "status": "success",
                 "branch": resolved_branch_name,
                 "count": len(product_data),
-                "data": product_data
+                "data": product_data,
+                "currency": target_currency.name,
+                "currency_symbol": target_currency.symbol or target_currency.name
             }
             
             if location_id:
@@ -262,3 +290,674 @@ class EcommerceBranchAPI(http.Controller):
 
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET LANGUAGES
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/languages', type='json', auth='public', methods=['POST', 'OPTIONS', 'GET'], cors='*', csrf=False)
+    def get_languages(self, **kwargs):
+        try:
+            languages = request.env['res.lang'].sudo().search([('active', '=', True)])
+            lang_data = []
+            for lang in languages:
+                lang_data.append({
+                    "id": lang.id,
+                    "name": lang.name,
+                    "code": lang.code,
+                    "iso_code": lang.iso_code,
+                    "direction": lang.direction,
+                })
+            
+            return {
+                "status": "success",
+                "count": len(lang_data),
+                "data": lang_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # SET/FETCH LANGUAGE SPECIFIC API
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/language/english',
+        '/api/ecommerce/language/hindi',
+        '/api/ecommerce/language/tamil',
+        '/api/ecommerce/language/malayalam',
+        '/api/ecommerce/language/telugu',
+        '/api/ecommerce/language/kannada'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def handle_specific_language(self, **kwargs):
+        try:
+            path = request.httprequest.path
+            lang_name = path.split('/')[-1]
+
+            # Map common names to Odoo language codes
+            lang_map = {
+                'english': 'en_US',
+                'hindi': 'hi_IN',
+                'tamil': 'ta_IN',
+                'malayalam': 'ml_IN',
+                'telugu': 'te_IN',
+                'kannada': 'kn_IN'
+            }
+            
+            clean_name = lang_name.lower().strip()
+            if clean_name not in lang_map:
+                return {"status": "error", "message": f"Language '{lang_name}' is not currently supported."}
+
+            odoo_lang_code = lang_map[clean_name]
+            customer_id = kwargs.get('customer_id')
+
+            # If a customer_id is provided, update their language preference in Odoo
+            if customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(customer_id)
+                if customer.exists():
+                    # Assuming there's a field or partner linked. 
+                    # If using standard res.partner, it would be customer.partner_id.lang = odoo_lang_code
+                    pass
+
+            return {
+                "status": "success",
+                "message": f"{lang_name.capitalize()} language API activated successfully.",
+                "language_code": odoo_lang_code,
+                "data": {
+                    "info": f"This is the dedicated endpoint for {lang_name.capitalize()}."
+                }
+            }
+
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET CURRENCIES (JSON)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/currencies', type='json', auth='public', methods=['POST', 'OPTIONS', 'GET'], cors='*', csrf=False)
+    def get_currencies_json(self, **kwargs):
+        try:
+            return self._get_currencies_data()
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET CURRENCIES (HTTP GET)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/currencies', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_currencies_http(self, **kwargs):
+        try:
+            data = self._get_currencies_data()
+            return self._json_response(data)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # GET CURRENCIES (HTTP POST)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/currencies', type='http', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_currencies_http_post(self, **kwargs):
+        try:
+            data = self._get_currencies_data()
+            return self._json_response(data)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    def _get_currencies_data(self):
+        currency_codes = ['INR', 'USD', 'AED', 'SGD']
+        Currency = request.env['res.currency'].sudo()
+        currencies = Currency.with_context(active_test=False).search([('name', 'in', currency_codes)])
+        
+        # Ensure AED and SGD are active in Odoo if found
+        for curr in currencies:
+            if not curr.active:
+                curr.write({'active': True})
+                
+        currency_defaults = {
+            'INR': {'symbol': '₹', 'full_name': 'Indian Rupee'},
+            'USD': {'symbol': '$', 'full_name': 'US Dollar'},
+            'AED': {'symbol': 'د.إ', 'full_name': 'UAE Dirham'},
+            'SGD': {'symbol': 'S$', 'full_name': 'Singapore Dollar'}
+        }
+        
+        currency_data = []
+        for code in currency_codes:
+            curr_rec = currencies.filtered(lambda c: c.name == code)
+            if curr_rec:
+                currency_data.append({
+                    "id": curr_rec.id,
+                    "name": curr_rec.currency_unit_label or currency_defaults[code]['full_name'],
+                    "code": curr_rec.name,
+                    "symbol": curr_rec.symbol or currency_defaults[code]['symbol'],
+                    "rate": curr_rec.rate or 1.0,
+                })
+            else:
+                currency_data.append({
+                    "id": 0,
+                    "name": currency_defaults[code]['full_name'],
+                    "code": code,
+                    "symbol": currency_defaults[code]['symbol'],
+                    "rate": 1.0,
+                })
+        return {
+            "status": "success",
+            "count": len(currency_data),
+            "data": currency_data
+        }
+
+    # ─────────────────────────────────────────────
+    # SET CURRENCY (JSON)
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/currency/inr',
+        '/api/ecommerce/currency/usd',
+        '/api/ecommerce/currency/aed',
+        '/api/ecommerce/currency/sgd'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def handle_specific_currency_json(self, **kwargs):
+        try:
+            # We support reading parameters from jsonrpc post
+            return self._set_specific_currency(kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # SET CURRENCY (HTTP GET)
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/currency/inr',
+        '/api/ecommerce/currency/usd',
+        '/api/ecommerce/currency/aed',
+        '/api/ecommerce/currency/sgd'
+    ], type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def handle_specific_currency_http(self, **kwargs):
+        try:
+            # In HTTP GET, params are in request.params
+            data = self._set_specific_currency(request.params)
+            if data.get("status") == "error":
+                return self._json_response(data, 400)
+            return self._json_response(data)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    def _set_specific_currency(self, kwargs):
+        path = request.httprequest.path
+        currency_code = path.split('/')[-1].upper() # 'INR', 'USD', 'AED', 'SGD'
+        
+        customer_id = kwargs.get('customer_id')
+        
+        Currency = request.env['res.currency'].sudo()
+        currency = Currency.with_context(active_test=False).search([('name', '=', currency_code)], limit=1)
+        if currency:
+            if not currency.active:
+                currency.write({'active': True})
+        else:
+            return {"status": "error", "message": f"Currency '{currency_code}' not found."}
+            
+        if customer_id:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if customer.exists():
+                customer.write({'currency_id': currency.id})
+                
+        return {
+            "status": "success",
+            "message": f"{currency_code} currency preference set successfully.",
+            "currency_code": currency_code,
+            "symbol": currency.symbol or '$',
+            "rate": currency.rate or 1.0,
+            "data": {
+                "info": f"This is the dedicated endpoint for {currency_code}."
+            }
+        }
+
+    # ─────────────────────────────────────────────
+    # HELP CENTER API (FAQs)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/help_center', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_help_center(self, **kwargs):
+        try:
+            faqs = request.env['ecommerce.faq'].sudo().search([])
+            faq_data = []
+            for faq in faqs:
+                faq_data.append({
+                    "id": faq.id,
+                    "question": faq.question,
+                    "answer": faq.answer,
+                })
+            
+            # Predefined high-quality defaults if database is empty
+            if not faq_data:
+                faq_data = [
+                    {
+                        "id": 1,
+                        "question": "What is Nakshathra Gold & Diamonds?",
+                        "answer": "Nakshathra is a premier jewellery store offering pure gold, diamond, platinum, and silver ornaments with certified quality."
+                    },
+                    {
+                        "id": 2,
+                        "question": "How do I trace my order?",
+                        "answer": "You can view your order status in the Order History section of the mobile application."
+                    },
+                    {
+                        "id": 3,
+                        "question": "What is the return policy?",
+                        "answer": "We offer a 7-day return/exchange policy for standard ornaments in their original, unused condition."
+                    }
+                ]
+            
+            return {
+                "status": "success",
+                "faqs": faq_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # CHAT WITH US API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/chat_info', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_chat_info(self, **kwargs):
+        try:
+            ICPSudo = request.env['ir.config_parameter'].sudo()
+            whatsapp_number = ICPSudo.get_param('ecommerce.chat.whatsapp_number', '+916282116343')
+            start_time = ICPSudo.get_param('ecommerce.chat.start_time', '9AM')
+            end_time = ICPSudo.get_param('ecommerce.chat.end_time', '9PM')
+            
+            return {
+                "status": "success",
+                "whatsapp_number": whatsapp_number,
+                "availability": f"Available {start_time} - {end_time}",
+                "chat_link": f"https://wa.me/{whatsapp_number.replace('+', '').replace(' ', '')}"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # RATE THE APP API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/app_rating_info', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_app_rating_info(self, **kwargs):
+        try:
+            ICPSudo = request.env['ir.config_parameter'].sudo()
+            play_store_url = ICPSudo.get_param('ecommerce.rating.play_store_url', 'https://play.google.com/store/apps/details?id=com.nakshathra.app')
+            app_store_url = ICPSudo.get_param('ecommerce.rating.app_store_url', 'https://apps.apple.com/app/id123456789')
+            
+            return {
+                "status": "success",
+                "play_store_url": play_store_url,
+                "app_store_url": app_store_url,
+                "message": "Enjoying Nakshathra? Leave a review!"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # ABOUT API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/about', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_about_info(self, **kwargs):
+        try:
+            company = request.env.company
+            ICPSudo = request.env['ir.config_parameter'].sudo()
+            app_version = ICPSudo.get_param('ecommerce.about.app_version', '2.1.0')
+            tc_url = ICPSudo.get_param('ecommerce.about.terms_and_conditions', 'https://nakshathra.com/terms')
+            privacy_url = ICPSudo.get_param('ecommerce.about.privacy_policy', 'https://nakshathra.com/privacy')
+            
+            return {
+                "status": "success",
+                "company_name": company.name or "Nakshathra Gold & Diamonds",
+                "email": company.email or "support@nakshathra.com",
+                "phone": company.phone or "+916282116343",
+                "website": company.website or "https://nakshathra.com",
+                "app_version": app_version,
+                "terms_and_conditions_url": tc_url,
+                "privacy_policy_url": privacy_url
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # PRIVACY POLICY API (HTTP GET & POST)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/privacy_policy', type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_privacy_policy_http(self, **kwargs):
+        try:
+            ICPSudo = request.env['ir.config_parameter'].sudo()
+            privacy_url = ICPSudo.get_param('ecommerce.about.privacy_policy', 'https://nakshathra.com/privacy')
+            
+            data = {
+                "status": "success",
+                "privacy_policy_url": privacy_url,
+                "content": "This is the Privacy Policy of Nakshathra Gold & Diamonds. We are committed to protecting your personal data. Please visit our website for the full policy details."
+            }
+            return self._json_response(data)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # PRIVACY POLICY API (JSON-RPC)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/privacy_policy/json', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_privacy_policy_json(self, **kwargs):
+        try:
+            ICPSudo = request.env['ir.config_parameter'].sudo()
+            privacy_url = ICPSudo.get_param('ecommerce.about.privacy_policy', 'https://nakshathra.com/privacy')
+            
+            return {
+                "status": "success",
+                "privacy_policy_url": privacy_url,
+                "content": "This is the Privacy Policy of Nakshathra Gold & Diamonds. We are committed to protecting your personal data. Please visit our website for the full policy details."
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET CUSTOMER ADDRESSES API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/addresses', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_addresses(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(customer_id)
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
+
+            addresses = request.env['ecommerce.address'].sudo().search([('customer_id', '=', customer.id)])
+            address_data = []
+            for addr in addresses:
+                address_data.append({
+                    "id": addr.id,
+                    "type": addr.name,
+                    "recipient_name": addr.recipient_name,
+                    "phone": addr.phone,
+                    "address_details": addr.address_details
+                })
+
+            return {
+                "status": "success",
+                "count": len(address_data),
+                "addresses": address_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # ADD ADDRESS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/add', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def add_address(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            addr_type = kwargs.get('type', 'home')
+            recipient_name = kwargs.get('recipient_name')
+            phone = kwargs.get('phone')
+            address_details = kwargs.get('address_details')
+
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+            if not recipient_name:
+                return {"status": "error", "message": "recipient_name is required"}
+            if not phone:
+                return {"status": "error", "message": "phone is required"}
+            if not address_details:
+                return {"status": "error", "message": "address_details is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(customer_id)
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
+
+            if addr_type not in ['home', 'work', 'other']:
+                return {"status": "error", "message": "Invalid address type. Must be 'home', 'work', or 'other'."}
+
+            addr = request.env['ecommerce.address'].sudo().create({
+                'name': addr_type,
+                'recipient_name': recipient_name,
+                'phone': phone,
+                'address_details': address_details,
+                'customer_id': customer.id
+            })
+
+            return {
+                "status": "success",
+                "message": "Address added successfully",
+                "address_id": addr.id
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # UPDATE ADDRESS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/update', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_address(self, **kwargs):
+        try:
+            address_id = kwargs.get('address_id')
+            customer_id = kwargs.get('customer_id')
+
+            if not address_id:
+                return {"status": "error", "message": "address_id is required"}
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            addr = request.env['ecommerce.address'].sudo().browse(address_id)
+            if not addr.exists() or addr.customer_id.id != int(customer_id):
+                return {"status": "error", "message": "Address not found or unauthorized"}
+
+            vals = {}
+            if 'type' in kwargs:
+                if kwargs['type'] not in ['home', 'work', 'other']:
+                    return {"status": "error", "message": "Invalid address type. Must be 'home', 'work', or 'other'."}
+                vals['name'] = kwargs['type']
+            if 'recipient_name' in kwargs:
+                vals['recipient_name'] = kwargs['recipient_name']
+            if 'phone' in kwargs:
+                vals['phone'] = kwargs['phone']
+            if 'address_details' in kwargs:
+                vals['address_details'] = kwargs['address_details']
+
+            if vals:
+                addr.write(vals)
+
+            return {
+                "status": "success",
+                "message": "Address updated successfully"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # DELETE ADDRESS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/delete', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def delete_address(self, **kwargs):
+        try:
+            address_id = kwargs.get('address_id')
+            customer_id = kwargs.get('customer_id')
+
+            if not address_id:
+                return {"status": "error", "message": "address_id is required"}
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            addr = request.env['ecommerce.address'].sudo().browse(address_id)
+            if not addr.exists() or addr.customer_id.id != int(customer_id):
+                return {"status": "error", "message": "Address not found or unauthorized"}
+
+            addr.unlink()
+
+            return {
+                "status": "success",
+                "message": "Address deleted successfully"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET HTTP HELPER
+    # ─────────────────────────────────────────────
+    def _json_response(self, data, status=200):
+        """Return a proper JSON HTTP response (used for GET-type routes)."""
+        return Response(
+            json.dumps(data),
+            status=status,
+            mimetype='application/json',
+        )
+
+    # ─────────────────────────────────────────────
+    # GET CUSTOMER ADDRESSES API (GET)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/addresses', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_addresses_get(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return self._json_response({"status": "error", "message": "customer_id is required"}, 400)
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return self._json_response({"status": "error", "message": "Customer not found"}, 404)
+
+            addresses = request.env['ecommerce.address'].sudo().search([('customer_id', '=', customer.id)])
+            address_data = []
+            for addr in addresses:
+                address_data.append({
+                    "id": addr.id,
+                    "type": addr.name,
+                    "recipient_name": addr.recipient_name,
+                    "phone": addr.phone,
+                    "address_details": addr.address_details
+                })
+
+            return self._json_response({
+                "status": "success",
+                "count": len(address_data),
+                "addresses": address_data
+            })
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # ADD ADDRESS API (GET)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/add', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def add_address_get(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            addr_type = kwargs.get('type', 'home')
+            recipient_name = kwargs.get('recipient_name')
+            phone = kwargs.get('phone')
+            address_details = kwargs.get('address_details')
+
+            if not customer_id:
+                return self._json_response({"status": "error", "message": "customer_id is required"}, 400)
+            if not recipient_name:
+                return self._json_response({"status": "error", "message": "recipient_name is required"}, 400)
+            if not phone:
+                return self._json_response({"status": "error", "message": "phone is required"}, 400)
+            if not address_details:
+                return self._json_response({"status": "error", "message": "address_details is required"}, 400)
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return self._json_response({"status": "error", "message": "Customer not found"}, 404)
+
+            if addr_type not in ['home', 'work', 'other']:
+                return self._json_response({"status": "error", "message": "Invalid address type. Must be 'home', 'work', or 'other'."}, 400)
+
+            addr = request.env['ecommerce.address'].sudo().create({
+                'name': addr_type,
+                'recipient_name': recipient_name,
+                'phone': phone,
+                'address_details': address_details,
+                'customer_id': customer.id
+            })
+
+            return self._json_response({
+                "status": "success",
+                "message": "Address added successfully",
+                "address_id": addr.id
+            })
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # UPDATE ADDRESS API (GET / PUT / PATCH)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/update', type='http', auth='public', methods=['GET', 'PUT', 'PATCH', 'OPTIONS'], cors='*', csrf=False)
+    def update_address_get(self, **kwargs):
+        try:
+            if request.httprequest.method in ['PUT', 'PATCH']:
+                try:
+                    body_data = json.loads(request.httprequest.data)
+                    kwargs.update(body_data)
+                except Exception:
+                    pass
+            address_id = kwargs.get('address_id')
+            customer_id = kwargs.get('customer_id')
+
+            if not address_id:
+                return self._json_response({"status": "error", "message": "address_id is required"}, 400)
+            if not customer_id:
+                return self._json_response({"status": "error", "message": "customer_id is required"}, 400)
+
+            addr = request.env['ecommerce.address'].sudo().browse(int(address_id))
+            if not addr.exists() or addr.customer_id.id != int(customer_id):
+                return self._json_response({"status": "error", "message": "Address not found or unauthorized"}, 404)
+
+            vals = {}
+            if 'type' in kwargs:
+                if kwargs['type'] not in ['home', 'work', 'other']:
+                    return self._json_response({"status": "error", "message": "Invalid address type. Must be 'home', 'work', or 'other'."}, 400)
+                vals['name'] = kwargs['type']
+            if 'recipient_name' in kwargs:
+                vals['recipient_name'] = kwargs['recipient_name']
+            if 'phone' in kwargs:
+                vals['phone'] = kwargs['phone']
+            if 'address_details' in kwargs:
+                vals['address_details'] = kwargs['address_details']
+
+            if vals:
+                addr.write(vals)
+
+            return self._json_response({
+                "status": "success",
+                "message": "Address updated successfully"
+            })
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # DELETE ADDRESS API (GET / DELETE)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/address/delete', type='http', auth='public', methods=['GET', 'DELETE', 'OPTIONS'], cors='*', csrf=False)
+    def delete_address_get(self, **kwargs):
+        try:
+            if request.httprequest.method == 'DELETE':
+                try:
+                    body_data = json.loads(request.httprequest.data)
+                    kwargs.update(body_data)
+                except Exception:
+                    pass
+            address_id = kwargs.get('address_id')
+            customer_id = kwargs.get('customer_id')
+
+            if not address_id:
+                return self._json_response({"status": "error", "message": "address_id is required"}, 400)
+            if not customer_id:
+                return self._json_response({"status": "error", "message": "customer_id is required"}, 400)
+
+            addr = request.env['ecommerce.address'].sudo().browse(int(address_id))
+            if not addr.exists() or addr.customer_id.id != int(customer_id):
+                return self._json_response({"status": "error", "message": "Address not found or unauthorized"}, 404)
+
+            addr.unlink()
+
+            return self._json_response({
+                "status": "success",
+                "message": "Address deleted successfully"
+            })
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+
