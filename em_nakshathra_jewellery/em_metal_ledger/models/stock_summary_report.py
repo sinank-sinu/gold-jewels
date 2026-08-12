@@ -14,278 +14,233 @@ class StockSummaryReportWizard(models.TransientModel):
         self.ensure_one()
         cr = self.env.cr
 
+        # Create indexes for instant querying if they don't already exist
+        cr.execute("CREATE INDEX IF NOT EXISTS idx_stock_move_label_date_state ON stock_move (label_id, state, date)")
+        cr.execute("CREATE INDEX IF NOT EXISTS idx_sale_order_line_label_state ON sale_order_line (label_id, state)")
+        cr.execute("CREATE INDEX IF NOT EXISTS idx_product_label_branch_created ON product_label (branch_id, create_date, active)")
+
         cr.execute("DELETE FROM stock_summary_report_line WHERE create_uid = %s", (self.env.uid,))
 
         start_dt = datetime.combine(self.start_date, datetime.min.time())
         end_dt = datetime.combine(self.end_date, datetime.max.time())
         no_of_days = (self.end_date - self.start_date).days + 1
 
-        # Internal locations
-        if self.branch_ids:
-            cr.execute(
-                "SELECT id FROM stock_location WHERE usage = 'internal' AND branch_id = ANY(%s)",
-                (self.branch_ids.ids,)
+        branch_ids = self.branch_ids.ids if self.branch_ids else []
+
+        query = """
+        WITH internal_locs AS (
+            SELECT id FROM stock_location 
+            WHERE usage = 'internal'
+              AND (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR branch_id = ANY(%s::int[]))
+        ),
+        relevant_labels AS (
+            SELECT pl.id AS label_id, pl.product_id, pl.purity_id,
+                   COALESCE(pl.purchase_gross_weight, 0.0) AS gross_wt,
+                   COALESCE(pl.purchase_net_weight, 0.0) AS net_wt,
+                   pl.create_date, COALESCE(pl.age_import, 0) AS ageing
+            FROM product_label pl
+            WHERE (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR pl.branch_id = ANY(%s::int[]))
+              AND (
+                (pl.create_date BETWEEN %s AND %s)
+                OR (pl.create_date < %s AND pl.active = true)
+                OR pl.id IN (
+                    SELECT sm.label_id FROM stock_move sm
+                    WHERE sm.state = 'done' AND sm.date BETWEEN %s AND %s AND sm.label_id IS NOT NULL
+                      AND (sm.location_id IN (SELECT id FROM internal_locs) OR sm.location_dest_id IN (SELECT id FROM internal_locs))
+                )
+                OR pl.id IN (
+                    SELECT sol.label_id FROM sale_order_line sol
+                    JOIN sale_order so ON so.id = sol.order_id
+                    WHERE sol.state IN ('sale','done') AND so.date_order BETWEEN %s AND %s AND sol.label_id IS NOT NULL
+                      AND (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR so.branch_id = ANY(%s::int[]))
+                )
             )
-        else:
-            cr.execute("SELECT id FROM stock_location WHERE usage = 'internal'")
-        internal_loc_ids = [r[0] for r in cr.fetchall()]
-        if not internal_loc_ids:
-            return self._open_report_action()
-
-        branch_label_sql = "AND pl.branch_id IN %s" if self.branch_ids else ""
-        branch_so_sql = "AND so.branch_id IN %s" if self.branch_ids else ""
-        # Use tuple for IN %s — psycopg2 reliably expands tuples as SQL IN (x, y, z)
-        bp = [tuple(self.branch_ids.ids)] if self.branch_ids else []
-
-        # 1a. Labels created during period
-        cr.execute(f"""
-            SELECT pl.id, pl.product_id, pl.purity_id,
-                   pl.purchase_gross_weight, pl.purchase_net_weight,
-                   pl.create_date, pl.active, pl.age_import
-            FROM product_label pl
-            WHERE pl.create_date BETWEEN %s AND %s
-            {branch_label_sql}
-        """, [start_dt, end_dt] + bp)
-        labels_in_period = {r[0]: r for r in cr.fetchall()}
-
-        # 1b. Active labels created before period
-        cr.execute(f"""
-            SELECT pl.id, pl.product_id, pl.purity_id,
-                   pl.purchase_gross_weight, pl.purchase_net_weight,
-                   pl.create_date, pl.active, pl.age_import
-            FROM product_label pl
-            WHERE pl.create_date < %s AND pl.active = true
-            {branch_label_sql}
-        """, [start_dt] + bp)
-        labels_before = {r[0]: r for r in cr.fetchall()}
-
-        # 1c. Labels moved during period
-        cr.execute(f"""
-            SELECT DISTINCT sm.label_id,
-                   pl.product_id, pl.purity_id,
-                   pl.purchase_gross_weight, pl.purchase_net_weight,
-                   pl.create_date, pl.active, pl.age_import
-            FROM stock_move sm
-            JOIN product_label pl ON pl.id = sm.label_id
-            WHERE sm.state = 'done'
-              AND sm.date BETWEEN %s AND %s
-              AND sm.label_id IS NOT NULL
-              AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
-            {branch_label_sql}
-        """, [start_dt, end_dt, internal_loc_ids, internal_loc_ids] + bp)
-        labels_moved = {r[0]: r for r in cr.fetchall()}
-
-        # 1d. Labels sold during period
-        cr.execute(f"""
-            SELECT DISTINCT sol.label_id,
-                   pl.product_id, pl.purity_id,
-                   pl.purchase_gross_weight, pl.purchase_net_weight,
-                   pl.create_date, pl.active, pl.age_import
-            FROM sale_order_line sol
-            JOIN sale_order so ON so.id = sol.order_id
-            JOIN product_label pl ON pl.id = sol.label_id
-            WHERE sol.state IN ('sale','done')
-              AND so.date_order BETWEEN %s AND %s
-              AND sol.label_id IS NOT NULL
-            {branch_so_sql}
-        """, [start_dt, end_dt] + bp)
-        labels_sold = {r[0]: r for r in cr.fetchall()}
-
-        # Merge all relevant labels
-        all_labels = {}
-        all_labels.update(labels_before)
-        all_labels.update(labels_in_period)
-        all_labels.update(labels_moved)
-        all_labels.update(labels_sold)
-
-        if not all_labels:
-            return self._open_report_action()
-
-        all_label_ids = list(all_labels.keys())
-        all_product_ids = list({r[1] for r in all_labels.values() if r[1]})
-
-        # 2. Opening moves (before start_date) - aggregated by label
-        cr.execute("""
-            SELECT sm.label_id,
-                   SUM(CASE WHEN sm.location_dest_id = ANY(%s)
-                                 AND NOT (sm.location_id = ANY(%s)) THEN 1 ELSE 0 END) AS in_count,
-                   SUM(CASE WHEN sm.location_id = ANY(%s)
-                                 AND NOT (sm.location_dest_id = ANY(%s)) THEN 1 ELSE 0 END) AS out_count
-            FROM stock_move sm
-            WHERE sm.state = 'done'
-              AND sm.date < %s
-              AND sm.label_id = ANY(%s)
-              AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
-            GROUP BY sm.label_id
-        """, [internal_loc_ids, internal_loc_ids,
-              internal_loc_ids, internal_loc_ids,
-              start_dt, all_label_ids,
-              internal_loc_ids, internal_loc_ids])
-        opening_by_label = {r[0]: (r[1], r[2]) for r in cr.fetchall()}
-
-        # Labels sold before start date
-        cr.execute("""
+        ),
+        sold_before AS (
             SELECT DISTINCT sol.label_id
             FROM sale_order_line sol
             JOIN sale_order so ON so.id = sol.order_id
-            WHERE sol.state IN ('sale','done')
-              AND so.date_order < %s
-              AND sol.label_id = ANY(%s)
-        """, [start_dt, all_label_ids])
-        sold_before_ids = {r[0] for r in cr.fetchall()}
-
-        # 3. Period moves - aggregated by label
-        cr.execute("""
-            SELECT sm.label_id,
-                   SUM(CASE WHEN sm.location_dest_id = ANY(%s)
-                                 AND NOT (sm.location_id = ANY(%s)) THEN 1 ELSE 0 END) AS in_count,
-                   SUM(CASE WHEN sm.location_id = ANY(%s)
-                                 AND NOT (sm.location_dest_id = ANY(%s)) THEN 1 ELSE 0 END) AS out_count
+            WHERE sol.state IN ('sale','done') AND so.date_order < %s AND sol.label_id IS NOT NULL
+              AND (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR so.branch_id = ANY(%s::int[]))
+        ),
+        out_before AS (
+            SELECT sm.label_id, COUNT(*) AS out_cnt
             FROM stock_move sm
-            WHERE sm.state = 'done'
-              AND sm.date BETWEEN %s AND %s
-              AND sm.label_id = ANY(%s)
-              AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
+            WHERE sm.state = 'done' AND sm.date < %s AND sm.label_id IS NOT NULL
+              AND sm.location_id IN (SELECT id FROM internal_locs)
+              AND sm.location_dest_id NOT IN (SELECT id FROM internal_locs)
             GROUP BY sm.label_id
-        """, [internal_loc_ids, internal_loc_ids,
-              internal_loc_ids, internal_loc_ids,
-              start_dt, end_dt, all_label_ids,
-              internal_loc_ids, internal_loc_ids])
-        period_by_label = {r[0]: (r[1], r[2]) for r in cr.fetchall()}
-
-        # Labels sold during period
-        cr.execute("""
+        ),
+        sold_in_period AS (
             SELECT DISTINCT sol.label_id
             FROM sale_order_line sol
             JOIN sale_order so ON so.id = sol.order_id
-            WHERE sol.state IN ('sale','done')
-              AND so.date_order BETWEEN %s AND %s
-              AND sol.label_id = ANY(%s)
-        """, [start_dt, end_dt, all_label_ids])
-        sold_in_period_ids = {r[0] for r in cr.fetchall()}
-
-        # 4. Min stock by product
-        cr.execute("""
-            SELECT product_id, MIN(product_min_qty)
+            WHERE sol.state IN ('sale','done') AND so.date_order BETWEEN %s AND %s AND sol.label_id IS NOT NULL
+              AND (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR so.branch_id = ANY(%s::int[]))
+        ),
+        out_period AS (
+            SELECT sm.label_id, COUNT(*) AS out_cnt
+            FROM stock_move sm
+            WHERE sm.state = 'done' AND sm.date BETWEEN %s AND %s AND sm.label_id IS NOT NULL
+              AND sm.location_id IN (SELECT id FROM internal_locs)
+              AND sm.location_dest_id NOT IN (SELECT id FROM internal_locs)
+            GROUP BY sm.label_id
+        ),
+        min_stocks AS (
+            SELECT product_id, MIN(product_min_qty) AS min_qty
             FROM stock_warehouse_orderpoint
-            WHERE location_id = ANY(%s) AND product_id = ANY(%s)
+            WHERE location_id IN (SELECT id FROM internal_locs)
             GROUP BY product_id
-        """, [internal_loc_ids, all_product_ids])
-        min_stock_by_product = {r[0]: r[1] for r in cr.fetchall()}
-
-        # 5. Product attributes
-        cr.execute("""
-            SELECT pp.id,
-                   pa.name::text,
-                   pav.name::text
+        ),
+        product_attrs AS (
+            SELECT pp.id AS product_id,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"type"','type','"item type"','item type','"product type"','product type') THEN pav.name::text END) AS type_val,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"variety"','variety','"verity"','verity') THEN pav.name::text END) AS variety_val,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"design"','design') THEN pav.name::text END) AS design_val,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"size"','size') THEN pav.name::text END) AS size_val,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"stone colour"','stone colour','"stone color"','stone color') THEN pav.name::text END) AS stone_val,
+                MAX(CASE WHEN LOWER(TRIM(pa.name::text)) IN ('"metal colour"','metal colour','"metal color"','metal color') THEN pav.name::text END) AS metal_val
             FROM product_product pp
             JOIN product_template_attribute_value ptav ON ptav.product_tmpl_id = pp.product_tmpl_id
             JOIN product_attribute_value pav ON pav.id = ptav.product_attribute_value_id
             JOIN product_attribute pa ON pa.id = pav.attribute_id
-            WHERE pp.id = ANY(%s)
-        """, [all_product_ids])
-        attr_by_product = {}
-        for prod_id, aname, aval in cr.fetchall():
-            attr_by_product.setdefault(prod_id, {})[aname.strip().lower()] = aval
+            GROUP BY pp.id
+        ),
+        computed AS (
+            SELECT
+                rl.product_id,
+                rl.label_id,
+                rl.purity_id,
+                rl.ageing,
+                -- Opening
+                (CASE WHEN rl.create_date < %s AND sb.label_id IS NULL AND COALESCE(ob.out_cnt, 0) = 0 THEN 1.0 ELSE 0.0 END) AS o_pcs,
+                (CASE WHEN rl.create_date < %s AND sb.label_id IS NULL AND COALESCE(ob.out_cnt, 0) = 0 THEN rl.gross_wt ELSE 0.0 END) AS o_gross,
+                (CASE WHEN rl.create_date < %s AND sb.label_id IS NULL AND COALESCE(ob.out_cnt, 0) = 0 THEN rl.net_wt ELSE 0.0 END) AS o_net,
+                -- In
+                (CASE WHEN rl.create_date BETWEEN %s AND %s THEN 1.0 ELSE 0.0 END) AS in_pcs,
+                (CASE WHEN rl.create_date BETWEEN %s AND %s THEN rl.gross_wt ELSE 0.0 END) AS in_gross,
+                (CASE WHEN rl.create_date BETWEEN %s AND %s THEN rl.net_wt ELSE 0.0 END) AS in_net,
+                -- Out
+                (CASE WHEN sip.label_id IS NOT NULL THEN 1.0 ELSE COALESCE(op.out_cnt, 0)::float END) AS out_pcs,
+                (CASE WHEN sip.label_id IS NOT NULL THEN rl.gross_wt ELSE rl.gross_wt * COALESCE(op.out_cnt, 0) END) AS out_gross,
+                (CASE WHEN sip.label_id IS NOT NULL THEN rl.net_wt ELSE rl.net_wt * COALESCE(op.out_cnt, 0) END) AS out_net,
+                
+                COALESCE(ms.min_qty, 0.0) AS min_stock,
+                COALESCE(pa.type_val, '') AS type_val,
+                COALESCE(pa.variety_val, '') AS variety_val,
+                COALESCE(pa.design_val, '') AS design_val,
+                COALESCE(pa.size_val, '') AS size_val,
+                COALESCE(pa.stone_val, '') AS stone_val,
+                COALESCE(pa.metal_val, '') AS metal_val
+            FROM relevant_labels rl
+            LEFT JOIN sold_before sb ON sb.label_id = rl.label_id
+            LEFT JOIN out_before ob ON ob.label_id = rl.label_id
+            LEFT JOIN sold_in_period sip ON sip.label_id = rl.label_id
+            LEFT JOIN out_period op ON op.label_id = rl.label_id
+            LEFT JOIN min_stocks ms ON ms.product_id = rl.product_id
+            LEFT JOIN product_attrs pa ON pa.product_id = rl.product_id
+            WHERE rl.product_id IS NOT NULL
+        )
+        INSERT INTO stock_summary_report_line (
+            product_id, label_id, purity_id, ageing,
+            opening_pcs, opening_gross_weight, opening_net_weight,
+            in_pcs, in_gross_weight, in_net_weight,
+            out_pcs, out_gross_weight, out_net_weight,
+            closing_pcs, closing_gross_weight, closing_net_weight,
+            average_inventory, no_of_days, min_stock_level,
+            turnover_ratio, dio, stock_gap,
+            type_value, variety_value, design_value, size_value,
+            stone_colour_value, metal_colour_value,
+            create_date, create_uid, write_date, write_uid
+        )
+        SELECT
+            product_id, label_id, purity_id, ageing,
+            o_pcs, o_gross, o_net,
+            in_pcs, in_gross, in_net,
+            out_pcs, out_gross, out_net,
+            (o_pcs + in_pcs - out_pcs) AS closing_pcs,
+            (o_gross + in_gross - out_gross) AS closing_gross_weight,
+            (o_net + in_net - out_net) AS closing_net_weight,
+            -- average_inventory
+            (CASE 
+                WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                ELSE 0.0
+            END) AS average_inventory,
+            %s AS no_of_days,
+            min_stock AS min_stock_level,
+            -- turnover_ratio
+            (CASE 
+                WHEN (CASE 
+                        WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                        WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                        ELSE 0.0
+                    END) > 0.0001 
+                THEN out_gross / (CASE 
+                        WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                        WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                        ELSE 0.0
+                    END)
+                ELSE 0.0
+            END) AS turnover_ratio,
+            -- dio
+            (CASE 
+                WHEN (CASE 
+                        WHEN (CASE 
+                                WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                                WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                                ELSE 0.0
+                            END) > 0.0001 
+                        THEN out_gross / (CASE 
+                                WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                                WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                                ELSE 0.0
+                            END)
+                        ELSE 0.0
+                    END) > 0.0001
+                THEN ROUND(%s::numeric / (out_gross / (CASE 
+                        WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                        WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                        ELSE 0.0
+                    END)))
+                WHEN (CASE 
+                        WHEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0 > 0 THEN (o_gross + (o_gross + in_gross - out_gross)) / 2.0
+                        WHEN (in_gross > 0 OR out_gross > 0) THEN (in_gross + out_gross) / 4.0
+                        ELSE 0.0
+                    END) > 0.0001 THEN %s
+                ELSE 0.0
+            END) AS dio,
+            ((o_gross + in_gross - out_gross) - min_stock) AS stock_gap,
+            type_val, variety_val, design_val, size_val, stone_val, metal_val,
+            NOW(), %s, NOW(), %s
+        FROM computed
+        WHERE (o_pcs != 0 OR o_gross != 0 OR in_pcs != 0 OR in_gross != 0 OR out_pcs != 0 OR out_gross != 0 OR (o_pcs + in_pcs - out_pcs) != 0 OR (o_gross + in_gross - out_gross) != 0 OR min_stock != 0);
+        """
 
-        # 6. Build and insert report lines
-        report_lines = []
-        now_ts = datetime.now()
-        uid = self.env.uid
+        params = [
+            # internal_locs
+            branch_ids, branch_ids, branch_ids,
+            # relevant_labels
+            branch_ids, branch_ids, branch_ids,
+            start_dt, end_dt, start_dt,
+            start_dt, end_dt,
+            start_dt, end_dt, branch_ids, branch_ids, branch_ids,
+            # sold_before
+            start_dt, branch_ids, branch_ids, branch_ids,
+            # out_before
+            start_dt,
+            # sold_in_period
+            start_dt, end_dt, branch_ids, branch_ids, branch_ids,
+            # out_period
+            start_dt, end_dt,
+            # computed Opening & In
+            start_dt, start_dt, start_dt,
+            start_dt, end_dt, start_dt, end_dt, start_dt, end_dt,
+            # SELECT no_of_days & dio & uid
+            no_of_days, no_of_days, no_of_days, self.env.uid, self.env.uid
+        ]
 
-        for label_id, ldata in all_labels.items():
-            _, product_id, purity_id, gross_wt, net_wt, create_date, active, ageing = ldata
-            if not product_id:
-                continue
-
-            if isinstance(create_date, datetime):
-                create_dt = create_date
-            elif create_date:
-                create_dt = datetime.fromisoformat(str(create_date))
-            else:
-                create_dt = None
-
-            # Opening
-            if create_dt and create_dt < start_dt:
-                op = opening_by_label.get(label_id, (0, 0))
-                was_sold_before = label_id in sold_before_ids or (op[1] > 0)
-                if not was_sold_before:
-                    o_pcs, o_gross, o_net = 1.0, gross_wt or 0.0, net_wt or 0.0
-                else:
-                    o_pcs, o_gross, o_net = 0.0, 0.0, 0.0
-            else:
-                o_pcs, o_gross, o_net = 0.0, 0.0, 0.0
-
-            # In
-            if create_dt and start_dt <= create_dt <= end_dt:
-                in_pcs, in_gross, in_net = 1.0, gross_wt or 0.0, net_wt or 0.0
-            else:
-                in_pcs, in_gross, in_net = 0.0, 0.0, 0.0
-
-            # Out
-            if label_id in sold_in_period_ids:
-                out_pcs, out_gross, out_net = 1.0, gross_wt or 0.0, net_wt or 0.0
-            else:
-                pv = period_by_label.get(label_id, (0, 0))
-                out_pcs = float(pv[1])
-                out_gross = (gross_wt or 0.0) * out_pcs
-                out_net = (net_wt or 0.0) * out_pcs
-
-            c_pcs = o_pcs + in_pcs - out_pcs
-            c_gross = o_gross + in_gross - out_gross
-            c_net = o_net + in_net - out_net
-
-            avg_inv = (o_gross + c_gross) / 2.0
-            if avg_inv <= 0.0 and (in_gross > 0.0 or out_gross > 0.0):
-                avg_inv = (in_gross + out_gross) / 4.0
-            turnover = (out_gross / avg_inv) if avg_inv > 0.0001 else 0.0
-            dio = round(no_of_days / turnover) if turnover > 0.0001 else (no_of_days if avg_inv > 0.0001 else 0.0)
-
-            min_stock = float(min_stock_by_product.get(product_id, 0.0) or 0.0)
-            stock_gap = c_gross - min_stock
-
-            attrs = attr_by_product.get(product_id, {})
-            type_val = attrs.get('type', attrs.get('item type', attrs.get('product type', '')))
-            variety_val = attrs.get('variety', attrs.get('verity', ''))
-            design_val = attrs.get('design', '')
-            size_val = attrs.get('size', '')
-            stone_val = attrs.get('stone colour', attrs.get('stone color', ''))
-            metal_val = attrs.get('metal colour', attrs.get('metal color', ''))
-
-            if not any([o_pcs, o_gross, in_pcs, in_gross, out_pcs, out_gross, c_pcs, c_gross, min_stock]):
-                continue
-
-            report_lines.append((
-                product_id, label_id, purity_id or None,
-                ageing or 0,
-                o_pcs, o_gross, o_net,
-                in_pcs, in_gross, in_net,
-                out_pcs, out_gross, out_net,
-                c_pcs, c_gross, c_net,
-                avg_inv, no_of_days, min_stock, turnover, dio, stock_gap,
-                type_val, variety_val, design_val, size_val,
-                stone_val, metal_val,
-                now_ts, uid, now_ts, uid,
-            ))
-
-        if report_lines:
-            cr.executemany("""
-                INSERT INTO stock_summary_report_line
-                    (product_id, label_id, purity_id, ageing,
-                     opening_pcs, opening_gross_weight, opening_net_weight,
-                     in_pcs, in_gross_weight, in_net_weight,
-                     out_pcs, out_gross_weight, out_net_weight,
-                     closing_pcs, closing_gross_weight, closing_net_weight,
-                     average_inventory, no_of_days, min_stock_level,
-                     turnover_ratio, dio, stock_gap,
-                     type_value, variety_value, design_value, size_value,
-                     stone_colour_value, metal_colour_value,
-                     create_date, create_uid, write_date, write_uid)
-                VALUES (%s,%s,%s,%s, %s,%s,%s, %s,%s,%s, %s,%s,%s,
-                        %s,%s,%s, %s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s,%s,%s, %s,%s,%s,%s)
-            """, report_lines)
-
+        cr.execute(query, params)
         return self._open_report_action()
 
     def _open_report_action(self):
