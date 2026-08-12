@@ -23,6 +23,8 @@
 | `/orders` | GET | View order history with token auth | Token (Authorization header) | None (token in header) |
 | `/order/{order_id}` | POST | View specific order details | public | `customer_id`, `order_id` (in URL) |
 | `/order/{order_id}` | GET | View order details with token auth | Token (Authorization header) | `order_id` (in URL) |
+| `/currencies` | GET / POST | Get supported currencies (INR, USD, AED, SGD) with symbols and rates | public | None |
+| `/currency/{code}` | GET / POST | Set customer preferred currency preference | public | optional: `customer_id` |
 
 ---
 
@@ -333,6 +335,58 @@ All error responses follow this format:
 | "Cart item not found" | Invalid cart_line_id |
 | "Invalid email or password" | Login credentials error |
 | "Email already registered" | Duplicate email during registration |
+
+### Currencies Response
+```json
+{
+  "status": "success",
+  "count": 4,
+  "data": [
+    {
+      "id": 20,
+      "name": "Indian Rupee",
+      "code": "INR",
+      "symbol": "₹",
+      "rate": 1.0
+    },
+    {
+      "id": 1,
+      "name": "US Dollar",
+      "code": "USD",
+      "symbol": "$",
+      "rate": 0.012
+    },
+    {
+      "id": 129,
+      "name": "UAE Dirham",
+      "code": "AED",
+      "symbol": "د.إ",
+      "rate": 0.044
+    },
+    {
+      "id": 37,
+      "name": "Singapore Dollar",
+      "code": "SGD",
+      "symbol": "S$",
+      "rate": 0.016
+    }
+  ]
+}
+```
+
+### Set Currency Response
+```json
+{
+  "status": "success",
+  "message": "USD currency preference set successfully.",
+  "currency_code": "USD",
+  "symbol": "$",
+  "rate": 0.012,
+  "data": {
+    "info": "This is the dedicated endpoint for USD."
+  }
+}
+```
 
 ---
 

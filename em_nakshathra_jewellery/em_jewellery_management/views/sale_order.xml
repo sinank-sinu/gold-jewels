@@ -211,13 +211,12 @@
                 <field name="active_scheme_id" invisible="1"/>
                 <group>
                     <field name="apply_scheme" widget="boolean_toggle"/>
-                    <button
-                        name="action_apply_scheme"
-                        string="Apply Scheme"
-                        type="object"
-                        class="btn-primary"
-                        invisible="not apply_scheme or state not in ('draft', 'sent', 'sale') or scheme_line_id != False"/>
-
+<!--                    <button-->
+<!--                        name="action_apply_scheme"-->
+<!--                        string="Apply Scheme"-->
+<!--                        type="object"-->
+<!--                        class="btn-primary"-->
+<!--                        invisible="not apply_scheme or state not in ('draft', 'sent', 'sale') or scheme_line_id != False"/>-->
                     <button
                         name="action_remove_scheme"
                         string="Remove Scheme"

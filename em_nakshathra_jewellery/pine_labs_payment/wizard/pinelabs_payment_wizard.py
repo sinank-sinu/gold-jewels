@@ -304,9 +304,8 @@ class PineLabsPaymentWizard(models.TransientModel):
             payment_journal = cash_journal
 
             # Target dynamic Debtors Account Search matching your exact accounting structure logic
-            debtors_domain = [('code', '=', '100400')]
             if branch:
-                debtors_domain = ['&', ('code', '=', '100400'), '|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
+                debtors_domain = ['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
             debtors_account = self.env['account.account'].search(debtors_domain, limit=1)
 
             if not debtors_account:
