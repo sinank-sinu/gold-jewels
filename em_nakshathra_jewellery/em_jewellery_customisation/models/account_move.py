@@ -1,5 +1,6 @@
 from math import ceil
-from odoo import models, api, fields
+from odoo import models, api, fields, _
+from odoo.exceptions import UserError
 
 
 class AccountMove(models.Model):
@@ -14,11 +15,11 @@ class AccountMove(models.Model):
     # --- 1. Update Invoice Frontend Widget Totals ---
     @api.depends_context('lang')
     @api.depends(
-        'invoice_line_ids.price_subtotal', 
-        'invoice_line_ids.tax_ids', 
-        'invoice_payment_term_id', 
-        'partner_id', 
-        'currency_id', 
+        'invoice_line_ids.price_subtotal',
+        'invoice_line_ids.tax_ids',
+        'invoice_payment_term_id',
+        'partner_id',
+        'currency_id',
         'amount_rounding'
     )
     def _compute_tax_totals(self):
@@ -69,10 +70,10 @@ class AccountMove(models.Model):
 
     # --- 2. Update Invoice Backend Database Record Values (Total, Residual & Signed Fields) ---
     @api.depends(
-        'invoice_line_ids.price_subtotal', 
-        'invoice_line_ids.tax_ids', 
-        'line_ids.amount_currency', 
-        'line_ids.balance', 
+        'invoice_line_ids.price_subtotal',
+        'invoice_line_ids.tax_ids',
+        'line_ids.amount_currency',
+        'line_ids.balance',
         'amount_rounding'
     )
     def _compute_amount(self):
@@ -96,11 +97,127 @@ class AccountMove(models.Model):
             # Update the master total fields (Both normal and company-currency signed version)
             move.amount_total = move.amount_total + move.amount_rounding
             move.amount_total_signed = move.amount_total_signed + move.amount_rounding
-            
+
             # Update the residual fields so the UI "Amount Due" matches perfectly
             move.amount_residual = move.amount_residual + move.amount_rounding
             move.amount_residual_signed = move.amount_residual_signed + move.amount_rounding
             # move.amount_total_in_currency_signed = move.amount_total_in_currency_signed + move.amount_rounding
+
+    has_outstanding_scheme_payment = fields.Boolean(
+        string="Has Outstanding Scheme Payment",
+        compute="_compute_has_outstanding_scheme_payment"
+    )
+
+    def _get_outstanding_scheme_payment_lines(self):
+        self.ensure_one()
+        if self.state != 'posted' or self.move_type != 'out_invoice':
+            return self.env['account.move.line']
+
+        pay_term_lines = self.line_ids.filtered(lambda line: line.account_id.account_type == 'asset_receivable')
+        if not pay_term_lines:
+            return self.env['account.move.line']
+
+        domain = [
+            ('account_id', 'in', pay_term_lines.account_id.ids),
+            ('parent_state', '=', 'posted'),
+            ('partner_id', '=', self.commercial_partner_id.id),
+            ('reconciled', '=', False),
+            ('balance', '<', 0.0),
+            '|', ('amount_residual', '!=', 0.0), ('amount_residual_currency', '!=', 0.0),
+        ]
+
+        lines = self.env['account.move.line'].search(domain)
+        scheme_lines = self.env['account.move.line']
+        for line in lines:
+            # Check if this line is linked to a scheme installment
+            installment = self.env['jewellery.scheme.installment'].search([('move_id', '=', line.move_id.id)], limit=1)
+            if installment:
+                scheme_lines |= line
+                continue
+
+            # Fallback string check
+            ref = line.ref or ''
+            name = line.name or ''
+            move_name = line.move_id.name or ''
+            if any(term in ref or term in name or term in move_name
+                   for term in ['Scheme Payment', 'Scheme Transfer', 'Scheme Installment', 'Scheme Redemption']):
+                scheme_lines |= line
+
+        return scheme_lines
+
+    @api.depends('invoice_outstanding_credits_debits_widget', 'state', 'partner_id')
+    def _compute_has_outstanding_scheme_payment(self):
+        for move in self:
+            if move.state == 'posted' and move.move_type == 'out_invoice':
+                scheme_lines = move._get_outstanding_scheme_payment_lines()
+                move.has_outstanding_scheme_payment = bool(scheme_lines)
+            else:
+                move.has_outstanding_scheme_payment = False
+
+    def action_redeem_outstanding_schemes(self):
+        self.ensure_one()
+        scheme_lines = self._get_outstanding_scheme_payment_lines()
+        if not scheme_lines:
+            raise UserError(_("No outstanding scheme payment credits found for this customer."))
+
+        for line in scheme_lines:
+            # 1. Reconcile this line against the invoice
+            invoice_receivable_lines = self.line_ids.filtered(
+                lambda l: l.account_id == line.account_id and not l.reconciled
+            )
+            if invoice_receivable_lines:
+                (line + invoice_receivable_lines).reconcile()
+
+            # 2. Find the corresponding scheme enrollment(s) to mark as redeemed
+            enrollments = self.env['jewellery.scheme.enrollment']
+            installment = self.env['jewellery.scheme.installment'].search([('move_id', '=', line.move_id.id)])
+            if installment:
+                enrollments |= installment.mapped('enrollment_id')
+
+            # Fallback: matching text in the ref / name / move name
+            if not enrollments:
+                partner_schemes = self.env['jewellery.scheme.enrollment'].search([
+                    ('partner_id', '=', self.partner_id.id),
+                    ('state', 'in', ('running', 'completed')),
+                    ('is_redeemed', '=', False)
+                ])
+                ref = line.ref or ''
+                name = line.name or ''
+                move_name = line.move_id.name or ''
+                for scheme in partner_schemes:
+                    if (scheme.name and (scheme.name in ref or scheme.name in name or scheme.name in move_name)) or \
+                       (scheme.ticket_number and (scheme.ticket_number in ref or scheme.ticket_number in name or scheme.ticket_number in move_name)):
+                        enrollments |= scheme
+
+                # Fallback: if there is only one running/completed scheme for the customer, use that
+                if not enrollments and len(partner_schemes) == 1:
+                    enrollments |= partner_schemes[0]
+
+            # 3. Mark scheme as redeemed and create scheme.redemption record
+            for scheme in enrollments:
+                scheme.write({
+                    'state': 'redeemed',
+                    'is_redeemed': True,
+                })
+                # Find sale order
+                sale_orders = self.invoice_line_ids.mapped('sale_line_ids.order_id')
+                sale_order = sale_orders[0] if sale_orders else self.env['sale.order']
+
+                # Create redemption record if it doesn't exist (only if sale_order exists)
+                if sale_order:
+                    existing_redemption = self.env['scheme.redemption'].search([
+                        ('scheme_id', '=', scheme.id),
+                        ('sale_order_id', '=', sale_order.id)
+                    ], limit=1)
+
+                    if not existing_redemption:
+                        self.env['scheme.redemption'].create({
+                            'scheme_id': scheme.id,
+                            'sale_order_id': sale_order.id,
+                            'amount': abs(line.amount_residual or line.balance),
+                            'date': fields.Date.today(),
+                        })
+        return True
 
 
 # from math import ceil
@@ -188,4 +305,3 @@ class AccountMove(models.Model):
 #             move.amount_total = ceil(adjusted_total / 100.0) * 100
 
 
-  
