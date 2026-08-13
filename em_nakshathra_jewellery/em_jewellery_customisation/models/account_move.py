@@ -363,14 +363,14 @@ class AccountMove(models.Model):
                                     (0, 0, {
                                         'account_id': outstanding_receipts_account.id,
                                         'partner_id': move.partner_id.id,
-                                        'name': label,
+                                        'name': f"Scheme Payment - {label}",
                                         'debit': total_amount,
                                         'credit': 0.0,
                                     }),
                                     (0, 0, {
                                         'account_id': debtors_account.id,
                                         'partner_id': move.partner_id.id,
-                                        'name': label,
+                                        'name': f"Scheme Payment - {label}",
                                         'debit': 0.0,
                                         'credit': total_amount,
                                     })
