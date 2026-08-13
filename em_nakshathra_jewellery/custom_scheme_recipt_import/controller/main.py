@@ -134,7 +134,9 @@ def run_import_in_background(db_name, uid, file_path):
                                         journal = False
                                         if journal_name:
                                             journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
-                                            journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                                            journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                                            if not journal:
+                                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
 
                                         scheme_vals = {
                                             'name': get_v('Name'),
@@ -189,7 +191,9 @@ def run_import_in_background(db_name, uid, file_path):
                             journal = False
                             if journal_name:
                                 journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
-                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                                journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                                if not journal:
+                                    journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
                                 
                             excel_move_name = get_v('Scheme Line/Move')
                             excel_move_id = False
@@ -200,7 +204,12 @@ def run_import_in_background(db_name, uid, file_path):
 
                             if not excel_move_id and journal and line_amount_f:
                                 if journal.id not in _account_cache:
-                                    ob_acc = journal.default_account_id
+                                    ob_acc = env['account.account'].search([
+                                        ('company_id', '=', journal.company_id.id),
+                                        ('name', 'ilike', 'Outstanding Rec')
+                                    ], limit=1)
+                                    if not ob_acc:
+                                        ob_acc = journal.default_account_id
                                     if not ob_acc:
                                         ob_acc = env['account.account'].search([
                                             ('company_id', '=', journal.company_id.id),
@@ -208,12 +217,16 @@ def run_import_in_background(db_name, uid, file_path):
                                             ('name', 'ilike', 'opening balance'),
                                             ('account_type', '=', 'current_assets'),
                                         ], limit=1)
+                                        
                                     dr_acc = env['account.account'].search([
                                         ('company_id', '=', journal.company_id.id),
-                                        '|',
-                                        ('name', 'ilike', 'debtor'),
-                                        ('account_type', '=', 'asset_receivable'),
+                                        ('name', 'ilike', 'Debtor')
                                     ], limit=1)
+                                    if not dr_acc:
+                                        dr_acc = env['account.account'].search([
+                                            ('company_id', '=', journal.company_id.id),
+                                            ('account_type', '=', 'asset_receivable'),
+                                        ], limit=1)
                                     _account_cache[journal.id] = (ob_acc, dr_acc)
 
                                 opening_balance_account, debtors_account = _account_cache[journal.id]
@@ -282,7 +295,7 @@ class SchemeImportController(http.Controller):
 
     @http.route('/import/schemes/now', type='http', auth='user')
     def trigger_scheme_import(self, **kwargs):
-        file_name = 'scheme_payment 01.04.2026.xlsx'
+        file_name = 'Scheme Opening HO.xlsx'
         file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
 
         if not file_path or not os.path.exists(file_path):
@@ -373,3 +386,56 @@ class SchemeImportController(http.Controller):
         progress = progress.replace('"', '\\"')
         
         return request.make_response(f'{{"progress": "{progress}", "total": "{total}"}}', headers=[('Content-Type', 'application/json')])
+
+    @http.route('/import/schemes/undo', type='http', auth='user')
+    def undo_scheme_import(self, **kwargs):
+        file_name = 'Scheme Opening HO.xlsx'
+        file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
+
+        if not file_path or not os.path.exists(file_path):
+            return f"<h1>Error</h1><p>File not found at {file_path}</p>"
+        
+        try:
+            import openpyxl
+            workbook = openpyxl.load_workbook(file_path, data_only=True)
+            sheet = workbook.active
+            h_map = {str(sheet.cell(row=1, column=i).value).strip(): i for i in range(1, sheet.max_column + 1) if sheet.cell(row=1, column=i).value}
+            
+            tickets = set()
+            for row_idx in range(2, sheet.max_row + 1):
+                idx = h_map.get('Ticket Number')
+                val = sheet.cell(row=row_idx, column=idx).value if idx else False
+                if val:
+                    tickets.add(str(val).strip().upper())
+                    
+            if not tickets:
+                return "<h1>No tickets found in the excel file to undo.</h1>"
+
+            env = request.env
+            enrollments = env['jewellery.scheme.enrollment'].sudo().search([('ticket_number', 'in', list(tickets))])
+            installments = env['jewellery.scheme.installment'].sudo().search([('enrollment_id', 'in', enrollments.ids)])
+            
+            # Unpost and delete moves
+            moves_to_delete = env['account.move'].sudo()
+            for inst in installments:
+                if inst.move_id and (inst.move_id.ref or "").startswith("Scheme Payment:"):
+                    moves_to_delete |= inst.move_id
+                    
+            additional_moves = env['account.move'].sudo().search([('ref', 'in', [f"Scheme Payment: {t}" for t in tickets])])
+            moves_to_delete |= additional_moves
+            
+            for move in moves_to_delete:
+                if move.state == 'posted':
+                    move.button_draft()
+            
+            moves_count = len(moves_to_delete)
+            inst_count = len(installments)
+            enr_count = len(enrollments)
+            
+            moves_to_delete.unlink()
+            installments.unlink()
+            enrollments.unlink()
+            
+            return f"<h1>Undo Complete</h1><p>Successfully deleted {enr_count} enrollments, {inst_count} installments, and {moves_count} journal entries matching the tickets in the Excel file.</p>"
+        except Exception as e:
+            return f"<h1>Error during Undo</h1><p>{str(e)}</p>"
