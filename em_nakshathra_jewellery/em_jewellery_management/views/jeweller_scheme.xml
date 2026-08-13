@@ -83,6 +83,27 @@
         </field>
     </record>
 
+    <record id="view_scheme_search" model="ir.ui.view">
+        <field name="name">scheme.search</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name" string="Scheme Name"/>
+                <field name="ticket_number"/>
+                <field name="partner_id" string="Customer"/>
+                <field name="phone"/>
+                <field name="whatsapp_number"/>
+                <separator/>
+                <filter string="Running" name="filter_running" domain="[('state', '=', 'running')]"/>
+                <filter string="Redeemed" name="filter_redeemed" domain="[('state', '=', 'redeemed')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Customer" name="group_by_partner" context="{'group_by':'partner_id'}"/>
+                    <filter string="State" name="group_by_state" context="{'group_by':'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <record id="action_scheme_enrollment" model="ir.actions.act_window">
         <field name="name">Jewellery Schemes</field>
         <field name="res_model">jewellery.scheme.enrollment</field>

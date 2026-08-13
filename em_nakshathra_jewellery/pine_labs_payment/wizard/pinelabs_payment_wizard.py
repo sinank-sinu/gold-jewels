@@ -129,19 +129,19 @@ class PineLabsPaymentWizard(models.TransientModel):
             branch = self.invoice_id.branch_id
         if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
             branch = self.sale_order_id.branch_id
-        if not branch and self.scheme_installment_id and hasattr(self.scheme_installment_id.enrollment_id, 'branch_id'):
-            branch = self.scheme_installment_id.enrollment_id.branch_id
         if not branch:
             branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
 
+        target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
+
         domain = [
             ('type', '=', 'bank'),
-            ('company_id', '=', self.env.company.id),
+            ('company_id', '=', target_company_id),
             ('name', 'not ilike', 'suspense'),
             ('name', 'not ilike', 'suspence')
         ]
         if branch:
-            domain.append(('branch_id', '=', branch.id))
+            domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
 
         bank_journal = self.env['account.journal'].search(domain, limit=1)
         if not bank_journal:
@@ -161,14 +161,20 @@ class PineLabsPaymentWizard(models.TransientModel):
             payment_journal = bank_journal
 
             # Target dynamic Debtors Account Search matching your exact accounting structure logic
+            debtors_domain = [('name', 'ilike', 'Debtors'), ('company_id', '=', payment_journal.company_id.id)]
             if branch:
-                debtors_domain = ['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
+                debtors_domain = [
+                    ('name', 'ilike', 'Debtors'),
+                    ('company_id', '=', payment_journal.company_id.id),
+                    '|', ('branch_id', '=', branch.id), ('branch_id', '=', False)
+                ]
             debtors_account = self.env['account.account'].search(debtors_domain, limit=1)
 
             if not debtors_account:
-                raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
+                raise UserError(_("Debtors account not found in Chart of Accounts for company %s.") % payment_journal.company_id.name)
 
-            liability_account = payment_journal.default_account_id
+            out_accs = payment_journal._get_journal_inbound_outstanding_payment_accounts()
+            liability_account = out_accs[0] if out_accs else payment_journal.default_account_id
             if not liability_account:
                 raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
 
@@ -176,6 +182,7 @@ class PineLabsPaymentWizard(models.TransientModel):
             move_vals = {
                 'move_type': 'entry',
                 'journal_id': payment_journal.id,
+                'company_id': payment_journal.company_id.id,
                 'ref': _('Scheme Payment via Bank Transfer - %s') % (rec.enrollment_id.name or ''),
                 'line_ids': [
                     (0, 0, {
@@ -275,14 +282,13 @@ class PineLabsPaymentWizard(models.TransientModel):
             branch = self.invoice_id.branch_id
         if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
             branch = self.sale_order_id.branch_id
-        if not branch and self.scheme_installment_id and hasattr(self.scheme_installment_id.enrollment_id, 'branch_id'):
-            branch = self.scheme_installment_id.enrollment_id.branch_id
         if not branch:
             branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
 
-        domain = [('type', '=', 'cash'), ('company_id', '=', self.env.company.id)]
+        target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
+        domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
         if branch:
-            domain.append(('branch_id', '=', branch.id))
+            domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
 
         cash_journal = self.env['account.journal'].search(domain, limit=1)
         if not cash_journal:
@@ -304,14 +310,20 @@ class PineLabsPaymentWizard(models.TransientModel):
             payment_journal = cash_journal
 
             # Target dynamic Debtors Account Search matching your exact accounting structure logic
+            debtors_domain = [('name', 'ilike', 'Debtors'), ('company_id', '=', payment_journal.company_id.id)]
             if branch:
-                debtors_domain = ['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
+                debtors_domain = [
+                    ('name', 'ilike', 'Debtors'),
+                    ('company_id', '=', payment_journal.company_id.id),
+                    '|', ('branch_id', '=', branch.id), ('branch_id', '=', False)
+                ]
             debtors_account = self.env['account.account'].search(debtors_domain, limit=1)
 
             if not debtors_account:
-                raise UserError(_("Debtors account 100400 not found in Chart of Accounts."))
+                raise UserError(_("Debtors account not found in Chart of Accounts for company %s.") % payment_journal.company_id.name)
 
-            liability_account = payment_journal.default_account_id
+            out_accs = payment_journal._get_journal_inbound_outstanding_payment_accounts()
+            liability_account = out_accs[0] if out_accs else payment_journal.default_account_id
             if not liability_account:
                 raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
 
@@ -319,6 +331,7 @@ class PineLabsPaymentWizard(models.TransientModel):
             move_vals = {
                 'move_type': 'entry',
                 'journal_id': payment_journal.id,
+                'company_id': payment_journal.company_id.id,
                 'ref': _('Scheme Payment via Cash - %s') % (rec.enrollment_id.name or ''),
                 'line_ids': [
                     (0, 0, {
@@ -691,9 +704,10 @@ class PineLabsPaymentWizard(models.TransientModel):
 
             if not journal:
                 # Fallback to the first available bank/cash journal if not configured on the terminal
+                target_company_id = self.invoice_id.company_id.id if self.invoice_id else self.env.company.id
                 journal = self.env['account.journal'].search([
                     ('type', 'in', ('bank', 'cash')),
-                    ('company_id', '=', self.env.company.id),
+                    ('company_id', '=', target_company_id),
                 ], limit=1)
 
             if journal:
