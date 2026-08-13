@@ -1096,6 +1096,7 @@ if(tot>0)run(); else log('No records found.');
                     res = picking.with_company(excel_company).with_context(
                         skip_backorder=True,
                         cancel_backorder=True,
+                        skip_sms=True,
                         default_company_id=excel_company.id,
                         company_id=excel_company.id,
                         allowed_company_ids=[excel_company.id],
@@ -1114,6 +1115,7 @@ if(tot>0)run(); else log('No records found.');
                     raise
 
             if order_date:
+                c_env.flush_all()
                 c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
@@ -1143,6 +1145,7 @@ if(tot>0)run(); else log('No records found.');
                         res = picking.with_company(excel_company).with_context(
                             skip_backorder=True,
                             cancel_backorder=True,
+                            skip_sms=True,
                             default_company_id=excel_company.id,
                             company_id=excel_company.id,
                             allowed_company_ids=[excel_company.id],
@@ -1161,6 +1164,7 @@ if(tot>0)run(); else log('No records found.');
                         raise
 
                 if order_date:
+                    c_env.flush_all()
                     c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
                     c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                     c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
