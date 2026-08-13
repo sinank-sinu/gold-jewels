@@ -24,6 +24,8 @@ class EcommerceCustomer(models.Model):
     token_expiry = fields.Datetime(string='Token Expiry')
     active = fields.Boolean(default=True)
     created_at = fields.Datetime(string='Registered On', default=fields.Datetime.now)
+    address_ids = fields.One2many('ecommerce.address', 'customer_id', string='Saved Addresses')
+    currency_id = fields.Many2one('res.currency', string='Preferred Currency')
 
     _sql_constraints = [
         ('email_unique', 'UNIQUE(email)', 'A customer with this email already exists.')

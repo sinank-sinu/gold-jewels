@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_cash_book_report_billing_staff,access.cash.book.report.billing.staff,dynamic_accounts_report.model_cash_book_report,em_jewellery_management.group_jewellery_billing_staff,1,1,1,1

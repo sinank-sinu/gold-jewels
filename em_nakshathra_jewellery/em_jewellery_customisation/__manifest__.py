@@ -19,6 +19,7 @@
         'views/fine_rate_master_view.xml',
         'views/stock_picking_views.xml',
         'views/sale_order_views.xml',
+        'views/account_move_views.xml',
         
 
     ],

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_scheme_payment_correction_log_tree" model="ir.ui.view">
+        <field name="name">scheme.payment.correction.log.tree</field>
+        <field name="model">scheme.payment.correction.log</field>
+        <field name="arch" type="xml">
+            <tree string="Correction Logs" create="false" edit="false" delete="false">
+                <field name="processed_at"/>
+                <field name="scheme_payment_reference"/>
+                <field name="scheme_name"/>
+                <field name="partner_id"/>
+                <field name="move_name"/>
+                <field name="journal_id"/>
+                <field name="payment_journal_id"/>
+                <field name="company_id"/>
+                <field name="old_account_id"/>
+                <field name="new_account_id"/>
+                <field name="amount"/>
+                <field name="currency_id" column_invisible="True"/>
+                <field name="status" widget="badge" decoration-success="status in ('corrected', 'already_correct')" decoration-warning="status == 'skipped'" decoration-danger="status == 'failed'"/>
+                <field name="error_message" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_scheme_payment_correction_log_form" model="ir.ui.view">
+        <field name="name">scheme.payment.correction.log.form</field>
+        <field name="model">scheme.payment.correction.log</field>
+        <field name="arch" type="xml">
+            <form string="Correction Log" create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="scheme_payment_reference"/>
+                            <field name="scheme_name"/>
+                            <field name="partner_id"/>
+                            <field name="move_name"/>
+                            <field name="journal_id"/>
+                            <field name="payment_journal_id"/>
+                            <field name="company_id"/>
+                        </group>
+                        <group>
+                            <field name="old_account_id"/>
+                            <field name="new_account_id"/>
+                            <field name="amount"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="previous_state"/>
+                            <field name="final_state"/>
+                            <field name="status" widget="badge" decoration-success="status in ('corrected', 'already_correct')" decoration-warning="status == 'skipped'" decoration-danger="status == 'failed'"/>
+                            <field name="processed_at"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Error Message" invisible="status != 'failed'">
+                            <field name="error_message"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_scheme_payment_correction_log_search" model="ir.ui.view">
+        <field name="name">scheme.payment.correction.log.search</field>
+        <field name="model">scheme.payment.correction.log</field>
+        <field name="arch" type="xml">
+            <search string="Search Correction Logs">
+                <field name="scheme_payment_reference"/>
+                <field name="scheme_name"/>
+                <field name="partner_id"/>
+                <field name="move_name"/>
+                <filter string="Corrected" name="status_corrected" domain="[('status','=','corrected')]"/>
+                <filter string="Already Correct" name="status_already_correct" domain="[('status','=','already_correct')]"/>
+                <filter string="Skipped" name="status_skipped" domain="[('status','=','skipped')]"/>
+                <filter string="Missing Journal" name="status_missing_payment_journal" domain="[('status','=','missing_payment_journal')]"/>
+                <filter string="Missing Outstanding Account" name="status_missing_outstanding_account" domain="[('status','=','missing_outstanding_account')]"/>
+                <filter string="Failed" name="status_failed" domain="[('status','=','failed')]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_scheme_payment_correction_log" model="ir.actions.act_window">
+        <field name="name">Correction Logs</field>
+        <field name="res_model">scheme.payment.correction.log</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">
+                No correction logs found.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_scheme_payment_correction_root" name="Scheme Corrections" parent="account.menu_finance_entries" sequence="100"/>
+    <menuitem id="menu_scheme_payment_correction_log" name="Correction Logs" parent="menu_scheme_payment_correction_root" action="action_scheme_payment_correction_log" sequence="10"/>
+</odoo>

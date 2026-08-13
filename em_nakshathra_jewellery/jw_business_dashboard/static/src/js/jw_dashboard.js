@@ -25,14 +25,14 @@ function loadChartJs() {
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 const PALETTE = [
-    '#6366f1','#f59e0b','#10b981','#f43f5e','#8b5cf6',
-    '#06b6d4','#ef4444','#3b82f6','#ec4899','#14b8a6',
-    '#f97316','#84cc16','#a855f7','#22d3ee','#fb923c',
+    '#6366f1', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6',
+    '#06b6d4', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6',
+    '#f97316', '#84cc16', '#a855f7', '#22d3ee', '#fb923c',
 ];
 
 const GOLD_PALETTE = [
-    '#d97706','#b45309','#f59e0b','#fbbf24','#fde68a',
-    '#92400e','#78350f','#a16207','#ca8a04','#eab308',
+    '#d97706', '#b45309', '#f59e0b', '#fbbf24', '#fde68a',
+    '#92400e', '#78350f', '#a16207', '#ca8a04', '#eab308',
 ];
 
 class JwBusinessDashboard extends Component {
@@ -112,6 +112,8 @@ class JwBusinessDashboard extends Component {
             schemesRunning: [],
             schemesCompleted: [],
             schemesRedeemed: [],
+            resolvedDateFrom: '',
+            resolvedDateTo: '',
             employeeKpis: { total: 0, present: 0, absent: 0, leave: 0, half_day: 0 },
             employeeSummary: [],
         });
@@ -223,6 +225,8 @@ class JwBusinessDashboard extends Component {
                 schemesRunning: data.schemes_running || [],
                 schemesCompleted: data.schemes_completed || [],
                 schemesRedeemed: data.schemes_redeemed || [],
+                resolvedDateFrom: (data.period && data.period.from) || '',
+                resolvedDateTo: (data.period && data.period.to) || '',
                 employeeKpis: (data.employee_data && data.employee_data.kpis) || this.state.employeeKpis,
                 employeeSummary: (data.employee_data && data.employee_data.summary) || [],
                 lastUpdated: new Date().toLocaleString(),
@@ -386,7 +390,7 @@ class JwBusinessDashboard extends Component {
                 const startDateStr = `${year}-${String(month).padStart(2, '0')}-01 00:00:00`;
                 const lastDay = new Date(year, month, 0).getDate();
                 const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')} 23:59:59`;
-                
+
                 const domain = [
                     ['state', 'in', ['sale', 'done']],
                     ['date_order', '>=', startDateStr],
@@ -395,7 +399,7 @@ class JwBusinessDashboard extends Component {
                 if (this.state.branchId !== 'all') {
                     domain.push(['branch_id', '=', parseInt(this.state.branchId)]);
                 }
-                
+
                 this.action.doAction({
                     name: `Sales Orders - ${label}`,
                     type: 'ir.actions.act_window',
@@ -763,7 +767,7 @@ class JwBusinessDashboard extends Component {
                         callbacks: {
                             label: (ctx) => ` ${ctx.label}: ${ctx.raw} orders`
                         }
-                     }
+                    }
                 },
                 cutout: '65%'
             }
@@ -1358,26 +1362,26 @@ class JwBusinessDashboard extends Component {
                     const { ctx, scales: { x, y } } = chart;
                     const helpers = chart.config.options.plugins.bulletHelper;
                     if (!helpers || !helpers.data) return;
-                    
+
                     helpers.data.forEach((item, index) => {
                         const centerX = x.getPixelForValue(index);
                         const barWidth = 50; // width of background track
                         const leftX = centerX - barWidth / 2;
                         const bottomY = y.getPixelForValue(0);
-                        
+
                         const maxVal = Math.max(item.actual, item.target) * 1.1;
                         const yLow = y.getPixelForValue(item.range_low);
                         const yMed = y.getPixelForValue(item.range_med);
                         const yHigh = y.getPixelForValue(maxVal);
-                        
+
                         // Draw low range (greenish/satisfactory)
                         ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
                         ctx.fillRect(leftX, yLow, barWidth, bottomY - yLow);
-                        
+
                         // Draw med range (yellowish/warning)
                         ctx.fillStyle = 'rgba(245, 158, 11, 0.08)';
                         ctx.fillRect(leftX, yMed, barWidth, yLow - yMed);
-                        
+
                         // Draw high range (reddish/critical)
                         ctx.fillStyle = 'rgba(244, 63, 94, 0.05)';
                         ctx.fillRect(leftX, yHigh, barWidth, yMed - yHigh);
@@ -1579,17 +1583,22 @@ class JwBusinessDashboard extends Component {
         const values = data.map(item => item.value);
 
         this.charts.schemesTrendChart = new window.Chart(canvas, {
-            type: 'bar',
+            type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
                     label: 'New Enrollments Count',
                     data: values,
-                    backgroundColor: 'rgba(56, 189, 248, 0.85)',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
                     borderColor: '#38bdf8',
-                    borderWidth: 1,
-                    borderRadius: { topLeft: 4, topRight: 4 },
-                    barThickness: 24
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#38bdf8',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
                 }]
             },
             options: {
@@ -2430,17 +2439,22 @@ class JwBusinessDashboard extends Component {
             const labels = data.map(item => item.label);
             const values = data.map(item => item.value);
             this.charts.maximizedChartCanvas = new window.Chart(canvas, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'New Enrollments Count',
                         data: values,
-                        backgroundColor: 'rgba(56, 189, 248, 0.85)',
+                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
                         borderColor: '#38bdf8',
-                        borderWidth: 1,
-                        borderRadius: { topLeft: 4, topRight: 4 },
-                        barThickness: 24
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#38bdf8',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -2589,6 +2603,37 @@ class JwBusinessDashboard extends Component {
             res_model: 'jewellery.scheme.enrollment',
             res_id: id,
             views: [[false, 'form']],
+            target: 'current',
+        });
+    }
+
+    openSchemeEnrollmentsByState(state) {
+        const domain = [];
+        if (state !== 'all') {
+            domain.push(['state', '=', state]);
+        }
+        if (this.state.resolvedDateFrom) {
+            domain.push(['date_of_joining', '>=', this.state.resolvedDateFrom]);
+        }
+        if (this.state.resolvedDateTo) {
+            domain.push(['date_of_joining', '<=', this.state.resolvedDateTo]);
+        }
+        if (this.state.branchId !== 'all') {
+            domain.push(['branch_id', '=', parseInt(this.state.branchId)]);
+        }
+
+        let name = 'Schemes';
+        if (state === 'running') name = 'Running Schemes';
+        else if (state === 'completed') name = 'Completed Schemes';
+        else if (state === 'redeemed') name = 'Redeemed Schemes';
+
+        this.action.doAction({
+            name: name,
+            type: 'ir.actions.act_window',
+            res_model: 'jewellery.scheme.enrollment',
+            view_mode: 'list,form',
+            views: [[false, 'list'], [false, 'form']],
+            domain: domain,
             target: 'current',
         });
     }

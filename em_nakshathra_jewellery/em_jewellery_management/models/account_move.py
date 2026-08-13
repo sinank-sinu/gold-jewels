@@ -26,6 +26,19 @@ class AccountMove(models.Model):
         compute='_compute_vendor_bill_amount',
         store=False,
     )
+# need to hide method after import saleorder
+    def _set_next_sequence(self):
+        """
+        OVERRIDE to fix Odoo 17 concurrency race condition during sequence generation.
+        The core sequence.mixin's while True retry loop only flushes `name`. 
+        If `state` is not flushed to 'posted' in the DB, the `account_move_unique_name`
+        UNIQUE constraint is bypassed during the loop and triggers outside of it, crashing the transaction.
+        Flushing `state` ensures the UNIQUE constraint triggers INSIDE the retry loop.
+        """
+        for move in self:
+            if move.state == 'posted':
+                move.flush_recordset(['state'])
+        return super()._set_next_sequence()
 
     @api.depends('invoice_line_ids.sale_line_ids.order_id.is_sale_return', 'invoice_line_ids.purchase_line_id.order_id.is_sale_return_po')
     def _compute_is_sale_return(self):

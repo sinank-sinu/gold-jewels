@@ -1754,6 +1754,108 @@
           }
         ]
       }
+    },
+    {
+      "endpoint": "/currencies",
+      "method": "GET / POST",
+      "description": "Get all supported currencies and conversion rates",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Get Supported Currencies List",
+          "description": "List all active currencies with rates and symbols",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Send Request",
+              "description": "Send GET or POST request to list currencies",
+              "request": {}
+            },
+            {
+              "step": 2,
+              "action": "Receive Response",
+              "description": "Get status success with count and data array of currencies",
+              "response": {
+                "status": "success",
+                "count": 4,
+                "data": [
+                  {
+                    "id": 20,
+                    "name": "Indian Rupee",
+                    "code": "INR",
+                    "symbol": "₹",
+                    "rate": 1.0
+                  },
+                  {
+                    "id": 1,
+                    "name": "US Dollar",
+                    "code": "USD",
+                    "symbol": "$",
+                    "rate": 0.012
+                  },
+                  {
+                    "id": 129,
+                    "name": "UAE Dirham",
+                    "code": "AED",
+                    "symbol": "د.إ",
+                    "rate": 0.044
+                  },
+                  {
+                    "id": 37,
+                    "name": "Singapore Dollar",
+                    "code": "SGD",
+                    "symbol": "S$",
+                    "rate": 0.016
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/currency/{code}",
+      "method": "GET / POST",
+      "description": "Set customer's preferred currency preference",
+      "authentication": "public",
+      "cors": "*",
+      "csrf": false,
+      "step_by_step_flows": [
+        {
+          "flow_id": 1,
+          "flow_name": "Set Preferred Currency",
+          "description": "Update preferred currency in customer profile and return currency status",
+          "steps": [
+            {
+              "step": 1,
+              "action": "Send Request",
+              "description": "Send GET or POST request with optional customer_id",
+              "request": {
+                "customer_id": 1
+              }
+            },
+            {
+              "step": 2,
+              "action": "Receive Response",
+              "description": "Get success response with new currency preference set",
+              "response": {
+                "status": "success",
+                "message": "USD currency preference set successfully.",
+                "currency_code": "USD",
+                "symbol": "$",
+                "rate": 0.012,
+                "data": {
+                  "info": "This is the dedicated endpoint for USD."
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "data_models": {
@@ -1804,7 +1906,8 @@
         "phone": "Customer phone",
         "city": "Customer city",
         "password_hash": "Hashed password",
-        "password_salt": "Password salt"
+        "password_salt": "Password salt",
+        "currency_id": "Preferred currency ID (res.currency Many2one)"
       }
     },
     "ecommerce_cart": {

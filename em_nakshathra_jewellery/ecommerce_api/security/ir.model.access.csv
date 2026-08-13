@@ -4,3 +4,7 @@ access_ecommerce_customer_public,ecommerce.customer public,model_ecommerce_custo
 access_ecommerce_cart_user,ecommerce.cart user,model_ecommerce_cart,base.group_user,1,1,1,1
 access_ecommerce_cart_line_user,ecommerce.cart.line user,model_ecommerce_cart_line,base.group_user,1,1,1,1
 access_ecommerce_wishlist_user,ecommerce.wishlist user,model_ecommerce_wishlist,base.group_user,1,1,1,1
+access_ecommerce_faq_user,ecommerce.faq user,model_ecommerce_faq,base.group_user,1,1,1,1
+access_ecommerce_faq_public,ecommerce.faq public,model_ecommerce_faq,base.group_public,1,0,0,0
+access_ecommerce_address_user,ecommerce.address user,model_ecommerce_address,base.group_user,1,1,1,1
+access_ecommerce_address_public,ecommerce.address public,model_ecommerce_address,base.group_public,1,1,1,1

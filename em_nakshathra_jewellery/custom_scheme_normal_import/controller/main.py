@@ -34,7 +34,8 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
     try:
         registry = http.request.env.registry
         with registry.cursor() as cr:
-            env = http.request.env(cr=cr, user=uid)
+            import odoo
+            env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
             
             workbook = openpyxl.load_workbook(file_path, data_only=True)
             sheet = workbook.active
@@ -108,7 +109,7 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
                                     'whatsapp_number': str(get_v(row_idx, 'Whatsapp Number')).replace('.0', '') if get_v(row_idx, 'Whatsapp Number') else False,
                                     'address':         str(get_v(row_idx, 'Address')) if get_v(row_idx, 'Address') else False,
                                     'nominee':         str(get_v(row_idx, 'Nominee')) if get_v(row_idx, 'Nominee') else False,
-                                    'name': str(get_v(row_idx, 'Name')).strip() if get_v(row_idx, 'Name') else False,
+                                    'name':            str(get_v(row_idx, 'Name')).strip() if get_v(row_idx, 'Name') else False,
                                 })
                                 scheme_id = scheme_record.id
 
@@ -136,7 +137,11 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
                             continue
 
                         journal_name = get_v(row_idx, 'Scheme Line/Journal')
-                        journal = env['account.journal'].search([('name', '=', str(journal_name).strip())], limit=1) if journal_name else False
+                        if journal_name:
+                            journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                            journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                        else:
+                            journal = False
                         
                         excel_move_name = get_v(row_idx, 'Scheme Line/Move')
                         excel_move_id = env['account.move'].search([('name', '=', str(excel_move_name).strip())], limit=1) if excel_move_name else False
@@ -144,10 +149,12 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
 
                         if not excel_move_id and journal and line_amount_f:
                             if journal.id not in _account_cache:
-                                ob_acc = env['account.account'].search([
-                                    ('company_id', '=', journal.company_id.id),
-                                    ('name', 'ilike', 'Opening Balance%'),
-                                ], limit=1)
+                                ob_acc = journal.default_account_id
+                                if not ob_acc:
+                                    ob_acc = env['account.account'].search([
+                                        ('company_id', '=', journal.company_id.id),
+                                        ('name', 'ilike', 'Opening Balance%'),
+                                    ], limit=1)
                                 dr_acc = env['account.account'].search([
                                     ('company_id', '=', journal.company_id.id),
                                     ('name', 'ilike', 'Debtors'),
@@ -226,6 +233,15 @@ class SchemeImportController(http.Controller):
             return request.make_response(f"<h1>Error</h1><p>File not found at {file_path}</p>", headers=[('Content-Type', 'text/html')])
 
         start_row = int(kwargs.get('start_row', 2))
+        
+        # Auto-delete any corrupted installments (missing journal) when starting a fresh import
+        if start_row == 2:
+            request.env.cr.execute("""
+                DELETE FROM jewellery_scheme_installment 
+                WHERE journal_id IS NULL AND move_id IS NULL
+            """)
+            request.env.cr.commit()
+            
         db_name = request.env.cr.dbname
         uid = request.env.uid
 
@@ -235,7 +251,69 @@ class SchemeImportController(http.Controller):
             return request.make_response("<h1>Import Failed</h1><p>Check terminal logs for errors.</p>", headers=[('Content-Type', 'text/html')])
 
         if end_row > max_row:
-            html = "<html><head><style>body{font-family:Arial;text-align:center;margin-top:50px;background:#f9f9f9;}h1{color:#28a745;}</style></head><body><h1>Import Completed Successfully!</h1><p>All rows have been imported.</p></body></html>"
+            try:
+                # 1. Patch Opening Balances to Bank Ledgers
+                request.env.cr.execute("""
+                    UPDATE account_move_line aml
+                    SET account_id = aj.default_account_id
+                    FROM account_move am
+                    JOIN account_journal aj ON am.journal_id = aj.id
+                    WHERE aml.move_id = am.id
+                      AND am.ref LIKE 'Scheme Payment:%%'
+                      AND aml.name LIKE 'Scheme Liability (Opening)%%'
+                      AND aj.default_account_id IS NOT NULL
+                      AND aml.account_id != aj.default_account_id
+                """)
+                _logger.info("Auto-Patched %s incorrect Opening Balance lines to Bank Ledgers.", request.env.cr.rowcount)
+                
+                # 2. Patch Move Branch IDs
+                request.env.cr.execute("""
+                    UPDATE account_move am
+                    SET branch_id = aj.branch_id
+                    FROM account_journal aj
+                    WHERE am.journal_id = aj.id 
+                      AND aj.branch_id IS NOT NULL 
+                      AND am.branch_id != aj.branch_id
+                      AND am.ref LIKE 'Scheme Payment:%%'
+                """)
+                _logger.info("Auto-Patched %s incorrect Move Branch IDs.", request.env.cr.rowcount)
+                
+                # 3. Patch Move Line Branch IDs
+                request.env.cr.execute("""
+                    UPDATE account_move_line aml
+                    SET branch_id = am.branch_id
+                    FROM account_move am
+                    WHERE aml.move_id = am.id
+                      AND am.branch_id IS NOT NULL
+                      AND aml.branch_id != am.branch_id
+                      AND am.ref LIKE 'Scheme Payment:%%'
+                """)
+                _logger.info("Auto-Patched %s incorrect Move Line Branch IDs.", request.env.cr.rowcount)
+
+                # 4. Patch Scheme Enrollment Branch IDs
+                request.env.cr.execute("""
+                    WITH FirstInstallment AS (
+                        SELECT DISTINCT ON (i.enrollment_id)
+                            i.enrollment_id, j.branch_id
+                        FROM jewellery_scheme_installment i
+                        JOIN account_journal j ON i.journal_id = j.id
+                        WHERE j.branch_id IS NOT NULL
+                        ORDER BY i.enrollment_id, i.date ASC
+                    )
+                    UPDATE jewellery_scheme_enrollment e
+                    SET branch_id = f.branch_id
+                    FROM FirstInstallment f
+                    WHERE e.id = f.enrollment_id
+                      AND (e.branch_id IS NULL OR e.branch_id != f.branch_id)
+                """)
+                _logger.info("Auto-Patched %s incorrect Scheme Enrollment Branch IDs.", request.env.cr.rowcount)
+                
+                request.env.cr.commit()
+            except Exception as e:
+                _logger.error("Failed to run automatic patches: %s", str(e))
+                request.env.cr.rollback()
+
+            html = "<html><head><style>body{font-family:Arial;text-align:center;margin-top:50px;background:#f9f9f9;}h1{color:#28a745;}</style></head><body><h1>Import Completed Successfully!</h1><p>All rows have been imported. The database has been fully patched for Accounts and Branches.</p></body></html>"
         else:
             progress = min(100, int((end_row / max_row) * 100))
             html = f"""
