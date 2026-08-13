@@ -2,7 +2,6 @@ from odoo import models, fields, api
 from odoo.exceptions import UserError
 import json
 from datetime import datetime
-
 class JewelleryJobWork(models.Model):
     _inherit = 'jewellery.job.work'
 
