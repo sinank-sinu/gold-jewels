@@ -13,6 +13,9 @@
                         class="btn-primary"
                         invisible="state != 'draft' or payment_type not in ('inbound', 'outbound') or pinelabs_transaction_id != False"/>
             </xpath>
+            <xpath expr="//field[@name='payment_type']" position="after">
+                <field name="is_suspense_payment" widget="boolean_toggle"/>
+            </xpath>
             <xpath expr="//group[@name='main_group']" position="inside">
                 <group name="pinelabs_details" string="Pine Labs"
                        invisible="not pinelabs_transaction_id">

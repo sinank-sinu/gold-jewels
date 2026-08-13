@@ -707,6 +707,9 @@ if(tot>0)run(); else log('No records found.');
 
             if og_amt > 0:
                 order_vals['has_old_gold'] = True
+                
+            if scheme_amt > 0:
+                order_vals['apply_scheme'] = True
 
             order = c_env['sale.order'].sudo().create(order_vals)
             has_lines = False
@@ -1093,6 +1096,7 @@ if(tot>0)run(); else log('No records found.');
                     res = picking.with_company(excel_company).with_context(
                         skip_backorder=True,
                         cancel_backorder=True,
+                        skip_sms=True,
                         default_company_id=excel_company.id,
                         company_id=excel_company.id,
                         allowed_company_ids=[excel_company.id],
@@ -1111,9 +1115,14 @@ if(tot>0)run(); else log('No records found.');
                     raise
 
             if order_date:
+                c_env.flush_all()
                 c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                picking.invalidate_recordset(['date_done', 'date'])
+                picking.move_ids.invalidate_recordset(['date'])
+                picking.move_line_ids.invalidate_recordset(['date'])
+                order.sudo().write({'effective_date': order_date})
 
         # Validate Old Gold Delivery
         if order.purchase_order_id:
@@ -1136,6 +1145,7 @@ if(tot>0)run(); else log('No records found.');
                         res = picking.with_company(excel_company).with_context(
                             skip_backorder=True,
                             cancel_backorder=True,
+                            skip_sms=True,
                             default_company_id=excel_company.id,
                             company_id=excel_company.id,
                             allowed_company_ids=[excel_company.id],
@@ -1154,9 +1164,13 @@ if(tot>0)run(); else log('No records found.');
                         raise
 
                 if order_date:
+                    c_env.flush_all()
                     c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
                     c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                     c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                    picking.invalidate_recordset(['date_done', 'date'])
+                    picking.move_ids.invalidate_recordset(['date'])
+                    picking.move_line_ids.invalidate_recordset(['date'])
 
         # 11. Invoice
         if not order.order_line:
@@ -1204,7 +1218,16 @@ if(tot>0)run(); else log('No records found.');
             invoice.write(inv_vals)
 
         if invoice.state == 'draft':
-            invoice.action_post()
+            try:
+                invoice.with_company(excel_company).with_context(
+                    default_company_id=excel_company.id,
+                    company_id=excel_company.id,
+                    allowed_company_ids=[excel_company.id],
+                ).action_post()
+                _logger.info("[SALE IMPORT] Voucher %s: Successfully posted invoice %s", vou_no, invoice.name)
+            except Exception as e:
+                _logger.error("[SALE IMPORT] Voucher %s: Failed to post invoice %s for customer %s. Error: %s", vou_no, invoice.name, invoice.partner_id.name, e)
+                raise
 
         if hasattr(invoice, 'custom_total') and invoice.custom_total < 0:
             try:
@@ -1213,18 +1236,36 @@ if(tot>0)run(); else log('No records found.');
                 _logger.warning("Voucher %s: Customer Payment creation failed: %s", vou_no, e)
                 raise
 
-        # 11.5 Apply Scheme via Invoice (Redeem Scheme)
+        # Fetch all companies to mimic Administrator UI visibility for cross-company schemes
+        all_company_ids = c_env['res.company'].sudo().search([]).ids
+        
+        # Check if the invoice actually has an outstanding scheme payment credit (matching UI visibility)
+        outstanding_scheme_lines = invoice.sudo().with_company(excel_company).with_context(
+            allowed_company_ids=all_company_ids,
+        )._get_outstanding_scheme_payment_lines()
+        
+        has_outstanding = bool(outstanding_scheme_lines)
+        
         if scheme_amt > 0:
             try:
-                invoice.with_company(excel_company).with_context(
+                if has_outstanding:
+                    _logger.info("Voucher %s: Detected outstanding scheme credit for customer %s. Automatically redeeming...", vou_no, invoice.partner_id.name)
+                else:
+                    _logger.warning("Voucher %s: Excel specifies scheme amount, but no eligible outstanding scheme credit was found for customer %s.", vou_no, invoice.partner_id.name)
+
+                # Execute redemption with sudo and all companies to match UI visibility and cross-company branch rules
+                invoice.sudo().with_company(excel_company).with_context(
                     default_company_id=excel_company.id,
                     company_id=excel_company.id,
-                    allowed_company_ids=[excel_company.id],
+                    allowed_company_ids=all_company_ids,
                 ).action_redeem_outstanding_schemes()
+                
+            except UserError as e:
+                _logger.error("Voucher %s: UserError during scheme redemption: %s. Customer: %s, Invoice: %s", vou_no, e, invoice.partner_id.name, invoice.name)
+                # DO NOT raise here. We want the migration to proceed and not fail the voucher!
             except Exception as e:
-                _logger.warning("Voucher %s: Scheme redeem failed: %s", vou_no, e)
-                # Following existing migration script's error handling behavior (log and raise)
-                raise
+                _logger.error("Voucher %s: Unexpected error during scheme redemption: %s", vou_no, e, exc_info=True)
+                # DO NOT raise here. We want the migration to proceed and not fail the voucher!
 
         # 12. Payments
         self._register_payments(c_env, order, invoice, rows, order_date, cache, excel_company)
