@@ -229,32 +229,52 @@ class AccountMove(models.Model):
         return True
 
     def action_post(self):
+        res = super().action_post()
         for move in self:
             if move.move_type == 'out_invoice':
+                # Automatically redeem schemes if possible
+                try:
+                    all_company_ids = self.env['res.company'].sudo().search([]).ids
+                    move_sudo = move.sudo().with_context(allowed_company_ids=all_company_ids)
+                    if move_sudo._get_outstanding_scheme_payment_lines():
+                        move_sudo.action_redeem_outstanding_schemes()
+                except Exception as e:
+                    pass
+
                 # Check if any associated sale order has apply_scheme = True
                 sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id')
                 if any(so.apply_scheme for so in sale_orders):
-                    other_company_schemes = self.env['jewellery.scheme.enrollment'].sudo().search([
+                    all_potential_schemes = self.env['jewellery.scheme.enrollment'].sudo().search([
                         ('partner_id', '=', move.partner_id.id),
                         ('state', 'in', ('running', 'completed')),
                         ('is_redeemed', '=', False),
-                        ('branch_id.company_id', '!=', move.company_id.id),
+                        '|', ('branch_id.company_id', '!=', move.company_id.id),
+                             ('branch_id', '=', False),
                     ])
+
+                    other_company_schemes = self.env['jewellery.scheme.enrollment'].sudo()
+                    company_schemes = defaultdict(list)
+
+                    for scheme in all_potential_schemes:
+                        comp = scheme.branch_id.company_id
+                        if not comp and scheme.scheme_line_ids:
+                            paid_lines = scheme.scheme_line_ids.filtered(lambda l: l.state == 'paid' and l.move_id)
+                            if paid_lines:
+                                comp = paid_lines[0].move_id.company_id
+
+                        if comp and comp.id != move.company_id.id:
+                            other_company_schemes |= scheme
+                            company_schemes[comp].append(scheme)
+
                     if other_company_schemes:
-                        # Group by company
-                        company_schemes = defaultdict(list)
-                        for scheme in other_company_schemes:
-                            comp = scheme.branch_id.company_id
-                            if comp:
-                                company_schemes[comp].append(scheme)
-                        
+
                         sale_order = sale_orders[0] if sale_orders else False
-                        
+
                         for comp, schemes in company_schemes.items():
                             total_amount = sum(s.total_paid for s in schemes)
                             if total_amount <= 0:
                                 continue
-                            
+
                             # 1. Find bank/cash or general journal in current company
                             journal = self.env['account.journal'].search([
                                 ('company_id', '=', move.company_id.id),
@@ -356,13 +376,13 @@ class AccountMove(models.Model):
                                     })
                                 ]
                             }
-                            
+
                             new_move = self.env['account.move'].with_context(
                                 default_move_type='entry',
                                 default_journal_id=journal.id,
                             ).create(move_vals)
                             new_move.action_post()
-                            
+
                             for scheme in schemes:
                                 scheme.write({
                                     'state': 'redeemed',
@@ -375,7 +395,7 @@ class AccountMove(models.Model):
                                         'amount': scheme.total_paid,
                                         'date': fields.Date.today(),
                                     })
-        return super().action_post()
+        return res
 
 
 # from math import ceil
