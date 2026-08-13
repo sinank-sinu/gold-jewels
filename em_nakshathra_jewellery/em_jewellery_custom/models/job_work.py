@@ -3,12 +3,6 @@ from odoo.exceptions import UserError
 import json
 from datetime import datetime
 
-class ProductTemplateAttributeValue(models.Model):
-    _inherit = 'product.template.attribute.value'
-
-    def _filter_single_value_lines(self):
-        return self
-
 class JewelleryJobWork(models.Model):
     _inherit = 'jewellery.job.work'
 
