@@ -45,41 +45,50 @@ class JewellerySchemeInstallment(models.Model):
         if expected_total > 0 and (enrollment.total_paid + self.amount) > expected_total:
             raise UserError(_("Transfer limit exceeded. Total allowed amount for this scheme is %s. You cannot transfer more than the allowed duration.") % expected_total)
             
-        # 1. Find Suspense Journal
-        journal = self.env['account.journal'].search(['|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'suspence')], limit=1)
+        target_company_id = self.enrollment_id.branch_id.company_id.id if self.enrollment_id.branch_id and hasattr(self.enrollment_id.branch_id, 'company_id') and self.enrollment_id.branch_id.company_id else self.env.company.id
+        
+        # 1. Find Suspense Journal for the correct company
+        journal = self.env['account.journal'].search([
+            ('company_id', '=', target_company_id),
+            '|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'Suspense')
+        ], limit=1)
+        
         if not journal:
-            raise UserError(_("CRITICAL ERROR: No journal containing the name 'suspense' or 'suspence' was found in your accounting settings!"))
+            comp_name = self.env['res.company'].browse(target_company_id).name
+            raise UserError(_("CRITICAL ERROR: No journal containing the name 'suspense' or 'suspence' was found in your accounting settings for the company '%s'!") % comp_name)
+        
+        # As per the new accounting flow, we now want to Debit Outstanding Receipts instead of Suspense
+        outstanding_receipts_account = self.env['account.account'].search([
+            ('company_id', '=', target_company_id),
+            ('name', 'ilike', 'Outstanding Reciept')
+        ], limit=1)
+        
+        if not outstanding_receipts_account:
+            raise UserError(_("Please configure an 'Outstanding Receipts' account for the company to process the transfer."))
+
             
-        # 2. Find Accounts
-        suspense_account = self.env['account.account'].search([('code', '=', '100202')], limit=1)
-        if not suspense_account:
-            suspense_account = self.env['account.account'].search([('name', 'ilike', 'Bank Suspense Account')], limit=1)
-            
-        if not suspense_account:
-            raise UserError(_("Bank Suspense Account (100202) not found in the chart of accounts."))
-            
-        debtors_account = self.env['account.account'].search([('code', '=', '100400')], limit=1)
+        debtors_account = partner.property_account_receivable_id
         if not debtors_account:
-            # Fallback to partner's receivable if '100400 Debtors' not found by code
-            debtors_account = partner.property_account_receivable_id
+            debtors_account = self.env['account.account'].search([('account_type', '=', 'asset_receivable'), ('company_id', '=', target_company_id)], limit=1)
             
         if not debtors_account:
-            raise UserError(_("Debtors Account (100400) not found."))
+            raise UserError(_("No Receivable account found on the partner %s, and no generic receivable account found for the company.") % partner.name)
             
         # 3. Create Draft Journal Entry
         move_vals = {
             'journal_id': journal.id,
+            'company_id': target_company_id,
             'date': fields.Date.today(),
             'ref': f"Scheme Transfer - {self.enrollment_id.name or partner.name}",
-            'branch_id': self.enrollment_id.branch_id.id if hasattr(self.env['account.move'], 'branch_id') and self.enrollment_id.branch_id else False,
             'partner_id': partner.id,
             'line_ids': [
                 (0, 0, {
-                    'account_id': suspense_account.id,
+                    'account_id': outstanding_receipts_account.id,
                     'partner_id': partner.id,
-                    'name': f"Transfer from Suspense - {partner.name}",
+                    'name': f"Transfer from Outstanding Receipts - {partner.name}",
                     'debit': self.amount,
                     'credit': 0.0,
+                    'company_id': target_company_id,
                 }),
                 (0, 0, {
                     'account_id': debtors_account.id,
@@ -87,6 +96,7 @@ class JewellerySchemeInstallment(models.Model):
                     'name': f"Transfer to Debtors - {partner.name}",
                     'debit': 0.0,
                     'credit': self.amount,
+                    'company_id': target_company_id,
                 })
             ]
         }
@@ -108,6 +118,7 @@ class JewellerySchemeInstallment(models.Model):
             'res_model': 'account.move',
             'res_id': move.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'current',
         }
 
