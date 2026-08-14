@@ -59,7 +59,7 @@ class AccountMove(models.Model):
             tax_totals['display_rounding'] = True
             tax_totals['rounding_amount'] = rounding_amount
             tax_totals['formatted_rounding_amount'] = (
-                move.currency_id.symbol + " %.2f" % rounding_amount
+                    move.currency_id.symbol + " %.2f" % rounding_amount
             )
 
             tax_totals['amount_total'] = new_total
@@ -67,7 +67,6 @@ class AccountMove(models.Model):
 
             # Assign back the updated object to refresh the view layer
             move.tax_totals = tax_totals
-
 
     # --- 2. Update Invoice Backend Database Record Values (Total, Residual & Signed Fields) ---
     @api.depends(
@@ -157,7 +156,8 @@ class AccountMove(models.Model):
     @api.depends('invoice_outstanding_credits_debits_widget', 'state', 'partner_id', 'payment_state')
     def _compute_has_outstanding_scheme_payment(self):
         for move in self:
-            if move.state == 'posted' and move.move_type == 'out_invoice' and move.payment_state not in ('paid', 'in_payment'):
+            if move.state == 'posted' and move.move_type == 'out_invoice' and move.payment_state not in ('paid',
+                                                                                                         'in_payment'):
                 scheme_lines = move._get_outstanding_scheme_payment_lines()
                 move.has_outstanding_scheme_payment = bool(scheme_lines)
             else:
@@ -195,7 +195,8 @@ class AccountMove(models.Model):
                 move_name = line.move_id.name or ''
                 for scheme in partner_schemes:
                     if (scheme.name and (scheme.name in ref or scheme.name in name or scheme.name in move_name)) or \
-                       (scheme.ticket_number and (scheme.ticket_number in ref or scheme.ticket_number in name or scheme.ticket_number in move_name)):
+                            (scheme.ticket_number and (
+                                    scheme.ticket_number in ref or scheme.ticket_number in name or scheme.ticket_number in move_name)):
                         enrollments |= scheme
 
                 # Fallback: if there is only one running/completed scheme for the customer, use that
@@ -229,44 +230,24 @@ class AccountMove(models.Model):
         return True
 
     def action_post(self):
-        res = super().action_post()
         for move in self:
             if move.move_type == 'out_invoice':
-                # Automatically redeem schemes if possible
-                try:
-                    all_company_ids = self.env['res.company'].sudo().search([]).ids
-                    move_sudo = move.sudo().with_context(allowed_company_ids=all_company_ids)
-                    if move_sudo._get_outstanding_scheme_payment_lines():
-                        move_sudo.action_redeem_outstanding_schemes()
-                except Exception as e:
-                    pass
-
                 # Check if any associated sale order has apply_scheme = True
                 sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id')
                 if any(so.apply_scheme for so in sale_orders):
-                    all_potential_schemes = self.env['jewellery.scheme.enrollment'].sudo().search([
+                    other_company_schemes = self.env['jewellery.scheme.enrollment'].sudo().search([
                         ('partner_id', '=', move.partner_id.id),
                         ('state', 'in', ('running', 'completed')),
                         ('is_redeemed', '=', False),
-                        '|', ('branch_id.company_id', '!=', move.company_id.id),
-                             ('branch_id', '=', False),
+                        ('branch_id.company_id', '!=', move.company_id.id),
                     ])
-
-                    other_company_schemes = self.env['jewellery.scheme.enrollment'].sudo()
-                    company_schemes = defaultdict(list)
-
-                    for scheme in all_potential_schemes:
-                        comp = scheme.branch_id.company_id
-                        if not comp and scheme.scheme_line_ids:
-                            paid_lines = scheme.scheme_line_ids.filtered(lambda l: l.state == 'paid' and l.move_id)
-                            if paid_lines:
-                                comp = paid_lines[0].move_id.company_id
-
-                        if comp and comp.id != move.company_id.id:
-                            other_company_schemes |= scheme
-                            company_schemes[comp].append(scheme)
-
                     if other_company_schemes:
+                        # Group by company
+                        company_schemes = defaultdict(list)
+                        for scheme in other_company_schemes:
+                            comp = scheme.branch_id.company_id
+                            if comp:
+                                company_schemes[comp].append(scheme)
 
                         sale_order = sale_orders[0] if sale_orders else False
 
@@ -301,10 +282,12 @@ class AccountMove(models.Model):
                             if not outstanding_receipts_account:
                                 outstanding_receipts_account = self.env['account.account'].search([
                                     ('company_id', '=', move.company_id.id),
-                                    '|', ('name', 'ilike', 'Outstanding Receipt'), ('name', 'ilike', 'Outstanding Reciept')
+                                    '|', ('name', 'ilike', 'Outstanding Receipt'),
+                                    ('name', 'ilike', 'Outstanding Reciept')
                                 ], limit=1)
                             if not outstanding_receipts_account and journal:
-                                pay_method_lines = journal.inbound_payment_method_line_ids.filtered(lambda l: l.payment_account_id)
+                                pay_method_lines = journal.inbound_payment_method_line_ids.filtered(
+                                    lambda l: l.payment_account_id)
                                 if pay_method_lines:
                                     outstanding_receipts_account = pay_method_lines[0].payment_account_id
                             if not outstanding_receipts_account and journal:
@@ -342,15 +325,17 @@ class AccountMove(models.Model):
                                     ('account_type', '=', 'asset_receivable')
                                 ], limit=1)
                             if not debtors_account:
-                                pay_term_lines = move.line_ids.filtered(lambda line: line.account_id.account_type == 'asset_receivable')
+                                pay_term_lines = move.line_ids.filtered(
+                                    lambda line: line.account_id.account_type == 'asset_receivable')
                                 if pay_term_lines:
                                     debtors_account = pay_term_lines[0].account_id
                             if not debtors_account:
-                                debtors_account = move.partner_id.with_company(move.company_id).property_account_receivable_id
+                                debtors_account = move.partner_id.with_company(
+                                    move.company_id).property_account_receivable_id
                             if not debtors_account:
                                 raise UserError(_("Debtors/Receivable account not found in the current company."))
 
-                            # 4. Create draft entry
+                            # 4. Create draft entry in current company
                             label = comp.name
                             move_vals = {
                                 'journal_id': journal.id,
@@ -383,6 +368,47 @@ class AccountMove(models.Model):
                             ).create(move_vals)
                             new_move.action_post()
 
+                            # 5. Create another journal entry in the SAME company (move.company_id.id)
+                            # Find partner named as the scheme's country name
+                            scheme_country_name = comp.country_id.name or ''
+                            other_partner = self.env['res.partner'].sudo().search([('name', '=', scheme_country_name)],
+                                                                                  limit=1)
+                            if not other_partner:
+                                other_partner = self.env['res.partner'].sudo().search([('name', '=', comp.name)],
+                                                                                      limit=1) or comp.partner_id
+
+                            other_label = ", ".join(filter(None, schemes.mapped('name'))) or comp.name
+                            other_move_vals = {
+                                'journal_id': journal.id,
+                                'date': fields.Date.today(),
+                                'ref': other_label,
+                                'company_id': move.company_id.id,
+                                'partner_id': other_partner.id,
+                                'branch_id': move.branch_id.id if hasattr(move,
+                                                                          'branch_id') and move.branch_id else False,
+                                'line_ids': [
+                                    (0, 0, {
+                                        'account_id': debtors_account.id,
+                                        'partner_id': other_partner.id,
+                                        'name': other_label,
+                                        'debit': total_amount,
+                                        'credit': 0.0,
+                                    }),
+                                    (0, 0, {
+                                        'account_id': outstanding_receipts_account.id,
+                                        'partner_id': other_partner.id,
+                                        'name': other_label,
+                                        'debit': 0.0,
+                                        'credit': total_amount,
+                                    })
+                                ]
+                            }
+                            other_new_move = self.env['account.move'].with_context(
+                                default_move_type='entry',
+                                default_journal_id=journal.id,
+                            ).create(other_move_vals)
+                            other_new_move.action_post()
+
                             for scheme in schemes:
                                 scheme.write({
                                     'state': 'redeemed',
@@ -395,8 +421,7 @@ class AccountMove(models.Model):
                                         'amount': scheme.total_paid,
                                         'date': fields.Date.today(),
                                     })
-        return res
-
+        return super().action_post()
 
 # from math import ceil
 # from odoo import models, api, fields
@@ -481,5 +506,4 @@ class AccountMove(models.Model):
 #             adjusted_total = move.amount_total + move.amount_rounding
 
 #             move.amount_total = ceil(adjusted_total / 100.0) * 100
-
 
