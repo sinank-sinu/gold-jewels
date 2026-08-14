@@ -140,6 +140,7 @@
         name="Sales"
         parent="menu_jewellery_root"
         sequence="4"
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_billing_staff"
     />
 
     <menuitem
@@ -147,7 +148,7 @@
         name="Sales Orders"
         parent="menu_jewellery_sales_root"
         action="sale.action_orders"
-        groups="em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_manager"
+        groups="em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_billing_staff"
         sequence="10"
     />
 

@@ -66,6 +66,8 @@ class StockMove(models.Model):
     @api.onchange('label_id', 'product_uom_qty', 'tax_id')
     def _onchange_label_id(self):
         if self.label_id:
+            if not self.product_id and self.label_id.product_id:
+                self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
             self.product_uom_qty = self.label_id.purchase_gross_weight
 

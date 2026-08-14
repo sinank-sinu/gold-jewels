@@ -168,5 +168,41 @@
             <field name="perm_create" eval="True"/>
             <field name="perm_unlink" eval="True"/>
         </record>
+
+        <!-- Record Rule for Billing Staff to see ALL Sales Orders -->
+        <record id="rule_sale_order_billing_staff_all" model="ir.rule">
+            <field name="name">Jewellery Billing Staff: All Orders</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <!-- Record Rule for Billing Staff to see ALL Sales Order Lines -->
+        <record id="rule_sale_order_line_billing_staff_all" model="ir.rule">
+            <field name="name">Jewellery Billing Staff: All Order Lines</field>
+            <field name="model_id" ref="sale.model_sale_order_line"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <!-- Record Rule for Billing Staff to see ALL Stock Pickings (needed for order confirmation) -->
+        <record id="rule_stock_picking_billing_staff_all" model="ir.rule">
+            <field name="name">Jewellery Billing Staff: All Pickings</field>
+            <field name="model_id" ref="stock.model_stock_picking"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
     </data>
 </odoo>

@@ -5,7 +5,9 @@
     'summary': 'Extend Cash Book Report with Branch Filters',
     'category': 'Accounting',
     'depends': ['base', 'account', 'dynamic_accounts_report'],
-    'data': [],
+    'data': [
+        'security/ir.model.access.csv',
+    ],
     'assets': {
         'web.assets_backend': [
             'custom_cash_book_branch/static/src/js/cash_book_extend.js',

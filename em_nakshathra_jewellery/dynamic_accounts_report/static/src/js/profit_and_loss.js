@@ -4,7 +4,7 @@ const now = new Date();
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { useRef, useState } from "@odoo/owl";
-import { BlockUI } from "@web/core/ui/block_ui";
+import { BlockUI, unblockUI } from "@web/core/ui/block_ui";
 import { download } from "@web/core/network/download";
 const actionRegistry = registry.category("actions");
 
