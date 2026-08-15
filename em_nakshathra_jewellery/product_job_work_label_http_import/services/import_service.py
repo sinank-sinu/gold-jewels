@@ -99,7 +99,48 @@ class ProductLabelImportService:
                         company = label.branch_id.company_id or label.product_id.company_id
                         if company:
                             label = label.with_company(company)
-                        label.action_stock_in()
+                            
+                        # Create and force validate the transfer for the label stock directly in the script
+                        if label.source_location_id and label.branch_location_id:
+                            picking_type = self.env['stock.picking.type'].search([
+                                ('code', '=', 'internal'),
+                                ('company_id', '=', label.branch_id.company_id.id)
+                            ], limit=1) or self.env.ref('stock.picking_type_internal')
+                            
+                            picking = self.env['stock.picking'].create({
+                                'picking_type_id': picking_type.id,
+                                'location_id': label.source_location_id.id,
+                                'location_dest_id': label.branch_location_id.id,
+                                'origin': label.name,
+                                'branch_id': label.branch_id.id,
+                            })
+
+                            self.env['stock.move'].create({
+                                'name': f"Stock In: {label.name}",
+                                'product_id': label.product_id.id,
+                                'product_uom_qty': label.purchase_gross_weight or 1.0,
+                                'product_uom': label.product_id.uom_id.id,
+                                'location_id': label.source_location_id.id,
+                                'location_dest_id': label.branch_location_id.id,
+                                'picking_id': picking.id,
+                                'label_id': label.id,
+                                'purity_id': label.purity_id.id if label.purity_id else False,
+                                'branch_id': label.branch_id.id,
+                            })
+
+                            picking.action_confirm()
+                            picking.action_assign()
+                            for move in picking.move_ids_without_package:
+                                move.quantity = move.product_uom_qty
+                                move.picked = True
+                            
+                            # Force completion without checking UI wizards
+                            picking._action_done()
+
+                            label.write({
+                                'picking_id': picking.id,
+                                'is_stocked_in': True,
+                            })
 
                         picking = label.picking_id
                         if picking and excel_date:

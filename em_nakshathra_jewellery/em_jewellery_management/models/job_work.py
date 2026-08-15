@@ -125,6 +125,11 @@ class JewelleryJobWork(models.Model):
         'purchase_id',
         string="Labels"
     )
+    jw_label_ids = fields.One2many(
+        'product.label',
+        'job_work_id',
+        string="Job Work Labels"
+    )
     company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
 
     @api.depends(
@@ -145,11 +150,11 @@ class JewelleryJobWork(models.Model):
                 order.job_work_line_ids.mapped('total_fine')
             )
 
-    @api.depends('label_ids.sale_gross_weight')
+    @api.depends('jw_label_ids.sale_gross_weight')
     def _compute_total_labelled(self):
         for order in self:
             order.total_labelled = sum(
-                order.label_ids.mapped('sale_gross_weight')
+                order.jw_label_ids.mapped('sale_gross_weight')
             )
 
     @api.depends(
