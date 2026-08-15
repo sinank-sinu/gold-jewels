@@ -104,7 +104,7 @@ class ProductLabelImportService:
                         if label.source_location_id and label.branch_location_id:
                             picking_type = self.env['stock.picking.type'].search([
                                 ('code', '=', 'internal'),
-                                ('company_id', '=', label.branch_id.company_id.id)
+                                ('company_id', '=', label.branch_id.company_id.id or company)
                             ], limit=1) or self.env.ref('stock.picking_type_internal')
                             
                             picking = self.env['stock.picking'].create({
