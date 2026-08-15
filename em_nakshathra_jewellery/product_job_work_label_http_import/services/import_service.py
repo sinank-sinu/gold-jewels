@@ -12,63 +12,6 @@ class ProductLabelImportService:
         self.env = env(su=True)
         self.job_work_cache = {}
 
-    def _create_stock_transfer(self, label):
-        """Create and validate internal transfer during import."""
-
-        company = label.company_id
-
-        picking_type = self.env['stock.picking.type'].search([
-            ('code', '=', 'internal'),
-            ('company_id', '=', company.id)
-        ], limit=1)
-
-        if not picking_type:
-            raise UserError(
-                f"Internal Picking Type not found for company {company.name}"
-            )
-
-        picking = self.env['stock.picking'].create({
-            'company_id': company.id,
-            'picking_type_id': picking_type.id,
-            'location_id': label.source_location_id.id,
-            'location_dest_id': label.branch_location_id.id,
-            'origin': label.name,
-            'branch_id': label.branch_id.id,
-        })
-
-        move = self.env['stock.move'].create({
-            'name': label.name,
-            'company_id': company.id,
-            'product_id': label.product_id.id,
-            'product_uom_qty': label.purchase_gross_weight or 1.0,
-            'product_uom': label.product_id.uom_id.id,
-            'location_id': label.source_location_id.id,
-            'location_dest_id': label.branch_location_id.id,
-            'picking_id': picking.id,
-            'branch_id': label.branch_id.id,
-            'label_id': label.id,
-            'purity_id': label.purity_id.id if label.purity_id else False,
-        })
-        move.quantity = label.purchase_gross_weight or 1.0
-
-        picking.action_confirm()
-        picking.action_assign()
-
-        self.env['stock.move.line'].create({
-            'company_id': company.id,
-            'move_id': move.id,
-            'picking_id': picking.id,
-            'product_id': label.product_id.id,
-            'product_uom_id': label.product_id.uom_id.id,
-            'location_id': label.source_location_id.id,
-            'location_dest_id': label.branch_location_id.id,
-            'quantity': label.purchase_gross_weight or 1.0,
-        })
-
-        picking.button_validate()
-
-        return picking
-
     def process_import(self, file_base64):
         self.job_work_cache = {}
         created = 0
@@ -153,11 +96,12 @@ class ProductLabelImportService:
                                     pass
                         
                         # Perform Transfer immediately
-                        # Perform Transfer immediately
-                        picking = self._create_stock_transfer(label)
+                        company = label.branch_id.company_id or label.product_id.company_id
+                        if company:
+                            label = label.with_company(company)
+                        label.action_stock_in()
 
-                        label.picking_id = picking.id
-                        label.is_stocked_in = True
+                        picking = label.picking_id
                         if picking and excel_date:
                             formatted_date = excel_date.strftime('%Y-%m-%d %H:%M:%S')
                             try:

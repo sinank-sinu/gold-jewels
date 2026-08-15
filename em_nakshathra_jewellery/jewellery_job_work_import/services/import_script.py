@@ -499,7 +499,75 @@ class JobWorkImportService:
             existing_jws = self.env['jewellery.job.work'].search([('name', 'in', all_jw_numbers)])
             if existing_jws:
                 duplicate_names = [jw.name for jw in existing_jws]
-                error_msg = f"DUPLICATION ERROR: The following Job Work numbers already exist in Odoo: {', '.join(duplicate_names)}. Import aborted."
+                _logger.info(f"Found existing Job Works. Updating their dates and aborting import: {', '.join(duplicate_names)}")
+                
+                for dup_name in duplicate_names:
+                    if dup_name in grouped_data:
+                        # Extract the correct order date from Excel for this duplicate
+                        dup_lines = grouped_data[dup_name]
+                        if dup_lines:
+                            dup_first_line = dup_lines[0]
+                            dup_order_date = self.safe_date(dup_first_line.get('OrderDate') if dup_first_line.get('OrderDate') is not None else dup_first_line.get('order date'))
+                            
+                            existing_jw = self.env['jewellery.job.work'].search([('name', '=', dup_name)], limit=1)
+                            if existing_jw and dup_order_date:
+                                # 1. Update Job Work date via SQL to bypass readonly state
+                                self.env.cr.execute(
+                                    "UPDATE jewellery_job_work SET order_date=%s WHERE id=%s",
+                                    (dup_order_date, existing_jw.id)
+                                )
+                                existing_jw.invalidate_recordset(['order_date'])
+                                
+                                # 2. Update Issue Voucher date
+                                issues = self.env['jewellery.issue.voucher'].search([('job_work_id', '=', existing_jw.id)])
+                                for issue in issues:
+                                    self.env.cr.execute(
+                                        "UPDATE jewellery_issue_voucher SET order_date=%s WHERE id=%s",
+                                        (dup_order_date, issue.id)
+                                    )
+                                    issue.invalidate_recordset(['order_date'])
+                                    
+                                # 3. Update Receive Voucher date and Stock Moves
+                                receives = self.env['jewellery.receive.voucher'].search([('job_work_id', '=', existing_jw.id)])
+                                for receive in receives:
+                                    self.env.cr.execute(
+                                        "UPDATE jewellery_receive_voucher SET order_date=%s WHERE id=%s",
+                                        (dup_order_date, receive.id)
+                                    )
+                                    receive.invalidate_recordset(['order_date'])
+                                    
+                                    picking = receive.picking_id
+                                    if picking:
+                                        formatted_date = dup_order_date.strftime('%Y-%m-%d 12:00:00')
+                                        try:
+                                            picking.flush_recordset()
+                                            picking.move_ids.flush_recordset()
+                                            picking.move_line_ids.flush_recordset()
+                                            
+                                            self.env.cr.execute(
+                                                "UPDATE stock_picking SET scheduled_date=%s, date_done=%s, date=%s WHERE id=%s",
+                                                (formatted_date, formatted_date, formatted_date, picking.id)
+                                            )
+                                            self.env.cr.execute(
+                                                "UPDATE stock_move SET date=%s, date_deadline=%s WHERE picking_id=%s",
+                                                (formatted_date, formatted_date, picking.id)
+                                            )
+                                            self.env.cr.execute(
+                                                "UPDATE stock_move_line SET date=%s WHERE picking_id=%s",
+                                                (formatted_date, picking.id)
+                                            )
+                                            
+                                            picking.invalidate_recordset()
+                                            picking.move_ids.invalidate_recordset()
+                                            picking.move_line_ids.invalidate_recordset()
+                                        except Exception as date_e:
+                                            _logger.warning(f"Could not apply excel date {formatted_date} to existing picking {picking.name}: {date_e}")
+
+                # Commit the date updates so they are saved to the database permanently
+                self.env.cr.commit()
+                
+                # Now raise the error to completely abort the import and prevent any new records from being created
+                error_msg = f"DUPLICATION ERROR: The following Job Work numbers already exist in Odoo: {', '.join(duplicate_names)}. Their dates have been updated, but the import of any new records is aborted."
                 self.env['ir.config_parameter'].sudo().set_param(f'import_error_{task_id}', error_msg)
                 raise UserError(error_msg)
                 
@@ -1028,6 +1096,32 @@ Picking Type: {correct_picking_type.name}""")
                             receive_with_comp.state = 'done'
                             if receive_with_comp.job_work_id:
                                 receive_with_comp.job_work_id.state = 'received'
+
+                            if order_date and primary_picking:
+                                formatted_date = order_date.strftime('%Y-%m-%d 12:00:00')
+                                try:
+                                    primary_picking.flush_recordset()
+                                    primary_picking.move_ids.flush_recordset()
+                                    primary_picking.move_line_ids.flush_recordset()
+
+                                    self.env.cr.execute(
+                                        "UPDATE stock_picking SET scheduled_date=%s, date_done=%s, date=%s WHERE id=%s",
+                                        (formatted_date, formatted_date, formatted_date, primary_picking.id)
+                                    )
+                                    self.env.cr.execute(
+                                        "UPDATE stock_move SET date=%s, date_deadline=%s WHERE picking_id=%s",
+                                        (formatted_date, formatted_date, primary_picking.id)
+                                    )
+                                    self.env.cr.execute(
+                                        "UPDATE stock_move_line SET date=%s WHERE picking_id=%s",
+                                        (formatted_date, primary_picking.id)
+                                    )
+
+                                    primary_picking.invalidate_recordset()
+                                    primary_picking.move_ids.invalidate_recordset()
+                                    primary_picking.move_line_ids.invalidate_recordset()
+                                except Exception as date_e:
+                                    _logger.warning(f"Could not apply excel date {formatted_date} to receive voucher picking {primary_picking.name}: {date_e}")
                                 
                         except UserError:
                             raise
