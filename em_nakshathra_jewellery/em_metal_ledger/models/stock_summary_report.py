@@ -37,7 +37,14 @@ class StockSummaryReportWizard(models.TransientModel):
             SELECT pl.id AS label_id, pl.product_id, pl.purity_id,
                    COALESCE(pl.purchase_gross_weight, 0.0) AS gross_wt,
                    COALESCE(pl.purchase_net_weight, 0.0) AS net_wt,
-                   pl.create_date, COALESCE(pl.age_import, 0) AS ageing
+                   pl.create_date,
+                   (CASE 
+                        WHEN COALESCE(pl.age_import, 0) != 0 
+                        THEN COALESCE(pl.age_import, 0) + (CURRENT_DATE - pl.create_date::date)
+                        WHEN pl.create_date IS NOT NULL 
+                        THEN (CURRENT_DATE - pl.create_date::date) + 1
+                        ELSE 0
+                    END) AS ageing
             FROM product_label pl
             WHERE (%s::int[] IS NULL OR cardinality(%s::int[]) = 0 OR pl.branch_id = ANY(%s::int[]))
               AND (
