@@ -69,6 +69,7 @@ class SaleOrderMetalLedger(models.Model):
                     
 
                     ReplacementCostingItem.create({
+                        'sale_order_id': order.id,
                         'date': order.date_order.date() if order.date_order else fields.Date.today(),
                         'branch_id': order.branch_id.id if hasattr(order, 'branch_id') else False,
                         'salesman_id': order.user_id.id,
@@ -148,6 +149,7 @@ class SaleOrderMetalLedger(models.Model):
                     # TEMPORARY
                     # We will fill the purchase values later
                     ReplacementCostingItem.create({
+                        'sale_order_id': order.id,
                         'date': order.date_order.date() if order.date_order else fields.Date.today(),
                         'branch_id': order.branch_id.id if hasattr(order, 'branch_id') else False,
                         'salesman_id': order.user_id.id,

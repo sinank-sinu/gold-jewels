@@ -969,18 +969,21 @@ if(tot>0)run(); else log('No records found.');
                     ).action_apply_old_gold()
                 if order_date:
                     date_only = order_date.date() if isinstance(order_date, datetime.datetime) else order_date
-                    if order.purchase_order_id:
-                        order.purchase_order_id.sudo().write({
-                            'date_order': order_date,
-                            'date_approve': order_date,
-                        })
-                    if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
-                        if order.old_gold_bill_id.state == 'draft':
-                            order.old_gold_bill_id.sudo().write({'invoice_date': date_only, 'date': date_only})
-                    elif order.purchase_order_id and order.purchase_order_id.invoice_ids:
-                        for bill in order.purchase_order_id.invoice_ids:
-                            if bill.state == 'draft':
-                                bill.sudo().write({'invoice_date': date_only, 'date': date_only})
+                    order.invalidate_recordset(['purchase_order_id', 'old_gold_bill_id'])
+                    po = order.purchase_order_id
+                    if po:
+                        c_env.flush_all()
+                        c_env.cr.execute("UPDATE purchase_order SET date_order = %s, date_approve = %s, date_planned = %s, effective_date = %s WHERE id = %s", (order_date, order_date, order_date, order_date, po.id))
+                        c_env.cr.execute("UPDATE purchase_order_line SET date_planned = %s WHERE order_id = %s", (order_date, po.id))
+                        po.invalidate_recordset(['date_order', 'date_approve', 'date_planned', 'effective_date'])
+                        po.order_line.invalidate_recordset(['date_planned'])
+                        
+                        bills = po.invoice_ids
+                        if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
+                            bills |= order.old_gold_bill_id
+                        for bill in bills:
+                            c_env.cr.execute("UPDATE account_move SET invoice_date = %s, invoice_date_due = %s, date = %s WHERE id = %s", (date_only, date_only, date_only, bill.id))
+                            bill.invalidate_recordset(['invoice_date', 'invoice_date_due', 'date'])
             except Exception as e:
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
                 raise
@@ -1080,10 +1083,12 @@ if(tot>0)run(); else log('No records found.');
         for picking in order.picking_ids:
             if picking.state == 'cancel':
                 continue
-            
+            if order_date:
+                c_env.flush_all()
+                c_env.cr.execute("UPDATE stock_picking SET scheduled_date = %s WHERE id = %s", (order_date, picking.id))
+                picking.invalidate_recordset(['scheduled_date'])
+
             if picking.state != 'done':
-                if order_date:
-                    picking.sudo().write({'scheduled_date': order_date})
                 if picking.picking_type_code == 'outgoing' and source_loc:
                     picking.location_id = source_loc.id
                     for move in picking.move_ids:
@@ -1129,10 +1134,12 @@ if(tot>0)run(); else log('No records found.');
             for picking in order.purchase_order_id.picking_ids:
                 if picking.state == 'cancel':
                     continue
-                
+                if order_date:
+                    c_env.flush_all()
+                    c_env.cr.execute("UPDATE stock_picking SET scheduled_date = %s WHERE id = %s", (order_date, picking.id))
+                    picking.invalidate_recordset(['scheduled_date'])
+
                 if picking.state != 'done':
-                    if order_date:
-                        picking.sudo().write({'scheduled_date': order_date})
                     if og_branch_loc_final:
                         picking.location_dest_id = og_branch_loc_final.id
                         for move in picking.move_ids:

@@ -230,7 +230,7 @@ class JewelleryReceiveVoucher(models.Model):
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.gross_weight,
                 'name': line.product_id.name,
-                'product_uom': uom_gram.id,
+                'product_uom': line.uom_id.id or line.product_id.uom_id.id,
                 'location_id': picking.location_id.id,
                 'location_dest_id': picking.location_dest_id.id,
                 'picking_id': picking.id,
@@ -241,12 +241,11 @@ class JewelleryReceiveVoucher(models.Model):
 
         picking.action_confirm()
         picking.action_assign()
-        for move_line in picking.move_line_ids:
-            # Read qty from parent stock.move (product_uom_qty is invalid on move.line)
-            move_line.quantity = move_line.move_id.product_uom_qty
-            move_line.picked = True
+        for move in picking.move_ids_without_package:
+            move.quantity = move.product_uom_qty
+            move.picked = True
 
-        picking.with_context(skip_backorder=True).button_validate()
+        picking._action_done()
 
         self.picking_id = picking.id
         self.state = 'done'

@@ -211,7 +211,7 @@ class ProductLabel(models.Model):
             if rec.job_work_id:
                 jw = rec.job_work_id
                 # Deduct all other labels on this Job Work, then deduct current label's live weight
-                other_labels = jw.label_ids - rec
+                other_labels = jw.jw_label_ids - rec
                 total_other = sum(other_labels.mapped('sale_gross_weight'))
                 rec.unlabelled_weight_jw = jw.total_weight - total_other - (rec.sale_gross_weight or 0.0)
 

@@ -26,6 +26,8 @@ class ProductLabelImportService:
                 f"Internal Picking Type not found for company {company.name}"
             )
 
+        qty = label.purchase_gross_weight or 1.0
+
         picking = self.env['stock.picking'].create({
             'company_id': company.id,
             'picking_type_id': picking_type.id,
@@ -39,7 +41,7 @@ class ProductLabelImportService:
             'name': label.name,
             'company_id': company.id,
             'product_id': label.product_id.id,
-            'product_uom_qty': label.purchase_gross_weight or 1.0,
+            'product_uom_qty': qty,
             'product_uom': label.product_id.uom_id.id,
             'location_id': label.source_location_id.id,
             'location_dest_id': label.branch_location_id.id,
@@ -48,21 +50,25 @@ class ProductLabelImportService:
             'label_id': label.id,
             'purity_id': label.purity_id.id if label.purity_id else False,
         })
-        move.quantity = label.purchase_gross_weight or 1.0
 
         picking.action_confirm()
         picking.action_assign()
 
-        self.env['stock.move.line'].create({
-            'company_id': company.id,
-            'move_id': move.id,
-            'picking_id': picking.id,
-            'product_id': label.product_id.id,
-            'product_uom_id': label.product_id.uom_id.id,
-            'location_id': label.source_location_id.id,
-            'location_dest_id': label.branch_location_id.id,
-            'quantity': label.purchase_gross_weight or 1.0,
-        })
+        # Use the move line created by Odoo.
+        move_line = move.move_line_ids[:1]
+
+        if not move_line:
+            move_line = self.env['stock.move.line'].create({
+                'company_id': company.id,
+                'move_id': move.id,
+                'picking_id': picking.id,
+                'product_id': label.product_id.id,
+                'product_uom_id': label.product_id.uom_id.id,
+                'location_id': label.source_location_id.id,
+                'location_dest_id': label.branch_location_id.id,
+            })
+
+        move_line.quantity = qty
 
         picking.button_validate()
 

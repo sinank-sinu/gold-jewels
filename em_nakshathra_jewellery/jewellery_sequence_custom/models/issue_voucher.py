@@ -14,7 +14,11 @@ class JewelleryIssueVoucher(models.Model):
                 raise ValidationError("Branch code is missing!")
             seq = self.env['ir.sequence'].next_by_code('jewellery.issue.voucher')
             if not seq:
-                raise ValidationError("Sequence not working!")
+                seq_obj = self.env['ir.sequence'].sudo().search([('code', '=', 'jewellery.issue.voucher')], limit=1)
+                if seq_obj:
+                    seq = seq_obj.next_by_id()
+                else:
+                    raise ValidationError(f"Sequence { 'jewellery.issue.voucher' } is missing from the database!")
             vals['name'] = f"{branch.branch_code}/{seq}"
         res = super().create(vals)
         return res

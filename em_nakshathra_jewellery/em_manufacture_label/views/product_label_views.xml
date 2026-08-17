@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_product_label_form_inherit_mrp" model="ir.ui.view">
+        <field name="name">product.label.form.inherit.mrp</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='unlabelled_weight']" position="after">
+                <field name="production_id"/>
+                <field name="unlabelled_weight_mrp"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

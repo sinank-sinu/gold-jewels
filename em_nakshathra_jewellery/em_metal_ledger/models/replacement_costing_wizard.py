@@ -45,15 +45,15 @@ class ReplacementCostingWizard(models.TransientModel):
             sheet.write(0, i, header, bold_format)
             sheet.set_column(i, i, 15)
             
-        domain = [('date', '>=', self.date_from), ('date', '<=', self.date_to)]
+        domain = [('sale_date', '>=', self.date_from), ('sale_date', '<=', self.date_to)]
         if self.branch_ids:
             domain.append(('branch_id', 'in', self.branch_ids.ids))
             
-        items = self.env['replacement.costing.item'].search(domain, order='date asc')
+        items = self.env['replacement.costing.item'].search(domain, order='sale_date asc')
         
         row = 1
         for item in items:
-            sheet.write(row, 0, item.date, date_format)
+            sheet.write(row, 0, item.sale_date, date_format)
             sheet.write(row, 1, item.salesman_id.name if item.salesman_id else '')
             sheet.write(row, 2, item.sales_voucher_name or '')
             sheet.write(row, 3, item.label_id.name if item.label_id else '')

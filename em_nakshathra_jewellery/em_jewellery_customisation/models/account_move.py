@@ -224,7 +224,7 @@ class AccountMove(models.Model):
                             'scheme_id': scheme.id,
                             'sale_order_id': sale_order.id,
                             'amount': abs(line.amount_residual or line.balance),
-                            'date': fields.Date.today(),
+                            'date': sale_order.date_order.date() if sale_order and sale_order.date_order else fields.Date.today(),
                         })
         return True
 
@@ -354,7 +354,7 @@ class AccountMove(models.Model):
                             label = comp.name
                             move_vals = {
                                 'journal_id': journal.id,
-                                'date': fields.Date.today(),
+                                'date': sale_order.date_order.date(),
                                 'ref': label,
                                 'company_id': move.company_id.id,
                                 'partner_id': move.partner_id.id,
@@ -393,7 +393,7 @@ class AccountMove(models.Model):
                                         'scheme_id': scheme.id,
                                         'sale_order_id': sale_order.id,
                                         'amount': scheme.total_paid,
-                                        'date': fields.Date.today(),
+                                        'date': sale_order.date_order.date() if sale_order and sale_order.date_order else fields.Date.today(),
                                     })
         return res
 
