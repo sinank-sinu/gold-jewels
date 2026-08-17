@@ -5,7 +5,7 @@
         <field name="model">replacement.costing.item</field>
         <field name="arch" type="xml">
             <tree string="Replacement Costing" create="False" edit="False">
-                <field name="date"/>
+                <field name="sale_date" string="Date"/>
                 <field name="salesman_id"/>
                 <field name="sales_voucher_name"/>
                 <field name="label_id"/>

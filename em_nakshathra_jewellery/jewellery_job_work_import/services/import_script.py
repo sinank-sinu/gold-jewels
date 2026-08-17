@@ -1007,7 +1007,7 @@ Receive Voucher Line: {jw_line.purchase_making_charge_value}""")
                                         'product_id': line.product_id.id,
                                         'product_uom_qty': line.gross_weight,
                                         'name': line.product_id.name,
-                                        'product_uom': uom_gram.id,
+                                        'product_uom': line.uom_id.id or line.product_id.uom_id.id,
                                         'location_id': picking.location_id.id,
                                         'location_dest_id': picking.location_dest_id.id,
                                         'picking_id': picking.id,
@@ -1072,7 +1072,7 @@ Done Quantity: {move.quantity}
 Picking Type: {correct_picking_type.name}""")
 
                                 try:
-                                    current_picking.with_context(skip_backorder=True).button_validate()
+                                    current_picking._action_done()
                                 except Exception as receive_e:
                                     move = current_picking.move_ids[:1]
                                     error_msg = (

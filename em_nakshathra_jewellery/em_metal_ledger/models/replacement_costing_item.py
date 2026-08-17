@@ -4,9 +4,24 @@ import datetime
 class ReplacementCostingItem(models.Model):
     _name = 'replacement.costing.item'
     _description = 'Replacement Costing Item Wise'
-    _order = 'date desc'
+    _order = 'sale_date desc'
 
-    date = fields.Date(string="Date", default=fields.Date.context_today)
+    date = fields.Date(string="Date")
+    sale_order_id = fields.Many2one('sale.order', string="Sale Order")
+    sale_date = fields.Date(string="Sale Date", compute="_compute_sale_date", store=True)
+
+    @api.depends('sale_order_id', 'sale_order_id.date_order', 'sales_voucher_name', 'date')
+    def _compute_sale_date(self):
+        for rec in self:
+            so = rec.sale_order_id
+            if not so and rec.sales_voucher_name:
+                so = self.env['sale.order'].sudo().search([('name', '=', rec.sales_voucher_name)], limit=1)
+                if so:
+                    rec.sale_order_id = so
+            if so and so.date_order:
+                rec.sale_date = so.date_order.date()
+            else:
+                rec.sale_date = rec.date or fields.Date.today()
     salesman_id = fields.Many2one('res.users', string="Salesman")
     sales_voucher_name = fields.Char(string="Voucher")
     label_id = fields.Many2one('product.label', string="Label")
