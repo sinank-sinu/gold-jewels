@@ -147,13 +147,6 @@ class SaleOrder(models.Model):
         PurchaseLine = self.env['purchase.order.line']
         AccountMove = self.env['account.move']
 
-        product = self.env.ref(
-            'em_jewellery_management.product_old_gold',
-            raise_if_not_found=False
-        )
-        if not product:
-            raise ValidationError(_("Old Gold product not configured."))
-
         journal = self.env['account.journal'].search(
             [('type', 'in', ('cash', 'bank')),
              ('company_id', '=', self.env.company.id)],
@@ -163,6 +156,24 @@ class SaleOrder(models.Model):
             raise ValidationError(_("Cash/Bank journal not found."))
 
         for order in self:
+            product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+            company_id = order.company_id.id or self.env.company.id
+            
+            if product and product.company_id and product.company_id.id != company_id:
+                product = self.env['product.product'].sudo().search([
+                    ('name', '=ilike', 'Old Gold'),
+                    ('company_id', 'in', [company_id, False])
+                ], limit=1)
+                if not product:
+                    product = self.env['product.product'].sudo().search([
+                        ('is_old_gold', '=', True),
+                        ('name', 'not ilike', 'Scrap'),
+                        ('company_id', 'in', [company_id, False])
+                    ], limit=1)
+                    
+            if not product:
+                raise ValidationError(_("Old Gold product not configured for company."))
+
             if not order.old_gold_line_ids:
                 raise ValidationError(_("No Old Gold lines found."))
 
@@ -257,8 +268,17 @@ class SaleOrder(models.Model):
             # ------------------------------------------------
             bill_action = po.action_create_invoice()
             bill = AccountMove.browse(bill_action['res_id'])
-            bill.invoice_date = fields.Date.context_today(self)
-            bill.is_old_gold_bill = True
+
+            target_date = self.env.context.get('old_gold_invoice_date')
+            if not target_date:
+                target_date = fields.Date.context_today(self)
+
+            bill.with_context(check_move_validity=False).write({
+                'name': '/',
+                'invoice_date': target_date,
+                'date': target_date,
+                'is_old_gold_bill': True
+            })
 
             bill.action_post()
             self.old_gold_bill_id = bill.id

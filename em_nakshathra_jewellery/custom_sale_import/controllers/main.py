@@ -46,6 +46,19 @@ try:
 
     def _company_aware_create_old_gold_stock(self, og):
         product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+        if product and product.company_id and product.company_id.id != self.company_id.id:
+            product = self.env['product.product'].sudo().search([
+                ('name', '=ilike', 'Old Gold'),
+                ('company_id', 'in', [self.company_id.id, False])
+            ], limit=1)
+            if not product:
+                # Fallback to any old gold product that is not scrap
+                product = self.env['product.product'].sudo().search([
+                    ('is_old_gold', '=', True),
+                    ('name', 'not ilike', 'Scrap'),
+                    ('company_id', 'in', [self.company_id.id, False])
+                ], limit=1)
+                
         picking_type = (self.warehouse_id and self.warehouse_id.int_type_id) or self.env['stock.picking.type'].search([
             ('code', '=', 'internal'),
             ('company_id', '=', self.company_id.id),
@@ -155,6 +168,39 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
     def import_process(self, file, **kwargs):
         if not file:
             return "<h1>Error</h1><p>No file uploaded.</p>"
+            
+        # --- PRE-FLIGHT DB CLEANUP ---
+        # Fix corrupted sequences generated during previous partial imports 
+        try:
+            moves = request.env['account.move'].sudo().search([
+                '|', ('name', 'ilike', '/2026/08/'), ('name', 'ilike', 'FIX/%'),
+                ('state', '=', 'posted')
+            ])
+            import re
+            for move in moves:
+                if not move.date: continue
+                date_str = move.date.strftime('%Y/%m')
+                new_name = move.name
+                
+                # Strip FIX/ prefixes
+                new_name = re.sub(r'^(FIX/\d+/)+', '', new_name)
+                
+                # Replace the month/year if mismatched
+                if f'/{date_str}/' not in new_name:
+                    new_name = re.sub(r'/\d{4}/\d{2}/', f'/{date_str}/', new_name)
+                    
+                if new_name != move.name:
+                    # Check for collisions to avoid unique constraint errors
+                    request.env.cr.execute("SELECT id FROM account_move WHERE name = %s AND journal_id = %s AND id != %s", (new_name, move.journal_id.id, move.id))
+                    if request.env.cr.fetchone():
+                        new_name = f"{new_name}-{move.id}"
+                    
+                    request.env.cr.execute("UPDATE account_move SET name = %s WHERE id = %s", (new_name, move.id))
+            request.env.cr.commit()
+        except Exception as e:
+            _logger.warning("Failed to run pre-flight sequence cleanup: %s", e)
+        # -----------------------------
+        
         try:
             wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
 

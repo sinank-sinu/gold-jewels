@@ -174,12 +174,24 @@ class AccountMove(models.Model):
 
             journal = self.env['account.journal'].search([
                 ('type', 'in', ('bank', 'cash')),
-                ('company_id', '=', move.company_id.id)
+                ('company_id', '=', move.company_id.id),
+                ('default_account_id', '!=', False)
             ], limit=1)
+            
+            if not journal:
+                journal = self.env['account.journal'].search([
+                    ('type', 'in', ('bank', 'cash')),
+                    ('company_id', '=', move.company_id.id)
+                ], limit=1)
 
             if not journal:
                 raise ValidationError(_("No bank/cash journal found."))
+            elif not journal.default_account_id:
+                raise ValidationError(_("The selected journal '%s' is missing a Default Account. Please configure its accounts in Accounting settings to allow payments.") % journal.name)
 
+            payable_line = move.line_ids.filtered(lambda l: l.display_type == 'payment_term' or l.account_type == 'liability_payable')
+            destination_account_id = payable_line[0].account_id.id if payable_line else move.partner_id.with_company(move.company_id).property_account_payable_id.id
+            
             payment = Payment.create({
                 'payment_type': 'outbound',
                 'partner_type': 'supplier',
@@ -188,7 +200,12 @@ class AccountMove(models.Model):
                 'journal_id': journal.id,
                 'date': fields.Date.today(),
                 'ref': move.name,
+                'destination_account_id': destination_account_id,
             })
+            
+            # Force the outstanding account if Odoo's internal compute failed to find one
+            if not payment.outstanding_account_id and journal.default_account_id:
+                payment.outstanding_account_id = journal.default_account_id.id
 
             payment.action_post()
             if payment.state == 'posted':
