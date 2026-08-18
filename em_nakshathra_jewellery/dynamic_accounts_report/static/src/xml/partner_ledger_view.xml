@@ -16,7 +16,7 @@
                         </h1>
                     </div>
                     <div style="margin-right: 10px; margin-left: 10px;margin-bottom: 15px;display: flex;">
-                        <div class="sub_container_left" style="width:70%;">
+                        <div class="sub_container_left" style="width:70%; display: flex; align-items: center;">
                             <div class="report_print">
                                 <!-- Print (PDF) Button -->
                                 <button type="button"
@@ -32,7 +32,27 @@
                                     Export (XLSX)
                                 </button>
                             </div>
-
+                            <!-- Partner Name Search Input -->
+                            <div class="partner_name_search d-inline-block ms-3" style="min-width: 250px;">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white border-end-0">
+                                        <i class="fa fa-search text-muted"/>
+                                    </span>
+                                    <input type="text"
+                                           class="form-control border-start-0"
+                                           placeholder="Search Partner Name..."
+                                           t-att-value="state.search_partner_term || ''"
+                                           t-on-input="onSearchPartner"
+                                           style="box-shadow: none; outline: none;"/>
+                                    <t t-if="state.search_partner_term">
+                                        <button class="btn btn-sm btn-outline-secondary border-start-0"
+                                                type="button"
+                                                t-on-click="clearPartnerSearch">
+                                            <i class="fa fa-times"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
                         </div>
                         <div class="sub_container_right">
                             <!-- Time Range -->
@@ -425,6 +445,13 @@
                                                 </tr>
                                             </t>
                                         </t>
+                                    </t>
+                                    <t t-if="state.visible_partners and state.visible_partners.length == 0">
+                                        <tr>
+                                            <td colspan="15" class="text-center text-muted py-4" style="font-size: 14px;">
+                                                <i class="fa fa-info-circle me-1"/> No partners matching "<t t-esc="state.search_partner_term"/>" found.
+                                            </td>
+                                        </tr>
                                     </t>
                                     <tr>
                                         <th/>
