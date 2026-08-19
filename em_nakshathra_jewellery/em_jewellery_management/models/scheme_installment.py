@@ -3,6 +3,7 @@ from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_compare
 from dateutil.relativedelta import relativedelta  # Added for safe month arithmetic
 
+
 class JewellerySchemeInstallment(models.Model):
     _name = 'jewellery.scheme.installment'
     _description = 'Scheme Installment'
@@ -17,7 +18,8 @@ class JewellerySchemeInstallment(models.Model):
     amount = fields.Float(required=True)
 
     journal_id = fields.Many2one('account.journal')
-    move_id = fields.Many2one('account.move')
+    move_id = fields.Many2one('account.move', string="Customer Move")
+    suspense_move_id = fields.Many2one('account.move', string="Suspense Move", copy=False)
     transaction_id = fields.Char(string="Transaction ID", copy=False)
     state = fields.Selection([
         ('draft', 'Draft'),
@@ -28,54 +30,127 @@ class JewellerySchemeInstallment(models.Model):
 
     def action_transfer(self):
         self.ensure_one()
-        
+
         if self.is_transferred:
             raise UserError(_("This installment has already been transferred!"))
-            
-        
+
         if not self.amount or self.amount <= 0:
             raise UserError(_("Installment amount must be greater than zero to transfer."))
-            
+
         partner = self.enrollment_id.partner_id
         if not partner:
             raise UserError(_("No partner found on the scheme enrollment."))
-            
+
         enrollment = self.enrollment_id
         expected_total = enrollment.duration * enrollment.installment_amount
         if expected_total > 0 and (enrollment.total_paid + self.amount) > expected_total:
-            raise UserError(_("Transfer limit exceeded. Total allowed amount for this scheme is %s. You cannot transfer more than the allowed duration.") % expected_total)
-            
-        target_company_id = self.enrollment_id.branch_id.company_id.id if self.enrollment_id.branch_id and hasattr(self.enrollment_id.branch_id, 'company_id') and self.enrollment_id.branch_id.company_id else self.env.company.id
-        
-        # 1. Find Suspense Journal for the correct company
+            raise UserError(
+                _("Transfer limit exceeded. Total allowed amount for this scheme is %s. You cannot transfer more than the allowed duration.") % expected_total)
+
+        target_company_id = self.enrollment_id.branch_id.company_id.id if self.enrollment_id.branch_id and hasattr(
+            self.enrollment_id.branch_id,
+            'company_id') and self.enrollment_id.branch_id.company_id else self.env.company.id
+        target_company = self.env['res.company'].browse(target_company_id)
+
+        # 1. Find Miscellaneous Journal for target company
         journal = self.env['account.journal'].search([
             ('company_id', '=', target_company_id),
-            '|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'Suspense')
+            ('code', '=', 'SUS')
+        ], limit=1) or self.env['account.journal'].search([
+            ('company_id', '=', target_company_id),
+            ('name', 'ilike', 'suspense')
+        ], limit=1) or self.env['account.journal'].search([
+            ('company_id', '=', target_company_id),
+            ('type', '=', 'general')
         ], limit=1)
-        
+
         if not journal:
-            comp_name = self.env['res.company'].browse(target_company_id).name
-            raise UserError(_("CRITICAL ERROR: No journal containing the name 'suspense' or 'suspence' was found in your accounting settings for the company '%s'!") % comp_name)
-        
-        # As per the new accounting flow, we now want to Debit Outstanding Receipts instead of Suspense
-        outstanding_receipts_account = self.env['account.account'].search([
+            raise UserError(
+                _("Miscellaneous Journal missing!\nPlease create or configure a Miscellaneous Journal for company '%s'.") % target_company.name)
+
+        # 2. Get Suspense Partner
+        suspense_partner = self.env['res.partner'].search([
+            ('name', 'ilike', 'Suspense')
+        ], limit=1)
+
+        if not suspense_partner or not suspense_partner.id:
+            suspense_partner = self.env['res.partner'].create({
+                'name': 'Scheme Suspense',
+                'company_id': False,
+            })
+
+        # 3. Get Customer Debtors Account
+        debtors_account = partner.with_company(target_company).property_account_receivable_id
+        if debtors_account and debtors_account.company_id and debtors_account.company_id.id != target_company_id:
+            debtors_account = False
+
+        if not debtors_account:
+            debtors_account = self.env['account.account'].search([
+                ('company_id', '=', target_company_id),
+                ('account_type', '=', 'asset_receivable')
+            ], limit=1)
+
+        if not debtors_account or not debtors_account.id:
+            raise UserError(
+                _("No Receivable account found on the partner '%s', and no generic receivable account found for company '%s'.") % (
+                    partner.name, target_company.name))
+
+        # 4. Get Outstanding Receipts Account
+
+        outstanding_receipt_account = self.env['account.account'].search([
+            ('company_id', '=', target_company_id),
+            ('name', 'ilike', 'Outstanding Receipt')
+        ], limit=1) or self.env['account.account'].search([
             ('company_id', '=', target_company_id),
             ('name', 'ilike', 'Outstanding Reciept')
+        ], limit=1) or self.env['account.account'].search([
+            ('company_id', '=', target_company_id),
+            ('name', 'ilike', 'Outstanding')
         ], limit=1)
-        
-        if not outstanding_receipts_account:
-            raise UserError(_("Please configure an 'Outstanding Receipts' account for the company to process the transfer."))
 
-            
-        debtors_account = partner.property_account_receivable_id
-        if not debtors_account:
-            debtors_account = self.env['account.account'].search([('account_type', '=', 'asset_receivable'), ('company_id', '=', target_company_id)], limit=1)
-            
-        if not debtors_account:
-            raise UserError(_("No Receivable account found on the partner %s, and no generic receivable account found for the company.") % partner.name)
-            
-        # 3. Create Draft Journal Entry
-        move_vals = {
+        if not outstanding_receipt_account or not outstanding_receipt_account.id:
+            raise UserError(_("Outstanding Receipts Account missing for company '%s'.") % target_company.name)
+
+        # ------------------------------------------------------------------
+        # ENTRY 2 (Miscellaneous Journal - Suspense Partner Clearing):
+        # Line 1 (Debit): Debtor / Suspense Account (Debit) - Suspense Partner
+        # Line 2 (Credit): Outstanding Receipts Account (Credit) - Suspense Partner
+        # ------------------------------------------------------------------
+        entry2_vals = {
+            'journal_id': journal.id,
+            'company_id': target_company_id,
+            'date': fields.Date.today(),
+            'ref': f"Scheme Transfer (Suspense) - {self.enrollment_id.name or partner.name}",
+            'partner_id': suspense_partner.id,
+            'line_ids': [
+                (0, 0, {
+                    'account_id': debtors_account.id,
+                    'partner_id': suspense_partner.id,
+                    'name': f"Transfer Scheme Suspense Debtor - {suspense_partner.name}",
+                    'debit': self.amount,
+                    'credit': 0.0,
+                    'company_id': target_company_id,
+                }),
+                (0, 0, {
+                    'account_id': outstanding_receipt_account.id,
+                    'partner_id': suspense_partner.id,
+                    'name': f"Transfer Scheme Suspense Outstanding Receipt - {suspense_partner.name}",
+                    'debit': 0.0,
+                    'credit': self.amount,
+                    'company_id': target_company_id,
+                })
+            ]
+        }
+        move2 = self.env['account.move'].create(entry2_vals)
+        move2.write({'partner_id': suspense_partner.id})
+        move2.action_post()
+
+        # ------------------------------------------------------------------
+        # ENTRY 3 (Miscellaneous Journal - Customer Partner Allocation):
+        # Line 1 (Debit): Outstanding Receipts Account (Debit) - Customer Partner
+        # Line 2 (Credit): Debtor Account (Credit) - Customer Partner
+        # ------------------------------------------------------------------
+        entry3_vals = {
             'journal_id': journal.id,
             'company_id': target_company_id,
             'date': fields.Date.today(),
@@ -83,9 +158,9 @@ class JewellerySchemeInstallment(models.Model):
             'partner_id': partner.id,
             'line_ids': [
                 (0, 0, {
-                    'account_id': outstanding_receipts_account.id,
+                    'account_id': outstanding_receipt_account.id,
                     'partner_id': partner.id,
-                    'name': f"Transfer from Outstanding Receipts - {partner.name}",
+                    'name': f"Scheme Outstanding Receipt - {partner.name}",
                     'debit': self.amount,
                     'credit': 0.0,
                     'company_id': target_company_id,
@@ -93,32 +168,49 @@ class JewellerySchemeInstallment(models.Model):
                 (0, 0, {
                     'account_id': debtors_account.id,
                     'partner_id': partner.id,
-                    'name': f"Transfer to Debtors - {partner.name}",
+                    'name': f"Scheme Debtor Transfer - {partner.name}",
                     'debit': 0.0,
                     'credit': self.amount,
                     'company_id': target_company_id,
                 })
             ]
         }
-        
-        move = self.env['account.move'].create(move_vals)
-        move.write({'partner_id': partner.id})
-        
-        # Link the created transfer move to the installment so it shows in the 'Move' column
-        self.move_id = move.id
+        move3 = self.env['account.move'].create(entry3_vals)
+        move3.write({'partner_id': partner.id})
+        move3.action_post()
+
+        # ------------------------------------------------------------------
+        # Auto-reconcile Entry 1 (Bank Suspense) with Entry 2 (Misc Suspense)
+        # ------------------------------------------------------------------
+        try:
+            suspense_lines = self.env['account.move.line'].search([
+                ('partner_id', '=', suspense_partner.id),
+                ('account_id', 'in', [debtors_account.id, outstanding_receipt_account.id]),
+                ('reconciled', '=', False),
+                ('company_id', '=', target_company_id)
+            ])
+            for acc_id in [debtors_account.id, outstanding_receipt_account.id]:
+                acc_lines = suspense_lines.filtered(lambda l: l.account_id.id == acc_id)
+                if acc_lines and sum(acc_lines.mapped('debit')) == sum(acc_lines.mapped('credit')):
+                    acc_lines.reconcile()
+        except Exception:
+            pass
+
+        # Link moves to the installment record
+        self.suspense_move_id = move2.id
+        self.move_id = move3.id
         self.journal_id = journal.id
         self.is_transferred = True
         self.state = 'paid'
         self.transaction_id = 'BANK-TRANSFER'
-        
-        # 4. Open the created move in a new window for the user to review
+
+        # Return action to view created transfer entries
         return {
-            'name': _('Draft Entry (Transfer)'),
+            'name': _('Transfer Journal Entries'),
             'type': 'ir.actions.act_window',
             'res_model': 'account.move',
-            'res_id': move.id,
-            'view_mode': 'form',
-            'views': [(False, 'form')],
+            'domain': [('id', 'in', [move2.id, move3.id])],
+            'view_mode': 'tree,form',
             'target': 'current',
         }
 
