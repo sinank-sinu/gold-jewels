@@ -154,16 +154,17 @@ class StockSummaryReportController(http.Controller):
         query = """
             SELECT 
                 l.id, l.product_id, l.product_template_id, l.type_value, l.variety_value,
-                l.design_value, l.size_value, l.stone_colour_value, l.metal_colour_value,
+                l.design_value, l.size_value, l.stone_colour_value, l.metal_colour_value, l.purity_id,
                 l.ageing, l.opening_pcs, l.opening_gross_weight, l.opening_net_weight,
                 l.in_pcs, l.in_gross_weight, l.in_net_weight,
                 l.out_pcs, l.out_gross_weight, l.out_net_weight,
                 l.closing_pcs, l.closing_gross_weight, l.closing_net_weight,
                 l.average_inventory, l.turnover_ratio, l.no_of_days, l.dio, l.min_stock_level, l.stock_gap,
-                pp.default_code, pt.name as template_name
+                pp.default_code, pt.name as template_name, gp.name as purity_name
             FROM stock_summary_report_line l
             LEFT JOIN product_product pp ON l.product_id = pp.id
             LEFT JOIN product_template pt ON (l.product_template_id = pt.id OR pp.product_tmpl_id = pt.id)
+            LEFT JOIN gold_purity gp ON l.purity_id = gp.id
             WHERE l.create_uid = %s
             ORDER BY l.id ASC
         """
@@ -200,9 +201,9 @@ class StockSummaryReportController(http.Controller):
         worksheet.write('A2', f'Period: {start_date} to {end_date}', border_format)
         worksheet.write('A3', f'Branch: {branch_name}', border_format)
 
-        # Headers with 6 Variant columns
+        # Headers with 6 Variant columns + Purity
         headers = [
-            'Product', 'Type', 'Variety', 'Design', 'Size', 'Stone Colour', 'Metal Colour',
+            'Product', 'Type', 'Variety', 'Design', 'Size', 'Stone Colour', 'Metal Colour', 'Purity',
             'Ageing',
             'Opening PCs', 'Opening Gross', 'Opening Net',
             'In PCs', 'In Gross', 'In Net',
@@ -239,6 +240,7 @@ class StockSummaryReportController(http.Controller):
             size_val = _format_str(sample_line.get('size_value'))
             stone_col_val = _format_str(sample_line.get('stone_colour_value'))
             metal_col_val = _format_str(sample_line.get('metal_colour_value'))
+            purity_val = _format_str(sample_line.get('purity_name'))
 
             attr_parts = [
                 type_val or 'None',
@@ -287,25 +289,26 @@ class StockSummaryReportController(http.Controller):
             worksheet.write(row, 4, size_val, border_format)
             worksheet.write(row, 5, stone_col_val, border_format)
             worksheet.write(row, 6, metal_col_val, border_format)
-            worksheet.write(row, 7, ageing_avg, int_format)
-            worksheet.write(row, 8, o_pcs_sum, pcs_format)
-            worksheet.write(row, 9, o_gross_sum, num_format)
-            worksheet.write(row, 10, o_net_sum, num_format)
-            worksheet.write(row, 11, in_pcs_sum, pcs_format)
-            worksheet.write(row, 12, in_gross_sum, num_format)
-            worksheet.write(row, 13, in_net_sum, num_format)
-            worksheet.write(row, 14, out_pcs_sum, pcs_format)
-            worksheet.write(row, 15, out_gross_sum, num_format)
-            worksheet.write(row, 16, out_net_sum, num_format)
-            worksheet.write(row, 17, c_pcs_sum, pcs_format)
-            worksheet.write(row, 18, c_gross_sum, num_format)
-            worksheet.write(row, 19, c_net_sum, num_format)
-            worksheet.write(row, 20, avg_inv_val, num_format)
-            worksheet.write(row, 21, no_of_days_val, int_format)
-            worksheet.write(row, 22, min_stock_val, num_format)
-            worksheet.write(row, 23, turnover_val, dec2_format)
-            worksheet.write(row, 24, dio_val, int_format)
-            worksheet.write(row, 25, stock_gap_val, num_format)
+            worksheet.write(row, 7, purity_val, border_format)
+            worksheet.write(row, 8, ageing_avg, int_format)
+            worksheet.write(row, 9, o_pcs_sum, pcs_format)
+            worksheet.write(row, 10, o_gross_sum, num_format)
+            worksheet.write(row, 11, o_net_sum, num_format)
+            worksheet.write(row, 12, in_pcs_sum, pcs_format)
+            worksheet.write(row, 13, in_gross_sum, num_format)
+            worksheet.write(row, 14, in_net_sum, num_format)
+            worksheet.write(row, 15, out_pcs_sum, pcs_format)
+            worksheet.write(row, 16, out_gross_sum, num_format)
+            worksheet.write(row, 17, out_net_sum, num_format)
+            worksheet.write(row, 18, c_pcs_sum, pcs_format)
+            worksheet.write(row, 19, c_gross_sum, num_format)
+            worksheet.write(row, 20, c_net_sum, num_format)
+            worksheet.write(row, 21, avg_inv_val, num_format)
+            worksheet.write(row, 22, no_of_days_val, int_format)
+            worksheet.write(row, 23, min_stock_val, num_format)
+            worksheet.write(row, 24, turnover_val, dec2_format)
+            worksheet.write(row, 25, dio_val, int_format)
+            worksheet.write(row, 26, stock_gap_val, num_format)
             row += 1
 
         workbook.close()

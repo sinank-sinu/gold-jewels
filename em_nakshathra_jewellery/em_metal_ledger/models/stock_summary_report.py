@@ -344,7 +344,7 @@ class StockSummaryReportWizard(models.TransientModel):
         return {
             'type': 'ir.actions.act_url',
             'url': f'/metal_ledger/export_stock_summary?start_date={self.start_date}&end_date={self.end_date}&branch_name={branch_names}',
-            'target': 'new',
+            'target': 'self',
         }
 
     def action_print_grouped_xlsx(self):
@@ -354,7 +354,7 @@ class StockSummaryReportWizard(models.TransientModel):
         return {
             'type': 'ir.actions.act_url',
             'url': f'/metal_ledger/export_stock_summary_grouped?start_date={self.start_date}&end_date={self.end_date}&branch_name={branch_names}',
-            'target': 'new',
+            'target': 'self',
         }
 
 class StockSummaryReportLine(models.TransientModel):
