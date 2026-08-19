@@ -232,15 +232,6 @@ class AccountMove(models.Model):
         res = super().action_post()
         for move in self:
             if move.move_type == 'out_invoice':
-                # Automatically redeem schemes if possible
-                try:
-                    all_company_ids = self.env['res.company'].sudo().search([]).ids
-                    move_sudo = move.sudo().with_context(allowed_company_ids=all_company_ids)
-                    if move_sudo._get_outstanding_scheme_payment_lines():
-                        move_sudo.action_redeem_outstanding_schemes()
-                except Exception as e:
-                    pass
-
                 # Check if any associated sale order has apply_scheme = True
                 sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id')
                 if any(so.apply_scheme for so in sale_orders):
