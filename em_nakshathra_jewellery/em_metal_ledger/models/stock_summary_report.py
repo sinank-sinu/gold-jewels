@@ -277,7 +277,7 @@ class StockSummaryReportWizard(models.TransientModel):
                     avg_inventory = (in_gross + out_gross) / 4.0
                 turnover_ratio = (out_gross / avg_inventory) if avg_inventory > 0.0001 else 0.0
                 dio = round(no_of_days / turnover_ratio) if turnover_ratio > 0.0001 else (no_of_days if avg_inventory > 0.0001 else 0.0)
-                
+
                 product_rules = rules_by_product.get(product.id, [])
                 min_stock = product_rules[0].product_min_qty if product_rules else 0.0
                 stock_gap = c_gross - min_stock
@@ -343,9 +343,50 @@ class StockSummaryReportWizard(models.TransientModel):
             'target': 'new',
         }
 
+    def action_print_grouped_xlsx(self):
+        self.ensure_one()
+        self.action_generate_report()
+        branch_names = ', '.join(self.branch_ids.mapped('name')) if self.branch_ids else 'All Branches'
+        return {
+            'type': 'ir.actions.act_url',
+            'url': f'/metal_ledger/export_stock_summary_grouped?start_date={self.start_date}&end_date={self.end_date}&branch_name={branch_names}',
+            'target': 'new',
+        }
+
 class StockSummaryReportLine(models.TransientModel):
     _name = 'stock.summary.report.line'
     _description = 'Stock Summary Report Line'
+
+    @api.model
+    def read_group(self, domain, fields, groupby, offset=0, limit=None, orderby=False, lazy=True):
+        res = super(StockSummaryReportLine, self).read_group(
+            domain, fields, groupby, offset=offset, limit=limit, orderby=orderby, lazy=lazy
+        )
+        for line_data in res:
+            o_gross = line_data.get('opening_gross_weight', 0.0) or 0.0
+            c_gross = line_data.get('closing_gross_weight', 0.0) or 0.0
+            out_gross = line_data.get('out_gross_weight', 0.0) or 0.0
+            min_stock = line_data.get('min_stock_level', 0.0) or 0.0
+            no_days = line_data.get('no_of_days', 0) or 0
+
+            avg_inv = (o_gross + c_gross) / 2.0
+            if avg_inv <= 0.0 and out_gross > 0.0:
+                avg_inv = out_gross / 4.0
+
+            turnover = (out_gross / avg_inv) if avg_inv > 0.0001 else 0.0
+            dio_val = round(no_days / turnover) if turnover > 0.0001 else (no_days if avg_inv > 0.0001 else 0)
+            gap = c_gross - min_stock
+
+            if 'average_inventory' in fields or 'average_inventory' in line_data:
+                line_data['average_inventory'] = avg_inv
+            if 'turnover_ratio' in fields or 'turnover_ratio' in line_data:
+                line_data['turnover_ratio'] = turnover
+            if 'dio' in fields or 'dio' in line_data:
+                line_data['dio'] = dio_val
+            if 'stock_gap' in fields or 'stock_gap' in line_data:
+                line_data['stock_gap'] = gap
+
+        return res
 
     product_id = fields.Many2one('product.product', string='Product Variant')
     product_template_id = fields.Many2one('product.template', string='Product')
@@ -369,7 +410,7 @@ class StockSummaryReportLine(models.TransientModel):
     closing_net_weight = fields.Float(string='Closing Net', digits=(16, 3))
 
     average_inventory = fields.Float(string='Avg Inventory', digits=(16, 3))
-    no_of_days = fields.Integer(string='No. of Days')
+    no_of_days = fields.Integer(string='No. of Days', group_operator='avg')
     min_stock_level = fields.Float(string='Min Stock', digits=(16, 3))
     turnover_ratio = fields.Float(string='Turnover Ratio', digits=(16, 2))
     dio = fields.Float(string='DIO', digits=(16, 0))

@@ -14,101 +14,74 @@ class PurchaseRegisterXlsx(models.AbstractModel):
         
         # Define formats
         bold_format = workbook.add_format({'bold': True})
-        header_format = workbook.add_format({'bold': True, 'bg_color': '#4F81BD', 'font_color': 'white', 'border': 1})
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#1F4E78',  # Professional dark blue
+            'font_color': 'white',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'text_wrap': True
+        })
         cell_format = workbook.add_format({'border': 1})
-        date_format = workbook.add_format({'border': 1, 'num_format': 'dd/mm/yyyy'})
-        
-        # Set column widths
-        sheet.set_column('A:A', 15)
-        sheet.set_column('B:B', 20)
-        sheet.set_column('C:C', 25)
-        sheet.set_column('D:D', 15)
-        sheet.set_column('E:E', 15)
-        sheet.set_column('F:F', 15)
-        sheet.set_column('G:G', 20)
-        sheet.set_column('H:H', 15)
-        sheet.set_column('I:I', 15)
-        sheet.set_column('J:J', 15)
-        sheet.set_column('K:K', 20)
-        sheet.set_column('L:L', 15)
-        sheet.set_column('M:M', 15)
-        sheet.set_column('N:N', 15)
-        sheet.set_column('O:O', 15)
-        sheet.set_column('P:P', 15)
-        sheet.set_column('Q:Q', 15)
-        sheet.set_column('R:R', 15)
-        sheet.set_column('S:S', 15)
-        sheet.set_column('T:T', 15)
-        sheet.set_column('U:U', 15)
-        sheet.set_column('V:V', 15)
-        sheet.set_column('W:W', 15)
-        sheet.set_column('X:X', 15)
-        sheet.set_column('Y:Y', 15)
-        sheet.set_column('Z:Z', 15)
-        sheet.set_column('AA:AA', 15)
-        sheet.set_column('AB:AB', 15)
-        sheet.set_column('AC:AC', 15)
-        sheet.set_column('AD:AD', 15)
-        sheet.set_column('AE:AE', 15)
-        sheet.set_column('AF:AF', 15)
-        sheet.set_column('AG:AG', 15)
-        sheet.set_column('AH:AH', 15)
-        sheet.set_column('AI:AI', 15)
-        sheet.set_column('AJ:AJ', 15)
-        sheet.set_column('AK:AK', 15)
-        sheet.set_column('AL:AL', 15)
-        sheet.set_column('AM:AM', 15)
-        sheet.set_column('AN:AN', 15)
-        sheet.set_column('AO:AO', 20)
+        date_format = workbook.add_format({
+            'border': 1,
+            'num_format': 'dd/mm/yyyy',
+            'align': 'center',
+            'valign': 'vcenter'
+        })
         
         # Write headers
         headers = [
-            'PO Number',
-            'Date',
-            'Vendor',
-            'Vendor Reference',
-            'Branch',
-            'State',
-            'Total Amount',
-            'Currency',
-            'Product',
-            'Gross Weight',
-            'Received',
-            'Unit Price',
-            'Subtotal',
-            'Tax',
-            'UoM',
-            'Purity',
-            
-            'Rate(g)',
-            'Metal Amount',
-            'MC Type',
-            'Rate Value',
-            'MC%',
-            'Amount MC',
-            'MC Fine Weight',
-            'MC Amount',
-            'Total Fine',
-            'Packaging Qty',
-            'Packaging',
-            'Bank',
-            'Cash',
-            'Card',
-            'Upi',
-            
-            'Diamond Weight',
-            'Stone Weight',
-            'Other Weight',
-            'Diamond Amount',
-            'Stone Amount',
-            'Other Amount',
-            'Taxable Value (Sub Total)',
-            'CGST',
-            'SGST',
-            'Round Off',
-            'Bill Amount',
-            'Scheme'
+            'PO Number',                  # 0
+            'Date',                       # 1
+            'Vendor',                     # 2
+            'Vendor Reference',           # 3
+            'Branch',                     # 4
+            'State',                      # 5
+            'Currency',                   # 6
+            'Product',                    # 7
+            'UoM',                        # 8
+            'Purity',                     # 9
+            'Gross Weight',               # 10
+            'Net Weight',                 # 11
+            'Diamond Weight',             # 12
+            'Stone Weight',               # 13
+            'Other Weight',               # 14
+            'Received',                   # 15
+            'Rate(g)',                    # 16
+            'Metal Amount',               # 17
+            'MC Type',                    # 18
+            'Rate Value',                 # 19
+            'MC%',                        # 20
+            'Amount MC',                  # 21
+            'MC Fine Weight',             # 22
+            'MC Amount',                  # 23
+            'Total Fine',                 # 24
+            'Packaging Qty',              # 25
+            'Packaging',                  # 26
+            'Diamond Amount',             # 27
+            'Stone Amount',               # 28
+            'Other Amount',               # 29
+            'Unit Price',                 # 30
+            'Subtotal',                   # 31
+            'Taxable Value (Sub Total)',  # 32
+            'CGST',                       # 33
+            'SGST',                       # 34
+            'Tax',                        # 35
+            'Round Off',                  # 36
+            'Bill Amount',                # 37
+            'Total Amount',               # 38
+            'Bank',                       # 39
+            'Cash',                       # 40
+            'Card',                       # 41
+            'UPI'                         # 42
         ]
+        
+        # Set row height and column widths
+        sheet.set_row(0, 26)  # Professional spacious header row
+        for col, header in enumerate(headers):
+            sheet.set_column(col, col, max(len(header) + 4, 12))
         
         for col, header in enumerate(headers):
             sheet.write(0, col, header, header_format)
@@ -187,65 +160,70 @@ class PurchaseRegisterXlsx(models.AbstractModel):
                 sheet.write(row, 3, order.partner_ref or '', cell_format)
                 sheet.write(row, 4, order.branch_id.name if order.branch_id else '', cell_format)
                 sheet.write(row, 5, dict(order._fields['state'].selection).get(order.state, ''), cell_format)
-                sheet.write(row, 6, order.amount_total or 0, cell_format)
-                sheet.write(row, 7, order.currency_id.name or '', cell_format)
-                sheet.write(row, 8, line.product_id.name or '', cell_format)
-                sheet.write(row, 9, line.product_qty or 0, cell_format)
-                sheet.write(row, 10, line.qty_received or 0, cell_format)
-                sheet.write(row, 11, line.price_unit or 0, cell_format)
-                sheet.write(row, 12, line.price_subtotal or 0, cell_format)
-                sheet.write(row, 13, line.price_tax or 0, cell_format)
-                sheet.write(row, 14, line.product_uom.name or '', cell_format)
-                sheet.write(row, 15, line.purity_id.name if line.purity_id else '', cell_format)
-                sheet.write(row, 16, line.gross_weight or 0, cell_format)
-                sheet.write(row, 17, line.gold_rate or 0, cell_format)
-                sheet.write(row, 18, line.metal_amount or 0, cell_format)
-                mc_type = ''
-                if hasattr(line, 'purchase_making_charge_type') and line.purchase_making_charge_type:
-                    selection_dict = dict(line._fields['purchase_making_charge_type'].selection) if 'purchase_making_charge_type' in line._fields else {}
-                    mc_type = selection_dict.get(line.purchase_making_charge_type, line.purchase_making_charge_type)
-                sheet.write(row, 19, mc_type, cell_format)
-                sheet.write(row, 20, line.rate_value or 0, cell_format)
-                sheet.write(row, 21, line.mc_percent or 0, cell_format)
-                sheet.write(row, 22, line.mc_amount or 0, cell_format)
-                sheet.write(row, 23, line.mc_fine or 0, cell_format)
-                sheet.write(row, 24, line.purchase_making_charge_value or 0 if hasattr(line, 'purchase_making_charge_value') else 0, cell_format)
-                sheet.write(row, 25, line.total_fine or 0, cell_format)
-                sheet.write(row, 26, line.product_packaging_qty or 0 if hasattr(line, 'product_packaging_qty') else 0, cell_format)
-                sheet.write(row, 27, line.product_packaging_id.name if hasattr(line, 'product_packaging_id') and line.product_packaging_id else '', cell_format)
+                sheet.write(row, 6, order.currency_id.name or '', cell_format)
+                sheet.write(row, 7, line.product_id.name or '', cell_format)
+                sheet.write(row, 8, line.product_uom.name or '', cell_format)
+                sheet.write(row, 9, line.purity_id.name if line.purity_id else '', cell_format)
                 
-                sheet.write(row, 28, bank_amt if first_line else '', cell_format)
-                sheet.write(row, 29, cash_amt if first_line else '', cell_format)
-                sheet.write(row, 30, card_amt if first_line else '', cell_format)
-                sheet.write(row, 31, upi_amt if first_line else '', cell_format)
-                
-                # New columns
+                # New columns/values computation
                 gross_weight = line.gross_weight or 0
-                diamond_weight = line.purchase_diamond_weight_gm or 0 if hasattr(line, 'purchase_diamond_weight_gm') else 0
-                stone_weight = line.purchase_stone_weight or 0 if hasattr(line, 'purchase_stone_weight') else 0
-                other_weight = gross_weight - (line.net_weight or 0 if hasattr(line, 'net_weight') else 0) - diamond_weight - stone_weight
-                diamond_amount = diamond_weight * (line.purchase_diamond_rate or 0 if hasattr(line, 'purchase_diamond_rate') else 0)
-                stone_amount = stone_weight * (line.purchase_stone_rate or 0 if hasattr(line, 'purchase_stone_rate') else 0)
+                diamond_weight = line.diamond_weight_gm or 0 if hasattr(line, 'diamond_weight_gm') else 0
+                stone_weight = line.stone_weight or 0 if hasattr(line, 'stone_weight') else 0
+                net_weight = line.net_weight or 0 if hasattr(line, 'net_weight') else 0
+                other_weight = max(0, gross_weight - net_weight - diamond_weight - stone_weight)
+                diamond_amount = line.diamond_rate or 0 if hasattr(line, 'diamond_rate') else 0
+                stone_amount = line.stone_rate or 0 if hasattr(line, 'stone_rate') else 0
                 other_amount = other_weight * (line.gold_rate or 0)
                 taxable_value = line.price_subtotal or 0
                 cgst = line.price_tax / 2 if line.price_tax else 0
                 sgst = line.price_tax / 2 if line.price_tax else 0
-                round_off = order.amount_total - (order.amount_untaxed + order.amount_tax) if hasattr(order, 'amount_total') else 0
+                round_off = (order.amount_total or 0) - ((order.amount_untaxed or 0) + (order.amount_tax or 0)) if hasattr(order, 'amount_total') else 0
                 bill_amount = order.amount_total or 0
                 
-                sheet.write(row, 32, gross_weight, cell_format)
-                sheet.write(row, 33, diamond_weight, cell_format)
-                sheet.write(row, 34, stone_weight, cell_format)
-                sheet.write(row, 35, other_weight, cell_format)
-                sheet.write(row, 36, diamond_amount, cell_format)
-                sheet.write(row, 37, stone_amount, cell_format)
-                sheet.write(row, 38, other_amount, cell_format)
-                sheet.write(row, 39, taxable_value, cell_format)
-                sheet.write(row, 40, cgst, cell_format)
-                sheet.write(row, 41, sgst, cell_format)
-                sheet.write(row, 42, round_off, cell_format)
-                sheet.write(row, 43, bill_amount if first_line else '', cell_format)
-                sheet.write(row, 44, order.active_scheme_id.name if first_line and hasattr(order, 'active_scheme_id') and order.active_scheme_id else '', cell_format)
+                # Weights
+                sheet.write(row, 10, gross_weight, cell_format)
+                sheet.write(row, 11, net_weight, cell_format)
+                sheet.write(row, 12, diamond_weight, cell_format)
+                sheet.write(row, 13, stone_weight, cell_format)
+                sheet.write(row, 14, other_weight, cell_format)
+                sheet.write(row, 15, line.qty_received or 0, cell_format)
+                
+                # Metal & Charges
+                sheet.write(row, 16, line.gold_rate or 0, cell_format)
+                sheet.write(row, 17, line.metal_amount or 0, cell_format)
+                mc_type = ''
+                if hasattr(line, 'purchase_making_charge_type') and line.purchase_making_charge_type:
+                    selection_dict = dict(line._fields['purchase_making_charge_type'].selection) if 'purchase_making_charge_type' in line._fields else {}
+                    mc_type = selection_dict.get(line.purchase_making_charge_type, line.purchase_making_charge_type)
+                sheet.write(row, 18, mc_type, cell_format)
+                sheet.write(row, 19, line.rate_value or 0, cell_format)
+                sheet.write(row, 20, line.mc_percent or 0, cell_format)
+                sheet.write(row, 21, line.mc_amount or 0, cell_format)
+                sheet.write(row, 22, line.mc_fine or 0, cell_format)
+                sheet.write(row, 23, line.purchase_making_charge_value or 0 if hasattr(line, 'purchase_making_charge_value') else 0, cell_format)
+                sheet.write(row, 24, line.total_fine or 0, cell_format)
+                sheet.write(row, 25, line.product_packaging_qty or 0 if hasattr(line, 'product_packaging_qty') else 0, cell_format)
+                sheet.write(row, 26, line.product_packaging_id.name if hasattr(line, 'product_packaging_id') and line.product_packaging_id else '', cell_format)
+                sheet.write(row, 27, diamond_amount, cell_format)
+                sheet.write(row, 28, stone_amount, cell_format)
+                sheet.write(row, 29, other_amount, cell_format)
+                sheet.write(row, 30, line.price_unit or 0, cell_format)
+                
+                # Billing & Taxes
+                sheet.write(row, 31, line.price_subtotal or 0, cell_format)
+                sheet.write(row, 32, taxable_value, cell_format)
+                sheet.write(row, 33, cgst, cell_format)
+                sheet.write(row, 34, sgst, cell_format)
+                sheet.write(row, 35, line.price_tax or 0, cell_format)
+                sheet.write(row, 36, round_off, cell_format)
+                sheet.write(row, 37, bill_amount if first_line else 0, cell_format)
+                sheet.write(row, 38, order.amount_total or 0, cell_format)
+                
+                # Payments & Settlements
+                sheet.write(row, 39, bank_amt if first_line else 0, cell_format)
+                sheet.write(row, 40, cash_amt if first_line else 0, cell_format)
+                sheet.write(row, 41, card_amt if first_line else 0, cell_format)
+                sheet.write(row, 42, upi_amt if first_line else 0, cell_format)
                 
                 first_line = False
                 row += 1

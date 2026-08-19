@@ -407,7 +407,7 @@ class ProductLabelReportWizard(models.TransientModel):
                 days = 0
 
             # Variety Name
-            variety_name = label.product_id.name or ""
+            variety_name = label.product_id.display_name or ""
 
             # Item Name resolution
             item_name = ""
@@ -579,7 +579,7 @@ class ProductLabelReportWizard(models.TransientModel):
             ws2.cell(row=row_idx2, column=1, value=receipt_date_str).alignment = align_center
             ws2.cell(row=row_idx2, column=2, value=quant.product_id.product_tmpl_id.name or "").alignment = align_left
             
-            variety_name2 = quant.product_id.name or ""
+            variety_name2 = quant.product_id.display_name or ""
             ws2.cell(row=row_idx2, column=3, value=variety_name2).alignment = align_left
             
             ws2.cell(row=row_idx2, column=4, value=quant.product_id.purity_id.name or "").alignment = align_center
