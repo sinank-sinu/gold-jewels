@@ -33,6 +33,7 @@ class PartnerLedger extends owl.Component {
             date_range: null,
             account: null,
             options: null,
+            search_partner_term: "",
             message_list : [],
         });
         this.load_data(self.initial_render = true);
@@ -75,6 +76,7 @@ class PartnerLedger extends owl.Component {
             self.state.total_credit = totalCreditSum
             self.state.title = action_title
             self.state.visible_partners = partner_list;
+            self._applyPartnerSearch((self.state.search_partner_term || "").toLowerCase().trim());
         }
         catch (el) {
             window.location.href;
@@ -373,6 +375,7 @@ class PartnerLedger extends owl.Component {
         this.state.total_debit = totalDebitSum
         this.state.total_credit = totalCreditSum
         this.state.visible_partners = partner_list;
+        this._applyPartnerSearch((this.state.search_partner_term || "").toLowerCase().trim());
         if ($(this.unfoldButton.el.classList).find("selected-filter")) {
             this.unfoldButton.el.classList.remove("selected-filter")
         }
@@ -397,6 +400,36 @@ class PartnerLedger extends owl.Component {
                 $(this.tbody.el.children[length])[0].classList.remove('show')
             }
             ev.target.classList.remove("selected-filter");
+        }
+    }
+    onSearchPartner(ev) {
+        /**
+         * Real-time search partner by name in the partner ledger list.
+         */
+        const term = ev.target.value;
+        this.state.search_partner_term = term;
+        this._applyPartnerSearch(term.toLowerCase().trim());
+    }
+    clearPartnerSearch() {
+        /**
+         * Clears partner search input and restores full partner list.
+         */
+        this.state.search_partner_term = "";
+        this.state.visible_partners = this.state.partners;
+    }
+    _applyPartnerSearch(term) {
+        /**
+         * Filters visible_partners by partner name substring.
+         */
+        if (!term) {
+            this.state.visible_partners = this.state.partners;
+            return;
+        }
+        if (this.state.partners) {
+            this.state.visible_partners = this.state.partners.filter(partnerName => {
+                if (!partnerName || partnerName === 'false') return false;
+                return partnerName.toLowerCase().includes(term);
+            });
         }
     }
 }
