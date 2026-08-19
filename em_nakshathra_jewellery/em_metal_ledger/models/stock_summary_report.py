@@ -11,7 +11,7 @@ class StockSummaryReportWizard(models.TransientModel):
 
     def action_generate_report(self):
         self.ensure_one()
-        self.env['stock.summary.report.line'].sudo().search([('create_uid', '=', self.env.user.id)]).unlink()
+        self.env.cr.execute("DELETE FROM stock_summary_report_line WHERE create_uid = %s", (self.env.user.id,))
 
         internal_loc_domain = [('usage', '=', 'internal')]
         if self.branch_ids:
@@ -323,7 +323,11 @@ class StockSummaryReportWizard(models.TransientModel):
                     })
 
         if report_lines:
-            self.env['stock.summary.report.line'].sudo().create(report_lines)
+            batch_size = 1000
+            for i in range(0, len(report_lines), batch_size):
+                batch = report_lines[i:i + batch_size]
+                self.env['stock.summary.report.line'].sudo().create(batch)
+                self.env.invalidate_all()
 
         return {
             'name': _('Stock Summary Report'),
