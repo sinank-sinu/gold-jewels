@@ -200,32 +200,26 @@ class ImportLabelService:
         
         # 5. Validate Receipt with correct Source and Destination Location (Excel)
         if po.picking_ids:
-            src_loc = None
-            if source_location:
-                src_loc = self.env['stock.location'].search([('complete_name', '=', source_location)], limit=1)
-                if not src_loc:
-                    src_loc = self.env['stock.location'].search([('name', '=', source_location)], limit=1)
+            # Force Source Location to always be the Vendor Location
+            vendor_location_id = po.partner_id.property_stock_supplier.id
                     
             dst_loc = None
             if dest_location:
-                dst_loc = self.env['stock.location'].search([('complete_name', '=', source_location)], limit=1)
+                dst_loc = self.env['stock.location'].search([('complete_name', '=', dest_location)], limit=1)
                 if not dst_loc:
-                    dst_loc = self.env['stock.location'].search([('name', '=', source_location)], limit=1)
+                    dst_loc = self.env['stock.location'].search([('name', '=', dest_location)], limit=1)
                 
             for picking in po.picking_ids.filtered(lambda p: p.state not in ['done', 'cancel']):
-                if src_loc:
-                    picking.location_id = src_loc.id
+                picking.location_id = vendor_location_id
                 if dst_loc:
                     picking.location_dest_id = dst_loc.id
                     
                 for move in picking.move_ids:
-                    if src_loc:
-                        move.location_id = src_loc.id
+                    move.location_id = vendor_location_id
                     if dst_loc:
                         move.location_dest_id = dst_loc.id
                     for move_line in move.move_line_ids:
-                        if src_loc:
-                            move_line.location_id = src_loc.id
+                        move_line.location_id = vendor_location_id
                         if dst_loc:
                             move_line.location_dest_id = dst_loc.id
                 
