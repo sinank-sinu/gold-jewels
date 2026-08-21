@@ -22,6 +22,12 @@
             <xpath expr="//page[@name='narration']//field[@name='payment_ref']" position="before">
                 <field name="bank_reference" />
             </xpath>
+            <xpath expr="//field[@name='add_account_move_line_id']" position="attributes">
+                <attribute name="context">{'search_default_partner_id': partner_id, 'st_journal_id': journal_id, 'tree_view_ref': 'account_reconcile_oca.account_move_line_tree_reconcile_view', 'search_view_ref': 'account_reconcile_oca.account_move_line_search_reconcile_view'}</attribute>
+                <attribute name="domain">[('parent_state', '=', 'posted'), ('amount_residual', '!=', 0), ('account_id.reconcile', '=', True), ('company_id', '=', company_id), ('statement_line_id', '!=', id), ('account_id.account_type', 'not in', ('asset_receivable', 'liability_payable'))]</attribute>
+            </xpath>
+
+
         </field>
     </record>
 
