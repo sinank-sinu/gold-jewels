@@ -998,7 +998,7 @@ Receive Voucher Line: {jw_line.purchase_making_charge_value}""")
                                     'is_old_gold': True,
                                 })
                                 receive_with_comp.picking_id = picking.id
-                                
+
                                 uom_gram = self.env.ref('uom.product_uom_gram')
                                 for line in receive_with_comp.line_ids:
                                     price_unit = (line.total_receive_fine_amount / line.gross_weight) if line.gross_weight else 0.0
@@ -1018,15 +1018,39 @@ Receive Voucher Line: {jw_line.purchase_making_charge_value}""")
                                     created_moves |= move
                             else:
                                 created_moves = picking.move_ids
-
                             if picking.state not in ['done', 'cancel']:
                                 picking.action_confirm()
 
-                            # If negative initial demand exists, Odoo's _action_confirm converts it to a return move
-                            # and reassigns it to another picking. We collect all active pickings linked to the created moves.
-                            active_pickings = created_moves.mapped('picking_id').filtered(lambda p: p.state not in ('done', 'cancel'))
+                            # IMPORTANT:
+                            # action_confirm() may merge/recreate stock moves.
+                            # The originally created move can therefore be deleted.
+                            # Never use the old created_moves recordset after action_confirm().
+
+                            created_moves = picking.move_ids.exists()
+
+                            _logger.info(
+                                "After action_confirm: Picking=%s, Existing Move IDs=%s",
+                                picking.name,
+                                created_moves.ids,
+                            )
+
+                            active_pickings = picking.exists().filtered(
+                                lambda p: p.state not in ('done', 'cancel')
+                            )
+
                             if not active_pickings:
-                                active_pickings = picking.filtered(lambda p: p.state not in ('done', 'cancel'))
+                                active_pickings = created_moves.mapped('picking_id').exists().filtered(
+                                    lambda p: p.state not in ('done', 'cancel')
+                                )
+
+                            # if picking.state not in ['done', 'cancel']:
+                            #     picking.action_confirm()
+                            #
+                            # # If negative initial demand exists, Odoo's _action_confirm converts it to a return move
+                            # # and reassigns it to another picking. We collect all active pickings linked to the created moves.
+                            # active_pickings = created_moves.mapped('picking_id').filtered(lambda p: p.state not in ('done', 'cancel'))
+                            # if not active_pickings:
+                            #     active_pickings = picking.filtered(lambda p: p.state not in ('done', 'cancel'))
 
                             for current_picking in active_pickings:
                                 for move in current_picking.move_ids:
@@ -1055,12 +1079,12 @@ Picking State: {current_picking.state}
                                         except UserError as ue:
                                             if 'Nothing to check the availability for' not in str(ue):
                                                 raise
-                                        
+
                                 # Odoo 17: Set done quantity on the move and mark as picked
                                 for move in current_picking.move_ids:
                                     move.quantity = move.product_uom_qty
                                     move.picked = True
-                                    
+
                                     _logger.info(f"""[PARTNER RECEIPT VALIDATION]
 Picking: {current_picking.name}
 Product: {move.product_id.display_name}
@@ -1092,6 +1116,7 @@ Picking Type: {correct_picking_type.name}""")
                                     raise UserError(error_msg)
 
                             primary_picking = (created_moves.mapped('picking_id') or picking)[:1]
+
                             receive_with_comp.picking_id = primary_picking.id
                             receive_with_comp.state = 'done'
                             if receive_with_comp.job_work_id:
