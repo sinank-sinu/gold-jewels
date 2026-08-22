@@ -17,8 +17,8 @@
                 </group>
                 <footer>
                     <button name="action_generate_report" string="Generate Report" type="object" class="btn-primary"/>
-                    <button name="action_print_xlsx" string="Print Detailed XLSX" type="object" class="btn-secondary"/>
-                    <button name="action_print_grouped_xlsx" string="Print Product Summary XLSX" type="object" class="btn-primary"/>
+                    <button name="action_print_xlsx" string="Detailed XLSX" type="object" class="btn-secondary"/>
+                    <button name="action_print_grouped_xlsx" string="Product Summary XLSX" type="object" class="btn-primary"/>
                     <button string="Cancel" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>

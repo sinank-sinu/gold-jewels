@@ -166,7 +166,7 @@ class PurchaseRegisterXlsx(models.AbstractModel):
                 sheet.write(row, 9, line.purity_id.name if line.purity_id else '', cell_format)
                 
                 # New columns/values computation
-                gross_weight = line.gross_weight or 0
+                gross_weight = line.product_qty or 0
                 diamond_weight = line.diamond_weight_gm or 0 if hasattr(line, 'diamond_weight_gm') else 0
                 stone_weight = line.stone_weight or 0 if hasattr(line, 'stone_weight') else 0
                 net_weight = line.net_weight or 0 if hasattr(line, 'net_weight') else 0

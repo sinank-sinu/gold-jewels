@@ -6,7 +6,7 @@
         <field name="inherit_id" ref="em_metal_ledger.view_stock_summary_report_wizard_form"/>
         <field name="arch" type="xml">
             <xpath expr="//button[@name='action_print_grouped_xlsx']" position="after">
-                <button name="action_print_product_wise_xlsx" string="Print Product Wise XLSX" type="object" class="btn-primary"/>
+                <button name="action_print_product_wise_xlsx" string="Product Wise XLSX" type="object" class="btn-primary"/>
             </xpath>
         </field>
     </record>
