@@ -42,7 +42,9 @@ def _str(val):
 # Ensure company-aware internal picking type during old gold stock transfer
 try:
     from odoo.addons.em_jewellery_management.models.sale_order import SaleOrder
+
     orig_create_old_gold_stock = getattr(SaleOrder, '_create_old_gold_stock', None)
+
 
     def _company_aware_create_old_gold_stock(self, og):
         product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
@@ -58,12 +60,12 @@ try:
                     ('name', 'not ilike', 'Scrap'),
                     ('company_id', 'in', [self.company_id.id, False])
                 ], limit=1)
-                
+
         picking_type = (self.warehouse_id and self.warehouse_id.int_type_id) or self.env['stock.picking.type'].search([
             ('code', '=', 'internal'),
             ('company_id', '=', self.company_id.id),
         ], limit=1) or self.env.ref('stock.picking_type_internal', raise_if_not_found=False)
-        
+
         # Resolve company-scoped source location for old gold
         source_location = self.env['stock.location'].search([
             ('name', 'ilike', 'Old Gold'),
@@ -85,8 +87,10 @@ try:
                         'company_id': self.company_id.id,
                     })
         if not source_location:
-            source_location = self.branch_location_id or (self.warehouse_id and self.warehouse_id.lot_stock_id) or self.env.ref('em_jewellery_management.loc_branch_old_gold', raise_if_not_found=False)
-        
+            source_location = self.branch_location_id or (
+                        self.warehouse_id and self.warehouse_id.lot_stock_id) or self.env.ref(
+                'em_jewellery_management.loc_branch_old_gold', raise_if_not_found=False)
+
         uom = self.env.ref('uom.product_uom_gram', raise_if_not_found=False)
 
         if not product or not picking_type or not source_location or not uom:
@@ -131,6 +135,7 @@ try:
             _logger.warning("Old gold picking validation warning: %s", e)
         og.stock_move_id = move.id
 
+
     SaleOrder._create_old_gold_stock = _company_aware_create_old_gold_stock
 except Exception as e:
     _logger.warning("Could not patch SaleOrder._create_old_gold_stock: %s", e)
@@ -168,9 +173,9 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
     def import_process(self, file, **kwargs):
         if not file:
             return "<h1>Error</h1><p>No file uploaded.</p>"
-            
+
         # --- PRE-FLIGHT DB CLEANUP ---
-        # Fix corrupted sequences generated during previous partial imports 
+        # Fix corrupted sequences generated during previous partial imports
         try:
             moves = request.env['account.move'].sudo().search([
                 '|', ('name', 'ilike', '/2026/08/'), ('name', 'ilike', 'FIX/%'),
@@ -181,75 +186,117 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                 if not move.date: continue
                 date_str = move.date.strftime('%Y/%m')
                 new_name = move.name
-                
+
                 # Strip FIX/ prefixes
                 new_name = re.sub(r'^(FIX/\d+/)+', '', new_name)
-                
+
                 # Replace the month/year if mismatched
                 if f'/{date_str}/' not in new_name:
                     new_name = re.sub(r'/\d{4}/\d{2}/', f'/{date_str}/', new_name)
-                    
+
                 if new_name != move.name:
                     # Check for collisions to avoid unique constraint errors
-                    request.env.cr.execute("SELECT id FROM account_move WHERE name = %s AND journal_id = %s AND id != %s", (new_name, move.journal_id.id, move.id))
+                    request.env.cr.execute(
+                        "SELECT id FROM account_move WHERE name = %s AND journal_id = %s AND id != %s",
+                        (new_name, move.journal_id.id, move.id))
                     if request.env.cr.fetchone():
                         new_name = f"{new_name}-{move.id}"
-                    
+
                     request.env.cr.execute("UPDATE account_move SET name = %s WHERE id = %s", (new_name, move.id))
             request.env.cr.commit()
         except Exception as e:
             _logger.warning("Failed to run pre-flight sequence cleanup: %s", e)
         # -----------------------------
-        
+
         try:
             wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
 
             # Locate SALES sheet
-            sales_sn = next((s for s in wb.sheetnames if s.strip().upper() == 'SALES' or s.strip().upper().startswith('SALE')), wb.sheetnames[0])
+            sales_sn = next(
+                (s for s in wb.sheetnames if s.strip().upper() == 'SALES' or s.strip().upper().startswith('SALE')),
+                wb.sheetnames[0])
             sales_header_row = next(wb[sales_sn].iter_rows(min_row=1, max_row=1, values_only=True))
-            headers = [_str(h).lower().strip().replace(' ', '').replace('.', '').replace('-', '').replace('_', '') for h in sales_header_row]
+            headers = [_str(h).lower().strip().replace(' ', '').replace('.', '').replace('-', '').replace('_', '') for h
+                       in sales_header_row]
 
             c_m = {}
             for i, h in enumerate(headers):
-                if 'company' in h: c_m['company'] = i
-                elif 'branch' in h: c_m['branch'] = i
-                elif 'vou' in h and 'no' in h: c_m['vou_no'] = i
-                elif 'party' in h or 'cust' in h: c_m['party'] = i
-                elif 'date' in h: c_m['vou_date'] = i
-                elif 'source' in h and 'loc' in h: c_m['src_loc'] = i
-                elif 'variant' in h or ('prod' in h and 'name' in h) or 'item' in h: c_m['product_var'] = i
-                elif 'label' in h: c_m['label'] = i
-                elif 'barcode' in h: c_m['barcode'] = i
-                elif 'salesman' in h or 'salesperson' in h: c_m['salesman'] = i
-                elif 'purity' in h or 'carat' in h: c_m['purity'] = i
-                elif 'pcs' in h or 'qty' in h: c_m['pcs'] = i
-                elif 'gross' in h: c_m['gross'] = i
-                elif 'net' in h: c_m['net'] = i
-                elif 'di' in h and 'wt' in h: c_m['dia_wt'] = i
-                elif 'st' in h and 'wt' in h: c_m['st_wt'] = i
-                elif ('metal' in h and 'rate' in h) or ('gold' in h and 'rate' in h): c_m['m_rate'] = i
-                elif ('metal' in h and 'amt' in h) or ('gold' in h and 'amt' in h): c_m['m_amt'] = i
+                if 'company' in h:
+                    c_m['company'] = i
+                elif 'branch' in h:
+                    c_m['branch'] = i
+                elif 'vou' in h and 'no' in h:
+                    c_m['vou_no'] = i
+                elif 'party' in h or 'cust' in h:
+                    c_m['party'] = i
+                elif 'date' in h:
+                    c_m['vou_date'] = i
+                elif 'source' in h and 'loc' in h:
+                    c_m['src_loc'] = i
+                elif 'variant' in h or ('prod' in h and 'name' in h) or 'item' in h:
+                    c_m['product_var'] = i
+                elif 'label' in h:
+                    c_m['label'] = i
+                elif 'barcode' in h:
+                    c_m['barcode'] = i
+                elif 'salesman' in h or 'salesperson' in h:
+                    c_m['salesman'] = i
+                elif 'purity' in h or 'carat' in h:
+                    c_m['purity'] = i
+                elif 'pcs' in h or 'qty' in h:
+                    c_m['pcs'] = i
+                elif 'gross' in h:
+                    c_m['gross'] = i
+                elif 'net' in h:
+                    c_m['net'] = i
+                elif 'di' in h and 'wt' in h:
+                    c_m['dia_wt'] = i
+                elif 'st' in h and 'wt' in h:
+                    c_m['st_wt'] = i
+                elif ('metal' in h and 'rate' in h) or ('gold' in h and 'rate' in h):
+                    c_m['m_rate'] = i
+                elif ('metal' in h and 'amt' in h) or ('gold' in h and 'amt' in h):
+                    c_m['m_amt'] = i
                 elif h == 'mc' or ('mc' in h and 'amt' in h) or 'making' in h:
                     if '%' not in h: c_m['mc'] = i
-                elif 'di' in h and 'amt' in h: c_m['dia_amt'] = i
-                elif 'st' in h and 'amt' in h: c_m['st_amt'] = i
-                elif 'other' in h: c_m['other'] = i
-                elif 'tax' in h and 'amt' not in h and 'able' not in h: c_m['tax'] = i
-                elif 'bank' in h and ('ref' in h or 'reference' in h): c_m['bank_ref'] = i
-                elif 'bank' in h: c_m['bank_amt'] = i
-                elif 'upi' in h and '2' in h and ('ref' in h or 'reference' in h): c_m['upi_ref2'] = i
-                elif 'upi' in h and '2' in h: c_m['upi_amt2'] = i
-                elif 'upi' in h and ('ref' in h or 'reference' in h): c_m['upi_ref1'] = i
-                elif 'upi' in h: c_m['upi_amt1'] = i
-                elif 'card' in h and '3' in h and ('ref' in h or 'reference' in h): c_m['card_ref3'] = i
-                elif 'card' in h and '3' in h: c_m['card_amt3'] = i
-                elif 'card' in h and '2' in h and ('ref' in h or 'reference' in h): c_m['card_ref2'] = i
-                elif 'card' in h and '2' in h: c_m['card_amt2'] = i
-                elif 'card' in h and ('ref' in h or 'reference' in h): c_m['card_ref1'] = i
-                elif 'card' in h: c_m['card_amt1'] = i
-                elif 'cash' in h: c_m['cash_amt'] = i
-                elif 'scheme' in h: c_m['gold_scheme_amt'] = i
-                elif 'oldgold' in h or 'og' in h: c_m['og_amt'] = i
+                elif 'di' in h and 'amt' in h:
+                    c_m['dia_amt'] = i
+                elif 'st' in h and 'amt' in h:
+                    c_m['st_amt'] = i
+                elif 'other' in h:
+                    c_m['other'] = i
+                elif 'tax' in h and 'amt' not in h and 'able' not in h:
+                    c_m['tax'] = i
+                elif 'bank' in h and ('ref' in h or 'reference' in h):
+                    c_m['bank_ref'] = i
+                elif 'bank' in h:
+                    c_m['bank_amt'] = i
+                elif 'upi' in h and '2' in h and ('ref' in h or 'reference' in h):
+                    c_m['upi_ref2'] = i
+                elif 'upi' in h and '2' in h:
+                    c_m['upi_amt2'] = i
+                elif 'upi' in h and ('ref' in h or 'reference' in h):
+                    c_m['upi_ref1'] = i
+                elif 'upi' in h:
+                    c_m['upi_amt1'] = i
+                elif 'card' in h and '3' in h and ('ref' in h or 'reference' in h):
+                    c_m['card_ref3'] = i
+                elif 'card' in h and '3' in h:
+                    c_m['card_amt3'] = i
+                elif 'card' in h and '2' in h and ('ref' in h or 'reference' in h):
+                    c_m['card_ref2'] = i
+                elif 'card' in h and '2' in h:
+                    c_m['card_amt2'] = i
+                elif 'card' in h and ('ref' in h or 'reference' in h):
+                    c_m['card_ref1'] = i
+                elif 'card' in h:
+                    c_m['card_amt1'] = i
+                elif 'cash' in h:
+                    c_m['cash_amt'] = i
+                elif 'scheme' in h:
+                    c_m['gold_scheme_amt'] = i
+                elif 'oldgold' in h or 'og' in h:
+                    c_m['og_amt'] = i
 
             sales_data = {}
             for row_idx, row in enumerate(wb[sales_sn].iter_rows(min_row=2, values_only=True), start=2):
@@ -261,12 +308,13 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                     continue
                 raw_excel_val = r[c_m.get('vou_date', 3)]
                 _logger.info("[SALE DATE DEBUG] Raw Excel value: %s, Type: %s", raw_excel_val, type(raw_excel_val))
-                
+
                 if hasattr(raw_excel_val, "strftime"):
                     vou_date = raw_excel_val.strftime("%Y-%m-%d")
                 elif isinstance(raw_excel_val, (int, float)):
                     try:
-                        vou_date = (datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(raw_excel_val))).strftime("%Y-%m-%d")
+                        vou_date = (datetime.datetime(1899, 12, 30) + datetime.timedelta(
+                            days=float(raw_excel_val))).strftime("%Y-%m-%d")
                     except Exception:
                         vou_date = str(raw_excel_val).strip().split(" ")[0]
                 elif raw_excel_val:
@@ -280,52 +328,53 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                             pass
                 else:
                     vou_date = ""
-                
+
                 _logger.info("[SALE DATE DEBUG] Converted value: %s", vou_date)
 
                 entry = {
-                    'row_idx':          row_idx,
-                    'company_name':     _str(r[c_m.get('company', 38)]),
-                    'branch_name':      _str(r[c_m.get('branch', 0)]),
-                    'party_name':       _str(r[c_m.get('party', 2)]),
-                    'vou_date':         vou_date,
-                    'src_loc_name':     _str(r[c_m.get('src_loc', 4)]),
+                    'row_idx': row_idx,
+                    'company_name': _str(r[c_m.get('company', 38)]),
+                    'branch_name': _str(r[c_m.get('branch', 0)]),
+                    'party_name': _str(r[c_m.get('party', 2)]),
+                    'vou_date': vou_date,
+                    'src_loc_name': _str(r[c_m.get('src_loc', 4)]),
                     'product_var_name': _str(r[c_m.get('product_var', 5)]),
-                    'label_no':         _str(r[c_m.get('label', 6)]),
-                    'barcode_no':       _str(r[c_m.get('barcode', 7)]),
-                    'salesman':         _str(r[c_m.get('salesman', 8)]),
-                    'purity':           _str(r[c_m.get('purity', 9)]),
-                    'pcs':              _flt(r[c_m.get('pcs', 10)]),
-                    'gross_wt':         _flt(r[c_m.get('gross', 11)]),
-                    'net_wt':           _flt(r[c_m.get('net', 12)]),
-                    'diamond_wt':       _flt(r[c_m.get('dia_wt', 13)]),
-                    'stone_wt':         _flt(r[c_m.get('st_wt', 14)]),
-                    'metal_rate':       _flt(r[c_m.get('m_rate', 15)]),
-                    'metal_amt':        _flt(r[c_m.get('m_amt', 16)]),
-                    'mc_amt':           _flt(r[c_m.get('mc', 17)]),
-                    'diamond_amt':      _flt(r[c_m.get('dia_amt', 18)]),
-                    'stone_amt':        _flt(r[c_m.get('st_amt', 19)]),
-                    'other_charge':     _flt(r[c_m.get('other', 20)]),
-                    'taxes':            _str(r[c_m.get('tax', 22)]),
-                    'bank_amt':         _flt(r[c_m.get('bank_amt', 25)]),
-                    'bank_ref':         _str(r[c_m.get('bank_ref', 26)]),
-                    'upi_amt1':         _flt(r[c_m.get('upi_amt1', 27)]),
-                    'upi_ref1':         _str(r[c_m.get('upi_ref1', 28)]),
-                    'upi_amt2':         _flt(r[c_m.get('upi_amt2', 29)]),
-                    'upi_ref2':         _str(r[c_m.get('upi_ref2', 30)]),
-                    'card_amt1':        _flt(r[c_m.get('card_amt1', 31)]),
-                    'card_ref1':        _str(r[c_m.get('card_ref1', 32)]),
-                    'card_amt2':        _flt(r[c_m.get('card_amt2', 33)]),
-                    'card_ref2':        _str(r[c_m.get('card_ref2', 34)]),
-                    'cash_amt':         _flt(r[c_m.get('cash_amt', 35)]),
-                    'gold_scheme':      _flt(r[c_m.get('gold_scheme_amt', 36)]),
-                    'og_amt':           _flt(r[c_m.get('og_amt', 37)]),
+                    'label_no': _str(r[c_m.get('label', 6)]),
+                    'barcode_no': _str(r[c_m.get('barcode', 7)]),
+                    'salesman': _str(r[c_m.get('salesman', 8)]),
+                    'purity': _str(r[c_m.get('purity', 9)]),
+                    'pcs': _flt(r[c_m.get('pcs', 10)]),
+                    'gross_wt': _flt(r[c_m.get('gross', 11)]),
+                    'net_wt': _flt(r[c_m.get('net', 12)]),
+                    'diamond_wt': _flt(r[c_m.get('dia_wt', 13)]),
+                    'stone_wt': _flt(r[c_m.get('st_wt', 14)]),
+                    'metal_rate': _flt(r[c_m.get('m_rate', 15)]),
+                    'metal_amt': _flt(r[c_m.get('m_amt', 16)]),
+                    'mc_amt': _flt(r[c_m.get('mc', 17)]),
+                    'diamond_amt': _flt(r[c_m.get('dia_amt', 18)]),
+                    'stone_amt': _flt(r[c_m.get('st_amt', 19)]),
+                    'other_charge': _flt(r[c_m.get('other', 20)]),
+                    'taxes': _str(r[c_m.get('tax', 22)]),
+                    'bank_amt': _flt(r[c_m.get('bank_amt', 25)]),
+                    'bank_ref': _str(r[c_m.get('bank_ref', 26)]),
+                    'upi_amt1': _flt(r[c_m.get('upi_amt1', 27)]),
+                    'upi_ref1': _str(r[c_m.get('upi_ref1', 28)]),
+                    'upi_amt2': _flt(r[c_m.get('upi_amt2', 29)]),
+                    'upi_ref2': _str(r[c_m.get('upi_ref2', 30)]),
+                    'card_amt1': _flt(r[c_m.get('card_amt1', 31)]),
+                    'card_ref1': _str(r[c_m.get('card_ref1', 32)]),
+                    'card_amt2': _flt(r[c_m.get('card_amt2', 33)]),
+                    'card_ref2': _str(r[c_m.get('card_ref2', 34)]),
+                    'cash_amt': _flt(r[c_m.get('cash_amt', 35)]),
+                    'gold_scheme': _flt(r[c_m.get('gold_scheme_amt', 36)]),
+                    'og_amt': _flt(r[c_m.get('og_amt', 37)]),
                 }
                 sales_data.setdefault(vou, []).append(entry)
 
             # Pre-parse OG sheet
             og_data = {}
-            og_sheet_name = next((s for s in wb.sheetnames if s.strip().upper() in ('OG', 'OLD GOLD', 'OLD_GOLD')), None)
+            og_sheet_name = next((s for s in wb.sheetnames if s.strip().upper() in ('OG', 'OLD GOLD', 'OLD_GOLD')),
+                                 None)
             if og_sheet_name:
                 for row in wb[og_sheet_name].iter_rows(min_row=2, values_only=True):
                     if not any(row):
@@ -334,20 +383,21 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                     vou = _str(r[2])  # col C = Sales Voucher No
                     if vou:
                         og_data.setdefault(vou, []).append({
-                            'item_name':       _str(r[4]),
-                            'carat':           _str(r[5]),
-                            'gross_wt':        _flt(r[6]),
-                            'net_wt':          _flt(r[7]),
-                            'di_wt':           _flt(r[8]),
-                            'di_amt':          _flt(r[9]),
-                            'metal_rate':      _flt(r[10]),
-                            'amount':          _flt(r[11]),
+                            'item_name': _str(r[4]),
+                            'carat': _str(r[5]),
+                            'gross_wt': _flt(r[6]),
+                            'net_wt': _flt(r[7]),
+                            'di_wt': _flt(r[8]),
+                            'di_amt': _flt(r[9]),
+                            'metal_rate': _flt(r[10]),
+                            'amount': _flt(r[11]),
                             'branch_location': _str(r[12]),
                         })
 
             # Pre-parse GOLD SCHEME sheet
             scheme_data = {}
-            scheme_sheet_name = next((s for s in wb.sheetnames if any(k in s.strip().upper() for k in ('GOLD SCHEME', 'GOLD_SCHEME', 'GOLDSCHEME', 'SCHEME'))), None)
+            scheme_sheet_name = next((s for s in wb.sheetnames if any(
+                k in s.strip().upper() for k in ('GOLD SCHEME', 'GOLD_SCHEME', 'GOLDSCHEME', 'SCHEME'))), None)
             if scheme_sheet_name:
                 for row in wb[scheme_sheet_name].iter_rows(min_row=2, values_only=True):
                     if not any(row):
@@ -356,9 +406,9 @@ h2{{color:#1a237e;}} .btn{{background:#1a237e;color:#fff;padding:10px 22px;borde
                     vou = _str(r[2])  # col C = Voucher No
                     if vou:
                         scheme_data[vou] = {
-                            'customer':  _str(r[1]),
+                            'customer': _str(r[1]),
                             'ticket_no': _str(r[3]),
-                            'amount':    _flt(r[4]),
+                            'amount': _flt(r[4]),
                         }
 
             wb.close()
@@ -443,10 +493,10 @@ if(tot>0)run(); else log('No records found.');
             with open(tmp_path) as f:
                 data = json.load(f)
 
-            all_vous     = data['all_vous']
-            sales_data   = data['sales_data']
-            og_data      = data['og_data']
-            scheme_data  = data['scheme_data']
+            all_vous = data['all_vous']
+            sales_data = data['sales_data']
+            og_data = data['og_data']
+            scheme_data = data['scheme_data']
             skipped_list = data.get('skipped_list', [])
 
             chunk = all_vous[offset: offset + limit]
@@ -507,12 +557,12 @@ if(tot>0)run(); else log('No records found.');
     # ── Bulk Lookup Cache ────────────────────────────────────────────────────
     def _build_cache(self, env, chunk, sales_data, og_data):
         companies = env['res.company'].search([])
-        purities  = env['gold.purity'].search([])
+        purities = env['gold.purity'].search([])
 
         return {
-            'companies':  {c.name.strip(): c for c in companies},
-            'purities':   {p.name.strip(): p for p in purities},
-            '_journals':  {},
+            'companies': {c.name.strip(): c for c in companies},
+            'purities': {p.name.strip(): p for p in purities},
+            '_journals': {},
         }
 
     @staticmethod
@@ -535,12 +585,12 @@ if(tot>0)run(); else log('No records found.');
             raise UserError(f"No SALES rows for voucher {vou_no}")
 
         hdr_row = rows[0]
-        company_name    = hdr_row.get('company_name', '').strip()
-        branch_name     = hdr_row.get('branch_name', '').strip()
-        cust_name       = hdr_row.get('party_name', '').strip() or 'Unknown'
-        date_str        = next((r.get('vou_date') for r in rows if r.get('vou_date')), '')
+        company_name = hdr_row.get('company_name', '').strip()
+        branch_name = hdr_row.get('branch_name', '').strip()
+        cust_name = hdr_row.get('party_name', '').strip() or 'Unknown'
+        date_str = next((r.get('vou_date') for r in rows if r.get('vou_date')), '')
         source_loc_name = hdr_row.get('src_loc_name', '').strip()
-        salesman_name   = hdr_row.get('salesman', '').strip()
+        salesman_name = hdr_row.get('salesman', '').strip()
 
         # 1. Resolve Company from Excel
         excel_company = self._find(cache['companies'], company_name)
@@ -552,7 +602,8 @@ if(tot>0)run(); else log('No records found.');
                 cache['companies'][company_name] = excel_company
 
         if not excel_company:
-            _logger.error("Voucher %s: Company '%s' could not be resolved in database. Voucher skipped.", vou_no, company_name)
+            _logger.error("Voucher %s: Company '%s' could not be resolved in database. Voucher skipped.", vou_no,
+                          company_name)
             skipped_list.append({
                 'row': hdr_row.get('row_idx', 0),
                 'customer': cust_name,
@@ -715,19 +766,6 @@ if(tot>0)run(); else log('No records found.');
             ('company_id', '=', excel_company.id)
         ], limit=1)
 
-        og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
-        scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
-
-        og_infos = og_data.get(vou_no, [])
-        if og_infos:
-            og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
-            if og_amt_from_sheet > 0:
-                og_amt = og_amt_from_sheet
-
-        sch_info = scheme_data.get(vou_no, {})
-        if sch_info and sch_info.get('amount', 0.0) > 0:
-            scheme_amt = sch_info.get('amount', 0.0)
-
         if existing_order:
             _logger.info("[SALE IMPORT] Voucher: %s", vou_no)
             _logger.info("[SALE IMPORT] Searching existing sale order...")
@@ -735,21 +773,12 @@ if(tot>0)run(); else log('No records found.');
             order = existing_order
             has_lines = bool(order.order_line)
             has_og_lines = bool(c_env['sale.old.gold.line'].sudo().search([('sale_id', '=', order.id)], limit=1))
-            
-            # If the order exists, update boolean flags if amounts are found
-            update_vals = {}
-            if og_amt > 0 and not order.has_old_gold:
-                update_vals['has_old_gold'] = True
-            if scheme_amt > 0 and not order.apply_scheme:
-                update_vals['apply_scheme'] = True
-            if update_vals:
-                order.sudo().write(update_vals)
         else:
             order_vals = {
-                'partner_id':  partner.id if partner else False,
-                'date_order':  order_date,
-                'origin':      vou_no,
-                'company_id':  excel_company.id,
+                'partner_id': partner.id if partner else False,
+                'date_order': order_date,
+                'origin': vou_no,
+                'company_id': excel_company.id,
             }
             if branch:
                 order_vals['branch_id'] = branch.id
@@ -760,9 +789,22 @@ if(tot>0)run(); else log('No records found.');
             if source_loc:
                 order_vals['branch_location_id'] = source_loc.id
 
+            og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
+            scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
+
+            og_infos = og_data.get(vou_no, [])
+            if og_infos:
+                og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
+                if og_amt_from_sheet > 0:
+                    og_amt = og_amt_from_sheet
+
+            sch_info = scheme_data.get(vou_no, {})
+            if sch_info and sch_info.get('amount', 0.0) > 0:
+                scheme_amt = sch_info.get('amount', 0.0)
+
             if og_amt > 0:
                 order_vals['has_old_gold'] = True
-                
+
             if scheme_amt > 0:
                 order_vals['apply_scheme'] = True
 
@@ -776,19 +818,21 @@ if(tot>0)run(); else log('No records found.');
         prod_cache = cache.setdefault(f'products_{excel_company.id}', {})
 
         for row in rows:
+            if has_lines:
+                break
             product_var_name = row.get('product_var_name', '').strip()
-            label_ref        = row.get('label_no', '').strip()
-            barcode_no       = row.get('barcode_no', '').strip()
-            purity_name      = row.get('purity', '').strip()
-            gross_wt         = row.get('gross_wt', 0.0)
-            diamond_wt       = row.get('diamond_wt', 0.0)
-            stone_wt         = row.get('stone_wt', 0.0)
-            metal_rate       = row.get('metal_rate', 0.0)
-            metal_amt        = row.get('metal_amt', 0.0)
-            mc_amt           = row.get('mc_amt', 0.0)
-            diamond_amt      = row.get('diamond_amt', 0.0)
-            stone_amt        = row.get('stone_amt', 0.0)
-            other_charge     = row.get('other_charge', 0.0)
+            label_ref = row.get('label_no', '').strip()
+            barcode_no = row.get('barcode_no', '').strip()
+            purity_name = row.get('purity', '').strip()
+            gross_wt = row.get('gross_wt', 0.0)
+            diamond_wt = row.get('diamond_wt', 0.0)
+            stone_wt = row.get('stone_wt', 0.0)
+            metal_rate = row.get('metal_rate', 0.0)
+            metal_amt = row.get('metal_amt', 0.0)
+            mc_amt = row.get('mc_amt', 0.0)
+            diamond_amt = row.get('diamond_amt', 0.0)
+            stone_amt = row.get('stone_amt', 0.0)
+            other_charge = row.get('other_charge', 0.0)
 
             if not label_ref and not barcode_no and not product_var_name:
                 continue
@@ -859,7 +903,8 @@ if(tot>0)run(); else log('No records found.');
                         prod_cache[product_var_name] = line_product
 
             if not line_product and label:
-                prod_name_to_search = label.product_id.name if label.product_id else (label.product_tmpl_id.name if label.product_tmpl_id else None)
+                prod_name_to_search = label.product_id.name if label.product_id else (
+                    label.product_tmpl_id.name if label.product_tmpl_id else None)
                 if prod_name_to_search:
                     line_product = c_env['product.product'].search([
                         ('name', '=ilike', prod_name_to_search),
@@ -875,7 +920,8 @@ if(tot>0)run(); else log('No records found.');
                 })
 
             if not line_product:
-                _logger.warning("Voucher %s row %s: Label %s / product %s could not be resolved for Company %s", vou_no, row.get('row_idx', 0), label_ref or barcode_no, product_var_name, excel_company.id)
+                _logger.warning("Voucher %s row %s: Label %s / product %s could not be resolved for Company %s", vou_no,
+                                row.get('row_idx', 0), label_ref or barcode_no, product_var_name, excel_company.id)
                 continue
 
             if label and not label.product_id and line_product:
@@ -895,37 +941,22 @@ if(tot>0)run(); else log('No records found.');
             if not taxes:
                 taxes = line_product.taxes_id.filtered(lambda t: t.company_id.id in (excel_company.id, False))
 
-            # Avoid duplicating lines if the order already has them
-            existing_line = False
-            target_qty = gross_wt or (label.sale_gross_weight if label else 0.0) or 1.0
-            for ol in order.order_line:
-                if label and ol.label_id.id == label.id:
-                    existing_line = True
-                    break
-                elif not label and ol.product_id.id == line_product.id and abs(ol.product_uom_qty - target_qty) < 0.001:
-                    existing_line = True
-                    break
-            
-            if existing_line:
-                continue
-
-
             line_vals = {
-                'order_id':               order.id,
-                'product_id':             line_product.id,
-                'label_id':               label.id if label else False,
-                'purity_id':              purity.id if purity else False,
-                'product_uom_qty':        gross_wt or (label.sale_gross_weight if label else 0.0) or 1.0,
-                'product_uom':            line_product.uom_id.id,
-                'price_unit':             0.0,
-                'sale_stone_weight':      stone_wt or (label.sale_stone_weight if label else 0.0),
-                'sale_stone_weight_ct':   label.sale_stone_weight_ct if label else 0.0,
+                'order_id': order.id,
+                'product_id': line_product.id,
+                'label_id': label.id if label else False,
+                'purity_id': purity.id if purity else False,
+                'product_uom_qty': gross_wt or (label.sale_gross_weight if label else 0.0) or 1.0,
+                'product_uom': line_product.uom_id.id,
+                'price_unit': 0.0,
+                'sale_stone_weight': stone_wt or (label.sale_stone_weight if label else 0.0),
+                'sale_stone_weight_ct': label.sale_stone_weight_ct if label else 0.0,
                 'sale_diamond_weight_gm': diamond_wt or (label.sale_diamond_weight_gm if label else 0.0),
                 'sale_diamond_weight_ct': label.sale_diamond_weight_ct if label else 0.0,
-                'sale_stone_rate':        stone_amt or (label.sale_stone_rate if label else 0.0),
-                'sale_diamond_rate':      diamond_amt or (label.sale_diamond_rate if label else 0.0),
-                'other_weight_amount':    other_charge,
-                'tax_id':                 [(6, 0, taxes.ids)] if taxes else [],
+                'sale_stone_rate': stone_amt or (label.sale_stone_rate if label else 0.0),
+                'sale_diamond_rate': diamond_amt or (label.sale_diamond_rate if label else 0.0),
+                'other_weight_amount': other_charge,
+                'tax_id': [(6, 0, taxes.ids)] if taxes else [],
             }
             line = c_env['sale.order.line'].sudo().create(line_vals)
 
@@ -949,14 +980,19 @@ if(tot>0)run(); else log('No records found.');
                 line.invalidate_recordset(['metal_amount'])
 
             if hasattr(line, '_compute_subtotal'):
-                try: line._compute_subtotal()
-                except Exception: pass
+                try:
+                    line._compute_subtotal()
+                except Exception:
+                    pass
             if hasattr(line, '_compute_price_unit'):
-                try: line._compute_price_unit()
-                except Exception: pass
+                try:
+                    line._compute_price_unit()
+                except Exception:
+                    pass
             try:
                 line.flush_recordset(['price_subtotal', 'price_subtotal_actual', 'price_unit'])
-            except Exception: pass
+            except Exception:
+                pass
 
         # 6. Apply Old Gold
         og_branch_loc_final = source_loc
@@ -988,9 +1024,9 @@ if(tot>0)run(); else log('No records found.');
                     continue
 
                 og_gross = og_info.get('gross_wt', 0.0)
-                og_net   = og_info.get('net_wt', 0.0)
+                og_net = og_info.get('net_wt', 0.0)
                 og_stone = og_info.get('stone_wt', 0.0)
-                og_rate  = og_info.get('metal_rate', 0.0)
+                og_rate = og_info.get('metal_rate', 0.0)
 
                 if og_rate <= 0:
                     og_rate = amt / og_net if og_net > 0 else 0.0
@@ -1019,12 +1055,12 @@ if(tot>0)run(); else log('No records found.');
                     order.branch_location_id = og_branch_loc.id
 
                 c_env['sale.old.gold.line'].sudo().create({
-                    'sale_id':      order.id,
-                    'purity_id':    og_purity.id,
+                    'sale_id': order.id,
+                    'purity_id': og_purity.id,
                     'gross_weight': og_gross or (amt / og_rate if og_rate else 0.0),
                     'stone_weight': og_stone,
-                    'rate':         og_rate,
-                    'amount':       amt,
+                    'rate': og_rate,
+                    'amount': amt,
                 })
 
             try:
@@ -1041,21 +1077,25 @@ if(tot>0)run(); else log('No records found.');
                     po = order.purchase_order_id
                     if po:
                         c_env.flush_all()
-                        c_env.cr.execute("UPDATE purchase_order SET date_order = %s, date_approve = %s, date_planned = %s, effective_date = %s WHERE id = %s", (order_date, order_date, order_date, order_date, po.id))
-                        c_env.cr.execute("UPDATE purchase_order_line SET date_planned = %s WHERE order_id = %s", (order_date, po.id))
+                        c_env.cr.execute(
+                            "UPDATE purchase_order SET date_order = %s, date_approve = %s, date_planned = %s, effective_date = %s WHERE id = %s",
+                            (order_date, order_date, order_date, order_date, po.id))
+                        c_env.cr.execute("UPDATE purchase_order_line SET date_planned = %s WHERE order_id = %s",
+                                         (order_date, po.id))
                         po.invalidate_recordset(['date_order', 'date_approve', 'date_planned', 'effective_date'])
                         po.order_line.invalidate_recordset(['date_planned'])
-                        
+
                         bills = po.invoice_ids
                         if hasattr(order, 'old_gold_bill_id') and order.old_gold_bill_id:
                             bills |= order.old_gold_bill_id
                         for bill in bills:
-                            c_env.cr.execute("UPDATE account_move SET invoice_date = %s, invoice_date_due = %s, date = %s WHERE id = %s", (date_only, date_only, date_only, bill.id))
+                            c_env.cr.execute(
+                                "UPDATE account_move SET invoice_date = %s, invoice_date_due = %s, date = %s WHERE id = %s",
+                                (date_only, date_only, date_only, bill.id))
                             bill.invalidate_recordset(['invoice_date', 'invoice_date_due', 'date'])
             except Exception as e:
                 _logger.warning("Voucher %s: Old Gold apply failed: %s", vou_no, e)
                 raise
-
 
         # 8. Strict Pre-Confirmation Company Validation & Logging
         order_comp = order.company_id.id
@@ -1064,7 +1104,8 @@ if(tot>0)run(); else log('No records found.');
         picking_type_comp = picking_type.company_id.id if (picking_type and picking_type.company_id) else None
         src_loc = order.branch_location_id or (order.warehouse_id.lot_stock_id if order.warehouse_id else None)
         src_loc_comp = src_loc.company_id.id if (src_loc and src_loc.company_id) else None
-        dest_loc = (order.partner_id.property_stock_customer if order.partner_id else None) or c_env.ref('stock.stock_location_customers', raise_if_not_found=False)
+        dest_loc = (order.partner_id.property_stock_customer if order.partner_id else None) or c_env.ref(
+            'stock.stock_location_customers', raise_if_not_found=False)
         dest_loc_comp = dest_loc.company_id.id if (dest_loc and dest_loc.company_id) else None
         branch_comp = order.branch_id.company_id.id if (order.branch_id and order.branch_id.company_id) else None
 
@@ -1075,7 +1116,8 @@ if(tot>0)run(); else log('No records found.');
             if p:
                 prod_names.append(p.display_name)
                 if p.company_id and p.company_id.id != excel_company.id:
-                    invalid_prod_msgs.append(f"Product '{p.display_name}' belongs to Company '{p.company_id.name}' (ID: {p.company_id.id})")
+                    invalid_prod_msgs.append(
+                        f"Product '{p.display_name}' belongs to Company '{p.company_id.name}' (ID: {p.company_id.id})")
 
         # Logging as strictly required
         _logger.info(
@@ -1105,19 +1147,24 @@ if(tot>0)run(); else log('No records found.');
         if not order.warehouse_id:
             mismatches.append(f"No warehouse found for Company '{excel_company.name}' (ID: {excel_company.id})")
         elif wh_comp != excel_company.id:
-            mismatches.append(f"Warehouse '{order.warehouse_id.name}' belongs to Company ID {wh_comp}, expected {excel_company.id}")
+            mismatches.append(
+                f"Warehouse '{order.warehouse_id.name}' belongs to Company ID {wh_comp}, expected {excel_company.id}")
 
         if picking_type_comp and picking_type_comp != excel_company.id:
-            mismatches.append(f"Picking Type '{picking_type.name}' belongs to Company ID {picking_type_comp}, expected {excel_company.id}")
+            mismatches.append(
+                f"Picking Type '{picking_type.name}' belongs to Company ID {picking_type_comp}, expected {excel_company.id}")
 
         if src_loc_comp and src_loc_comp != excel_company.id:
-            mismatches.append(f"Source Location '{src_loc.complete_name}' belongs to Company ID {src_loc_comp}, expected {excel_company.id}")
+            mismatches.append(
+                f"Source Location '{src_loc.complete_name}' belongs to Company ID {src_loc_comp}, expected {excel_company.id}")
 
         if dest_loc_comp and dest_loc_comp != excel_company.id:
-            mismatches.append(f"Destination Location '{dest_loc.complete_name}' belongs to Company ID {dest_loc_comp}, expected {excel_company.id}")
+            mismatches.append(
+                f"Destination Location '{dest_loc.complete_name}' belongs to Company ID {dest_loc_comp}, expected {excel_company.id}")
 
         if branch_comp and branch_comp != excel_company.id:
-            mismatches.append(f"Branch '{order.branch_id.name}' belongs to Company ID {branch_comp}, expected {excel_company.id}")
+            mismatches.append(
+                f"Branch '{order.branch_id.name}' belongs to Company ID {branch_comp}, expected {excel_company.id}")
 
         if invalid_prod_msgs:
             mismatches.extend(invalid_prod_msgs)
@@ -1137,13 +1184,12 @@ if(tot>0)run(); else log('No records found.');
             raise ValidationError(f"Company mismatch on voucher {vou_no}:\n{error_details}")
 
         # 9. Confirm Order
-        if order.state in ('draft', 'sent'):
-            order.with_company(excel_company).with_context(
-                mail_notrack=True,
-                default_company_id=excel_company.id,
-                company_id=excel_company.id,
-                allowed_company_ids=[excel_company.id],
-            ).action_confirm()
+        order.with_company(excel_company).with_context(
+            mail_notrack=True,
+            default_company_id=excel_company.id,
+            company_id=excel_company.id,
+            allowed_company_ids=[excel_company.id],
+        ).action_confirm()
         if order_date:
             order.sudo().write({'date_order': order_date})
             c_env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (order_date, order.id))
@@ -1179,10 +1225,12 @@ if(tot>0)run(); else log('No records found.');
                         model = res.get('res_model', '')
                         ctx = res.get('context', {})
                         if model == 'stock.immediate.transfer':
-                            wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz = c_env['stock.immediate.transfer'].with_context(ctx).create(
+                                {'pick_ids': [(4, picking.id)]})
                             wiz.process()
                         elif model == 'stock.backorder.confirmation':
-                            wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                            wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create(
+                                {'pick_ids': [(4, picking.id)]})
                             wiz.process()
                 except Exception as e:
                     _logger.warning("Voucher %s: Delivery validate failed: %s", vou_no, e)
@@ -1190,7 +1238,8 @@ if(tot>0)run(); else log('No records found.');
 
             if order_date:
                 c_env.flush_all()
-                c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s",
+                                 (order_date, order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                 c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
                 picking.invalidate_recordset(['date_done', 'date'])
@@ -1205,7 +1254,8 @@ if(tot>0)run(); else log('No records found.');
                     continue
                 if order_date:
                     c_env.flush_all()
-                    c_env.cr.execute("UPDATE stock_picking SET scheduled_date = %s WHERE id = %s", (order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_picking SET scheduled_date = %s WHERE id = %s",
+                                     (order_date, picking.id))
                     picking.invalidate_recordset(['scheduled_date'])
 
                 if picking.state != 'done':
@@ -1230,10 +1280,12 @@ if(tot>0)run(); else log('No records found.');
                             model = res.get('res_model', '')
                             ctx = res.get('context', {})
                             if model == 'stock.immediate.transfer':
-                                wiz = c_env['stock.immediate.transfer'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                                wiz = c_env['stock.immediate.transfer'].with_context(ctx).create(
+                                    {'pick_ids': [(4, picking.id)]})
                                 wiz.process()
                             elif model == 'stock.backorder.confirmation':
-                                wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create({'pick_ids': [(4, picking.id)]})
+                                wiz = c_env['stock.backorder.confirmation'].with_context(ctx).create(
+                                    {'pick_ids': [(4, picking.id)]})
                                 wiz.process()
                     except Exception as e:
                         _logger.warning("Voucher %s: Old Gold Delivery validate failed: %s", vou_no, e)
@@ -1241,9 +1293,11 @@ if(tot>0)run(); else log('No records found.');
 
                 if order_date:
                     c_env.flush_all()
-                    c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s", (order_date, order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_picking SET date_done = %s, date = %s WHERE id = %s",
+                                     (order_date, order_date, picking.id))
                     c_env.cr.execute("UPDATE stock_move SET date = %s WHERE picking_id = %s", (order_date, picking.id))
-                    c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s", (order_date, picking.id))
+                    c_env.cr.execute("UPDATE stock_move_line SET date = %s WHERE picking_id = %s",
+                                     (order_date, picking.id))
                     picking.invalidate_recordset(['date_done', 'date'])
                     picking.move_ids.invalidate_recordset(['date'])
                     picking.move_line_ids.invalidate_recordset(['date'])
@@ -1254,8 +1308,9 @@ if(tot>0)run(); else log('No records found.');
 
         _logger.info("[SALE IMPORT] Voucher: %s", vou_no)
         _logger.info("[SALE IMPORT] Searching existing accounting move...")
-        
-        existing_move = order.invoice_ids.filtered(lambda inv: inv.move_type in ('out_invoice', 'out_refund') and inv.state != 'cancel')
+
+        existing_move = order.invoice_ids.filtered(
+            lambda inv: inv.move_type in ('out_invoice', 'out_refund') and inv.state != 'cancel')
         if not existing_move:
             existing_move = c_env['account.move'].search([
                 ('ref', '=', vou_no),
@@ -1302,7 +1357,8 @@ if(tot>0)run(); else log('No records found.');
                 ).action_post()
                 _logger.info("[SALE IMPORT] Voucher %s: Successfully posted invoice %s", vou_no, invoice.name)
             except Exception as e:
-                _logger.error("[SALE IMPORT] Voucher %s: Failed to post invoice %s for customer %s. Error: %s", vou_no, invoice.name, invoice.partner_id.name, e)
+                _logger.error("[SALE IMPORT] Voucher %s: Failed to post invoice %s for customer %s. Error: %s", vou_no,
+                              invoice.name, invoice.partner_id.name, e)
                 raise
 
         if hasattr(invoice, 'custom_total') and invoice.custom_total < 0:
@@ -1314,20 +1370,24 @@ if(tot>0)run(); else log('No records found.');
 
         # Fetch all companies to mimic Administrator UI visibility for cross-company schemes
         all_company_ids = c_env['res.company'].sudo().search([]).ids
-        
+
         # Check if the invoice actually has an outstanding scheme payment credit (matching UI visibility)
         outstanding_scheme_lines = invoice.sudo().with_company(excel_company).with_context(
             allowed_company_ids=all_company_ids,
         )._get_outstanding_scheme_payment_lines()
-        
+
         has_outstanding = bool(outstanding_scheme_lines)
-        
+
         if scheme_amt > 0:
             try:
                 if has_outstanding:
-                    _logger.info("Voucher %s: Detected outstanding scheme credit for customer %s. Automatically redeeming...", vou_no, invoice.partner_id.name)
+                    _logger.info(
+                        "Voucher %s: Detected outstanding scheme credit for customer %s. Automatically redeeming...",
+                        vou_no, invoice.partner_id.name)
                 else:
-                    _logger.warning("Voucher %s: Excel specifies scheme amount, but no eligible outstanding scheme credit was found for customer %s.", vou_no, invoice.partner_id.name)
+                    _logger.warning(
+                        "Voucher %s: Excel specifies scheme amount, but no eligible outstanding scheme credit was found for customer %s.",
+                        vou_no, invoice.partner_id.name)
 
                 # Execute redemption with sudo and all companies to match UI visibility and cross-company branch rules
                 invoice.sudo().with_company(excel_company).with_context(
@@ -1335,9 +1395,10 @@ if(tot>0)run(); else log('No records found.');
                     company_id=excel_company.id,
                     allowed_company_ids=all_company_ids,
                 ).action_redeem_outstanding_schemes()
-                
+
             except UserError as e:
-                _logger.error("Voucher %s: UserError during scheme redemption: %s. Customer: %s, Invoice: %s", vou_no, e, invoice.partner_id.name, invoice.name)
+                _logger.error("Voucher %s: UserError during scheme redemption: %s. Customer: %s, Invoice: %s", vou_no,
+                              e, invoice.partner_id.name, invoice.name)
                 # DO NOT raise here. We want the migration to proceed and not fail the voucher!
             except Exception as e:
                 _logger.error("Voucher %s: Unexpected error during scheme redemption: %s", vou_no, e, exc_info=True)
@@ -1380,19 +1441,10 @@ if(tot>0)run(); else log('No records found.');
         def pay(amount, jtype, hint='', ref=''):
             if not amount or amount <= 0:
                 return
-            
-            if invoice.payment_state in ('paid', 'in_payment', 'reversed') or invoice.amount_residual <= 0.001:
-                _logger.info("Voucher %s: Invoice already paid or nothing left to pay. Skipping payment.", invoice.ref)
-                return
-            
-            if amount > invoice.amount_residual:
-                _logger.info("Voucher %s: Capping payment amount %s to residual %s", invoice.ref, amount, invoice.amount_residual)
-                amount = invoice.amount_residual
-
-
             journal = find_journal(jtype, hint)
             if not journal:
-                _logger.warning("Voucher %s: Journal not found type=%s hint=%s for Company %s", invoice.ref, jtype, hint, excel_company.id)
+                _logger.warning("Voucher %s: Journal not found type=%s hint=%s for Company %s", invoice.ref, jtype,
+                                hint, excel_company.id)
                 return
             try:
                 wiz_vals = {
@@ -1419,24 +1471,24 @@ if(tot>0)run(); else log('No records found.');
                 raise
 
         try:
-            bank_amt  = max([_flt(r.get('bank_amt', 0)) for r in rows] or [0])
-            bank_ref  = next((_str(r.get('bank_ref', '')) for r in rows if _str(r.get('bank_ref', ''))), '')
-            upi_amt1  = max([_flt(r.get('upi_amt1', 0)) for r in rows] or [0])
-            upi_ref1  = next((_str(r.get('upi_ref1', '')) for r in rows if _str(r.get('upi_ref1', ''))), '')
-            upi_amt2  = max([_flt(r.get('upi_amt2', 0)) for r in rows] or [0])
-            upi_ref2  = next((_str(r.get('upi_ref2', '')) for r in rows if _str(r.get('upi_ref2', ''))), '')
+            bank_amt = max([_flt(r.get('bank_amt', 0)) for r in rows] or [0])
+            bank_ref = next((_str(r.get('bank_ref', '')) for r in rows if _str(r.get('bank_ref', ''))), '')
+            upi_amt1 = max([_flt(r.get('upi_amt1', 0)) for r in rows] or [0])
+            upi_ref1 = next((_str(r.get('upi_ref1', '')) for r in rows if _str(r.get('upi_ref1', ''))), '')
+            upi_amt2 = max([_flt(r.get('upi_amt2', 0)) for r in rows] or [0])
+            upi_ref2 = next((_str(r.get('upi_ref2', '')) for r in rows if _str(r.get('upi_ref2', ''))), '')
             card_amt1 = max([_flt(r.get('card_amt1', 0)) for r in rows] or [0])
             card_ref1 = next((_str(r.get('card_ref1', '')) for r in rows if _str(r.get('card_ref1', ''))), '')
             card_amt2 = max([_flt(r.get('card_amt2', 0)) for r in rows] or [0])
             card_ref2 = next((_str(r.get('card_ref2', '')) for r in rows if _str(r.get('card_ref2', ''))), '')
-            cash_amt  = max([_flt(r.get('cash_amt', 0)) for r in rows] or [0])
+            cash_amt = max([_flt(r.get('cash_amt', 0)) for r in rows] or [0])
 
-            pay(bank_amt,  'bank', 'bank', bank_ref)
-            pay(upi_amt1,  'bank', 'upi',  upi_ref1)
-            pay(upi_amt2,  'bank', 'upi',  upi_ref2)
+            pay(bank_amt, 'bank', 'bank', bank_ref)
+            pay(upi_amt1, 'bank', 'upi', upi_ref1)
+            pay(upi_amt2, 'bank', 'upi', upi_ref2)
             pay(card_amt1, 'bank', 'card', card_ref1)
             pay(card_amt2, 'bank', 'card', card_ref2)
-            pay(cash_amt,  'cash', '',     '')
+            pay(cash_amt, 'cash', '', '')
         except Exception as e:
             _logger.warning("Voucher %s: Register payments exception: %s", invoice.ref, e)
             raise

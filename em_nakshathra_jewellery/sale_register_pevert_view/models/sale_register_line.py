@@ -53,64 +53,119 @@ class SaleRegisterLine(models.Model):
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
 
-        # Detect optional columns in sale_order
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order' AND column_name='old_gold_bill_amount'
-        """)
-        old_gold_expr = (
-            "COALESCE(so.old_gold_bill_amount, 0)"
-            if self.env.cr.fetchone() else "0::numeric"
-        )
+        def has_column(table_name, col_name):
+            self.env.cr.execute(f"""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='{table_name}' AND column_name='{col_name}'
+            """)
+            return bool(self.env.cr.fetchone())
 
-        # Detect optional columns in sale_order_line
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='purity_id'
-        """)
-        purity_expr = "sol.purity_id" if self.env.cr.fetchone() else "NULL"
+        old_gold_expr = "COALESCE(so.old_gold_bill_amount, 0)" if has_column('sale_order', 'old_gold_bill_amount') else "0::numeric"
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='net_weight'
-        """)
-        net_weight_expr = "COALESCE(sol.net_weight, 0)" if self.env.cr.fetchone() else "0::numeric"
+        has_purity = has_column('sale_order_line', 'purity_id')
+        purity_expr = "sol.purity_id" if has_purity else "NULL::integer"
+        purity_join = "LEFT JOIN gold_purity gp ON gp.id = sol.purity_id" if has_purity else "LEFT JOIN gold_purity gp ON 1=0"
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='fine_weight'
-        """)
-        fine_weight_expr = "COALESCE(sol.fine_weight, 0)" if self.env.cr.fetchone() else "0::numeric"
+        has_net_weight = has_column('sale_order_line', 'net_weight')
+        has_fine_weight = has_column('sale_order_line', 'fine_weight')
+        has_gold_rate = has_column('sale_order_line', 'gold_rate')
+        has_metal_amount = has_column('sale_order_line', 'metal_amount')
+        has_mc_percent = has_column('sale_order_line', 'mc_percent_actual')
+        has_mc_amount = has_column('sale_order_line', 'mc_amount_actual')
+        has_mc_discount = has_column('sale_order_line', 'mc_discount')
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='gold_rate'
-        """)
-        gold_rate_expr = "COALESCE(sol.gold_rate, 0)" if self.env.cr.fetchone() else "0::numeric"
+        has_stone_wt = has_column('sale_order_line', 'sale_stone_weight')
+        has_diamond_wt = has_column('sale_order_line', 'sale_diamond_weight_gm')
+        has_stone_rate = has_column('sale_order_line', 'sale_stone_rate')
+        has_diamond_rate = has_column('sale_order_line', 'sale_diamond_rate')
+        has_other_wt_amt = has_column('sale_order_line', 'other_weight_amount')
+        has_is_scheme = has_column('sale_order_line', 'is_scheme_line')
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='metal_amount'
-        """)
-        metal_amount_expr = "COALESCE(sol.metal_amount, 0)" if self.env.cr.fetchone() else "0::numeric"
+        stone_wt_sql = "COALESCE(sol.sale_stone_weight, 0)" if has_stone_wt else "0::numeric"
+        diamond_wt_sql = "COALESCE(sol.sale_diamond_weight_gm, 0)" if has_diamond_wt else "0::numeric"
+        stone_rate_sql = "COALESCE(sol.sale_stone_rate, 0)" if has_stone_rate else "0::numeric"
+        diamond_rate_sql = "COALESCE(sol.sale_diamond_rate, 0)" if has_diamond_rate else "0::numeric"
+        other_wt_amt_sql = "COALESCE(sol.other_weight_amount, 0)" if has_other_wt_amt else "0::numeric"
+        is_scheme_sql = "sol.is_scheme_line" if has_is_scheme else "FALSE"
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='mc_percent_actual'
-        """)
-        mc_percent_expr = "COALESCE(sol.mc_percent_actual, 0)" if self.env.cr.fetchone() else "0::numeric"
+        gold_rate_expr = "COALESCE(sol.gold_rate, 0)" if has_gold_rate else "0::numeric"
+        mc_percent_expr = "COALESCE(sol.mc_percent_actual, 0)" if has_mc_percent else "0::numeric"
+        mc_discount_expr = "COALESCE(sol.mc_discount, 0)" if has_mc_discount else "0::numeric"
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='mc_amount_actual'
-        """)
-        mc_amount_expr = "COALESCE(sol.mc_amount_actual, 0)" if self.env.cr.fetchone() else "0::numeric"
+        net_wt_fallback = f"GREATEST(0, COALESCE(sol.product_uom_qty, 0) - {stone_wt_sql} - {diamond_wt_sql})"
+        if has_net_weight:
+            net_weight_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN sol.net_weight IS NOT NULL AND sol.net_weight > 0 THEN sol.net_weight
+                    ELSE {net_wt_fallback}
+                END
+            """
+        else:
+            net_weight_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    ELSE {net_wt_fallback}
+                END
+            """
 
-        self.env.cr.execute("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='sale_order_line' AND column_name='mc_discount'
-        """)
-        mc_discount_expr = "COALESCE(sol.mc_discount, 0)" if self.env.cr.fetchone() else "0::numeric"
+        if has_fine_weight:
+            fine_weight_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN sol.fine_weight IS NOT NULL AND sol.fine_weight > 0 THEN sol.fine_weight
+                    WHEN gp.percentage IS NOT NULL AND gp.percentage > 0 THEN
+                        ({net_weight_expr}) * (gp.percentage / 100.0)
+                    ELSE 0
+                END
+            """
+        else:
+            fine_weight_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN gp.percentage IS NOT NULL AND gp.percentage > 0 THEN
+                        ({net_weight_expr}) * (gp.percentage / 100.0)
+                    ELSE 0
+                END
+            """
+
+        if has_metal_amount:
+            metal_amount_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN sol.metal_amount IS NOT NULL AND sol.metal_amount > 0 THEN sol.metal_amount
+                    ELSE ({net_weight_expr}) * {gold_rate_expr}
+                END
+            """
+        else:
+            metal_amount_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    ELSE ({net_weight_expr}) * {gold_rate_expr}
+                END
+            """
+
+        if has_mc_amount:
+            mc_amount_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN sol.mc_amount_actual IS NOT NULL AND sol.mc_amount_actual > 0 THEN sol.mc_amount_actual
+                    WHEN {mc_percent_expr} > 0 THEN ({metal_amount_expr}) * ({mc_percent_expr} / 100.0)
+                    WHEN sol.price_subtotal IS NOT NULL AND sol.price_subtotal > ({metal_amount_expr}) THEN
+                        GREATEST(0, sol.price_subtotal - ({metal_amount_expr}) - {stone_rate_sql} - {diamond_rate_sql} - {other_wt_amt_sql})
+                    ELSE 0
+                END
+            """
+        else:
+            mc_amount_expr = f"""
+                CASE
+                    WHEN {is_scheme_sql} IS TRUE THEN 0
+                    WHEN {mc_percent_expr} > 0 THEN ({metal_amount_expr}) * ({mc_percent_expr} / 100.0)
+                    WHEN sol.price_subtotal IS NOT NULL AND sol.price_subtotal > ({metal_amount_expr}) THEN
+                        GREATEST(0, sol.price_subtotal - ({metal_amount_expr}) - {stone_rate_sql} - {diamond_rate_sql} - {other_wt_amt_sql})
+                    ELSE 0
+                END
+            """
 
         # In Odoo 17, sale.order.invoice_ids is computed (no M2M table).
         # Real link: sale_order_line -> sale_order_line_invoice_rel -> account_move_line -> account_move
@@ -233,6 +288,7 @@ class SaleRegisterLine(models.Model):
                 FROM sale_order_line sol
                 JOIN sale_order so   ON sol.order_id = so.id
                 JOIN line_rank lr    ON lr.id = sol.id
+                """ + purity_join + """
                 LEFT JOIN payment_data pd ON pd.order_id = so.id
                 LEFT JOIN invoice_data id ON id.order_id = so.id
                 WHERE so.state IN ('sale', 'done')
