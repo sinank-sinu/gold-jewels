@@ -715,6 +715,19 @@ if(tot>0)run(); else log('No records found.');
             ('company_id', '=', excel_company.id)
         ], limit=1)
 
+        og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
+        scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
+
+        og_infos = og_data.get(vou_no, [])
+        if og_infos:
+            og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
+            if og_amt_from_sheet > 0:
+                og_amt = og_amt_from_sheet
+
+        sch_info = scheme_data.get(vou_no, {})
+        if sch_info and sch_info.get('amount', 0.0) > 0:
+            scheme_amt = sch_info.get('amount', 0.0)
+
         if existing_order:
             _logger.info("[SALE IMPORT] Voucher: %s", vou_no)
             _logger.info("[SALE IMPORT] Searching existing sale order...")
@@ -722,6 +735,15 @@ if(tot>0)run(); else log('No records found.');
             order = existing_order
             has_lines = bool(order.order_line)
             has_og_lines = bool(c_env['sale.old.gold.line'].sudo().search([('sale_id', '=', order.id)], limit=1))
+            
+            # If the order exists, update boolean flags if amounts are found
+            update_vals = {}
+            if og_amt > 0 and not order.has_old_gold:
+                update_vals['has_old_gold'] = True
+            if scheme_amt > 0 and not order.apply_scheme:
+                update_vals['apply_scheme'] = True
+            if update_vals:
+                order.sudo().write(update_vals)
         else:
             order_vals = {
                 'partner_id':  partner.id if partner else False,
@@ -737,19 +759,6 @@ if(tot>0)run(); else log('No records found.');
                 order_vals['user_id'] = salesman.id
             if source_loc:
                 order_vals['branch_location_id'] = source_loc.id
-
-            og_amt = max([_flt(r.get('og_amt', 0.0)) for r in rows] or [0.0])
-            scheme_amt = max([_flt(r.get('gold_scheme', 0.0)) for r in rows] or [0.0])
-
-            og_infos = og_data.get(vou_no, [])
-            if og_infos:
-                og_amt_from_sheet = sum([info.get('amount', 0.0) for info in og_infos])
-                if og_amt_from_sheet > 0:
-                    og_amt = og_amt_from_sheet
-
-            sch_info = scheme_data.get(vou_no, {})
-            if sch_info and sch_info.get('amount', 0.0) > 0:
-                scheme_amt = sch_info.get('amount', 0.0)
 
             if og_amt > 0:
                 order_vals['has_old_gold'] = True
@@ -767,8 +776,6 @@ if(tot>0)run(); else log('No records found.');
         prod_cache = cache.setdefault(f'products_{excel_company.id}', {})
 
         for row in rows:
-            if has_lines:
-                break
             product_var_name = row.get('product_var_name', '').strip()
             label_ref        = row.get('label_no', '').strip()
             barcode_no       = row.get('barcode_no', '').strip()
@@ -887,6 +894,21 @@ if(tot>0)run(); else log('No records found.');
                 ], limit=1)
             if not taxes:
                 taxes = line_product.taxes_id.filtered(lambda t: t.company_id.id in (excel_company.id, False))
+
+            # Avoid duplicating lines if the order already has them
+            existing_line = False
+            target_qty = gross_wt or (label.sale_gross_weight if label else 0.0) or 1.0
+            for ol in order.order_line:
+                if label and ol.label_id.id == label.id:
+                    existing_line = True
+                    break
+                elif not label and ol.product_id.id == line_product.id and abs(ol.product_uom_qty - target_qty) < 0.001:
+                    existing_line = True
+                    break
+            
+            if existing_line:
+                continue
+
 
             line_vals = {
                 'order_id':               order.id,
@@ -1115,12 +1137,13 @@ if(tot>0)run(); else log('No records found.');
             raise ValidationError(f"Company mismatch on voucher {vou_no}:\n{error_details}")
 
         # 9. Confirm Order
-        order.with_company(excel_company).with_context(
-            mail_notrack=True,
-            default_company_id=excel_company.id,
-            company_id=excel_company.id,
-            allowed_company_ids=[excel_company.id],
-        ).action_confirm()
+        if order.state in ('draft', 'sent'):
+            order.with_company(excel_company).with_context(
+                mail_notrack=True,
+                default_company_id=excel_company.id,
+                company_id=excel_company.id,
+                allowed_company_ids=[excel_company.id],
+            ).action_confirm()
         if order_date:
             order.sudo().write({'date_order': order_date})
             c_env.cr.execute("UPDATE sale_order SET create_date = %s WHERE id = %s", (order_date, order.id))
@@ -1357,6 +1380,16 @@ if(tot>0)run(); else log('No records found.');
         def pay(amount, jtype, hint='', ref=''):
             if not amount or amount <= 0:
                 return
+            
+            if invoice.payment_state in ('paid', 'in_payment', 'reversed') or invoice.amount_residual <= 0.001:
+                _logger.info("Voucher %s: Invoice already paid or nothing left to pay. Skipping payment.", invoice.ref)
+                return
+            
+            if amount > invoice.amount_residual:
+                _logger.info("Voucher %s: Capping payment amount %s to residual %s", invoice.ref, amount, invoice.amount_residual)
+                amount = invoice.amount_residual
+
+
             journal = find_journal(jtype, hint)
             if not journal:
                 _logger.warning("Voucher %s: Journal not found type=%s hint=%s for Company %s", invoice.ref, jtype, hint, excel_company.id)
