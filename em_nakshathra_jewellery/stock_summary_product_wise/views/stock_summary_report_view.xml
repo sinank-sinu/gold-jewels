@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="view_stock_summary_report_wizard_form_inherit" model="ir.ui.view">
+        <field name="name">stock.summary.report.wizard.form.inherit</field>
+        <field name="model">stock.summary.report.wizard</field>
+        <field name="inherit_id" ref="em_metal_ledger.view_stock_summary_report_wizard_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_print_grouped_xlsx']" position="after">
+                <button name="action_print_product_wise_xlsx" string="Print Product Wise XLSX" type="object" class="btn-primary"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
