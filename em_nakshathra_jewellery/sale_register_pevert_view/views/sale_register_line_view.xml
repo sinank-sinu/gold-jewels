@@ -51,8 +51,7 @@
         <field name="arch" type="xml">
             <pivot string="Sale Register" disable_linking="False">
                 <field name="date_order"       type="row" interval="month"/>
-                <field name="branch_id"        type="row"/>
-                <field name="partner_id"       type="row"/>
+                <!-- Removed branch_id and partner_id from type="row" to prevent deep auto-expansion and hanging on load. Users can manually expand them. -->
                 <field name="state"            type="col"/>
                 <field name="amount_total"     type="measure"/>
                 <field name="metal_amount"     type="measure"/>

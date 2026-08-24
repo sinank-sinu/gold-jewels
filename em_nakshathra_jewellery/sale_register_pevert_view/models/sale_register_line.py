@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, tools
+from odoo import models, fields, tools, api
 
 
 class SaleRegisterLine(models.Model):
@@ -49,6 +49,22 @@ class SaleRegisterLine(models.Model):
     cash_amount     = fields.Float('Cash', readonly=True)
     card_amount     = fields.Float('Card', readonly=True)
     upi_amount      = fields.Float('UPI', readonly=True)
+
+    @api.model
+    def read_group(self, domain, fields, groupby, offset=0, limit=None, orderby=False, lazy=True):
+        """
+        Optimize read_group to prevent the pivot view from loading an unbounded number of groups.
+        This enforces lazy loading/safe aggregation limits.
+        """
+        PIVOT_GROUP_LIMIT = 500
+        # If there's a groupby, we limit the results to prevent browser/server hanging.
+        # When groupby=[], it's the grand total query, which returns 1 row safely.
+        if groupby and (limit is None or limit > PIVOT_GROUP_LIMIT):
+            limit = PIVOT_GROUP_LIMIT
+            
+        return super(SaleRegisterLine, self).read_group(
+            domain, fields, groupby, offset=offset, limit=limit, orderby=orderby, lazy=lazy
+        )
 
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
@@ -294,3 +310,8 @@ class SaleRegisterLine(models.Model):
                 WHERE so.state IN ('sale', 'done')
             )
         """)
+
+        # Add safe indexes to improve query and pivot performance
+        self.env.cr.execute("CREATE INDEX IF NOT EXISTS sale_order_branch_id_idx ON sale_order (branch_id);")
+        self.env.cr.execute("CREATE INDEX IF NOT EXISTS sale_order_date_state_idx ON sale_order (date_order, state);")
+        self.env.cr.execute("CREATE INDEX IF NOT EXISTS account_move_state_type_idx ON account_move (state, move_type);")
