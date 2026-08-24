@@ -260,6 +260,7 @@ class AccountMove(models.Model):
                     if other_company_schemes:
 
                         sale_order = sale_orders[0] if sale_orders else False
+                        entry_date = fields.Date.to_date(sale_order.date_order) if sale_order and sale_order.date_order else fields.Date.today()
 
                         for comp, schemes in company_schemes.items():
                             total_amount = sum(s.total_paid for s in schemes)
@@ -345,7 +346,7 @@ class AccountMove(models.Model):
                             label = comp.name
                             move_vals = {
                                 'journal_id': journal.id,
-                                'date': sale_order.date_order.date(),
+                                'date': entry_date,
                                 'ref': label,
                                 'company_id': move.company_id.id,
                                 'partner_id': move.partner_id.id,
@@ -374,6 +375,44 @@ class AccountMove(models.Model):
                             ).create(move_vals)
                             new_move.action_post()
 
+                            # 5. Create another journal entry in the SAME company (move.company_id.id)
+                            # Find partner named as the scheme's country name
+                            scheme_country_name = comp.country_id.name or ''
+                            other_partner = self.env['res.partner'].sudo().search([('name', '=', scheme_country_name)], limit=1)
+                            if not other_partner:
+                                other_partner = self.env['res.partner'].sudo().search([('name', '=', comp.name)], limit=1) or comp.partner_id
+
+                            other_label = ", ".join(filter(None, [s.name for s in schemes])) or comp.name
+                            other_move_vals = {
+                                'journal_id': journal.id,
+                                'date': entry_date,
+                                'ref': other_label,
+                                'company_id': move.company_id.id,
+                                'partner_id': other_partner.id,
+                                'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
+                                'line_ids': [
+                                    (0, 0, {
+                                        'account_id': debtors_account.id,
+                                        'partner_id': other_partner.id,
+                                        'name': other_label,
+                                        'debit': total_amount,
+                                        'credit': 0.0,
+                                    }),
+                                    (0, 0, {
+                                        'account_id': outstanding_receipts_account.id,
+                                        'partner_id': other_partner.id,
+                                        'name': other_label,
+                                        'debit': 0.0,
+                                        'credit': total_amount,
+                                    })
+                                ]
+                            }
+                            other_new_move = self.env['account.move'].with_context(
+                                default_move_type='entry',
+                                default_journal_id=journal.id,
+                            ).create(other_move_vals)
+                            other_new_move.action_post()
+
                             for scheme in schemes:
                                 scheme.write({
                                     'state': 'redeemed',
@@ -386,7 +425,9 @@ class AccountMove(models.Model):
                                         'amount': scheme.total_paid,
                                         'date': sale_order.date_order.date() if sale_order and sale_order.date_order else fields.Date.today(),
                                     })
-        return res
+                                    if not sale_order.active_scheme_id:
+                                        sale_order.sudo().write({'active_scheme_id': scheme.id})
+                    return res
 
 
 # from math import ceil
