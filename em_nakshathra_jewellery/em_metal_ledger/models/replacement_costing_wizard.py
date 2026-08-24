@@ -50,7 +50,9 @@ class ReplacementCostingWizard(models.TransientModel):
             domain.append(('branch_id', 'in', self.branch_ids.ids))
             
         items = self.env['replacement.costing.item'].search(domain, order='sale_date asc')
-        
+        if items:
+            items._compute_all_fields()
+
         row = 1
         for item in items:
             sheet.write(row, 0, item.sale_date, date_format)

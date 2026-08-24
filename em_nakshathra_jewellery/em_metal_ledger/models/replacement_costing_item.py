@@ -80,6 +80,7 @@ class ReplacementCostingItem(models.Model):
     total_gp = fields.Float(string="Total GP", compute="_compute_all_fields", store=True)
 
     @api.depends('net_weight_purchase', 'purity_id', 'purchase_metal_rate', 'purchase_mc_percent_fine',
+                 'purchase_making_charge_type', 'purchase_mc_amount',
                  'diamond_amount_purchase', 'stone_amount_purchase', 'rate_fine_next_day_1pm',
                  'metal_amount_sale', 'mc_amount_sale', 'diamond_amount_sale', 'stone_amount_sale')
     def _compute_all_fields(self):
@@ -103,8 +104,11 @@ class ReplacementCostingItem(models.Model):
             rec.taxable_amount_purchase = rec.metal_amount_purchase + rec.purchase_mc_value + rec.diamond_amount_purchase + rec.stone_amount_purchase
             
             rec.purchase_metal_amount_on_fine = rec.rate_fine_next_day_1pm * rec.metal_qty_on_fine
-            rec.purchase_mc_amount_on_fine = rec.purchase_mc_on_fine_qty * rec.rate_fine_next_day_1pm
-            
+            if rec.purchase_making_charge_type in ('amount', 'rate_per_gram'):
+                rec.purchase_mc_amount_on_fine = rec.purchase_mc_value
+            else:
+                rec.purchase_mc_amount_on_fine = rec.purchase_mc_on_fine_qty * rec.rate_fine_next_day_1pm
+
             # rec.sale_mc_percent = (rec.mc_amount_sale / rec.metal_amount_sale * 100.0) if rec.metal_amount_sale else 0.0
             rec.sale_taxable_amount = rec.metal_amount_sale + rec.mc_amount_sale + rec.diamond_amount_sale + rec.stone_amount_sale
             
