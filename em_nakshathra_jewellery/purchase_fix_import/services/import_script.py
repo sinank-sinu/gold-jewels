@@ -194,99 +194,183 @@ class ImportLabelService:
             ).property_account_payable_id = payable_account.id
 
 
-        # 2. Find Existing PO
-        po = self.env['purchase.order'].search([
-            ('partner_ref', '=', bill_ref),
-            ('company_id', '=', current_company.id)
-        ], limit=1)
+        # 2. Create PO
+        po_vals = {
+            'partner_id': partner.id,
+            'date_order': date_str,
+            'partner_ref': bill_ref,
+            'company_id': current_company.id,
+        }
+        branch_name = lines[0].get('Branch') if lines else None
+        if branch_name:
+            branch = self.env['res.branch'].search([('name', '=', str(branch_name).strip())], limit=1)
+            if branch:
+                po_vals['branch_id'] = branch.id
 
-        if not po:
-            _logger.error(f"Cannot find existing Purchase Order with Bill Reference '{bill_ref}' for company '{current_company.name}'.")
-            return
+        po = self.env['purchase.order'].create(po_vals)
+        print(po)
+        print(po.name)
 
-        if len(po.order_line) != len(lines):
-            raise UserError(f"Line count mismatch for PO {po.name}. Excel has {len(lines)} lines, but PO has {len(po.order_line)} lines. Cannot map lines safely.")
+        source_location = None
+        dest_location = None
 
-        # 3. Surgical Update of Product ID Across the System
-        _logger.info(f"Starting surgical variant fix for PO: {po.name} (Ref: {bill_ref})")
-
-        for excel_line, po_line in zip(lines, po.order_line):
-            product = self._resolve_product(excel_line, current_company)
+        # 3. Add PO Lines
+        for line in lines:
+            product = self._resolve_product(line, current_company)
             if not product:
                 continue
+            import re
 
-            old_product_id = po_line.product_id.id
-            new_product_id = product.id
+            tax_name = str(line.get("Order Lines/Taxes") or "").strip()
 
-            if old_product_id == new_product_id:
-                continue
+            tax = False
 
-            _logger.info(f"Updating PO {po.name} Line {po_line.id}: Product {old_product_id} -> {new_product_id}")
+            if tax_name == "3% GST":
+                tax = self.env["account.tax"].search([
+                    ("name", "=", tax_name),
+                    ("type_tax_use", "in", ["purchase", "none"]),('company_id','=',current_company.id)
+                ], limit=1)
 
-            # A. Update purchase_order_line
-            self.env.cr.execute("UPDATE purchase_order_line SET product_id = %s WHERE id = %s", (new_product_id, po_line.id))
+                tax = self.env["account.tax"].browse(tax.id)
+            elif tax_name == "18% GST":
+                tax = self.env["account.tax"].search([
+                    ("name", "=", tax_name),
+                    ("type_tax_use", "in", ["purchase", "none"]), ('company_id', '=', current_company.id)
+                ], limit=1)
 
-            # B. Update stock_move and stock_move_line
-            self.env.cr.execute("UPDATE stock_move SET product_id = %s WHERE purchase_line_id = %s", (new_product_id, po_line.id))
+                tax = self.env["account.tax"].browse(tax.id)
+                print("tax 18 % found")
+
+            # if not tax:
+            #     raise UserError(
+            #         _("Purchase Tax '%s' not found for company '%s'.")
+            #         % (tax_name, current_company.name)
+            #     )
+
+            qty = float(line.get('Order Lines/Quantity') or line.get('Quantity') or 1.0)
+            price = float(line.get('Order Lines/Unit Price') or line.get('Unit Price') or 0.0)
+            weight = float(line.get('Weight') or line.get('Gross Weight') or line.get('Weight (g)') or line.get(
+                'Weight in grams') or 0.0)
+            gold_rate_val = str(line.get("Fine Rate") or "").strip()
+
+            try:
+                gold_rate = float(gold_rate_val)
+            except (ValueError, TypeError):
+                gold_rate = 0.0
+
+            purity_id = False
+            purity_name = line.get('Purity')
+            if purity_name:
+                purity = self.env['gold.purity'].search([('name', '=', str(purity_name).strip())], limit=1)
+                if purity:
+                    purity_id = purity.id
+            _logger.info(
+                "Product: %s (%s), Company: %s (%s)",
+                product.display_name,
+                product.id,
+                product.company_id.name if product.company_id else "Shared",
+                product.company_id.id if product.company_id else None
+            )
+
+            if product.company_id and product.company_id.id != po.company_id.id:
+                raise UserError(
+                    f"Product {product.display_name} belongs to company {product.company_id.name}, "
+                    f"but Purchase Order {po.name} belongs to company {po.company_id.name}."
+                )
+
+            if not source_location and (line.get('Source Location') or line.get('Src Location')):
+                source_location = str(line.get('Source Location') or line.get('Src Location')).strip()
+            if not dest_location and (line.get('Destination Location') or line.get('Dest Location')):
+                dest_location = str(line.get('Destination Location') or line.get('Dest Location')).strip()
+
+            po_line_vals = {
+                'order_id': po.id,
+                'product_id': product.id,
+                'name': product.name,
+                'product_qty': qty,
+                'price_unit': price,
+                'gross_weight': weight,
+                'product_uom': product.uom_id.id,
+                'date_planned': date_str,
+                'gold_rate': gold_rate,
+                'taxes_id': [(6, 0, [tax.id])] if tax else [(5, 0, 0)],
+            }
+            if purity_id:
+                po_line_vals['purity_id'] = purity_id
+
+            self.env['purchase.order.line'].create(po_line_vals)
+
+        # if not po.order_line:
+        #     po.unlink()
+        #     return
+
+        # 4. Confirm PO
+        po.button_confirm()
+        print(po)
+        print(po.name)
+        print(po.company_id.name)
+
+        # Force the confirmation date and arrival date to the Excel bill date
+        po.write({
+            'date_approve': date_str,
+            'date_planned': date_str,
+            'unfix': False
+        })
+
+        # 5. Validate Receipt with correct Source and Destination Location (Excel)
+        if po.picking_ids:
+            src_loc = None
+            if source_location:
+                src_loc = self.env['stock.location'].search([('complete_name', '=', source_location)], limit=1)
+                if not src_loc:
+                    src_loc = self.env['stock.location'].search([('name', '=', source_location)], limit=1)
+
+            dst_loc = None
+            if dest_location:
+                dst_loc = self.env['stock.location'].search([('complete_name', '=', source_location)], limit=1)
+                if not dst_loc:
+                    dst_loc = self.env['stock.location'].search([('name', '=', source_location)], limit=1)
+
+            for picking in po.picking_ids.filtered(lambda p: p.state not in ['done', 'cancel']):
+                if src_loc:
+                    picking.location_id = src_loc.id
+                if dst_loc:
+                    picking.location_dest_id = dst_loc.id
+
+                for move in picking.move_ids:
+                    if src_loc:
+                        move.location_id = src_loc.id
+                    if dst_loc:
+                        move.location_dest_id = dst_loc.id
+                    for move_line in move.move_line_ids:
+                        if src_loc:
+                            move_line.location_id = src_loc.id
+                        if dst_loc:
+                            move_line.location_dest_id = dst_loc.id
+
+                # Auto-validate receipt
+                for move in picking.move_ids:
+                    move.quantity = move.product_uom_qty
+
+                picking.scheduled_date = date_str
+                picking.button_validate()
+
+                # Force the picking date to the Excel bill date
+                picking.write({'date_done': date_str})
+                picking.move_ids.write({'date': date_str})
+                picking.move_line_ids.write({'date': date_str})
+
+        po.action_create_invoice()
+        
+        for bill in po.invoice_ids:
+            bill.write({
+                'invoice_date': date_str,
+                'date': date_str,
+                'invoice_date_due': date_str,
+            })
             
-            self.env.cr.execute("""
-                UPDATE stock_move_line sml
-                SET product_id = %s
-                FROM stock_move sm
-                WHERE sml.move_id = sm.id AND sm.purchase_line_id = %s
-            """, (new_product_id, po_line.id))
-
-            # C. Update stock_valuation_layer
-            self.env.cr.execute("""
-                UPDATE stock_valuation_layer svl
-                SET product_id = %s
-                FROM stock_move sm
-                WHERE svl.stock_move_id = sm.id AND sm.purchase_line_id = %s
-            """, (new_product_id, po_line.id))
-
-            # D. Update account_move_line (Vendor Bill)
-            self.env.cr.execute("""
-                UPDATE account_move_line aml
-                SET product_id = %s
-                WHERE aml.purchase_line_id = %s
-            """, (new_product_id, po_line.id))
-
-            # E. Update stock_quant
-            self.env.cr.execute("""
-                SELECT sml.location_dest_id, sml.quantity
-                FROM stock_move_line sml
-                JOIN stock_move sm ON sml.move_id = sm.id
-                WHERE sm.purchase_line_id = %s
-            """, (po_line.id,))
-            
-            for row in self.env.cr.fetchall():
-                loc_id = row[0]
-                qty = row[1] or 0.0
-                
-                if qty <= 0:
-                    continue
-                    
-                # Decrease old product stock
-                self.env.cr.execute("""
-                    UPDATE stock_quant SET quantity = quantity - %s 
-                    WHERE product_id = %s AND location_id = %s
-                """, (qty, old_product_id, loc_id))
-                
-                # Increase new product stock
-                self.env.cr.execute("""
-                    UPDATE stock_quant SET quantity = quantity + %s 
-                    WHERE product_id = %s AND location_id = %s
-                """, (qty, new_product_id, loc_id))
-                
-                if self.env.cr.rowcount == 0:
-                    self.env.cr.execute("""
-                        INSERT INTO stock_quant (product_id, location_id, quantity, in_date, company_id)
-                        VALUES (%s, %s, %s, now(), %s)
-                    """, (new_product_id, loc_id, qty, current_company.id))
-
         self.env.flush_all()
         self.env.invalidate_all()
-        _logger.info(f"Successfully fixed variants for PO {po.name}!")
 
     def _resolve_product(self, row, current_company):
         _logger.info("ROW = %s", row)
