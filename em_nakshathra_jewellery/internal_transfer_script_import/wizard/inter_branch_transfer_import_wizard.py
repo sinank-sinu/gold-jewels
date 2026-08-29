@@ -219,11 +219,26 @@ class InterBranchTransferImportWizard(models.TransientModel):
                         label = labels[0]
                     
                     # 5. Check Virtual Location to prevent duplicate/invalid transfers
-                    current_loc_id = virtual_locations.get(label.id, label.branch_location_id.id if label.branch_location_id else False)
+                    # First check virtual location (if it moved in previous rows).
+                    # If no virtual location, check branch_location_id (current active location).
+                    # If branch_location_id is empty, fallback to source_location_id (initial location).
+                    if label.id in virtual_locations:
+                        current_loc_id = virtual_locations[label.id]
+                    elif label.branch_location_id:
+                        current_loc_id = label.branch_location_id.id
+                    elif label.source_location_id:
+                        current_loc_id = label.source_location_id.id
+                    else:
+                        current_loc_id = False
                     
                     if current_loc_id == dest_loc.id:
                         skipped_count += 1
                         skipped_details.append({'row': row_no, 'label': label.name, 'reason': f"Label is already at destination location '{dest_loc.complete_name}'."})
+                        continue
+
+                    if src_loc.id == dest_loc.id:
+                        skipped_count += 1
+                        skipped_details.append({'row': row_no, 'label': label.name, 'reason': f"Excel Source and Destination are the same '{dest_loc.complete_name}'."})
                         continue
                         
                     # NOTE: Removed the 'current_loc_id != src_loc.id' skip logic 
