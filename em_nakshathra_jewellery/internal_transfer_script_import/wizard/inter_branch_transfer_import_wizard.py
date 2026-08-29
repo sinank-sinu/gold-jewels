@@ -221,9 +221,13 @@ class InterBranchTransferImportWizard(models.TransientModel):
                     # 5. Check Virtual Location to prevent duplicate/invalid transfers
                     current_loc_id = virtual_locations.get(label.id, label.branch_location_id.id if label.branch_location_id else False)
                     
+                    if current_loc_id == dest_loc.id:
+                        skipped_count += 1
+                        skipped_details.append({'row': row_no, 'label': label.name, 'reason': f"Label is already at destination location '{dest_loc.complete_name}'."})
+                        continue
+                        
                     # NOTE: Removed the 'current_loc_id != src_loc.id' skip logic 
                     # as requested, to allow all historical transfers to import successfully.
-
                         
                     # Sync data if needed
                     changes = self._sync_label_data(label, row_dict, dest_loc, src_loc)
@@ -337,6 +341,12 @@ class InterBranchTransferImportWizard(models.TransientModel):
     @api.model
     def _run_migration_background(self, db_name, uid, context, transfer_data_list):
         import odoo
+        import time
+        
+        # Give the main web thread 2 seconds to finish its commit and release DB locks 
+        # on the product_label records that were just updated in _sync_label_data.
+        time.sleep(2)
+        
         context = dict(context or {}, skip_label_location_overwrite=True)
         _logger.info("Starting background migration of %s transfers", len(transfer_data_list))
         
