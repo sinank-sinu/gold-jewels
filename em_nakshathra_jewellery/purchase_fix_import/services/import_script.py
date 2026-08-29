@@ -19,45 +19,6 @@ class ImportLabelService:
     def __init__(self, env):
         self.env = env
 
-    def _ensure_chart_of_accounts(self, company):
-        print("Loading Chart of Accounts")
-        """Ensure the company has a Chart of Accounts."""
-        self.env.cr.commit()
-
-        account = self.env['account.account'].search([
-            ('company_id', '=', company.id)
-        ], limit=1)
-
-        if account:
-            return
-
-        template = self.env['account.chart.template'].search([
-            ('country_id', '=', company.country_id.id)
-        ], limit=1)
-
-        if not template:
-            raise UserError(
-                _("No Chart of Accounts template found for company '%s'.") % company.name
-            )
-
-        _logger.info(
-            "Loading Chart of Accounts '%s' for company '%s'",
-            template.name,
-            company.name,
-        )
-
-        template.try_loading(company)
-        accounts = self.env['account.account'].search_count([
-            ('company_id', '=', company.id)
-        ])
-
-        _logger.info(
-            "Company %s has %s accounts after loading.",
-            company.name,
-            accounts
-        )
-
-        self.env.cr.commit()
 
     def _find_tax(self, tax_name):
 
@@ -209,32 +170,29 @@ class ImportLabelService:
                 partner.company_id = False
             except Exception:
                 pass
+
         # --------------------------------------------------------------
-        # Ensure vendor has the correct Payable account for this company
+        # Ensure vendor has the correct Creditors Payable account
         # --------------------------------------------------------------
         payable_account = self.env['account.account'].search([
             ('company_id', '=', current_company.id),
             ('account_type', '=', 'liability_payable'),
+            ('name', 'ilike', 'creditor'),
         ], limit=1)
 
+        # Fallback if 'creditor' isn't in the name, just find one that is NOT opening purchase
         if not payable_account:
-            raise UserError(
-                "No Payable account found for company '%s'."
-                % current_company.name
-            )
+            payable_account = self.env['account.account'].search([
+                ('company_id', '=', current_company.id),
+                ('account_type', '=', 'liability_payable'),
+                ('name', 'not ilike', 'opening'),
+            ], limit=1)
 
-        _logger.info(
-            "Vendor: %s | Company: %s | Payable Account: %s - %s (%s)",
-            partner.name,
-            current_company.name,
-            payable_account.code,
-            payable_account.name,
-            payable_account.id,
-        )
+        if payable_account:
+            partner.with_company(
+                current_company
+            ).property_account_payable_id = payable_account.id
 
-        partner.with_company(
-            current_company
-        ).property_account_payable_id = payable_account.id
 
         # 2. Create PO
         po_vals = {
@@ -401,60 +359,18 @@ class ImportLabelService:
                 picking.write({'date_done': date_str})
                 picking.move_ids.write({'date': date_str})
                 picking.move_line_ids.write({'date': date_str})
-        # ------------------------------------------------------------------
-        # Ensure Purchase Journal exists for the Branch
-        # ------------------------------------------------------------------
-        if po.branch_id:
-            journal = self.env['account.journal'].search([
-                ('type', '=', 'purchase'),
-                ('company_id', '=', po.company_id.id),
-                ('branch_id', '=', po.branch_id.id),
-            ], limit=1)
 
-            if not journal:
-                _logger.info(
-                    "Purchase Journal not found for branch '%s'. Creating one...",
-                    po.branch_id.name
-                )
-
-                # Generate a unique journal code
-                code = ("PUR%s" % po.branch_id.id)[:5].upper()
-                while self.env['account.journal'].search([
-                    ('code', '=', code),
-                    ('company_id', '=', po.company_id.id)
-                ], limit=1):
-                    code = ("P%s%s" % (po.branch_id.id, len(code)))[:5].upper()
-
-                journal = self.env['account.journal'].create({
-                    'name': '%s Purchase' % po.branch_id.name,
-                    'code': code,
-                    'type': 'purchase',
-                    'company_id': po.company_id.id,
-                    'branch_id': po.branch_id.id,
-                })
-
-                _logger.info(
-                    "Created Purchase Journal '%s' for branch '%s'",
-                    journal.name,
-                    po.branch_id.name
-                )
-        self._ensure_chart_of_accounts(po.company_id)
-        # po._prepare_invoice()
         po.action_create_invoice()
-        # f = Form(
-        #     self.env["account.move"].with_context(
-        #         default_move_type="in_invoice",
-        #         default_is_approved=True
-        #     )
-        # )
-
-        # f.partner_id = po.partner_id
-        # f.invoice_date = fields.Date.context_today(self.env.user)
-        # f.purchase_vendor_bill_id = self.env[
-        #     "purchase.bill.union"
-        # ].browse(-po.id)
-
-        # bill = f.save()
+        
+        for bill in po.invoice_ids:
+            bill.write({
+                'invoice_date': date_str,
+                'date': date_str,
+                'invoice_date_due': date_str,
+            })
+            
+        self.env.flush_all()
+        self.env.invalidate_all()
 
     def _resolve_product(self, row, current_company):
         _logger.info("ROW = %s", row)
