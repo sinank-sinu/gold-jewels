@@ -562,8 +562,8 @@ class ImportLabelService:
                 )
             assert template.exists(), "Product Template not found. Creation of new Product Templates is disabled."
             self.template_cache[template_cache_key] = template
-        # Service products never have attributes or variants
-        if template.type == "service":
+        # Service products and vault products never have attributes or variants
+        if template.type == "service" or "VAULT" in template.name.upper() or not template.attribute_line_ids:
             variant = template.product_variant_id
             self.variant_cache[cache_key] = variant
             return variant
