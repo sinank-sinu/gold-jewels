@@ -383,22 +383,26 @@ class ImportLabelService:
                     po.branch_id.name
                 )
         self._ensure_chart_of_accounts(po.company_id)
-        # po._prepare_invoice()
         po.action_create_invoice()
-        # f = Form(
-        #     self.env["account.move"].with_context(
-        #         default_move_type="in_invoice",
-        #         default_is_approved=True
-        #     )
-        # )
 
-        # f.partner_id = po.partner_id
-        # f.invoice_date = fields.Date.context_today(self.env.user)
-        # f.purchase_vendor_bill_id = self.env[
-        #     "purchase.bill.union"
-        # ].browse(-po.id)
+        def _parse_date(d):
+            if isinstance(d, datetime):
+                return d.strftime("%Y-%m-%d")
+            if d:
+                return str(d).split(" ")[0]
+            return date_str
 
-        # bill = f.save()
+        accounting_date = _parse_date(lines[0].get("Accounting Date"))
+        due_date = _parse_date(lines[0].get("Due Date") or lines[0].get("Du Date"))
+
+        if po.invoice_ids:
+            po.invoice_ids.write({
+                'invoice_date': date_str,
+                'date': accounting_date,
+                'invoice_date_due': due_date,
+            })
+            self.env.flush_all()
+            self.env.invalidate_all()
 
     def _resolve_product(self, row, current_company):
         _logger.info("ROW = %s", row)
