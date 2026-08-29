@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_inter_branch_transfer_import_wizard,inter.branch.transfer.import.wizard,model_inter_branch_transfer_import_wizard,stock.group_stock_user,1,1,1,1
+access_inter_branch_transfer_log_wizard,inter.branch.transfer.log.wizard,model_inter_branch_transfer_log_wizard,stock.group_stock_user,1,1,1,1

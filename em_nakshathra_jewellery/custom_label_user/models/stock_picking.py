@@ -11,6 +11,11 @@ class StockPicking(models.Model):
     )
     def _compute_location_id(self):
         """Compute the source location of the picking based on the label's source location."""
+        
+        # Bypass compute completely for migration to protect explicit assignments
+        if self.env.context.get('skip_label_location_overwrite'):
+            return
+
         # Save the current values of location_id and location_dest_id before running super
         current_locations = {}
         for picking in self:

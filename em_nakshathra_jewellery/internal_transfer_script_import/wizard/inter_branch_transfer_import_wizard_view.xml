@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_inter_branch_transfer_import_wizard_form" model="ir.ui.view">
+        <field name="name">inter.branch.transfer.import.wizard.form</field>
+        <field name="model">inter.branch.transfer.import.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Import Inter-Branch Transfers">
+                <group>
+                    <field name="file" filename="filename" widget="binary"/>
+                    <field name="filename" invisible="1"/>
+                </group>
+                <div class="alert alert-info" role="alert">
+                    <p><strong>Import Guidelines:</strong></p>
+                    <ul>
+                        <li>Upload an Excel file containing columns: <strong>Label Name, Barcode, Source Location, Destination Location, Company, Sale Gross Weight (g)</strong>.</li>
+                        <li><strong>Note:</strong> Internal transfers will only be created for product labels that already exist in the system. If the label or barcode is missing or not found in Odoo, the row will be skipped without creating a transfer.</li>
+                    </ul>
+                </div>
+                <footer>
+                    <button name="action_import" string="Import Transfers" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_inter_branch_transfer_import_wizard" model="ir.actions.act_window">
+        <field name="name">Internal Transfer Script Import</field>
+        <field name="res_model">inter.branch.transfer.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+    <record id="view_inter_branch_transfer_log_wizard_form" model="ir.ui.view">
+        <field name="name">inter.branch.transfer.log.wizard.form</field>
+        <field name="model">inter.branch.transfer.log.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Execution Logs">
+                <sheet>
+                    <field name="log_text" widget="text" style="background-color: #1e1e1e; color: #4af626; font-family: monospace; font-size: 13px; min-height: 400px; width: 100%; border: 1px solid #333; padding: 10px;"/>
+                </sheet>
+                <footer>
+                    <button name="action_close" string="Close" type="object" class="btn-primary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>
