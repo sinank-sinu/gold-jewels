@@ -220,12 +220,15 @@ class AccountMove(models.Model):
                     ], limit=1)
 
                     if not existing_redemption:
-                        self.env['scheme.redemption'].create({
+                        self.env['scheme.redemption'].sudo().create({
                             'scheme_id': scheme.id,
                             'sale_order_id': sale_order.id,
-                            'amount': abs(line.amount_residual or line.balance),
+                            'amount': scheme.total_paid,
                             'date': sale_order.date_order.date() if sale_order and sale_order.date_order else fields.Date.today(),
                         })
+                        if not sale_order.active_scheme_id:
+                            sale_order.sudo().write({'active_scheme_id': scheme.id})
+
         return True
 
     def action_post(self):
@@ -413,20 +416,7 @@ class AccountMove(models.Model):
                             ).create(other_move_vals)
                             other_new_move.action_post()
 
-                            for scheme in schemes:
-                                scheme.write({
-                                    'state': 'redeemed',
-                                    'is_redeemed': True,
-                                })
-                                if sale_order:
-                                    self.env['scheme.redemption'].sudo().create({
-                                        'scheme_id': scheme.id,
-                                        'sale_order_id': sale_order.id,
-                                        'amount': scheme.total_paid,
-                                        'date': sale_order.date_order.date() if sale_order and sale_order.date_order else fields.Date.today(),
-                                    })
-                                    if not sale_order.active_scheme_id:
-                                        sale_order.sudo().write({'active_scheme_id': scheme.id})
+                           
                     return res
 
 
