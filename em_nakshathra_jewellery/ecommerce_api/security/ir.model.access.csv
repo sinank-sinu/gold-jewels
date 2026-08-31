@@ -8,3 +8,8 @@ access_ecommerce_faq_user,ecommerce.faq user,model_ecommerce_faq,base.group_user
 access_ecommerce_faq_public,ecommerce.faq public,model_ecommerce_faq,base.group_public,1,0,0,0
 access_ecommerce_address_user,ecommerce.address user,model_ecommerce_address,base.group_user,1,1,1,1
 access_ecommerce_address_public,ecommerce.address public,model_ecommerce_address,base.group_public,1,1,1,1
+access_ecommerce_product_review_user,ecommerce.product.review user,model_ecommerce_product_review,base.group_user,1,1,1,1
+
+access_ecommerce_product_review_public,ecommerce.product.review public,model_ecommerce_product_review,base.group_public,1,1,1,1
+access_ecommerce_referral_user,ecommerce.referral user,model_ecommerce_referral,base.group_user,1,1,1,1
+access_ecommerce_referral_public,ecommerce.referral public,model_ecommerce_referral,base.group_public,1,1,1,1

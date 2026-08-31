@@ -570,6 +570,10 @@ class EcommerceCartWishlistAPI(http.Controller):
             if not product_id:
                 return {"status": "error", "message": "product_id is required"}
 
+            product = request.env['product.template'].sudo().browse(int(product_id))
+            if not product.exists():
+                return {"status": "error", "message": "Product not found"}
+
             Wishlist = request.env['ecommerce.wishlist'].sudo()
             existing = Wishlist.search([
                 ('customer_id', '=', customer.id),
@@ -613,6 +617,10 @@ class EcommerceCartWishlistAPI(http.Controller):
 
             if not product_id:
                 return self._json_response({"status": "error", "message": "product_id is required"}, 400)
+
+            product = request.env['product.template'].sudo().browse(int(product_id))
+            if not product.exists():
+                return self._json_response({"status": "error", "message": "Product not found"}, 404)
 
             Wishlist = request.env['ecommerce.wishlist'].sudo()
             existing = Wishlist.search([

@@ -68,6 +68,27 @@ class EcommerceBranchAPI(http.Controller):
             
             locations = request.env['stock.location'].sudo().search(location_domain)
 
+            # ── Pre-fetch quants and labels in batch ──
+            all_quants = request.env['stock.quant'].sudo().search([
+                ('product_id.product_tmpl_id', 'in', products.ids),
+                ('location_id', 'in', locations.ids),
+                ('quantity', '>', 0)
+            ])
+            quant_map = {}
+            for q in all_quants:
+                key = (q.product_id.product_tmpl_id.id, q.location_id.id)
+                quant_map.setdefault(key, []).append(q)
+
+            all_labels = request.env['product.label'].sudo().search([
+                ('product_tmpl_id', 'in', products.ids),
+                ('branch_location_id', 'in', locations.ids),
+                ('active', '=', True)
+            ])
+            label_map = {}
+            for l in all_labels:
+                key = (l.product_tmpl_id.id, l.branch_location_id.id)
+                label_map.setdefault(key, []).append(l)
+
             product_data = []
             for prod in products:
                 description = prod.description_sale or prod.description or ""
@@ -82,26 +103,18 @@ class EcommerceBranchAPI(http.Controller):
                 available_locations = []
                 
                 for loc in locations:
-                    quants = request.env['stock.quant'].sudo().search([
-                        ('product_id.product_tmpl_id', '=', prod.id),
-                        ('location_id', '=', loc.id),
-                        ('quantity', '>', 0)
-                    ])
-                    total_qty = sum(quants.mapped('quantity'))
+                    prod_loc_quants = quant_map.get((prod.id, loc.id), [])
+                    total_qty = sum(q.quantity for q in prod_loc_quants)
                     
                     if total_qty > 0:
                         total_stock += total_qty
                         available_locations.append(loc.name)
                         
                         # ── Get label information for this product at this location ──
-                        labels = request.env['product.label'].sudo().search([
-                            ('product_tmpl_id', '=', prod.id),
-                            ('branch_location_id', '=', loc.id),
-                            ('active', '=', True)
-                        ])
+                        prod_loc_labels = label_map.get((prod.id, loc.id), [])
                         
                         label_data = []
-                        for label in labels:
+                        for label in prod_loc_labels:
                             label_data.append({
                                 "label_number": label.label_number,
                                 "label_name": label.name,
@@ -179,6 +192,165 @@ class EcommerceBranchAPI(http.Controller):
             return {"status": "error", "message": str(e)}
 
     # ─────────────────────────────────────────────
+    # SEARCH PRODUCTS API (JSON)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/products/search', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def search_products(self, **kwargs):
+        try:
+            query = (kwargs.get('query') or kwargs.get('search_query') or '').strip()
+            if not query:
+                return {"status": "error", "message": "query or search_query parameter is required"}
+
+            branch_id   = kwargs.get('branch_id')
+            branch_name = (kwargs.get('branch_name') or '').strip()
+            currency_code = kwargs.get('currency')
+            customer_id = kwargs.get('customer_id')
+
+            # Resolve branch if branch_id/branch_name is provided
+            Branch = request.env['res.branch'].sudo()
+            branch = None
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+
+            # Resolve currency
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
+
+            # Build domain: must be saleable, match search query (name/code)
+            domain = [
+                ('sale_ok', '=', True),
+                '|', ('name', 'ilike', query), ('default_code', 'ilike', query)
+            ]
+            if branch:
+                domain.append('|')
+                domain.append(('branch_id', '=', branch.id))
+                domain.append(('branch_id', '=', False))
+
+            products = request.env['product.template'].sudo().search(domain)
+
+            # Resolve stock locations
+            location_domain = []
+            if branch:
+                location_domain.append(('branch_id', '=', branch.id))
+            locations = request.env['stock.location'].sudo().search(location_domain)
+
+            # ── Pre-fetch quants and labels in batch ──
+            all_quants = request.env['stock.quant'].sudo().search([
+                ('product_id.product_tmpl_id', 'in', products.ids),
+                ('location_id', 'in', locations.ids),
+                ('quantity', '>', 0)
+            ])
+            quant_map = {}
+            for q in all_quants:
+                key = (q.product_id.product_tmpl_id.id, q.location_id.id)
+                quant_map.setdefault(key, []).append(q)
+
+            all_labels = request.env['product.label'].sudo().search([
+                ('product_tmpl_id', 'in', products.ids),
+                ('branch_location_id', 'in', locations.ids),
+                ('active', '=', True)
+            ])
+            label_map = {}
+            for l in all_labels:
+                key = (l.product_tmpl_id.id, l.branch_location_id.id)
+                label_map.setdefault(key, []).append(l)
+
+            product_data = []
+            for prod in products:
+                description = prod.description_sale or prod.description or ""
+                purity_name = prod.purity_id.name if prod.purity_id else None
+                purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+                
+                location_stocks = []
+                total_stock = 0
+                available_locations = []
+                
+                for loc in locations:
+                    prod_loc_quants = quant_map.get((prod.id, loc.id), [])
+                    total_qty = sum(q.quantity for q in prod_loc_quants)
+                    
+                    if total_qty > 0:
+                        total_stock += total_qty
+                        available_locations.append(loc.name)
+                        
+                        prod_loc_labels = label_map.get((prod.id, loc.id), [])
+                        
+                        label_data = []
+                        for label in prod_loc_labels:
+                            label_data.append({
+                                "label_number": label.label_number,
+                                "label_name": label.name,
+                                "tag_weight": label.tag_weight,
+                                "grams": label.sale_gross_weight,
+                                "purity": label.purity_id.name if label.purity_id else purity_name,
+                                "purity_percentage": label.purity_id.percentage if label.purity_id else purity_percentage
+                            })
+                        
+                        loc_price = prod.list_price or 0.0
+                        if target_currency != company_currency:
+                            loc_price = company_currency._convert(loc_price, target_currency, company, fields.Date.today())
+
+                        location_stocks.append({
+                            "location_id": loc.id,
+                            "location_name": loc.name,
+                            "location_complete_name": loc.complete_name,
+                            "product_name": prod.name,
+                            "price": round(loc_price, 2),
+                            "description": description,
+                            "image_url": f"/web/image/product.template/{prod.id}/image_1920",
+                            "quantity": total_qty,
+                            "purity": purity_name,
+                            "purity_percentage": purity_percentage,
+                            "labels": label_data
+                        })
+                
+                if (branch and total_stock > 0) or not branch:
+                    prod_price = prod.list_price or 0.0
+                    if target_currency != company_currency:
+                        prod_price = company_currency._convert(prod_price, target_currency, company, fields.Date.today())
+
+                    product_data.append({
+                        "id": prod.id,
+                        "name": prod.name,
+                        "price": round(prod_price, 2),
+                        "description": description,
+                        "image_url": f"/web/image/product.template/{prod.id}/image_1920",
+                        "branch_id": prod.branch_id.id if prod.branch_id else None,
+                        "branch_name": prod.branch_id.name if prod.branch_id else "All Branches",
+                        "total_stock": total_stock,
+                        "available_locations": available_locations,
+                        "location_stocks": location_stocks,
+                        "purity": purity_name,
+                        "purity_percentage": purity_percentage
+                    })
+
+            return {
+                "status": "success",
+                "query": query,
+                "count": len(product_data),
+                "data": product_data,
+                "currency": target_currency.name,
+                "currency_symbol": target_currency.symbol or target_currency.name
+            }
+
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+
     # CUSTOMER REGISTER
     # ─────────────────────────────────────────────
     @http.route('/api/ecommerce/register', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
@@ -274,6 +446,9 @@ class EcommerceBranchAPI(http.Controller):
             if not customer._verify_password(password):
                 return {"status": "error", "message": "Invalid email or password"}
 
+            # Generate authentication token
+            token = customer._generate_token()
+
             return {
                 "status": "success",
                 "message": "Login successful",
@@ -285,6 +460,53 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "auth_token": token,
+                    "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
+                }
+            }
+
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # BIOMETRIC LOGIN
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/biometric_login', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def biometric_login(self, **kwargs):
+        try:
+            token = None
+            auth_header = request.httprequest.headers.get('Authorization', '')
+            if auth_header.startswith('Token '):
+                token = auth_header[6:].strip()
+            
+            if not token:
+                token = kwargs.get('auth_token')
+
+            if not token:
+                return {"status": "error", "message": "auth_token is required in body or Authorization: Token <token> header"}
+
+            Customer = request.env['ecommerce.customer'].sudo()
+            customer = Customer.search([('auth_token', '=', token)], limit=1)
+
+            if not customer:
+                return {"status": "error", "message": "Invalid authentication token"}
+
+            if not customer._verify_token(token):
+                return {"status": "error", "message": "Authentication token expired or invalid"}
+
+            return {
+                "status": "success",
+                "message": "Biometric login successful",
+                "data": {
+                    "customer_id": customer.id,
+                    "name": customer.name,
+                    "first_name": customer.first_name,
+                    "last_name": customer.last_name,
+                    "email": customer.email,
+                    "phone": customer.phone,
+                    "city": customer.city,
+                    "auth_token": token,
+                    "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
             }
 
@@ -959,5 +1181,728 @@ class EcommerceBranchAPI(http.Controller):
             })
         except Exception as e:
             return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # UPDATE CUSTOMER PROFILE API (JSON)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/customer/update', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_customer_profile(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
+
+            vals = {}
+            if 'first_name' in kwargs:
+                vals['first_name'] = kwargs['first_name']
+            if 'last_name' in kwargs:
+                vals['last_name'] = kwargs['last_name']
+            
+            # If name is provided and we aren't explicitly updating first_name/last_name, parse it
+            if 'name' in kwargs and 'first_name' not in kwargs and 'last_name' not in kwargs:
+                name_parts = (kwargs['name'] or '').strip().split(None, 1)
+                if len(name_parts) == 1:
+                    vals['first_name'] = name_parts[0]
+                    vals['last_name'] = ''
+                elif len(name_parts) > 1:
+                    vals['first_name'] = name_parts[0]
+                    vals['last_name'] = name_parts[1]
+
+            if 'phone' in kwargs:
+                vals['phone'] = kwargs['phone']
+            if 'email' in kwargs:
+                email = (kwargs['email'] or '').strip().lower()
+                if email and email != customer.email:
+                    if request.env['ecommerce.customer'].sudo().search([('email', '=', email)], limit=1):
+                        return {"status": "error", "message": "An account with this email already exists"}
+                    vals['email'] = email
+            if 'city' in kwargs:
+                vals['city'] = kwargs['city']
+
+            # Update notification preferences
+            for pref in ['push_notifications', 'order_updates', 'offer_alerts', 'email_newsletter']:
+                if pref in kwargs:
+                    vals[pref] = bool(kwargs[pref])
+
+            if vals:
+                customer.write(vals)
+
+            return {
+                "status": "success",
+                "message": "Profile updated successfully",
+                "customer": {
+                    "id": customer.id,
+                    "first_name": customer.first_name,
+                    "last_name": customer.last_name,
+                    "name": customer.name,
+                    "email": customer.email,
+                    "phone": customer.phone,
+                    "city": customer.city,
+                    "push_notifications": customer.push_notifications,
+                    "order_updates": customer.order_updates,
+                    "offer_alerts": customer.offer_alerts,
+                    "email_newsletter": customer.email_newsletter
+                }
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # CUSTOMER LOGOUT API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/logout', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def logout(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
+
+            return {
+                "status": "success",
+                "message": "Logged out successfully"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # DELETE CUSTOMER ACCOUNT API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/customer/delete', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def delete_customer_account(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            if not customer_id:
+                return {"status": "error", "message": "customer_id is required"}
+
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            if not customer.exists():
+                return {"status": "error", "message": "Customer not found"}
+
+            # Deactivate account by setting active = False
+            customer.write({'active': False})
+
+            return {
+                "status": "success",
+                "message": "Account deleted/deactivated successfully"
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET ACTIVE OFFERS / PROMOTIONS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/active_offers', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_active_offers(self, **kwargs):
+        try:
+            customer_id = kwargs.get('customer_id')
+            category = kwargs.get('category')
+            
+            domain = [('active', '=', True)]
+            
+            if category:
+                domain.append(('notification_category', '=', category))
+            else:
+                domain.append(('notification_category', 'in', ['offer_alert', 'new_arrival']))
+                
+            if customer_id:
+                domain.append('|')
+                domain.append(('customer_id', '=', int(customer_id)))
+                domain.append(('customer_id', '=', False))
+            else:
+                domain.append(('customer_id', '=', False))
+
+            notifications = request.env['ecommerce.notification'].sudo().search(domain, order='created_at desc')
+            
+            offers = []
+            for item in notifications:
+                offers.append({
+                    "id": item.id,
+                    "title": item.title,
+                    "message": item.message,
+                    "image": item.image.decode('utf-8') if isinstance(item.image, bytes) else item.image,
+                    "category": item.notification_category,
+                    "created_at": item.created_at.strftime('%Y-%m-%d %H:%M:%S') if item.created_at else None
+                })
+            
+            return {
+                "status": "success",
+                "offers": offers
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET CATEGORIES API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/categories', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_categories(self, **kwargs):
+        try:
+            parent_name = kwargs.get('parent_name', 'Saleable')
+            domain = []
+            if parent_name:
+                parent = request.env['product.category'].sudo().search([('name', '=', parent_name)], limit=1)
+                if parent:
+                    domain.append(('parent_id', '=', parent.id))
+            
+            if not domain:
+                domain = [('name', 'in', ['Necklaces', 'Earrings', 'Rings', 'Bracelets', 'Wedding Sets'])]
+
+            categories = request.env['product.category'].sudo().search(domain)
+            category_list = []
+            for cat in categories:
+                category_list.append({
+                    "id": cat.id,
+                    "name": cat.name,
+                    "parent_id": cat.parent_id.id if cat.parent_id else None,
+                    "parent_name": cat.parent_id.name if cat.parent_id else None
+                })
+            return {
+                "status": "success",
+                "categories": category_list
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # GET CATEGORY PRODUCTS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/category_products', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_category_products(self, **kwargs):
+        try:
+            category_id = kwargs.get('category_id')
+            category_name = kwargs.get('category_name')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+            currency_code = kwargs.get('currency')
+            customer_id = kwargs.get('customer_id')
+
+            if not category_id and not category_name:
+                return {"status": "error", "message": "category_id or category_name is required"}
+
+            # Resolve Category
+            Category = request.env['product.category'].sudo()
+            category = None
+            if category_id:
+                category = Category.browse(int(category_id))
+            elif category_name:
+                category = Category.search([('name', 'ilike', category_name)], limit=1)
+
+            if not category or not category.exists():
+                return {"status": "error", "message": "Category not found"}
+
+            # Resolve Currency
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+
+            # Resolve Branch
+            Branch = request.env['res.branch'].sudo()
+            branch = None
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+            else:
+                branch = Branch.search([], limit=1)
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
+
+            # Build Domain
+            domain = [
+                ('sale_ok', '=', True),
+                ('categ_id', '=', category.id)
+            ]
+            if branch:
+                domain.append('|')
+                domain.append(('branch_id', '=', branch.id))
+                domain.append(('branch_id', '=', False))
+
+            products = request.env['product.template'].sudo().search(domain)
+
+            # Resolve locations for this branch
+            locations = request.env['stock.location'].sudo()
+            if branch:
+                locations = request.env['stock.location'].sudo().search([('branch_id', '=', branch.id)])
+
+            product_data = []
+            for prod in products:
+                description = prod.description_sale or prod.description or ""
+                purity_name = prod.purity_id.name if prod.purity_id else None
+                purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+                
+                total_stock = 0
+                available_locations = []
+                for loc in locations:
+                    quants = request.env['stock.quant'].sudo().search([
+                        ('product_id.product_tmpl_id', '=', prod.id),
+                        ('location_id', '=', loc.id),
+                        ('quantity', '>', 0)
+                    ])
+                    total_qty = sum(quants.mapped('quantity'))
+                    if total_qty > 0:
+                        total_stock += total_qty
+                        available_locations.append(loc.name)
+
+                # Convert price if needed
+                list_price = prod.list_price or 0.0
+                if target_currency and company_currency and target_currency != company_currency:
+                    converted_price = company_currency._convert(
+                        list_price, target_currency, company, fields.Date.today()
+                    )
+                else:
+                    converted_price = list_price
+
+                # Check if in customer's wishlist
+                in_wishlist = False
+                if customer_id:
+                    wish_item = request.env['ecommerce.wishlist'].sudo().search([
+                        ('customer_id', '=', int(customer_id)),
+                        ('product_id', '=', prod.id)
+                    ], limit=1)
+                    in_wishlist = bool(wish_item)
+
+                product_data.append({
+                    "id": prod.id,
+                    "name": prod.name,
+                    "description": description,
+                    "price": round(converted_price, 2),
+                    "currency": target_currency.name if target_currency else "INR",
+                    "purity": purity_name,
+                    "purity_percentage": purity_percentage,
+                    "total_stock": total_stock,
+                    "available_locations": available_locations,
+                    "in_wishlist": in_wishlist,
+                    "image": prod.image_1920.decode('utf-8') if isinstance(prod.image_1920, bytes) else prod.image_1920
+                })
+
+            return {
+                "status": "success",
+                "category": {
+                    "id": category.id,
+                    "name": category.name
+                },
+                "products": product_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # PRODUCT DETAIL API (JSON)
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/product_detail', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_product_detail(self, **kwargs):
+        try:
+            product_id = kwargs.get('product_id')
+            customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+            currency_code = kwargs.get('currency')
+
+            if not product_id:
+                return {"status": "error", "message": "product_id is required"}
+
+            # Resolve Product Template
+            ProductTemplate = request.env['product.template'].sudo()
+            prod = ProductTemplate.browse(int(product_id))
+            if not prod or not prod.exists():
+                return {"status": "error", "message": "Product not found"}
+
+            # Resolve Currency
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+
+            # Resolve Branch
+            Branch = request.env['res.branch'].sudo()
+            branch = None
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+            else:
+                branch = Branch.search([], limit=1)
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
+
+            # Resolve locations for this branch
+            locations = request.env['stock.location'].sudo()
+            if branch:
+                locations = request.env['stock.location'].sudo().search([('branch_id', '=', branch.id)])
+
+            # Stock Calculation
+            total_stock = 0
+            available_locations = []
+            for loc in locations:
+                quants = request.env['stock.quant'].sudo().search([
+                    ('product_id.product_tmpl_id', '=', prod.id),
+                    ('location_id', '=', loc.id),
+                    ('quantity', '>', 0)
+                ])
+                total_qty = sum(quants.mapped('quantity'))
+                if total_qty > 0:
+                    total_stock += total_qty
+                    available_locations.append(loc.name)
+
+            # Price Conversion
+            list_price = prod.list_price or 0.0
+            if target_currency and company_currency and target_currency != company_currency:
+                converted_price = company_currency._convert(
+                    list_price, target_currency, company, fields.Date.today()
+                )
+            else:
+                converted_price = list_price
+
+            # Check if in customer's wishlist
+            in_wishlist = False
+            if customer_id:
+                wish_item = request.env['ecommerce.wishlist'].sudo().search([
+                    ('customer_id', '=', int(customer_id)),
+                    ('product_id', '=', prod.id)
+                ], limit=1)
+                in_wishlist = bool(wish_item)
+
+            # Calculate average rating and reviews count
+            reviews = request.env['ecommerce.product.review'].sudo().search([
+                ('product_id', '=', prod.id)
+            ])
+            reviews_count = len(reviews)
+            if reviews_count > 0:
+                avg_rating = round(sum(r.rating for r in reviews) / reviews_count, 1)
+            else:
+                avg_rating = 4.8  # Default rating
+
+            # Original price (mimicking a 20% discount if not defined)
+            original_price = round(converted_price / 0.8, 2)
+            discount_percentage = 20
+
+            purity_name = prod.purity_id.name if prod.purity_id else None
+            purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+
+            description = prod.description_sale or prod.description or ""
+
+            product_details = {
+                "id": prod.id,
+                "name": prod.name,
+                "description": description,
+                "price": round(converted_price, 2),
+                "original_price": original_price,
+                "discount_percentage": discount_percentage,
+                "currency": target_currency.name if target_currency else "INR",
+                "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                "purity": purity_name,
+                "purity_percentage": purity_percentage,
+                "total_stock": total_stock,
+                "available_locations": available_locations,
+                "rating": avg_rating,
+                "reviews_count": reviews_count,
+                "in_wishlist": in_wishlist,
+                "image": prod.image_1920.decode('utf-8') if isinstance(prod.image_1920, bytes) else prod.image_1920
+            }
+
+            return {
+                "status": "success",
+                "product": product_details
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # LATEST MODELS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/latest_models', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_latest_models(self, **kwargs):
+        try:
+            limit = kwargs.get('limit', 10)
+            customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+            currency_code = kwargs.get('currency')
+
+            # Resolve Currency
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+
+            # Resolve Branch
+            Branch = request.env['res.branch'].sudo()
+            branch = None
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+            else:
+                branch = Branch.search([], limit=1)
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
+
+            # Resolve locations for this branch
+            locations = request.env['stock.location'].sudo()
+            if branch:
+                locations = request.env['stock.location'].sudo().search([('branch_id', '=', branch.id)])
+
+            # Build Domain for Latest Models
+            domain = [
+                ('sale_ok', '=', True)
+            ]
+            if branch:
+                domain.append('|')
+                domain.append(('branch_id', '=', branch.id))
+                domain.append(('branch_id', '=', False))
+
+            products = request.env['product.template'].sudo().search(domain, order='create_date desc, id desc', limit=int(limit))
+
+            product_data = []
+            for prod in products:
+                description = prod.description_sale or prod.description or ""
+                purity_name = prod.purity_id.name if prod.purity_id else None
+                purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+                
+                total_stock = 0
+                available_locations = []
+                for loc in locations:
+                    quants = request.env['stock.quant'].sudo().search([
+                        ('product_id.product_tmpl_id', '=', prod.id),
+                        ('location_id', '=', loc.id),
+                        ('quantity', '>', 0)
+                    ])
+                    total_qty = sum(quants.mapped('quantity'))
+                    if total_qty > 0:
+                        total_stock += total_qty
+                        available_locations.append(loc.name)
+
+                # Convert price if needed
+                list_price = prod.list_price or 0.0
+                if target_currency and company_currency and target_currency != company_currency:
+                    converted_price = company_currency._convert(
+                        list_price, target_currency, company, fields.Date.today()
+                    )
+                else:
+                    converted_price = list_price
+
+                # Check if in customer's wishlist
+                in_wishlist = False
+                if customer_id:
+                    wish_item = request.env['ecommerce.wishlist'].sudo().search([
+                        ('customer_id', '=', int(customer_id)),
+                        ('product_id', '=', prod.id)
+                    ], limit=1)
+                    in_wishlist = bool(wish_item)
+
+                # Rating
+                reviews = request.env['ecommerce.product.review'].sudo().search([
+                    ('product_id', '=', prod.id)
+                ])
+                reviews_count = len(reviews)
+                if reviews_count > 0:
+                    avg_rating = round(sum(r.rating for r in reviews) / reviews_count, 1)
+                else:
+                    avg_rating = 4.8
+
+                original_price = round(converted_price / 0.8, 2)
+                discount_percentage = 20
+
+                product_data.append({
+                    "id": prod.id,
+                    "name": prod.name,
+                    "description": description,
+                    "price": round(converted_price, 2),
+                    "original_price": original_price,
+                    "discount_percentage": discount_percentage,
+                    "currency": target_currency.name if target_currency else "INR",
+                    "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                    "purity": purity_name,
+                    "purity_percentage": purity_percentage,
+                    "total_stock": total_stock,
+                    "available_locations": available_locations,
+                    "rating": avg_rating,
+                    "reviews_count": reviews_count,
+                    "in_wishlist": in_wishlist,
+                    "badge": "NEW",
+                    "image": prod.image_1920.decode('utf-8') if isinstance(prod.image_1920, bytes) else prod.image_1920
+                })
+
+            return {
+                "status": "success",
+                "count": len(product_data),
+                "products": product_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # RECOMMENDATIONS API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/recommendations', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_recommendations(self, **kwargs):
+        try:
+            limit = kwargs.get('limit', 10)
+            customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+            currency_code = kwargs.get('currency')
+
+            # Resolve Currency
+            Currency = request.env['res.currency'].sudo()
+            target_currency = None
+            if currency_code:
+                target_currency = Currency.search([('name', '=', currency_code.upper())], limit=1)
+            if not target_currency and customer_id:
+                customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+                if customer.exists() and customer.currency_id:
+                    target_currency = customer.currency_id
+
+            # Resolve Branch
+            Branch = request.env['res.branch'].sudo()
+            branch = None
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+            else:
+                branch = Branch.search([], limit=1)
+
+            company = branch.company_id if branch and branch.company_id else request.env.company
+            company_currency = company.currency_id
+            if not target_currency:
+                target_currency = company_currency
+
+            # Resolve locations for this branch
+            locations = request.env['stock.location'].sudo()
+            if branch:
+                locations = request.env['stock.location'].sudo().search([('branch_id', '=', branch.id)])
+
+            # Build Domain for Recommendations
+            domain = [
+                ('sale_ok', '=', True)
+            ]
+            if branch:
+                domain.append('|')
+                domain.append(('branch_id', '=', branch.id))
+                domain.append(('branch_id', '=', False))
+
+            # Fetch a larger pool of products to sort by rating in memory
+            products = request.env['product.template'].sudo().search(domain, limit=100)
+
+            product_pool = []
+            for prod in products:
+                # Rating
+                reviews = request.env['ecommerce.product.review'].sudo().search([
+                    ('product_id', '=', prod.id)
+                ])
+                reviews_count = len(reviews)
+                if reviews_count > 0:
+                    avg_rating = round(sum(r.rating for r in reviews) / reviews_count, 1)
+                else:
+                    avg_rating = 4.8
+
+                product_pool.append((prod, avg_rating, reviews_count))
+
+            # Sort by rating desc, then reviews count desc, then id desc
+            product_pool.sort(key=lambda x: (x[1], x[2], x[0].id), reverse=True)
+
+            # Apply limit
+            product_pool = product_pool[:int(limit)]
+
+            product_data = []
+            for prod, avg_rating, reviews_count in product_pool:
+                description = prod.description_sale or prod.description or ""
+                purity_name = prod.purity_id.name if prod.purity_id else None
+                purity_percentage = prod.purity_id.percentage if prod.purity_id else None
+                
+                total_stock = 0
+                available_locations = []
+                for loc in locations:
+                    quants = request.env['stock.quant'].sudo().search([
+                        ('product_id.product_tmpl_id', '=', prod.id),
+                        ('location_id', '=', loc.id),
+                        ('quantity', '>', 0)
+                    ])
+                    total_qty = sum(quants.mapped('quantity'))
+                    if total_qty > 0:
+                        total_stock += total_qty
+                        available_locations.append(loc.name)
+
+                # Convert price if needed
+                list_price = prod.list_price or 0.0
+                if target_currency and company_currency and target_currency != company_currency:
+                    converted_price = company_currency._convert(
+                        list_price, target_currency, company, fields.Date.today()
+                    )
+                else:
+                    converted_price = list_price
+
+                # Check if in customer's wishlist
+                in_wishlist = False
+                if customer_id:
+                    wish_item = request.env['ecommerce.wishlist'].sudo().search([
+                        ('customer_id', '=', int(customer_id)),
+                        ('product_id', '=', prod.id)
+                    ], limit=1)
+                    in_wishlist = bool(wish_item)
+
+                original_price = round(converted_price / 0.8, 2)
+                discount_percentage = 20
+
+                product_data.append({
+                    "id": prod.id,
+                    "name": prod.name,
+                    "description": description,
+                    "price": round(converted_price, 2),
+                    "original_price": original_price,
+                    "discount_percentage": discount_percentage,
+                    "currency": target_currency.name if target_currency else "INR",
+                    "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                    "purity": purity_name,
+                    "purity_percentage": purity_percentage,
+                    "total_stock": total_stock,
+                    "available_locations": available_locations,
+                    "rating": avg_rating,
+                    "reviews_count": reviews_count,
+                    "in_wishlist": in_wishlist,
+                    "image": prod.image_1920.decode('utf-8') if isinstance(prod.image_1920, bytes) else prod.image_1920
+                })
+
+            return {
+                "status": "success",
+                "count": len(product_data),
+                "products": product_data
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+
+
 
 

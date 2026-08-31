@@ -27,6 +27,27 @@ class EcommerceCustomer(models.Model):
     address_ids = fields.One2many('ecommerce.address', 'customer_id', string='Saved Addresses')
     currency_id = fields.Many2one('res.currency', string='Preferred Currency')
 
+    push_notifications = fields.Boolean(string='Push Notifications Preference', default=True)
+    order_updates = fields.Boolean(string='Order Updates Preference', default=True)
+    offer_alerts = fields.Boolean(string='Offer Alerts Preference', default=True)
+    email_newsletter = fields.Boolean(string='Email Newsletter Preference', default=True)
+    referral_code = fields.Char(string='Referral Code', compute='_compute_referral_code')
+    referral_earning = fields.Float(string='Referral Earnings (₹)', compute='_compute_referral_earning')
+    referred_by_id = fields.Many2one('ecommerce.customer', string='Referred By')
+    review_ids = fields.One2many('ecommerce.product.review', 'customer_id', string='Reviews')
+    referral_ids = fields.One2many('ecommerce.referral', 'referrer_id', string='Referrals')
+
+    def _compute_referral_code(self):
+        for rec in self:
+            if rec.id:
+                rec.referral_code = f"NAKSH-SHINE-{rec.id + 73}"
+            else:
+                rec.referral_code = "NAKSH-SHINE-77"
+
+    def _compute_referral_earning(self):
+        for rec in self:
+            rec.referral_earning = sum(ref.coupon_value for ref in rec.referral_ids if ref.status in ('joined', 'shipped'))
+
     _sql_constraints = [
         ('email_unique', 'UNIQUE(email)', 'A customer with this email already exists.')
     ]

@@ -1,6 +1,5 @@
 from odoo import models, fields, api
 
-
 class EcommerceOrder(models.Model):
     """E-commerce order for website customers."""
     _name = 'ecommerce.order'
@@ -12,25 +11,23 @@ class EcommerceOrder(models.Model):
     customer_id = fields.Many2one('ecommerce.customer', string='Customer', required=True, ondelete='cascade', index=True)
     line_ids = fields.One2many('ecommerce.order.line', 'order_id', string='Order Items')
     
-    # Order totals
     subtotal_amount = fields.Float(string='Subtotal', compute='_compute_amounts', store=True)
     tax_amount = fields.Float(string='Tax Amount', compute='_compute_amounts', store=True)
     total_amount = fields.Float(string='Total Amount', compute='_compute_amounts', store=True)
     
-    # Payment information
     payment_method = fields.Selection([
         ('cash', 'Cash'),
         ('bank', 'Bank Transfer'),
         ('upi', 'UPI'),
         ('card', 'Card')
     ], string='Payment Method', required=True)
+    
     payment_status = fields.Selection([
         ('pending', 'Pending'),
         ('paid', 'Paid'),
         ('failed', 'Failed')
     ], string='Payment Status', default='pending')
     
-    # Order status
     state = fields.Selection([
         ('draft', 'Draft'),
         ('confirmed', 'Confirmed'),
@@ -40,44 +37,46 @@ class EcommerceOrder(models.Model):
         ('cancelled', 'Cancelled')
     ], string='Status', default='draft', required=True)
     
-    # Shipping information
     shipping_address = fields.Text(string='Shipping Address')
     shipping_city = fields.Char(string='Shipping City')
     shipping_phone = fields.Char(string='Shipping Phone')
     
-    # Timestamps
     created_at = fields.Datetime(string='Order Date', default=fields.Datetime.now, readonly=True)
     confirmed_at = fields.Datetime(string='Confirmed Date', readonly=True)
     delivered_at = fields.Datetime(string='Delivered Date', readonly=True)
     
-    # Notes
     notes = fields.Text(string='Order Notes')
-    
+
     @api.depends('line_ids.subtotal')
     def _compute_amounts(self):
         for order in self:
             order.subtotal_amount = sum(order.line_ids.mapped('subtotal'))
-            order.tax_amount = 0.0  # TODO: Implement tax calculation if needed
+            order.tax_amount = 0.0
             order.total_amount = order.subtotal_amount + order.tax_amount
-    
+
     @api.model
     def create(self, vals):
         if vals.get('order_number', 'New') == 'New':
-            vals['order_number'] = self.env['ir.sequence'].next_by_code('ecommerce.order') or 'ORD/%s' % fields.Datetime.now().strftime('%Y%m%d%H%M%S')
+            seq = self.env['ir.sequence'].next_by_code('ecommerce.order')
+            vals['order_number'] = seq if seq else 'ORD/' + fields.Datetime.now().strftime('%Y%m%d%H%M%S')
         return super(EcommerceOrder, self).create(vals)
-    
+
     def action_confirm(self):
         self.write({
             'state': 'confirmed',
             'confirmed_at': fields.Datetime.now()
         })
-    
+
     def action_cancel(self):
-        self.write({'state': 'cancelled'})
-    
+        self.write({
+            'state': 'cancelled'
+        })
+
     def action_ship(self):
-        self.write({'state': 'shipped'})
-    
+        self.write({
+            'state': 'shipped'
+        })
+
     def action_deliver(self):
         self.write({
             'state': 'delivered',
@@ -96,7 +95,7 @@ class EcommerceOrderLine(models.Model):
     quantity = fields.Float(string='Quantity', required=True, default=1.0)
     price = fields.Float(string='Unit Price', required=True)
     subtotal = fields.Float(string='Subtotal', compute='_compute_subtotal', store=True)
-    
+
     @api.depends('quantity', 'price')
     def _compute_subtotal(self):
         for line in self:
