@@ -58,24 +58,21 @@ class PurchaseRegisterXlsx(models.AbstractModel):
             'MC Fine Weight',             # 22
             'MC Amount',                  # 23
             'Total Fine',                 # 24
-            'Packaging Qty',              # 25
-            'Packaging',                  # 26
-            'Diamond Amount',             # 27
-            'Stone Amount',               # 28
-            'Other Amount',               # 29
-            'Unit Price',                 # 30
-            'Subtotal',                   # 31
-            'Taxable Value (Sub Total)',  # 32
-            'CGST',                       # 33
-            'SGST',                       # 34
-            'Tax',                        # 35
-            'Round Off',                  # 36
-            'Bill Amount',                # 37
-            'Total Amount',               # 38
-            'Bank',                       # 39
-            'Cash',                       # 40
-            'Card',                       # 41
-            'UPI'                         # 42
+            'Diamond Amount',             # 25
+            'Stone Amount',               # 26
+            'Other Amount',               # 27
+            'Unit Price',                 # 28
+            'Subtotal',                   # 29
+            'Taxable Value (Sub Total)',  # 30
+            'CGST',                       # 31
+            'SGST',                       # 32
+            'Tax',                        # 33
+            'Bill Amount',                # 34
+            'Total Amount',               # 35
+            'Bank',                       # 36
+            'Cash',                       # 37
+            'Card',                       # 38
+            'UPI'                         # 39
         ]
         
         # Set row height and column widths
@@ -154,16 +151,17 @@ class PurchaseRegisterXlsx(models.AbstractModel):
 
             first_line = True
             for line in order.order_line:
-                sheet.write(row, 0, order.name or '', cell_format)
-                sheet.write(row, 1, order.date_order.date() if order.date_order else '', date_format)
-                sheet.write(row, 2, order.partner_id.name or '', cell_format)
-                sheet.write(row, 3, order.partner_ref or '', cell_format)
-                sheet.write(row, 4, order.branch_id.name if order.branch_id else '', cell_format)
-                sheet.write(row, 5, dict(order._fields['state'].selection).get(order.state, ''), cell_format)
-                sheet.write(row, 6, order.currency_id.name or '', cell_format)
-                sheet.write(row, 7, line.product_id.name or '', cell_format)
-                sheet.write(row, 8, line.product_uom.name or '', cell_format)
-                sheet.write(row, 9, line.purity_id.name if line.purity_id else '', cell_format)
+                col = 0
+                sheet.write(row, col, order.name or '', cell_format); col += 1
+                sheet.write(row, col, order.date_order.date() if order.date_order else '', date_format); col += 1
+                sheet.write(row, col, order.partner_id.name or '', cell_format); col += 1
+                sheet.write(row, col, order.partner_ref or '', cell_format); col += 1
+                sheet.write(row, col, order.branch_id.name if order.branch_id else '', cell_format); col += 1
+                sheet.write(row, col, dict(order._fields['state'].selection).get(order.state, ''), cell_format); col += 1
+                sheet.write(row, col, order.currency_id.name or '', cell_format); col += 1
+                sheet.write(row, col, line.product_id.name or '', cell_format); col += 1
+                sheet.write(row, col, line.product_uom.name or '', cell_format); col += 1
+                sheet.write(row, col, line.purity_id.name if line.purity_id else '', cell_format); col += 1
                 
                 # New columns/values computation
                 gross_weight = line.product_qty or 0
@@ -177,53 +175,50 @@ class PurchaseRegisterXlsx(models.AbstractModel):
                 taxable_value = line.price_subtotal or 0
                 cgst = line.price_tax / 2 if line.price_tax else 0
                 sgst = line.price_tax / 2 if line.price_tax else 0
-                round_off = (order.amount_total or 0) - ((order.amount_untaxed or 0) + (order.amount_tax or 0)) if hasattr(order, 'amount_total') else 0
                 bill_amount = order.amount_total or 0
                 
                 # Weights
-                sheet.write(row, 10, gross_weight, cell_format)
-                sheet.write(row, 11, net_weight, cell_format)
-                sheet.write(row, 12, diamond_weight, cell_format)
-                sheet.write(row, 13, stone_weight, cell_format)
-                sheet.write(row, 14, other_weight, cell_format)
-                sheet.write(row, 15, line.qty_received or 0, cell_format)
+                sheet.write(row, col, gross_weight, cell_format); col += 1
+                sheet.write(row, col, net_weight, cell_format); col += 1
+                sheet.write(row, col, diamond_weight, cell_format); col += 1
+                sheet.write(row, col, stone_weight, cell_format); col += 1
+                sheet.write(row, col, other_weight, cell_format); col += 1
+                sheet.write(row, col, line.qty_received or 0, cell_format); col += 1
                 
                 # Metal & Charges
-                sheet.write(row, 16, line.gold_rate or 0, cell_format)
-                sheet.write(row, 17, line.metal_amount or 0, cell_format)
+                sheet.write(row, col, line.gold_rate or 0, cell_format); col += 1
+                sheet.write(row, col, line.metal_amount or 0, cell_format); col += 1
                 mc_type = ''
                 if hasattr(line, 'purchase_making_charge_type') and line.purchase_making_charge_type:
                     selection_dict = dict(line._fields['purchase_making_charge_type'].selection) if 'purchase_making_charge_type' in line._fields else {}
                     mc_type = selection_dict.get(line.purchase_making_charge_type, line.purchase_making_charge_type)
-                sheet.write(row, 18, mc_type, cell_format)
-                sheet.write(row, 19, line.rate_value or 0, cell_format)
-                sheet.write(row, 20, line.mc_percent or 0, cell_format)
-                sheet.write(row, 21, line.mc_amount or 0, cell_format)
-                sheet.write(row, 22, line.mc_fine or 0, cell_format)
-                sheet.write(row, 23, line.purchase_making_charge_value or 0 if hasattr(line, 'purchase_making_charge_value') else 0, cell_format)
-                sheet.write(row, 24, line.total_fine or 0, cell_format)
-                sheet.write(row, 25, line.product_packaging_qty or 0 if hasattr(line, 'product_packaging_qty') else 0, cell_format)
-                sheet.write(row, 26, line.product_packaging_id.name if hasattr(line, 'product_packaging_id') and line.product_packaging_id else '', cell_format)
-                sheet.write(row, 27, diamond_amount, cell_format)
-                sheet.write(row, 28, stone_amount, cell_format)
-                sheet.write(row, 29, other_amount, cell_format)
-                sheet.write(row, 30, line.price_unit or 0, cell_format)
+                sheet.write(row, col, mc_type, cell_format); col += 1
+                sheet.write(row, col, line.rate_value or 0, cell_format); col += 1
+                sheet.write(row, col, line.mc_percent or 0, cell_format); col += 1
+                sheet.write(row, col, line.mc_amount or 0, cell_format); col += 1
+                sheet.write(row, col, line.mc_fine or 0, cell_format); col += 1
+                sheet.write(row, col, line.purchase_making_charge_value or 0 if hasattr(line, 'purchase_making_charge_value') else 0, cell_format); col += 1
+                sheet.write(row, col, line.total_fine or 0, cell_format); col += 1
+                
+                sheet.write(row, col, diamond_amount, cell_format); col += 1
+                sheet.write(row, col, stone_amount, cell_format); col += 1
+                sheet.write(row, col, other_amount, cell_format); col += 1
+                sheet.write(row, col, line.price_unit or 0, cell_format); col += 1
                 
                 # Billing & Taxes
-                sheet.write(row, 31, line.price_subtotal or 0, cell_format)
-                sheet.write(row, 32, taxable_value, cell_format)
-                sheet.write(row, 33, cgst, cell_format)
-                sheet.write(row, 34, sgst, cell_format)
-                sheet.write(row, 35, line.price_tax or 0, cell_format)
-                sheet.write(row, 36, round_off, cell_format)
-                sheet.write(row, 37, bill_amount if first_line else 0, cell_format)
-                sheet.write(row, 38, order.amount_total or 0, cell_format)
+                sheet.write(row, col, line.price_subtotal or 0, cell_format); col += 1
+                sheet.write(row, col, taxable_value, cell_format); col += 1
+                sheet.write(row, col, cgst, cell_format); col += 1
+                sheet.write(row, col, sgst, cell_format); col += 1
+                sheet.write(row, col, line.price_tax or 0, cell_format); col += 1
+                sheet.write(row, col, bill_amount if first_line else 0, cell_format); col += 1
+                sheet.write(row, col, order.amount_total or 0, cell_format); col += 1
                 
                 # Payments & Settlements
-                sheet.write(row, 39, bank_amt if first_line else 0, cell_format)
-                sheet.write(row, 40, cash_amt if first_line else 0, cell_format)
-                sheet.write(row, 41, card_amt if first_line else 0, cell_format)
-                sheet.write(row, 42, upi_amt if first_line else 0, cell_format)
+                sheet.write(row, col, bank_amt if first_line else 0, cell_format); col += 1
+                sheet.write(row, col, cash_amt if first_line else 0, cell_format); col += 1
+                sheet.write(row, col, card_amt if first_line else 0, cell_format); col += 1
+                sheet.write(row, col, upi_amt if first_line else 0, cell_format); col += 1
                 
                 first_line = False
                 row += 1
