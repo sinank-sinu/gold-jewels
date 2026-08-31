@@ -61,7 +61,7 @@ def _find_or_create_partner(env, name, phone):
         })
     return partner
 
-def run_import_in_background(db_name, uid, file_path):
+def run_import_in_background(db_name, uid, file_path, is_temp=False):
     """ Runs the heavy import in a background thread to prevent Odoo web timeouts. """
     _logger.info("Starting background import thread for %s", file_path)
     
@@ -289,14 +289,60 @@ def run_import_in_background(db_name, uid, file_path):
             env.cr.rollback()
             env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'ERROR: ' + str(e))
             _logger.error("Background Import Failure: %s", str(e))
+        finally:
+            if is_temp and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    _logger.warning("Could not remove temp file %s: %s", file_path, e)
 
 
 class SchemeImportController(http.Controller):
 
-    @http.route('/import/schemes/now', type='http', auth='user')
+    @http.route('/import/schemes', type='http', auth='user')
+    def upload_scheme_form(self, **kwargs):
+        html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Inter', Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5; color: #333; }}
+                    h1 {{ color: #2c3e50; font-weight: 600; }}
+                    .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
+                    .file-input {{ margin: 20px 0; }}
+                    button {{ background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }}
+                    button:hover {{ background: #0056b3; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Upload Scheme Excel File</h1>
+                    <form action="/import/schemes/now" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{request.csrf_token()}"/>
+                        <div class="file-input">
+                            <input type="file" name="file" accept=".xlsx" required="required"/>
+                        </div>
+                        <button type="submit">Upload and Import</button>
+                    </form>
+                </div>
+            </body>
+            </html>
+        """
+        return request.make_response(html_content, headers=[('Content-Type', 'text/html')])
+
+    @http.route('/import/schemes/now', type='http', auth='user', methods=['GET', 'POST'], csrf=False)
     def trigger_scheme_import(self, **kwargs):
-        file_name = 'Scheme Opening HO.xlsx'
-        file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
+        upload_file = kwargs.get('file')
+        is_temp = False
+
+        if upload_file:
+            import tempfile
+            fd, file_path = tempfile.mkstemp(suffix='.xlsx')
+            with os.fdopen(fd, 'wb') as f:
+                f.write(upload_file.read())
+            is_temp = True
+        else:
+            file_name = 'scheme cash(1).xlsx'
+            file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
 
         if not file_path or not os.path.exists(file_path):
             return f"<h1>Error</h1><p>File not found at {file_path}</p>"
@@ -305,7 +351,7 @@ class SchemeImportController(http.Controller):
         uid = request.env.uid
 
         # Launch background thread
-        thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path))
+        thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path, is_temp))
         thread.start()
 
         html_content = """
