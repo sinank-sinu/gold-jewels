@@ -194,6 +194,193 @@ class ProductLabel(models.Model):
     other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
     other_weight_amount = fields.Float(string="Other Weight Amount")
 
+    location_journey = fields.Char(
+        string="Journey",
+        compute="_compute_location_journey"
+    )
+
+    visual_html = fields.Html(
+        string="Visual Timeline",
+        compute="_compute_visual_html"
+    )
+
+    def _compute_visual_html(self):
+        for rec in self:
+            moves = self.env['stock.move.line'].search(
+                [('label_id', '=', rec.id), ('state', '=', 'done')],
+                order='date asc, id asc'
+            )
+
+            if not moves:
+                rec.visual_html = "<div style='text-align:center; padding: 20px; color: #777;'>No tracking history available yet.</div>"
+                continue
+
+            def clean_loc_name(loc):
+                name = loc.display_name
+                if name.startswith('Physical Locations/'):
+                    name = name.replace('Physical Locations/', '', 1)
+                elif name.startswith('Partner Locations/'):
+                    name = name.replace('Partner Locations/', '', 1)
+                elif name.startswith('Virtual Locations/'):
+                    name = name.replace('Virtual Locations/', '', 1)
+                return name
+
+            def get_icon(name):
+                name_lower = name.lower()
+                if 'ho' in name_lower or 'head office' in name_lower:
+                    return 'fa-building'
+                elif 'transit' in name_lower or 'trn' in name_lower:
+                    return 'fa-truck'
+                elif 'branch' in name_lower or 'brc' in name_lower:
+                    return 'fa-shopping-cart'
+                elif 'vendor' in name_lower or 'partner' in name_lower:
+                    return 'fa-industry'
+                elif 'customer' in name_lower or 'final' in name_lower:
+                    return 'fa-user'
+                return 'fa-map-marker'
+
+            stations = []
+            first_name = clean_loc_name(moves[0].location_id)
+            stations.append({
+                'name': first_name,
+                'date': moves[0].date.strftime('%d %b %Y, %I:%M %p') if moves[0].date else '',
+                'icon': get_icon(first_name),
+                'picking_html': ''
+            })
+
+            for move in moves:
+                dest_loc = clean_loc_name(move.location_dest_id)
+                picking = move.picking_id
+                picking_html = ""
+                if picking:
+                    picking_url = f"/web#id={picking.id}&model=stock.picking&view_type=form"
+                    picking_html = f"<a href='{picking_url}' target='_blank' style='display: inline-block; margin-top: 5px; font-size: 10px; font-weight: bold; color: #017e84; text-decoration: none; border: 1px solid #017e84; border-radius: 4px; padding: 3px 6px; background-color: #e8f4f8;'>{picking.name}</a>"
+
+                if stations[-1]['name'] != dest_loc:
+                    stations.append({
+                        'name': dest_loc,
+                        'date': move.date.strftime('%d %b %Y, %I:%M %p') if move.date else '',
+                        'icon': get_icon(dest_loc),
+                        'picking_html': picking_html
+                    })
+                else:
+                    if picking_html and picking_html not in stations[-1].get('picking_html', ''):
+                        if stations[-1]['picking_html']:
+                            stations[-1]['picking_html'] += "<div style='margin-top: 3px;'></div>" + picking_html
+                        else:
+                            stations[-1]['picking_html'] = picking_html
+
+            # Check if sold
+            is_sold = not rec.active or (moves and moves[-1].location_dest_id.usage == 'customer')
+            
+            invoice_html = ''
+            if is_sold:
+                invoice_line = self.env['account.move.line'].sudo().search([
+                    ('label_id', '=', rec.id),
+                    ('move_id.move_type', '=', 'out_invoice'),
+                    ('move_id.state', '!=', 'cancel')
+                ], limit=1, order='id desc')
+                
+                if invoice_line:
+                    invoice = invoice_line.move_id
+                    inv_date = invoice.invoice_date.strftime('%d %b %Y') if invoice.invoice_date else ''
+                    inv_time = invoice.create_date.strftime('%I:%M %p') if invoice.create_date else ''
+                    inv_url = f"/web#id={invoice.id}&model=account.move&view_type=form"
+                    invoice_html = f"<a href='{inv_url}' target='_blank' style='display: inline-block; margin-top: 5px; font-size: 10px; font-weight: bold; color: #d9534f; text-decoration: none; border: 1px solid #d9534f; border-radius: 4px; padding: 3px 6px; background-color: #fdf0f0;'>{invoice.name}</a><br/><span style='font-size:10px; color:#777;'>{inv_date} {inv_time}</span>"
+                else:
+                    sale_line = self.env['sale.order.line'].sudo().search([
+                        ('label_id', '=', rec.id),
+                        ('order_id.state', 'in', ['sale', 'done'])
+                    ], limit=1, order='id desc')
+                    if sale_line:
+                        sale = sale_line.order_id
+                        inv_date = sale.date_order.strftime('%d %b %Y') if sale.date_order else ''
+                        inv_time = sale.date_order.strftime('%I:%M %p') if sale.date_order else ''
+                        sale_url = f"/web#id={sale.id}&model=sale.order&view_type=form"
+                        invoice_html = f"<a href='{sale_url}' target='_blank' style='display: inline-block; margin-top: 5px; font-size: 10px; font-weight: bold; color: #d9534f; text-decoration: none; border: 1px solid #d9534f; border-radius: 4px; padding: 3px 6px; background-color: #fdf0f0;'>{sale.name}</a><br/><span style='font-size:10px; color:#777;'>{inv_date} {inv_time}</span>"
+
+                stations.append({
+                    'name': 'SOLD',
+                    'date': '',
+                    'icon': 'fa-shopping-bag',
+                    'picking_html': invoice_html,
+                    'is_sold_node': True
+                })
+
+            html = """
+            <div style="background: linear-gradient(to right bottom, #ffffff, #f4f6f9); padding: 25px 15px; border: 1px solid #e1e5eb; border-radius: 12px; margin-bottom: 25px; overflow-x: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.03); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                <div style="display: flex; justify-content: flex-start; align-items: flex-start; position: relative; width: max-content; margin: 0 auto;">
+                    <div style="position: absolute; top: 17px; left: 75px; width: calc(100% - 150px); height: 4px; background-color: #5cb85c; z-index: 1; border-radius: 2px;"></div>
+            """
+
+            for index, station in enumerate(stations):
+                color = "#d9534f" if station.get('is_sold_node') else "#5cb85c"
+                check_icon = "fa-star" if station.get('is_sold_node') else "fa-check"
+                shadow_color = "rgba(217, 83, 79, 0.2)" if station.get('is_sold_node') else "rgba(92, 184, 92, 0.2)"
+                
+                html += f"""
+                    <div style="position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; width: 150px; padding: 0 5px; box-sizing: border-box; transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='none'">
+                        <div style="width: 34px; height: 34px; background-color: {color}; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 15px; margin-bottom: 12px; box-shadow: 0 0 0 4px white, 0 4px 10px {shadow_color};"><i class='fa {check_icon}'></i></div>
+                        <div style="width: 48px; height: 48px; background-color: white; border: 1px solid #e1e5eb; border-radius: 12px; display: flex; justify-content: center; align-items: center; font-size: 20px; color: #495057; margin-bottom: 12px; box-shadow: 0 6px 16px rgba(0,0,0,0.06);"><i class='fa {station['icon']}'></i></div>
+                        <div style="text-align: center; font-weight: 600; color: {color}; font-size: 13px; word-wrap: break-word; margin-bottom: 6px; padding: 0 4px; line-height: 1.2;">{station['name']}</div>
+                        <div style="text-align: center; color: #6c757d; font-size: 11px; font-weight: 500; margin-bottom: 8px;">{station['date']}</div>
+                        <div style="text-align: center; width: 100%;">{station['picking_html']}</div>
+                    </div>
+                """
+
+            html += "</div></div>"
+            rec.visual_html = html
+
+    def _compute_location_journey(self):
+        for rec in self:
+            moves = self.env['stock.move.line'].search(
+                [('label_id', '=', rec.id), ('state', '=', 'done')],
+                order='date asc, id asc'
+            )
+            if not moves:
+                rec.location_journey = "New"
+                continue
+                
+            stations = []
+            
+            def clean_loc_name(loc):
+                name = loc.display_name
+                if name.startswith('Physical Locations/'):
+                    name = name.replace('Physical Locations/', '', 1)
+                elif name.startswith('Partner Locations/'):
+                    name = name.replace('Partner Locations/', '', 1)
+                elif name.startswith('Virtual Locations/'):
+                    name = name.replace('Virtual Locations/', '', 1)
+                return name
+                
+            first_loc = clean_loc_name(moves[0].location_id)
+            stations.append(first_loc)
+            
+            for move in moves:
+                dest_loc = clean_loc_name(move.location_dest_id)
+                if not stations or stations[-1] != dest_loc:
+                    stations.append(dest_loc)
+                    
+            rec.location_journey = " ➔ ".join(stations)
+
+    def action_view_tracker(self):
+        """Method to open the visual tracker wizard."""
+        self.ensure_one()
+        moves = self.env['stock.move'].search([('label_id', '=', self.id)])
+        wizard = self.env['label.tracker.wizard'].create({
+            'label_id': self.id,
+            'move_ids': [(6, 0, moves.ids)]
+        })
+        return {
+            'name': 'Journey Tracker',
+            'type': 'ir.actions.act_window',
+            'res_model': 'label.tracker.wizard',
+            'view_mode': 'form',
+            'res_id': wizard.id,
+            'target': 'new',
+        }
+
+
 
     @api.depends('purchase_id', 'job_work_id', 'sale_gross_weight')
     def _compute_unlabelled_weight(self):

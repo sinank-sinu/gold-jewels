@@ -79,6 +79,10 @@
           name="Ornament Labels"
           parent="menu_jewellery_products_root" sequence="60"
           action="em_jewellery_management.action_product_label"/>
+    <menuitem id="menu_product_label_tracker"
+          name="Label Tracker"
+          parent="menu_jewellery_products_root" sequence="70"
+          action="em_jewellery_management.action_product_label_tracker"/>
     <menuitem
         id="menu_jewellery_issue_voucher"
         name="Issue Vouchers"
