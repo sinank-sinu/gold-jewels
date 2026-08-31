@@ -21,6 +21,12 @@ class SaleOrder(models.Model):
         store=True,
     )
 
+    active_scheme_id = fields.Many2one(
+        'jewellery.scheme.enrollment',
+        string="Customer Scheme",
+        readonly=True
+    )
+
 
     @api.depends('order_line.product_id')
     def _compute_has_gold_bullion(self):

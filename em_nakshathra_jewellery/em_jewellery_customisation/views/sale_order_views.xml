@@ -10,6 +10,9 @@
             <xpath expr="//group[@name='sale_total']" position="inside">
                 <field name="amount_rounding" invisible="has_gold_bullion == True"/>
             </xpath>
+            <xpath expr="//page[@name='other_information']//field[@name='company_id']" position="after">
+                <field name="active_scheme_id"/>
+            </xpath>
         </field>
     </record>
 </odoo>
