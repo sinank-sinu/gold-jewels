@@ -39,7 +39,7 @@ class EcommerceMobileAPI(http.Controller):
                     "email": user.login,
                     "employee_id": employee.id if employee else None,
                     "employee_name": employee.name if employee else None,
-                    "job_position": employee.job_id if employee else None
+                    "job_position": employee.job_id.name if employee and employee.job_id else ""
                 }
             }
 
