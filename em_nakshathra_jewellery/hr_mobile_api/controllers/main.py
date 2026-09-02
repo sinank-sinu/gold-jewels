@@ -3,32 +3,7 @@ from odoo.http import request
 import json
 
 class HRMobileAPI(http.Controller):
-
-    def _get_current_user(self, kwargs):
-        user = request.env.user
-        public_user = request.env.ref('base.public_user', raise_if_not_found=False)
-        public_id = public_user.id if public_user else None
-
-        if not user or (public_id and user.id == public_id):
-            uid = request.session.uid or kwargs.get('user_id')
-            if uid:
-                user = request.env['res.users'].sudo().browse(int(uid))
-
-        if user and user.exists() and (not public_id or user.id != public_id):
-            return user
-        return None
-
-    def _get_employee(self, user):
-        if not user:
-            return request.env['hr.employee']
-        employee = user.sudo().employee_id
-        if not employee:
-            employee = request.env['hr.employee'].sudo().search([
-                ('user_id', '=', user.id)
-            ], limit=1)
-        return employee
-
-    # LOGIN
+    #LOGIN
     @http.route('/api/hr/login', type='json', auth='none', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def login(self, **kwargs):
         db_name = kwargs.get('db') or request.db
@@ -51,7 +26,10 @@ class HRMobileAPI(http.Controller):
                 }
 
             user = request.env['res.users'].sudo().browse(uid)
-            employee = self._get_employee(user)
+
+            employee = request.env['hr.employee'].sudo().search([
+                ('user_id', '=', user.id)
+            ], limit=1)
 
             return {
                 "status": "success",
@@ -62,7 +40,7 @@ class HRMobileAPI(http.Controller):
                     "email": user.login,
                     "employee_id": employee.id if employee else None,
                     "employee_name": employee.name if employee else None,
-                    "job_position": employee.job_id.name if employee and employee.job_id else ""
+                    "job_position": employee.job_id if employee else None
                 }
             }
 
@@ -71,8 +49,7 @@ class HRMobileAPI(http.Controller):
                 "status": "error",
                 "message": str(e)
             }
-
-    # LOGOUT
+    #LOGOUT
     @http.route('/api/hr/logout', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def logout(self, **kwargs):
         try:
@@ -88,70 +65,44 @@ class HRMobileAPI(http.Controller):
                 "message": str(e)
             }
     
-    # User Profile API
-    @http.route('/api/hr/user/profile', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    #User Profile API
+    @http.route('/api/hr/user/profile', type='json', auth='user', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_user_profile(self, **kwargs):
-        user = self._get_current_user(kwargs)
-        if not user:
-            return {"status": "error", "message": "Session expired"}
-            
-        employee = self._get_employee(user)
+        user = request.env.user
+        employee = user.employee_id
+        
         if not employee:
             return {"status": "error", "message": "Employee record not found"}
 
         return {
             "status": "success",
             "data": {
-                "name": employee.name or "",
-                "job_title": employee.job_id.name if employee and employee.job_id else "",
+                "name": employee.name,
+                "job_title": employee.job_id if employee else None,
                 "work_email": employee.work_email or "",
                 "work_phone": employee.work_phone or "",
-                "department": employee.department_id.name if employee and employee.department_id else "",
+                "department": employee.department_id.name or "",
             }
         }
 
-    # Today Overview API
-    @http.route('/api/hr/dashboard/overview', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    #Today Overview API
+    @http.route('/api/hr/dashboard/overview', type='json', auth='user', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_today_overview(self, **kwargs):
-        user = self._get_current_user(kwargs)
-        if not user:
-            return {"status": "error", "message": "Session expired"}
-
-        employee = self._get_employee(user)
-        if not employee:
-            return {
-                "status": "success",
-                "data": {
-                    "attendance_state": "checked_out",
-                    "last_check_in": "",
-                    "total_today_hours": 0.0
-                }
-            }
-
-        last_check_in = ""
-        if employee.last_attendance_id and employee.last_attendance_id.check_in:
-            last_check_in = employee.last_attendance_id.check_in.isoformat()
-
+        employee = request.env.user.employee_id
         return {
             "status": "success",
             "data": {
-                "attendance_state": employee.attendance_state or 'checked_out',
-                "last_check_in": last_check_in,
+                "attendance_state": employee.attendance_state, # 'checked_in' or 'checked_out'
+                "last_check_in": employee.last_attendance_id.check_in or "",
                 "total_today_hours": employee.hours_today or 0.0
             }
         }
 
-    # Weekly Attendance API
-    @http.route('/api/hr/dashboard/weekly-attendance', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    #Weekly Attendance API
+    @http.route('/api/hr/dashboard/weekly-attendance', type='json', auth='user', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_weekly_attendance(self, **kwargs):
-        user = self._get_current_user(kwargs)
-        if not user:
-            return {"status": "error", "message": "Session expired"}
-
-        employee = self._get_employee(user)
-        if not employee:
-            return {"status": "success", "data": []}
-
+        employee = request.env.user.employee_id
+        # Search for attendances in the last 7 days
         attendances = request.env['hr.attendance'].sudo().search([
             ('employee_id', '=', employee.id)
         ], limit=7, order='check_in desc')
@@ -159,25 +110,18 @@ class HRMobileAPI(http.Controller):
         history = []
         for att in attendances:
             history.append({
-                "date": att.check_in.date().isoformat() if att.check_in else "",
-                "check_in": att.check_in.isoformat() if att.check_in else "",
-                "check_out": att.check_out.isoformat() if att.check_out else "Working...",
+                "date": att.check_in.date().isoformat(),
+                "check_in": att.check_in,
+                "check_out": att.check_out or "Working...",
                 "worked_hours": att.worked_hours or 0.0
             })
             
         return {"status": "success", "data": history}
 
-    # Team Status API
-    @http.route('/api/hr/team/status', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    #Team Status API
     def get_team_status(self, **kwargs):
-        user = self._get_current_user(kwargs)
-        if not user:
-            return {"status": "error", "message": "Session expired"}
-
-        employee = self._get_employee(user)
-        if not employee:
-            return {"status": "success", "data": []}
-
+        employee = request.env.user.employee_id
+        # Find employees who report to this person
         subordinates = request.env['hr.employee'].sudo().search([
             ('parent_id', '=', employee.id)
         ])
@@ -186,8 +130,40 @@ class HRMobileAPI(http.Controller):
         for sub in subordinates:
             team.append({
                 "name": sub.name,
-                "state": sub.attendance_state or 'checked_out',
-                "job": sub.job_id.name if sub.job_id else ""
+                "state": sub.attendance_state,
+                "job": sub.job_id.name or ""
             })
             
         return {"status": "success", "data": team}
+    
+    #TEST TEAM STATUS API
+    # @http.route('/api/hr/team/status', type='json', auth='user', methods=['POST'], csrf=False)
+    # def get_team_status(self, **kwargs):
+    #     try:
+    #         # Fetch all active employees
+    #         employees = request.env['hr.employee'].sudo().search([])
+
+    #         team_data = []
+    #         for emp in employees:
+    #             team_data.append({
+    #                 "id": emp.id,
+    #                 "name": emp.name,
+    #                 "role": emp.job_id.name or "Staff",
+    #                 "employee_code": "",
+    #                 "department": emp.department_id.name or "General",
+    #                 "work_email": emp.work_email or "",
+    #                 "work_phone": emp.work_phone or "",
+    #                 "department": emp.department_id.name or "",                    
+                  
+    #             })
+
+    #         return {
+    #             "status": "success",
+    #             "count": len(team_data),
+    #             "data": team_data
+    #         }
+    #     except Exception as e:
+    #         return {
+    #             "status": "error",
+    #             "message": str(e)
+    #         }
