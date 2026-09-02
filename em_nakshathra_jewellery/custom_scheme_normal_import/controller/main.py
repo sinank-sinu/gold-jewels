@@ -221,19 +221,62 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
         return -1, -1
 
 class SchemeImportController(http.Controller):
-    @http.route('/import/schemes/normal/now', type='http', auth='user')
+
+    @http.route('/import/schemes/normal', type='http', auth='user')
+    def upload_scheme_normal_form(self, **kwargs):
+        html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Inter', Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5; color: #333; }}
+                    h1 {{ color: #2c3e50; font-weight: 600; }}
+                    .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
+                    .file-input {{ margin: 20px 0; }}
+                    button {{ background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }}
+                    button:hover {{ background: #0056b3; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Upload Normal Scheme Excel File</h1>
+                    <form action="/import/schemes/normal/now" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{request.csrf_token()}"/>
+                        <div class="file-input">
+                            <input type="file" name="file" accept=".xlsx"/>
+                        </div>
+                        <p style="font-size: 12px; color: #666;">Leave empty to use default file</p>
+                        <button type="submit">Upload and Import</button>
+                    </form>
+                </div>
+            </body>
+            </html>
+        """
+        return request.make_response(html_content, headers=[('Content-Type', 'text/html')])
+
+    @http.route('/import/schemes/normal/now', type='http', auth='user', methods=['GET', 'POST'], csrf=False)
     def trigger_scheme_import(self, **kwargs):
-        file_name = 'Gold Scheme New Joining Register April To July.xlsx'
-        file_path = get_module_resource('custom_scheme_normal_import', 'data', file_name)
-        
-        if not file_path or not os.path.exists(file_path):
-            file_path = os.path.join(os.path.dirname(__file__), '..', 'data', file_name)
+        upload_file = kwargs.get('file')
+        tmp_file = kwargs.get('tmp_file')
+        start_row = int(kwargs.get('start_row', 2))
+
+        if upload_file:
+            import tempfile
+            fd, file_path = tempfile.mkstemp(suffix='.xlsx')
+            with os.fdopen(fd, 'wb') as f:
+                f.write(upload_file.read())
+            tmp_file = file_path
+        elif tmp_file and os.path.exists(tmp_file):
+            file_path = tmp_file
+        else:
+            file_name = 'Gold Scheme New Joining Register April To July.xlsx'
+            file_path = get_module_resource('custom_scheme_normal_import', 'data', file_name)
+            
+            if not file_path or not os.path.exists(file_path):
+                file_path = os.path.join(os.path.dirname(__file__), '..', 'data', file_name)
             
         if not file_path or not os.path.exists(file_path):
             return request.make_response(f"<h1>Error</h1><p>File not found at {file_path}</p>", headers=[('Content-Type', 'text/html')])
 
-        start_row = int(kwargs.get('start_row', 2))
-        
         # Auto-delete any corrupted installments (missing journal) when starting a fresh import
         if start_row == 2:
             request.env.cr.execute("""
@@ -312,14 +355,21 @@ class SchemeImportController(http.Controller):
             except Exception as e:
                 _logger.error("Failed to run automatic patches: %s", str(e))
                 request.env.cr.rollback()
+                
+            if tmp_file and os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception as e:
+                    _logger.warning("Could not remove temp file %s: %s", tmp_file, e)
 
             html = "<html><head><style>body{font-family:Arial;text-align:center;margin-top:50px;background:#f9f9f9;}h1{color:#28a745;}</style></head><body><h1>Import Completed Successfully!</h1><p>All rows have been imported. The database has been fully patched for Accounts and Branches.</p></body></html>"
         else:
             progress = min(100, int((end_row / max_row) * 100))
+            tmp_query = f"&tmp_file={tmp_file}" if tmp_file else ""
             html = f"""
             <html>
                 <head>
-                    <meta http-equiv="refresh" content="0; url=/import/schemes/normal/now?start_row={end_row}" />
+                    <meta http-equiv="refresh" content="0; url=/import/schemes/normal/now?start_row={end_row}{tmp_query}" />
                     <style>
                         body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f9f9f9; }}
                         h1 {{ color: #007bff; }}
