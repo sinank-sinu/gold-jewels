@@ -1441,10 +1441,6 @@ if(tot>0)run(); else log('No records found.');
         def pay(amount, jtype, hint='', ref=''):
             if not amount or amount <= 0:
                 return
-            if invoice.amount_residual <= 0:
-                _logger.info("Voucher %s: Skipping payment %s/%s because invoice is already fully paid.", invoice.ref, jtype, hint)
-                return
-
             journal = find_journal(jtype, hint)
             if not journal:
                 _logger.warning("Voucher %s: Journal not found type=%s hint=%s for Company %s", invoice.ref, jtype,
@@ -1470,11 +1466,6 @@ if(tot>0)run(); else log('No records found.');
                 payments = wiz.action_create_payments()
                 if payments and hasattr(payments, 'bank_reference') and ref:
                     payments.write({'bank_reference': ref})
-            except UserError as e:
-                if "nothing left to pay" in str(e).lower() or "already paid" in str(e).lower():
-                    _logger.info("Voucher %s: Ignored payment error: %s", invoice.ref, e)
-                else:
-                    raise
             except Exception as e:
                 _logger.warning("Voucher %s: Payment failed %s/%s: %s", invoice.ref, jtype, hint, e)
                 raise
