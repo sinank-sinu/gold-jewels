@@ -51,6 +51,18 @@ class SaleOrder(models.Model):
     allowed_branch_ids = fields.Many2many('res.branch', store=True,
                                           string="Allowed Branches",
                                           compute='_compute_allowed_branch_ids')
+    total_product_qty = fields.Float(
+        string="Quantity",
+        compute='_compute_order_line_summaries',
+        store=True,
+        digits='Product Unit of Measure'
+    )
+
+    @api.depends('order_line.product_uom_qty')
+    def _compute_order_line_summaries(self):
+        for order in self:
+            lines = order.order_line.filtered(lambda l: not l.display_type)
+            order.total_product_qty = sum(lines.mapped('product_uom_qty'))
 
     @api.depends('company_id')
     def _compute_allowed_branch_ids(self):
