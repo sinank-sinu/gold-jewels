@@ -350,10 +350,53 @@ class EcommerceBranchAPI(http.Controller):
             return {"status": "error", "message": str(e)}
 
     # ─────────────────────────────────────────────
+    # ECOMMERCE BRANCHES LIST
+    # ─────────────────────────────────────────────
+    def _get_branches_data(self):
+        Branch = request.env['res.branch'].sudo()
+        branches = Branch.search([])
+        branch_data = []
+        for b in branches:
+            branch_data.append({
+                "id": b.id,
+                "name": b.name,
+                "code": b.code if hasattr(b, 'code') and b.code else "",
+                "city": b.city if hasattr(b, 'city') and b.city else "",
+            })
+        
+        if not branch_data:
+            branch_data = [
+                {"id": 1, "name": "Calicut Main Branch", "code": "CLT", "city": "Calicut"},
+                {"id": 2, "name": "Cochin Branch", "code": "COK", "city": "Cochin"},
+                {"id": 3, "name": "Trivandrum Branch", "code": "TRV", "city": "Trivandrum"},
+            ]
 
+        return {
+            "status": "success",
+            "data": branch_data
+        }
+
+    @http.route('/api/ecommerce/branches', type='json', auth='public', methods=['POST', 'GET', 'OPTIONS'], cors='*', csrf=False)
+    def get_branches(self, **kwargs):
+        try:
+            return self._get_branches_data()
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route('/api/ecommerce/branches', type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_branches_http(self, **kwargs):
+        try:
+            data = self._get_branches_data()
+            return self._json_response(data)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+
+    # ─────────────────────────────────────────────
     # CUSTOMER REGISTER
     # ─────────────────────────────────────────────
     @http.route('/api/ecommerce/register', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+
     def register(self, **kwargs):
         try:
             first_name      = (kwargs.get('first_name') or '').strip()
@@ -363,6 +406,9 @@ class EcommerceBranchAPI(http.Controller):
             email           = (kwargs.get('email') or '').strip().lower()
             password        = kwargs.get('password') or ''
             confirm_password = kwargs.get('confirm_password') or ''
+            branch_id       = kwargs.get('branch_id')
+            branch_name     = kwargs.get('branch_name')
+
 
             # ── Validation ─────────────────────────────────
             required = {
@@ -384,6 +430,13 @@ class EcommerceBranchAPI(http.Controller):
             if len(password) < 6:
                 return {"status": "error", "message": "Password must be at least 6 characters"}
 
+            # Resolve branch if provided
+            resolved_branch = None
+            if branch_id:
+                resolved_branch = request.env['res.branch'].sudo().browse(int(branch_id))
+            elif branch_name:
+                resolved_branch = request.env['res.branch'].sudo().search([('name', 'ilike', branch_name)], limit=1)
+
             Customer = request.env['ecommerce.customer'].sudo()
 
             # ── Check duplicate email ──────────────────────
@@ -395,7 +448,7 @@ class EcommerceBranchAPI(http.Controller):
             password_hash, salt = dummy._hash_password(password)
 
             # ── Create customer record ─────────────────────
-            customer = Customer.create({
+            customer_vals = {
                 'first_name': first_name,
                 'last_name': last_name,
                 'email': email,
@@ -403,7 +456,11 @@ class EcommerceBranchAPI(http.Controller):
                 'city': city,
                 'password_hash': password_hash,
                 'password_salt': salt,
-            })
+            }
+            if resolved_branch and resolved_branch.exists():
+                customer_vals['branch_id'] = resolved_branch.id
+
+            customer = Customer.create(customer_vals)
 
             # ── Generate authentication token ──
             token = customer._generate_token()
@@ -417,10 +474,13 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "branch_id": customer.branch_id.id if hasattr(customer, 'branch_id') and customer.branch_id else None,
+                    "branch_name": customer.branch_id.name if hasattr(customer, 'branch_id') and customer.branch_id else None,
                     "auth_token": token,
                     "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
             }
+
 
         except Exception as e:
             return {"status": "error", "message": str(e)}

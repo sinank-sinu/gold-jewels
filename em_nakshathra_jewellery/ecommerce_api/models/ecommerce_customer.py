@@ -26,6 +26,8 @@ class EcommerceCustomer(models.Model):
     created_at = fields.Datetime(string='Registered On', default=fields.Datetime.now)
     address_ids = fields.One2many('ecommerce.address', 'customer_id', string='Saved Addresses')
     currency_id = fields.Many2one('res.currency', string='Preferred Currency')
+    branch_id = fields.Many2one('res.branch', string='Preferred Branch')
+
 
     push_notifications = fields.Boolean(string='Push Notifications Preference', default=True)
     order_updates = fields.Boolean(string='Order Updates Preference', default=True)
