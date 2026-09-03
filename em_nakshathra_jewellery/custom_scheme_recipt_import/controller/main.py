@@ -2,7 +2,6 @@ import openpyxl
 import logging
 import os
 import threading
-import shutil
 import odoo
 from datetime import datetime, date, timedelta
 from odoo import http, fields
@@ -62,36 +61,7 @@ def _find_or_create_partner(env, name, phone):
         })
     return partner
 
-def _find_journal(env, journal_name):
-    if not journal_name:
-        journal_name = 'Vyttila'
-    raw_name = str(journal_name).strip()
-    # 1. Exact match with raw name
-    journal = env['account.journal'].search([('name', '=', raw_name)], limit=1)
-    if journal:
-        return journal
-    # 2. Swap Vyttila <-> Vytila
-    alt_name = raw_name.replace('Vyttila', 'Vytila') if 'Vyttila' in raw_name else raw_name.replace('Vytila', 'Vyttila')
-    journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
-    if journal:
-        return journal
-    # 3. Case-insensitive search fallback
-    journal = env['account.journal'].search([('name', 'ilike', raw_name)], limit=1)
-    if journal:
-        return journal
-    journal = env['account.journal'].search([('name', 'ilike', alt_name)], limit=1)
-    if journal:
-        return journal
-    return env['account.journal'].search([
-        '|', '|',
-        ('name', 'ilike', '50200117325578'),
-        ('name', 'ilike', 'Vyttila'),
-        ('name', 'ilike', 'Vytila')
-    ], limit=1)
-
-
-
-def run_import_in_background(db_name, uid, file_path):
+def run_import_in_background(db_name, uid, file_path, is_temp=False):
     """ Runs the heavy import in a background thread to prevent Odoo web timeouts. """
     _logger.info("Starting background import thread for %s", file_path)
     
@@ -103,7 +73,7 @@ def run_import_in_background(db_name, uid, file_path):
                 workbook = openpyxl.load_workbook(file_path, data_only=True)
                 sheet = workbook.active
 
-                h_map = {str(sheet.cell(row=1, column=i).value).strip().lower(): i
+                h_map = {str(sheet.cell(row=1, column=i).value).strip(): i
                          for i in range(1, sheet.max_column + 1)
                          if sheet.cell(row=1, column=i).value}
 
@@ -129,9 +99,8 @@ def run_import_in_background(db_name, uid, file_path):
                         _logger.info("Committed up to row %s. Memory cleared.", row_idx)
 
                     def get_v(col_name, _row=row_idx):
-                        idx = h_map.get(str(col_name).strip().lower())
+                        idx = h_map.get(col_name)
                         return sheet.cell(row=_row, column=idx).value if idx else False
-
 
                     try:
                         with env.cr.savepoint():
@@ -162,7 +131,12 @@ def run_import_in_background(db_name, uid, file_path):
                                         is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
 
                                         journal_name = get_v('Scheme Line/Journal')
-                                        journal = _find_journal(env, journal_name)
+                                        journal = False
+                                        if journal_name:
+                                            journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                            journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                                            if not journal:
+                                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
 
                                         scheme_vals = {
                                             'name': get_v('Name'),
@@ -211,82 +185,15 @@ def run_import_in_background(db_name, uid, file_path):
                             
                             existing_installment = env['jewellery.scheme.installment'].search(dup_domain, limit=1)
                             if existing_installment:
-                                journal_name = get_v('Scheme Line/Journal')
-                                journal = _find_journal(env, journal_name)
-                                upd_vals = {}
-                                if journal and (not existing_installment.journal_id or existing_installment.journal_id.id != journal.id):
-                                    upd_vals['journal_id'] = journal.id
-                                    
-                                if not existing_installment.move_id and journal and line_amount_f:
-                                    if journal.id not in _account_cache:
-                                        ob_acc = env['account.account'].search([
-                                            ('company_id', '=', journal.company_id.id),
-                                            ('name', 'ilike', 'Outstanding Rec')
-                                        ], limit=1)
-                                        if not ob_acc:
-                                            ob_acc = journal.default_account_id
-                                        if not ob_acc:
-                                            ob_acc = env['account.account'].search([
-                                                ('company_id', '=', journal.company_id.id),
-                                                '|',
-                                                ('name', 'ilike', 'opening balance'),
-                                                ('account_type', '=', 'current_assets'),
-                                            ], limit=1)
-                                            
-                                        dr_acc = env['account.account'].search([
-                                            ('company_id', '=', journal.company_id.id),
-                                            ('name', 'ilike', 'Debtor')
-                                        ], limit=1)
-                                        if not dr_acc:
-                                            dr_acc = env['account.account'].search([
-                                                ('company_id', '=', journal.company_id.id),
-                                                ('account_type', '=', 'asset_receivable'),
-                                            ], limit=1)
-                                        _account_cache[journal.id] = (ob_acc, dr_acc)
-
-                                    opening_balance_account, debtors_account = _account_cache[journal.id]
-                                    if opening_balance_account and debtors_account:
-                                        scheme_record = env['jewellery.scheme.enrollment'].browse(scheme_id)
-                                        line_partner_id = scheme_record.partner_id.id if scheme_record else False
-
-                                        move_vals = {
-                                            'journal_id': journal.id,
-                                            'date': line_date or fields.Date.today(),
-                                            'ref': f"Scheme Payment: {last_valid_ticket}",
-                                            'move_type': 'entry',
-                                            'company_id': journal.company_id.id,
-                                        }
-                                        if hasattr(journal, 'branch_id') and journal.branch_id:
-                                            move_vals['branch_id'] = journal.branch_id.id
-                                            
-                                        move_vals['line_ids'] = [
-                                            (0, 0, {
-                                                'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
-                                                'account_id': opening_balance_account.id,
-                                                'debit': line_amount_f,
-                                                'credit': 0.0,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                            (0, 0, {
-                                                'name': f'Scheme Payment - {last_valid_ticket}',
-                                                'account_id': debtors_account.id,
-                                                'debit': 0.0,
-                                                'credit': line_amount_f,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                        ]
-                                        new_move = env['account.move'].create(move_vals)
-                                        new_move.action_post()
-                                        upd_vals['move_id'] = new_move.id
-
-                                if upd_vals:
-                                    existing_installment.write(upd_vals)
-                                    count_lines += 1
                                 continue
 
-
                             journal_name = get_v('Scheme Line/Journal')
-                            journal = _find_journal(env, journal_name)
+                            journal = False
+                            if journal_name:
+                                journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                                if not journal:
+                                    journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
                                 
                             excel_move_name = get_v('Scheme Line/Move')
                             excel_move_id = False
@@ -382,213 +289,59 @@ def run_import_in_background(db_name, uid, file_path):
             env.cr.rollback()
             env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'ERROR: ' + str(e))
             _logger.error("Background Import Failure: %s", str(e))
+        finally:
+            if is_temp and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    _logger.warning("Could not remove temp file %s: %s", file_path, e)
 
 
 class SchemeImportController(http.Controller):
 
-    @http.route('/import/schemes/upload', type='http', auth='user', methods=['GET', 'POST'], csrf=False)
-    def upload_scheme_file(self, **kwargs):
-        if request.httprequest.method == 'POST':
-            try:
-                file = request.httprequest.files.get('file') or kwargs.get('file')
-                if not file or not getattr(file, 'filename', None):
-                    return "<h1>Error</h1><p>No file uploaded. Please select a valid .xlsx file.</p>"
-                
-                upload_dir = '/home/akhil/odoo/uploaded_imports'
-                os.makedirs(upload_dir, exist_ok=True)
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                file_name = getattr(file, 'filename', 'uploaded_file.xlsx')
-                file_path = os.path.join(upload_dir, f"{timestamp}_{file_name}")
-                
-                with open(file_path, 'wb') as f:
-                    if hasattr(file, 'stream'):
-                        file.stream.seek(0)
-                        shutil.copyfileobj(file.stream, f)
-                    elif hasattr(file, 'read'):
-                        f.write(file.read())
-                    else:
-                        f.write(file)
-                
-                db_name = request.env.cr.dbname if (request.env and request.env.cr) else request.db
-                uid = request.env.uid if request.env else odoo.SUPERUSER_ID
-
-                thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path))
-                thread.start()
-
-                return request.redirect('/import/schemes/now?uploaded=1')
-            except Exception as e:
-                _logger.error("Upload error: %s", str(e), exc_info=True)
-                return f"<h1>Upload Error</h1><p>{str(e)}</p>"
-
-        # GET Request - File Upload Page
-        html_content = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Scheme Receipt Bulk Import</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                :root {
-                    --primary: #4f46e5;
-                    --primary-hover: #4338ca;
-                    --bg: #f8fafc;
-                    --card-bg: #ffffff;
-                    --text: #1e293b;
-                    --subtext: #64748b;
-                    --border: #e2e8f0;
-                }
-                body {
-                    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-                    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    margin: 0;
-                    padding: 20px;
-                }
-                .upload-card {
-                    background: var(--card-bg);
-                    width: 100%;
-                    max-width: 580px;
-                    padding: 40px;
-                    border-radius: 20px;
-                    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-                    text-align: center;
-                }
-                .icon-circle {
-                    width: 70px;
-                    height: 70px;
-                    background: #e0e7ff;
-                    color: var(--primary);
-                    border-radius: 50%;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 32px;
-                    margin-bottom: 20px;
-                }
-                h1 { font-size: 24px; font-weight: 700; color: var(--text); margin: 0 0 10px 0; }
-                p.desc { font-size: 14px; color: var(--subtext); margin-bottom: 30px; line-height: 1.5; }
-                
-                .drop-zone {
-                    border: 2px dashed #a5b4fc;
-                    border-radius: 14px;
-                    padding: 35px 20px;
-                    background: #f8fafc;
-                    cursor: pointer;
-                    transition: all 0.2s ease-in-out;
-                    margin-bottom: 25px;
-                }
-                .drop-zone:hover, .drop-zone.dragover {
-                    border-color: var(--primary);
-                    background: #eef2ff;
-                }
-                .drop-zone-text { font-size: 15px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
-                .drop-zone-sub { font-size: 12px; color: var(--subtext); }
-                input[type="file"] { display: none; }
-                
-                .file-info {
-                    display: none;
-                    margin-top: 15px;
-                    padding: 10px 15px;
-                    background: #e0e7ff;
-                    border-radius: 8px;
-                    color: var(--primary);
-                    font-weight: 600;
-                    font-size: 14px;
-                }
-
-                .btn-submit {
-                    width: 100%;
-                    padding: 14px;
-                    background: var(--primary);
-                    color: white;
-                    border: none;
-                    border-radius: 10px;
-                    font-size: 16px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: background 0.2s;
-                    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);
-                }
-                .btn-submit:hover { background: var(--primary-hover); }
-
-                .action-links {
-                    margin-top: 25px;
-                    padding-top: 20px;
-                    border-top: 1px solid var(--border);
-                    display: flex;
-                    justify-content: space-around;
-                }
-                .action-links a {
-                    color: var(--primary);
-                    text-decoration: none;
-                    font-size: 13px;
-                    font-weight: 600;
-                }
-                .action-links a:hover { text-decoration: underline; }
-            </style>
-        </head>
-        <body>
-            <div class="upload-card">
-                <div class="icon-circle">📊</div>
-                <h1>Import Scheme Receipts</h1>
-                <p class="desc">Select or drop any Scheme Receipts Excel file (.xlsx). The background engine will match tickets, partners, journals, and post account entries automatically.</p>
-
-                <form id="uploadForm" action="/import/schemes/upload" method="POST" enctype="multipart/form-data">
-                    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-                        <div class="drop-zone-text">📁 Click or Drag & Drop Excel File</div>
-                        <div class="drop-zone-sub">Supports .xlsx format (e.g. Vyttila Journal, HO Scheme Opening, etc.)</div>
-                        <div class="file-info" id="fileInfo"></div>
-                    </div>
-                    <input type="file" name="file" id="fileInput" accept=".xlsx" onchange="showFileName(this)">
-                    
-                    <button type="submit" class="btn-submit" id="btnSubmit">Start Background Import</button>
-                </form>
-
-                <div class="action-links">
-                    <a href="/import/schemes/now">📈 Monitor Live Progress</a>
+    @http.route('/import/schemes', type='http', auth='user')
+    def upload_scheme_form(self, **kwargs):
+        html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Inter', Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5; color: #333; }}
+                    h1 {{ color: #2c3e50; font-weight: 600; }}
+                    .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }}
+                    .file-input {{ margin: 20px 0; }}
+                    button {{ background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }}
+                    button:hover {{ background: #0056b3; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Upload Scheme Excel File</h1>
+                    <form action="/import/schemes/now" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{request.csrf_token()}"/>
+                        <div class="file-input">
+                            <input type="file" name="file" accept=".xlsx" required="required"/>
+                        </div>
+                        <button type="submit">Upload and Import</button>
+                    </form>
                 </div>
-
-            </div>
-
-            <script>
-                const dropZone = document.getElementById('dropZone');
-                const fileInput = document.getElementById('fileInput');
-
-                dropZone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.add('dragover');
-                });
-                dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-                dropZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.remove('dragover');
-                    if (e.dataTransfer.files.length) {
-                        fileInput.files = e.dataTransfer.files;
-                        showFileName(fileInput);
-                    }
-                });
-
-                function showFileName(input) {
-                    const info = document.getElementById('fileInfo');
-                    if (input.files && input.files[0]) {
-                        info.style.display = 'block';
-                        info.innerText = 'Selected File: ' + input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(1) + ' KB)';
-                    }
-                }
-            </script>
-        </body>
-        </html>
+            </body>
+            </html>
         """
         return request.make_response(html_content, headers=[('Content-Type', 'text/html')])
 
-    @http.route('/import/schemes/vyttila', type='http', auth='user')
-    def trigger_vyttila_import(self, **kwargs):
-        file_path = '/home/akhil/Downloads/NAKSHATHRA PROJECT/xlsx/scheme imports/vytilla journel import.xlsx'
-        if not os.path.exists(file_path):
-            file_name = 'vytilla journel import.xlsx'
+    @http.route('/import/schemes/now', type='http', auth='user', methods=['GET', 'POST'], csrf=False)
+    def trigger_scheme_import(self, **kwargs):
+        upload_file = kwargs.get('file')
+        is_temp = False
+
+        if upload_file:
+            import tempfile
+            fd, file_path = tempfile.mkstemp(suffix='.xlsx')
+            with os.fdopen(fd, 'wb') as f:
+                f.write(upload_file.read())
+            is_temp = True
+        else:
+            file_name = 'scheme cash(1).xlsx'
             file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
 
         if not file_path or not os.path.exists(file_path):
@@ -597,25 +350,9 @@ class SchemeImportController(http.Controller):
         db_name = request.env.cr.dbname
         uid = request.env.uid
 
-        thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path))
+        # Launch background thread
+        thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path, is_temp))
         thread.start()
-
-        return request.redirect('/import/schemes/now?vyttila=1')
-
-    @http.route('/import/schemes/now', type='http', auth='user')
-    def trigger_scheme_import(self, **kwargs):
-        file_name = 'Scheme Opening HO.xlsx'
-        file_path = get_module_resource('custom_scheme_recipt_import', 'data', file_name)
-
-        if kwargs.get('uploaded'):
-            pass # Thread is already running from POST upload
-        elif file_path and os.path.exists(file_path):
-            db_name = request.env.cr.dbname
-            uid = request.env.uid
-            thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path))
-            thread.start()
-
-
 
         html_content = """
             <html>
@@ -748,172 +485,3 @@ class SchemeImportController(http.Controller):
             return f"<h1>Undo Complete</h1><p>Successfully deleted {enr_count} enrollments, {inst_count} installments, and {moves_count} journal entries matching the tickets in the Excel file.</p>"
         except Exception as e:
             return f"<h1>Error during Undo</h1><p>{str(e)}</p>"
-
-    @http.route('/import/schemes/fix_vyttila_journals', type='http', auth='user')
-    def fix_vyttila_journals(self, **kwargs):
-        """ Fixes existing scheme installment records in DB that are missing journal_id for Vyttila entries. """
-        try:
-            env = request.env
-            # 1. Find Vyttila journal
-            journal = env['account.journal'].sudo().search([
-                '|', '|',
-                ('name', 'ilike', '50200117325578'),
-                ('name', 'ilike', 'Vyttila'),
-                ('name', 'ilike', 'Vytila')
-            ], limit=1)
-            
-            if not journal:
-                return "<h1>Error</h1><p>Vyttila journal not found in database.</p>"
-                
-            # 2. Update existing installments for Vyttila tickets precisely
-            file_path = '/home/akhil/Downloads/NAKSHATHRA PROJECT/xlsx/scheme imports/vytilla journel import.xlsx'
-            if os.path.exists(file_path):
-                import openpyxl
-                wb = openpyxl.load_workbook(file_path, data_only=True)
-                sheet = wb.active
-                h_map = {str(sheet.cell(row=1, column=i).value).strip(): i for i in range(1, sheet.max_column + 1) if sheet.cell(row=1, column=i).value}
-                t_col = h_map.get('Ticket Number')
-                tx_col = h_map.get('Scheme Line/Transaction Id')
-                
-                tickets = set()
-                tx_ids = set()
-                for r in range(2, sheet.max_row + 1):
-                    t_val = sheet.cell(row=r, column=t_col).value if t_col else None
-                    tx_val = sheet.cell(row=r, column=tx_col).value if tx_col else None
-                    if t_val:
-                        tickets.add(str(t_val).strip().upper())
-                    if tx_val:
-                        tx_ids.add(str(tx_val).strip())
-                        
-                domain = [
-                    ('move_id', '=', False),
-                    '|',
-                    ('journal_id', '=', False),
-                    ('transaction_id', 'in', list(tx_ids))
-                ]
-                installments = env['jewellery.scheme.installment'].sudo().search(domain)
-                installments = installments.filtered(lambda i: i.enrollment_id and i.enrollment_id.ticket_number and i.enrollment_id.ticket_number.upper() in tickets)
-                fixed_count = len(installments)
-                
-                # Account resolution for move creation
-                ob_acc = env['account.account'].sudo().search([
-                    ('company_id', '=', journal.company_id.id),
-                    ('name', 'ilike', 'Outstanding Rec')
-                ], limit=1)
-                if not ob_acc:
-                    ob_acc = journal.default_account_id
-                if not ob_acc:
-                    ob_acc = env['account.account'].sudo().search([
-                        ('company_id', '=', journal.company_id.id),
-                        '|',
-                        ('name', 'ilike', 'opening balance'),
-                        ('account_type', '=', 'current_assets'),
-                    ], limit=1)
-                    
-                dr_acc = env['account.account'].sudo().search([
-                    ('company_id', '=', journal.company_id.id),
-                    ('name', 'ilike', 'Debtor')
-                ], limit=1)
-                if not dr_acc:
-                    dr_acc = env['account.account'].sudo().search([
-                        ('company_id', '=', journal.company_id.id),
-                        ('account_type', '=', 'asset_receivable'),
-                    ], limit=1)
-
-                moves_created = 0
-                for inst in installments:
-                    inst_vals = {'journal_id': journal.id}
-                    if not inst.move_id and ob_acc and dr_acc and inst.amount > 0:
-                        ticket_num = inst.enrollment_id.ticket_number or ''
-                        partner_id = inst.enrollment_id.partner_id.id if inst.enrollment_id else False
-                        move_vals = {
-                            'journal_id': journal.id,
-                            'date': inst.date or fields.Date.today(),
-                            'ref': f"Scheme Payment: {ticket_num}",
-                            'move_type': 'entry',
-                            'company_id': journal.company_id.id,
-                        }
-                        if hasattr(journal, 'branch_id') and journal.branch_id:
-                            move_vals['branch_id'] = journal.branch_id.id
-                            
-                        move_vals['line_ids'] = [
-                            (0, 0, {
-                                'name': f'Scheme Liability (Opening) - {ticket_num}',
-                                'account_id': ob_acc.id,
-                                'debit': inst.amount,
-                                'credit': 0.0,
-                                'partner_id': partner_id,
-                            }),
-                            (0, 0, {
-                                'name': f'Scheme Payment - {ticket_num}',
-                                'account_id': dr_acc.id,
-                                'debit': 0.0,
-                                'credit': inst.amount,
-                                'partner_id': partner_id,
-                            }),
-                        ]
-                        try:
-                            new_move = env['account.move'].sudo().create(move_vals)
-                            new_move.sudo().action_post()
-                            inst_vals['move_id'] = new_move.id
-                            moves_created += 1
-                        except Exception as move_err:
-                            _logger.warning("Failed to create move for installment %s: %s", inst.id, move_err)
-
-                    inst.sudo().write(inst_vals)
-
-                return f"<h1>Fix Complete</h1><p>Successfully updated ONLY {fixed_count} unassigned imported installment records with Journal <b>'{journal.name}'</b> (ID: {journal.id}) and generated {moves_created} Customer Moves (account.move entries).</p>"
-            else:
-                # Fallback DB-wide fix for missing journal_id
-                installments = env['jewellery.scheme.installment'].sudo().search([('journal_id', '=', False)])
-                fixed_count = len(installments)
-                installments.sudo().write({'journal_id': journal.id})
-                return f"<h1>Fix Complete (Fallback)</h1><p>Successfully updated {fixed_count} installment records with Journal <b>'{journal.name}'</b>.</p>"
-        except Exception as e:
-            return f"<h1>Error fixing DB records</h1><p>{str(e)}</p>"
-
-    @http.route('/import/schemes/revert_fix', type='http', auth='user')
-    def revert_fix_vyttila_journals(self, **kwargs):
-        try:
-            env = request.env
-            file_path = '/home/akhil/Downloads/NAKSHATHRA PROJECT/xlsx/scheme imports/vytilla journel import.xlsx'
-            if not os.path.exists(file_path):
-                return "<h1>Error</h1><p>Excel file not found.</p>"
-
-            import openpyxl
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            sheet = wb.active
-            h_map = {str(sheet.cell(row=1, column=i).value).strip(): i for i in range(1, sheet.max_column + 1) if sheet.cell(row=1, column=i).value}
-            t_col = h_map.get('Ticket Number')
-            tickets = set()
-            for r in range(2, sheet.max_row + 1):
-                val = sheet.cell(row=r, column=t_col).value if t_col else None
-                if val:
-                    tickets.add(str(val).strip().upper())
-
-            enrollments = env['jewellery.scheme.enrollment'].sudo().search([('ticket_number', 'in', list(tickets))])
-            installments = env['jewellery.scheme.installment'].sudo().search([('enrollment_id', 'in', enrollments.ids)])
-
-            moves_to_revert = env['account.move'].sudo().search([('ref', 'in', [f"Scheme Payment: {t}" for t in tickets])])
-            
-            reverted_insts = 0
-            for inst in installments:
-                if inst.move_id and inst.move_id in moves_to_revert:
-                    inst.sudo().write({'move_id': False, 'journal_id': False})
-                    reverted_insts += 1
-                elif inst.journal_id and inst.journal_id.name and ('50200117325578' in inst.journal_id.name or 'Vyttila' in inst.journal_id.name or 'Vytila' in inst.journal_id.name):
-                    if inst.transaction_id:
-                        inst.sudo().write({'journal_id': False})
-                        reverted_insts += 1
-
-            for m in moves_to_revert:
-                if m.state == 'posted':
-                    m.button_draft()
-
-            moves_count = len(moves_to_revert)
-            moves_to_revert.unlink()
-
-            return f"<h1>Revert Complete</h1><p>Successfully unposted and deleted {moves_count} journal entries and reset {reverted_insts} installments back to their original state.</p>"
-        except Exception as e:
-            return f"<h1>Error during Revert</h1><p>{str(e)}</p>"
-
