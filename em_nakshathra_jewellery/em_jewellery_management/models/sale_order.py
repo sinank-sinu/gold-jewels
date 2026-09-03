@@ -472,8 +472,8 @@ class SaleOrder(models.Model):
         for order in self:
             labels = order.order_line.mapped('label_id')
             labels.write({'active': False})
-            for og in order.old_gold_line_ids:
-                order._create_old_gold_stock(og)
+            # for og in order.old_gold_line_ids:
+            #     order._create_old_gold_stock(og)
         return res
 
     def _create_invoices(self, grouped=False, final=False, date=None):
