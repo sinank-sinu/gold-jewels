@@ -117,3 +117,70 @@ class ReplacementCostingItem(models.Model):
             rec.diamond_profit = rec.diamond_amount_sale - rec.diamond_amount_purchase
             rec.stone_profit = rec.stone_amount_sale - rec.stone_amount_purchase
             rec.total_gp = rec.metal_profit + rec.mc_profit + rec.diamond_profit + rec.stone_profit
+
+    def _update_vault_po_details(self):
+        """For vault items, populate purchase fields from the latest Purchase Order of the product and weight fields from Sale Order line."""
+        for item in self:
+            is_vault = item.product_id and (
+                getattr(item.product_id, 'is_vault_item', False) or
+                getattr(item.product_id.product_tmpl_id, 'is_vault_item', False)
+            )
+            if is_vault and item.product_id:
+                so_line = False
+                if item.sale_order_id:
+                    if item.label_id:
+                        so_line = item.sale_order_id.order_line.filtered(lambda l: l.label_id == item.label_id)[:1]
+                    if not so_line and item.product_id:
+                        so_line = item.sale_order_id.order_line.filtered(lambda l: l.product_id == item.product_id)[:1]
+
+                gross_wt = item.gross_weight_purchase
+                net_wt = item.net_weight_purchase
+                dia_wt = item.diamond_weight_purchase
+                stone_wt = item.stone_weight_purchase
+
+                if so_line:
+                    gross_wt = getattr(so_line, 'sale_gross_weight', 0.0) or so_line.product_uom_qty or 0.0
+                    net_wt = so_line.net_weight or 0.0
+                    dia_wt = getattr(so_line, 'sale_diamond_weight_gm', 0.0)
+                    stone_wt = getattr(so_line, 'sale_stone_weight', 0.0)
+
+                po_line = self.env['purchase.order.line'].sudo().search([
+                    ('product_id', '=', item.product_id.id),
+                    ('order_id.state', 'in', ['purchase', 'done']),
+                ], order='id desc', limit=1)
+
+                rate_fine_next_day_1pm = 0.0
+                mc_type = False
+                mc_percent = 0.0
+                if po_line:
+                    po_ref = po_line.order_id
+                    if po_ref and po_ref.date_order:
+                        po_date = po_ref.date_order.date() if isinstance(po_ref.date_order, datetime.datetime) else po_ref.date_order
+                        if po_date:
+                            next_day_date = po_date + datetime.timedelta(days=1)
+                            rate_master = self.env['fine.rate.master'].sudo().search([('date', '=', next_day_date)], limit=1)
+                            history = self.env['fine.rate.history'].sudo().search([('master_id', '=', rate_master.id)], order='update_datetime desc', limit=1)
+                            if history:
+                                rate_fine_next_day_1pm = history.fine_rate
+                            elif rate_master:
+                                rate_fine_next_day_1pm = rate_master.fine_rate
+
+                    mc_type = po_line.purchase_making_charge_type
+                    mc_percent = po_line.mc_percent if mc_type == 'percent' else 0.0
+
+                mc_fine = (net_wt * (mc_percent / 100.0)) if mc_type == 'percent' else 0.0
+
+                item.write({
+                    'gross_weight_purchase': gross_wt,
+                    'net_weight_purchase': net_wt,
+                    'diamond_weight_purchase': dia_wt,
+                    'stone_weight_purchase': stone_wt,
+                    'purchase_making_charge_type': mc_type,
+                    'purchase_mc_percent_fine': mc_percent,
+                    'purchase_mc_amount': 0.0,
+                    'purchase_metal_rate': 0.0,
+                    'diamond_amount_purchase': 0.0,
+                    'stone_amount_purchase': 0.0,
+                    'purchase_mc_fine': mc_fine,
+                    'rate_fine_next_day_1pm': rate_fine_next_day_1pm,
+                })
