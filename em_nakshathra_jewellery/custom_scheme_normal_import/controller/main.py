@@ -138,8 +138,11 @@ def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
 
                         journal_name = get_v(row_idx, 'Scheme Line/Journal')
                         if journal_name:
-                            journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                            journal_name = str(journal_name).strip()
                             journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                            if not journal and 'Vyt' in journal_name:
+                                alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
+                                journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
                         else:
                             journal = False
                         

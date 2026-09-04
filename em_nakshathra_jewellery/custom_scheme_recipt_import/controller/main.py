@@ -133,10 +133,16 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
                                         journal_name = get_v('Scheme Line/Journal')
                                         journal = False
                                         if journal_name:
-                                            journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                            journal_name = str(journal_name).strip()
                                             journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
                                             if not journal:
                                                 journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                                            
+                                            if not journal and 'Vyt' in journal_name:
+                                                alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
+                                                journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
+                                                if not journal:
+                                                    journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
 
                                         scheme_vals = {
                                             'name': get_v('Name'),
@@ -190,10 +196,16 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
                             journal_name = get_v('Scheme Line/Journal')
                             journal = False
                             if journal_name:
-                                journal_name = str(journal_name).strip().replace('Vyttila', 'Vytila')
+                                journal_name = str(journal_name).strip()
                                 journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
                                 if not journal:
                                     journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                                
+                                if not journal and 'Vyt' in journal_name:
+                                    alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
+                                    journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
+                                    if not journal:
+                                        journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
                                 
                             excel_move_name = get_v('Scheme Line/Move')
                             excel_move_id = False
