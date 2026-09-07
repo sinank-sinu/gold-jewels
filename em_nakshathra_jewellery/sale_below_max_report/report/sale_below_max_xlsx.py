@@ -16,7 +16,7 @@ class SaleBelowMaxXlsx(models.AbstractModel):
         row = 0
 
         #REPORT HEADER
-        sheet.merge_range(row, 0, row, 12, 'Sale Below Minimum Report', bold)
+        sheet.merge_range(row, 0, row, 13, 'Sale Below Minimum Report', bold)
         row += 2
 
         sheet.write(row, 0, 'From Date:', bold)
@@ -32,14 +32,15 @@ class SaleBelowMaxXlsx(models.AbstractModel):
         sheet.set_column(0, 0, 18)  # Order
         sheet.set_column(1, 1, 15)  # Date
         sheet.set_column(2, 2, 25)  # Customer
-        sheet.set_column(3, 3, 20)  # Branch
-        sheet.set_column(4, 4, 30)  # Product
-        sheet.set_column(5, 5, 15)  # Purity
-        sheet.set_column(6, 6, 20)  # Label
-        sheet.set_column(7, 12, 15)  # Numbers
+        sheet.set_column(3, 3, 20)  # Salesman
+        sheet.set_column(4, 4, 20)  # Branch
+        sheet.set_column(5, 5, 30)  # Product
+        sheet.set_column(6, 6, 15)  # Purity
+        sheet.set_column(7, 7, 20)  # Label
+        sheet.set_column(8, 13, 15)  # Numbers
 
         #TABLE HEADER
-        headers = ['Order', 'Date', 'Customer', 'Branch', 'Product', 'Purity', 'Label', 'Gross Wgt', 'Actual MC Amt', 'Metal Amt', 'MC % Actual', 'MC % Min', 'Difference']
+        headers = ['Order', 'Date', 'Customer', 'Salesman', 'Branch', 'Product', 'Purity', 'Label', 'Gross Wgt', 'Actual MC Amt', 'Metal Amt', 'MC % Actual', 'MC % Min', 'Difference']
 
         for col, header in enumerate(headers):
             sheet.write(row, col, header, bold)
@@ -74,17 +75,19 @@ class SaleBelowMaxXlsx(models.AbstractModel):
                     else:
                         sheet.write(row, 1, '')
 
-                    sheet.write(row, 2, order.partner_id.name)
-                    sheet.write(row, 3, order.branch_id.name if order.branch_id else '')
-                    sheet.write(row, 4, line.product_id.display_name)
-                    sheet.write(row, 5, line.purity_id.name if line.purity_id else '')
-                    sheet.write(row, 6, line.label_id.name if line.label_id else '')
-                    sheet.write(row, 7, line.product_uom_qty, number_format)
-                    sheet.write(row, 8, line.mc_amount_actual, number_format)
-                    sheet.write(row, 9, line.metal_amount, number_format)
-                    sheet.write(row, 10, line.mc_percent_actual, number_format)
-                    sheet.write(row, 11, line.sale_making_charge_min, number_format)
-                    sheet.write(row, 12,
+                    sheet.write(row, 2, order.partner_id.name or '')
+                    salesman_name = (line.salesman_id.name if hasattr(line, 'salesman_id') and line.salesman_id else False) or (order.user_id.name if order.user_id else '')
+                    sheet.write(row, 3, salesman_name)
+                    sheet.write(row, 4, order.branch_id.name if order.branch_id else '')
+                    sheet.write(row, 5, line.product_id.display_name)
+                    sheet.write(row, 6, line.purity_id.name if line.purity_id else '')
+                    sheet.write(row, 7, line.label_id.name if line.label_id else '')
+                    sheet.write(row, 8, line.product_uom_qty, number_format)
+                    sheet.write(row, 9, line.mc_amount_actual, number_format)
+                    sheet.write(row, 10, line.metal_amount, number_format)
+                    sheet.write(row, 11, line.mc_percent_actual, number_format)
+                    sheet.write(row, 12, line.sale_making_charge_min, number_format)
+                    sheet.write(row, 13,
                                 line.mc_percent_actual - line.sale_making_charge_min,
                                 number_format)
 
