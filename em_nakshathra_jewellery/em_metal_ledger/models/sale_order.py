@@ -28,6 +28,21 @@ class SaleOrderMetalLedger(models.Model):
 
         for order in self:
             po = order.purchase_order_id
+            sale_dt = order.date_order.date() if order.date_order else fields.Date.today()
+            next_day_date = sale_dt + datetime.timedelta(days=1)
+            rate_master = self.env['fine.rate.master'].search([('date', '=', next_day_date)], limit=1)
+            if not rate_master:
+                rate_master = self.env['fine.rate.master'].search([('date', '<=', next_day_date)], order='date desc', limit=1)
+            history = self.env['fine.rate.history'].search([
+                ('master_id', '=', rate_master.id),
+                ('fine_rate', '>', 0)
+            ], order='update_datetime desc', limit=1) if rate_master else False
+
+            rate_fine_next_day_1pm = 0.0
+            if history and history.fine_rate:
+                rate_fine_next_day_1pm = history.fine_rate
+            elif rate_master and rate_master.fine_rate:
+                rate_fine_next_day_1pm = rate_master.fine_rate
 
             for line in order.order_line:
                 if not line.product_id:
@@ -41,20 +56,6 @@ class SaleOrderMetalLedger(models.Model):
                 if line.label_id and not is_vault:
                     label = line.label_id
                     po_ref = label.purchase_id
-                    rate_fine_next_day_1pm = 0.0
-        
-                    if po_ref and po_ref.date_order:
-                        po_date = po_ref.date_order.date() if isinstance(po_ref.date_order, datetime.datetime) else po_ref.date_order
-                        if po_date:
-                            next_day_date = po_date + datetime.timedelta(days=1)
-                            rate_master = self.env['fine.rate.master'].search([('date', '=', next_day_date)], limit=1)
-                            history = self.env['fine.rate.history'].search([('master_id', '=', rate_master.id)], order='update_datetime desc', limit=1)
-
-                            if history:
-                                rate_fine_next_day_1pm = history.fine_rate
-                            elif rate_master:
-                                rate_fine_next_day_1pm = rate_master.fine_rate
-                    
 
                     ReplacementCostingItem.create({
                         'sale_order_id': order.id,
@@ -107,30 +108,6 @@ class SaleOrderMetalLedger(models.Model):
                         is_vault,
                         po_ref.name if po_ref else False
                     )
-
-                    rate_fine_next_day_1pm = 0.0
-
-                    if po_ref and po_ref.date_order:
-                        po_date = (
-                            po_ref.date_order.date()
-                            if isinstance(po_ref.date_order, datetime.datetime)
-                            else po_ref.date_order
-                        )
-
-                        next_day_date = po_date + datetime.timedelta(days=1)
-
-                        rate_master = self.env['fine.rate.master'].search([
-                            ('date', '=', next_day_date)
-                        ], limit=1)
-
-                        history = self.env['fine.rate.history'].search([
-                            ('master_id', '=', rate_master.id),
-                        ], order='update_datetime desc', limit=1)
-
-                        if history:
-                            rate_fine_next_day_1pm = history.fine_rate
-                        elif rate_master:
-                            rate_fine_next_day_1pm = rate_master.fine_rate
 
                     net_wt = line.net_weight or 0.0
                     mc_type = po_line.purchase_making_charge_type if po_line else False

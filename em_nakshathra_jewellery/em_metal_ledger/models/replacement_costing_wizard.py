@@ -77,6 +77,7 @@ class ReplacementCostingWizard(models.TransientModel):
         if items:
             if is_vault:
                 items._update_vault_po_details()
+            items._update_rates_next_day_1pm()
             items._compute_all_fields()
 
         row = 1

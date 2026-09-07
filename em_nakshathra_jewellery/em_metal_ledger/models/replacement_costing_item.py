@@ -1,5 +1,6 @@
 from odoo import models, fields, api
 import datetime
+from collections import defaultdict
 
 class ReplacementCostingItem(models.Model):
     _name = 'replacement.costing.item'
@@ -118,6 +119,39 @@ class ReplacementCostingItem(models.Model):
             rec.stone_profit = rec.stone_amount_sale - rec.stone_amount_purchase
             rec.total_gp = rec.metal_profit + rec.mc_profit + rec.diamond_profit + rec.stone_profit
 
+    def _update_rates_next_day_1pm(self):
+        """Update rate_fine_next_day_1pm based on sale_date + 1 day efficiently in bulk."""
+        all_sale_dates = {rec.sale_date or rec.date for rec in self if (rec.sale_date or rec.date)}
+        if not all_sale_dates:
+            return
+
+        date_map = {}
+        for sale_dt in all_sale_dates:
+            next_day = sale_dt + datetime.timedelta(days=1)
+            rate_master = self.env['fine.rate.master'].sudo().search([('date', '=', next_day)], limit=1)
+            if not rate_master:
+                rate_master = self.env['fine.rate.master'].sudo().search([('date', '<=', next_day)], order='date desc', limit=1)
+            history = self.env['fine.rate.history'].sudo().search([
+                ('master_id', '=', rate_master.id),
+                ('fine_rate', '>', 0)
+            ], order='update_datetime desc', limit=1) if rate_master else False
+            rate = 0.0
+            if history and history.fine_rate:
+                rate = history.fine_rate
+            elif rate_master and rate_master.fine_rate:
+                rate = rate_master.fine_rate
+            date_map[sale_dt] = rate
+
+        to_update = defaultdict(list)
+        for rec in self:
+            s_dt = rec.sale_date or rec.date
+            rate = date_map.get(s_dt, 0.0)
+            if rate and rec.rate_fine_next_day_1pm != rate:
+                to_update[rate].append(rec.id)
+
+        for rate, ids in to_update.items():
+            self.browse(ids).write({'rate_fine_next_day_1pm': rate})
+
     def _update_vault_po_details(self):
         """For vault items, populate purchase fields from the latest Purchase Order of the product and weight fields from Sale Order line."""
         for item in self:
@@ -149,22 +183,25 @@ class ReplacementCostingItem(models.Model):
                     ('order_id.state', 'in', ['purchase', 'done']),
                 ], order='id desc', limit=1)
 
+                sale_dt = item.sale_date or item.date or fields.Date.today()
+                next_day_date = sale_dt + datetime.timedelta(days=1)
+                rate_master = self.env['fine.rate.master'].sudo().search([('date', '=', next_day_date)], limit=1)
+                if not rate_master:
+                    rate_master = self.env['fine.rate.master'].sudo().search([('date', '<=', next_day_date)], order='date desc', limit=1)
+                history = self.env['fine.rate.history'].sudo().search([
+                    ('master_id', '=', rate_master.id),
+                    ('fine_rate', '>', 0)
+                ], order='update_datetime desc', limit=1) if rate_master else False
+
                 rate_fine_next_day_1pm = 0.0
+                if history and history.fine_rate:
+                    rate_fine_next_day_1pm = history.fine_rate
+                elif rate_master and rate_master.fine_rate:
+                    rate_fine_next_day_1pm = rate_master.fine_rate
+
                 mc_type = False
                 mc_percent = 0.0
                 if po_line:
-                    po_ref = po_line.order_id
-                    if po_ref and po_ref.date_order:
-                        po_date = po_ref.date_order.date() if isinstance(po_ref.date_order, datetime.datetime) else po_ref.date_order
-                        if po_date:
-                            next_day_date = po_date + datetime.timedelta(days=1)
-                            rate_master = self.env['fine.rate.master'].sudo().search([('date', '=', next_day_date)], limit=1)
-                            history = self.env['fine.rate.history'].sudo().search([('master_id', '=', rate_master.id)], order='update_datetime desc', limit=1)
-                            if history:
-                                rate_fine_next_day_1pm = history.fine_rate
-                            elif rate_master:
-                                rate_fine_next_day_1pm = rate_master.fine_rate
-
                     mc_type = po_line.purchase_making_charge_type
                     mc_percent = po_line.mc_percent if mc_type == 'percent' else 0.0
 
