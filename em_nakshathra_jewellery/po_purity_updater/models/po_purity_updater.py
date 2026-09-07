@@ -162,6 +162,7 @@ class PoPurityUpdater(models.AbstractModel):
     @api.model
     def _find_order(self, sales_voucher_no, purchase_voucher_no, fields):
         Purchase = self.env['purchase.order']
+        Sale = self.env['sale.order']
         so_voucher_field = fields['so_voucher_field']
         so_to_po_field = fields['so_to_po_field']
         po_sale_order_field = fields['po_sale_order_field']
@@ -174,12 +175,12 @@ class PoPurityUpdater(models.AbstractModel):
             if self._model_has_field('sale.order', so_to_po_field):
                 po = getattr(so, so_to_po_field, False)
             if po:
-                return po
+                return po, so
             # 1b) fallback: relation stored the other way round (PO -> SO)
             if self._model_has_field('purchase.order', po_sale_order_field):
                 order = Purchase.search([(po_sale_order_field, '=', so.id)], limit=1)
                 if order:
-                    return order
+                    return order, so
 
         # 2) fallback: try matching the Purchase Voucher No directly against
         #    a field on purchase.order (old behaviour, kept as a safety net).
@@ -189,41 +190,85 @@ class PoPurityUpdater(models.AbstractModel):
             if not order:
                 order = Purchase.search([('name', '=', purchase_voucher_no)], limit=1)
             if order:
-                return order
+                return order, so or Sale
         elif purchase_voucher_no:
             order = Purchase.search([('name', '=', purchase_voucher_no)], limit=1)
             if order:
-                return order
+                return order, so or Sale
 
-        return Purchase
+        return Purchase, so or Sale
 
     @api.model
-    def _match_line(self, lines, target_value, field_name):
+    def _match_line(self, lines, target_value, field_name, target_purity=None):
         """Pick the line in `lines` (any recordset - PO lines or bill lines)
-        whose `field_name` value is closest to `target_value`, within
-        GROSS_WT_TOLERANCE. If there's only one line, return it regardless."""
+        whose `field_name` value (or fallback quantity/weight) is closest to
+        `target_value`, within GROSS_WT_TOLERANCE.
+        If there's only one line, return it regardless.
+        If no line matches by weight and `target_purity` is provided, fall back
+        to matching by the purity name mentioned in line.name (needed when
+        multiple old-gold items were consolidated into a single PO line)."""
         empty = lines.browse([]) if lines is not False else lines
         if not lines:
             return empty
         if len(lines) == 1:
             return lines
-        if target_value in (None, False) or not field_name:
-            return empty
-        model_name = lines._name
-        if not self._model_has_field(model_name, field_name):
+        if target_value in (None, False) and not target_purity:
             return empty
 
+        # Pass 1: Weight matching with fallback to product_qty / quantity
         best_line = empty
         best_diff = None
-        for line in lines:
-            val = getattr(line, field_name, False)
-            if val in (None, False):
-                continue
-            diff = abs(val - float(target_value))
-            if diff <= self.GROSS_WT_TOLERANCE and (best_diff is None or diff < best_diff):
-                best_diff = diff
-                best_line = line
-        return best_line
+        if target_value not in (None, False):
+            try:
+                target_wt = float(target_value)
+            except (ValueError, TypeError):
+                target_wt = None
+
+            if target_wt is not None:
+                for line in lines:
+                    val = getattr(line, field_name, False) if field_name and hasattr(line, field_name) else False
+                    if val in (None, False) or (isinstance(val, (int, float)) and float(val) == 0.0):
+                        for alt in ('product_qty', 'product_uom_qty', 'quantity', 'gross_weight'):
+                            if hasattr(line, alt):
+                                alt_val = getattr(line, alt, False)
+                                if alt_val not in (None, False):
+                                    try:
+                                        if float(alt_val) != 0.0:
+                                            val = alt_val
+                                            break
+                                    except (ValueError, TypeError):
+                                        pass
+                    if val in (None, False):
+                        continue
+                    try:
+                        diff = abs(float(val) - target_wt)
+                    except (ValueError, TypeError):
+                        continue
+                    if diff <= self.GROSS_WT_TOLERANCE and (best_diff is None or diff < best_diff):
+                        best_diff = diff
+                        best_line = line
+
+        if best_line:
+            return best_line
+
+        # Pass 2: Fallback to purity in line description (consolidated old-gold lines)
+        if target_purity not in (None, False):
+            try:
+                p_num = float(target_purity)
+                candidates = [('%f' % p_num).rstrip('0').rstrip('.'), '%.2f' % p_num]
+                if p_num.is_integer():
+                    candidates.append(str(int(p_num)))
+                candidates = list(dict.fromkeys(candidates))
+
+                for line in lines:
+                    lname = getattr(line, 'name', '') or ''
+                    for c in candidates:
+                        if f'({c}' in lname or f'({c})' in lname or f'{c})' in lname or f' {c}' in lname or f'{c}%' in lname:
+                            return line
+            except (ValueError, TypeError):
+                pass
+
+        return empty
 
     @api.model
     def get_diagnostics(self):
@@ -321,17 +366,31 @@ class PoPurityUpdater(models.AbstractModel):
             candidates.append('%.2f' % purity_number)
 
             rec = Model.browse()
+            # 1. Exact match on name
             for val in candidates:
                 rec = Model.search([('name', '=', val)], limit=1)
                 if rec:
                     break
             if not rec:
-                # try common numeric field names on the purity master
+                # 2. Try common numeric field names on the purity master (exact and float tolerance)
                 for fname in ('value', 'purity', 'percentage', 'karat_value'):
                     if fname in Model._fields:
                         rec = Model.search([(fname, '=', purity_number)], limit=1)
+                        if not rec and hasattr(Model._fields[fname], 'type') and Model._fields[fname].type in ('float', 'integer'):
+                            rec = Model.search([
+                                (fname, '>=', purity_number - 0.1),
+                                (fname, '<=', purity_number + 0.1)
+                            ], limit=1)
                         if rec:
                             break
+            if not rec:
+                # 3. Try substring / ilike match on name, e.g. "21CT(87.5)" matching "87.5"
+                for val in candidates:
+                    rec = Model.search([('name', 'ilike', f'%({val})%')], limit=1)
+                    if not rec:
+                        rec = Model.search([('name', 'ilike', f'%{val}%')], limit=1)
+                    if rec:
+                        break
             if not rec:
                 raise ValueError(
                     "no matching '%s' record found for purity %s (tried: %s)"
@@ -475,6 +534,7 @@ class PoPurityUpdater(models.AbstractModel):
             if processed_rows % COMMIT_EVERY == 0:
                 try:
                     self.env.cr.commit()
+                    self.env.invalidate_all()
                 except Exception:
                     # If the connection is already gone there's nothing left
                     # to commit or continue with - stop the loop cleanly
@@ -490,8 +550,7 @@ class PoPurityUpdater(models.AbstractModel):
             voucher_label = sales_voucher_no or voucher_no or '(blank)'
 
             try:
-                with self.env.cr.savepoint():
-                    order = self._find_order(sales_voucher_no, voucher_no, resolved_fields)
+                order, so = self._find_order(sales_voucher_no, voucher_no, resolved_fields)
             except Exception as e:
                 _logger.exception("Row %s: failed while locating order", row_num)
                 errors.append((row_num, sales_voucher_no or voucher_no, "lookup error: %s" % e))
@@ -508,8 +567,7 @@ class PoPurityUpdater(models.AbstractModel):
                 continue
 
             try:
-                with self.env.cr.savepoint():
-                    line = self._match_line(order.order_line, gross_wt, line_gross_wt_field)
+                line = self._match_line(order.order_line, gross_wt, line_gross_wt_field, target_purity=purity)
             except Exception as e:
                 _logger.exception("Row %s: failed while matching line", row_num)
                 errors.append((row_num, sales_voucher_no or voucher_no, "line match error: %s" % e))
@@ -530,11 +588,11 @@ class PoPurityUpdater(models.AbstractModel):
                 with self.env.cr.savepoint():
                     write_value, _note = self._resolve_purity_write_value(line, line_purity_field, purity)
                     line.write({line_purity_field: write_value})
+                    self._log_update('po_line', 'success', sales_voucher_no, voucher_no, row_num,
+                                      purity, "Purity updated", purchase_order=order, purchase_order_line=line)
                 updated.append((row_num, sales_voucher_no or voucher_no, order.id, line.id, purity))
                 _logger.info("Row %s: updated PO %s line %s purity -> %s",
                              row_num, order.id, line.id, purity)
-                self._log_update('po_line', 'success', sales_voucher_no, voucher_no, row_num,
-                                  purity, "Purity updated", purchase_order=order, purchase_order_line=line)
             except Exception as e:
                 _logger.exception("Row %s: failed to update line %s", row_num, line.id)
                 errors.append((row_num, sales_voucher_no or voucher_no, str(e)))
@@ -546,7 +604,6 @@ class PoPurityUpdater(models.AbstractModel):
             # --- also update the matching line on the related Vendor Bill ---
             try:
                 with self.env.cr.savepoint():
-                    so = self._find_sale_order(sales_voucher_no, so_voucher_field)
                     bill = getattr(so, so_to_bill_field, False) if so and so_to_bill_field else False
                     if not bill:
                         bill = self.env['account.move'].browse()
@@ -554,38 +611,43 @@ class PoPurityUpdater(models.AbstractModel):
                     bill_line = self.env['account.move.line'].browse()
                     if bill:
                         bill_lines = getattr(bill, 'invoice_line_ids', bill.browse([]))
-                        bill_line = self._match_line(bill_lines, gross_wt, bill_line_qty_field)
+                        bill_line = self._match_line(bill_lines, gross_wt, bill_line_qty_field, target_purity=purity)
 
-                    if bill and bill_line:
-                        bill_write_value, _note = self._resolve_purity_write_value(
-                            bill_line, bill_line_purity_field, purity)
-                        bill_line.write({bill_line_purity_field: bill_write_value})
+                    if not bill:
+                        bill_not_found.append((row_num, sales_voucher_no or voucher_no))
+                        self._log_update('bill_line', 'failed', sales_voucher_no, voucher_no, row_num,
+                                          purity, "Vendor Bill not found for this voucher",
+                                          purchase_order=order, purchase_order_line=line)
+                        continue
 
-                if not bill:
-                    bill_not_found.append((row_num, sales_voucher_no or voucher_no))
-                    self._log_update('bill_line', 'failed', sales_voucher_no, voucher_no, row_num,
-                                      purity, "Vendor Bill not found for this voucher",
-                                      purchase_order=order, purchase_order_line=line)
-                    continue
+                    if not bill_line:
+                        bill_no_line_match.append((row_num, sales_voucher_no or voucher_no, gross_wt))
+                        self._log_update('bill_line', 'failed', sales_voucher_no, voucher_no, row_num,
+                                          purity, "No Vendor Bill line matched Gross Wt %s" % gross_wt,
+                                          purchase_order=order, purchase_order_line=line, vendor_bill=bill)
+                        continue
 
-                if not bill_line:
-                    bill_no_line_match.append((row_num, sales_voucher_no or voucher_no, gross_wt))
-                    self._log_update('bill_line', 'failed', sales_voucher_no, voucher_no, row_num,
-                                      purity, "No Vendor Bill line matched Gross Wt %s" % gross_wt,
-                                      purchase_order=order, purchase_order_line=line, vendor_bill=bill)
-                    continue
-
+                    bill_write_value, _note = self._resolve_purity_write_value(
+                        bill_line, bill_line_purity_field, purity)
+                    bill_line.write({bill_line_purity_field: bill_write_value})
+                    self._log_update('bill_line', 'success', sales_voucher_no, voucher_no, row_num,
+                                      purity, "Purity updated", purchase_order=order, purchase_order_line=line,
+                                      vendor_bill=bill, vendor_bill_line=bill_line)
                 bill_updated.append((row_num, sales_voucher_no or voucher_no, bill.id, bill_line.id, purity))
                 _logger.info("Row %s: updated Vendor Bill %s line %s purity -> %s",
                              row_num, bill.id, bill_line.id, purity)
-                self._log_update('bill_line', 'success', sales_voucher_no, voucher_no, row_num,
-                                  purity, "Purity updated", purchase_order=order, purchase_order_line=line,
-                                  vendor_bill=bill, vendor_bill_line=bill_line)
             except Exception as e:
                 _logger.exception("Row %s: failed to update vendor bill line", row_num)
                 bill_errors.append((row_num, sales_voucher_no or voucher_no, str(e)))
                 self._log_update('bill_line', 'failed', sales_voucher_no, voucher_no, row_num,
                                   purity, str(e), purchase_order=order, purchase_order_line=line)
+
+        # Final commit to ensure all remaining rows are saved and cache cleared
+        try:
+            self.env.cr.commit()
+            self.env.invalidate_all()
+        except Exception:
+            _logger.exception("Final commit failed")
 
         return {
             'updated': updated,

@@ -52,7 +52,14 @@ class PoPurityUploadController(http.Controller):
                     _logger.exception(
                         "Could not roll back the DB transaction after upload "
                         "failure - the connection was likely already closed")
-                error = str(e)
+        # If the cursor was closed during processing (e.g. connection dropped),
+        # re-acquire a fresh cursor so request.render can query templates.
+        if request.env.cr.closed:
+            try:
+                new_cr = request.registry.cursor()
+                request.env = request.env(cr=new_cr)
+            except Exception:
+                _logger.exception("Could not acquire new cursor for rendering upload result")
 
         return request.render('po_purity_updater.upload_result_template', {
             'result': result,
