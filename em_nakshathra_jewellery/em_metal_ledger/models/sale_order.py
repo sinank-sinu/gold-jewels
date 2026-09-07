@@ -30,41 +30,29 @@ class SaleOrderMetalLedger(models.Model):
             po = order.purchase_order_id
 
             for line in order.order_line:
-                if line.label_id:
+                if not line.product_id:
+                    continue
+
+                is_vault = (
+                    getattr(line.product_id, 'is_vault_item', False) or
+                    getattr(line.product_id.product_tmpl_id, 'is_vault_item', False)
+                )
+
+                if line.label_id and not is_vault:
                     label = line.label_id
                     po_ref = label.purchase_id
-                    # calculate rate_fine_next_day_1pm
                     rate_fine_next_day_1pm = 0.0
         
                     if po_ref and po_ref.date_order:
-                        # ensure po_date is a date object
-                        po_date = po_ref.date_order.date() if isinstance(po_ref.date_order,
-                                                                         datetime.datetime) else po_ref.date_order
+                        po_date = po_ref.date_order.date() if isinstance(po_ref.date_order, datetime.datetime) else po_ref.date_order
                         if po_date:
                             next_day_date = po_date + datetime.timedelta(days=1)
-                            target_dt = datetime.datetime.combine(next_day_date, datetime.time(13, 0))
-                            end_of_next_day = datetime.datetime.combine(next_day_date, datetime.time(23, 59, 59))
+                            rate_master = self.env['fine.rate.master'].search([('date', '=', next_day_date)], limit=1)
+                            history = self.env['fine.rate.history'].search([('master_id', '=', rate_master.id)], order='update_datetime desc', limit=1)
 
-                            _logger.info(
-                                "Searching Fine Rate History between %s and %s",
-                                target_dt,
-                                end_of_next_day
-                            )
-                            rate_master = self.env['fine.rate.master'].search([
-                                ('date', '=', next_day_date)
-                            ], limit=1)
-                            history = self.env['fine.rate.history'].search([
-                                ('master_id', '=', rate_master.id),
-                            ], order='update_datetime desc', limit=1)
-
-                            _logger.info(
-                                "History Found = %s | Rate = %s",
-                                history.id if history else False,
-                                history.fine_rate if history else 0.0
-                            )
                             if history:
                                 rate_fine_next_day_1pm = history.fine_rate
-                            else:
+                            elif rate_master:
                                 rate_fine_next_day_1pm = rate_master.fine_rate
                     
 
@@ -77,20 +65,17 @@ class SaleOrderMetalLedger(models.Model):
                         'label_id': label.id,
                         'purity_id': label.purity_id.id,
                         'pcs_from_sale': 1,
-                        # line.product_uom_qty,
                         'product_id': label.product_id.id,
                         'gross_weight_purchase': label.purchase_gross_weight,
                         'net_weight_purchase': label.purchase_net_weight,
                         'diamond_weight_purchase': label.purchase_diamond_weight_gm,
                         'stone_weight_purchase': label.purchase_stone_weight,
-                        #custom fields
                         'purchase_making_charge_type': label.purchase_making_charge_type,
                         'purchase_mc_percent_fine': (
                             label.purchase_making_charge_value
                             if label.purchase_making_charge_type == 'percent'
                             else 0.0
                         ),
-
                         'purchase_mc_amount': (
                             label.purchase_making_charge_amount
                             if label.purchase_making_charge_type in ('amount', 'rate_per_gram')
@@ -102,7 +87,7 @@ class SaleOrderMetalLedger(models.Model):
                         'purchase_mc_fine': label.mc_fine,
                         'rate_fine_next_day_1pm': rate_fine_next_day_1pm,
                         'sale_metal_rate_manual': line.gold_rate,
-                        'sale_mc_percent':line.mc_percent_actual,
+                        'sale_mc_percent': line.mc_percent_actual,
                         'metal_amount_sale': line.metal_amount,
                         'mc_amount_sale': line.mc_amount_actual,
                         'diamond_amount_sale': label.sale_diamond_rate,
@@ -117,8 +102,9 @@ class SaleOrderMetalLedger(models.Model):
                     po_ref = po_line.order_id if po_line else False
 
                     _logger.info(
-                        "No Label Found. Product=%s, Latest PO=%s",
+                        "Product=%s (Is Vault=%s), Latest PO=%s",
                         line.product_id.display_name,
+                        is_vault,
                         po_ref.name if po_ref else False
                     )
 
@@ -146,45 +132,44 @@ class SaleOrderMetalLedger(models.Model):
                         elif rate_master:
                             rate_fine_next_day_1pm = rate_master.fine_rate
 
-                    # TEMPORARY
-                    # We will fill the purchase values later
+                    net_wt = line.net_weight or 0.0
+                    mc_type = po_line.purchase_making_charge_type if po_line else False
+                    mc_percent = po_line.mc_percent if po_line and mc_type == 'percent' else 0.0
+                    mc_amount = 0.0 if is_vault else (
+                        (po_line.rate_value * net_wt) if po_line and mc_type == 'rate_per_gram'
+                        else po_line.mc_amount if po_line and mc_type == 'amount'
+                        else 0.0
+                    )
+                    mc_fine = (net_wt * (po_line.mc_percent / 100.0)) if po_line and mc_type == 'percent' else 0.0
+
                     ReplacementCostingItem.create({
                         'sale_order_id': order.id,
                         'date': order.date_order.date() if order.date_order else fields.Date.today(),
                         'branch_id': order.branch_id.id if hasattr(order, 'branch_id') else False,
                         'salesman_id': order.user_id.id,
                         'sales_voucher_name': order.name,
-                        'label_id': False,
+                        'label_id': line.label_id.id if line.label_id else False,
                         'product_id': line.product_id.id,
-                        'purity_id': line.purity_id.id,
-                        'pcs_from_sale': 1,
-                        'gross_weight_purchase': po_line.product_uom_qty,
+                        'purity_id': line.purity_id.id if line.purity_id else (po_line.purity_id.id if po_line and po_line.purity_id else False),
+                        'pcs_from_sale': line.product_uom_qty or 1,
+                        'gross_weight_purchase': getattr(line, 'sale_gross_weight', 0.0) or line.product_uom_qty or 0.0,
                         'net_weight_purchase': line.net_weight or 0.0,
-                        'diamond_weight_purchase': line.sale_diamond_weight_gm or 0.0,
-                        'stone_weight_purchase': line.sale_stone_weight or 0.0,
-                        'purchase_making_charge_type': po_line.purchase_making_charge_type if po_line else False,
-                        'purchase_mc_percent_fine': po_line.mc_percent if po_line and po_line.purchase_making_charge_type == 'percent' else 0.0,
-                        'purchase_mc_amount': (
-                            po_line.rate_value * line.net_weight if po_line and po_line.purchase_making_charge_type == 'rate_per_gram'
-                            else po_line.mc_amount if po_line and po_line.purchase_making_charge_type == 'amount'
-                            else 0.0
-                        ),
-                        'purchase_metal_rate': po_line.gold_rate if po_line else 0.0,
-                        'diamond_amount_purchase': po_line.diamond_rate if po_line else 0.0,
-                        'stone_amount_purchase': po_line.stone_rate if po_line else 0.0,
-                        'purchase_mc_fine': line.net_weight * po_line.mc_percent if po_line and po_line.purchase_making_charge_type == 'percent' else 0.0,
-                        'metal_qty_on_fine': line.net_weight * (line.purity_id.percentage / 100.0) if line.purity_id and line.net_weight else 0.0,
-                        'metal_amount_purchase': (line.net_weight * (line.purity_id.percentage / 100.0) * po_line.gold_rate) if line.purity_id and line.net_weight and po_line else 0.0,
-                        'purchase_mc_on_fine_qty': line.net_weight * (po_line.mc_percent / 100.0) if po_line and po_line.purchase_making_charge_type == 'percent' else 0.0,
-                        'purchase_mc_value': (line.net_weight * (po_line.mc_percent / 100.0) * po_line.gold_rate) if po_line and po_line.purchase_making_charge_type == 'percent' else (po_line.mc_amount if po_line and po_line.purchase_making_charge_type == 'amount' else 0.0),
-
+                        'diamond_weight_purchase': getattr(line, 'sale_diamond_weight_gm', 0.0),
+                        'stone_weight_purchase': getattr(line, 'sale_stone_weight', 0.0),
+                        'purchase_making_charge_type': mc_type,
+                        'purchase_mc_percent_fine': mc_percent,
+                        'purchase_mc_amount': mc_amount,
+                        'purchase_metal_rate': 0.0 if is_vault else (po_line.gold_rate if po_line else 0.0),
+                        'diamond_amount_purchase': 0.0 if is_vault else (po_line.diamond_rate if po_line else 0.0),
+                        'stone_amount_purchase': 0.0 if is_vault else (po_line.stone_rate if po_line else 0.0),
+                        'purchase_mc_fine': mc_fine,
                         'rate_fine_next_day_1pm': rate_fine_next_day_1pm,
                         'sale_metal_rate_manual': line.gold_rate,
                         'sale_mc_percent': line.mc_percent_actual,
                         'metal_amount_sale': line.metal_amount,
                         'mc_amount_sale': line.mc_amount_actual,
-                        'diamond_amount_sale': line.sale_diamond_rate,
-                        'stone_amount_sale': line.sale_stone_rate,
+                        'diamond_amount_sale': line.sale_diamond_rate if hasattr(line, 'sale_diamond_rate') and line.sale_diamond_rate else (line.label_id.sale_diamond_rate if line.label_id else 0.0),
+                        'stone_amount_sale': line.sale_stone_rate if hasattr(line, 'sale_stone_rate') and line.sale_stone_rate else (line.label_id.sale_stone_rate if line.label_id else 0.0),
                     })
 
     def _create_metal_ledger_on_confirm(self):
