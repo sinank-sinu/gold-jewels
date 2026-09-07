@@ -156,21 +156,28 @@ class SaleOrder(models.Model):
             raise ValidationError(_("Cash/Bank journal not found."))
 
         for order in self:
-            product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+
+            # FIX: Add sudo() to avoid OLD GOLD product access error
+            product = self.env.ref(
+                'em_jewellery_management.product_old_gold',
+                raise_if_not_found=False
+            ).sudo()
+
             company_id = order.company_id.id or self.env.company.id
-            
+
             if product and product.company_id and product.company_id.id != company_id:
                 product = self.env['product.product'].sudo().search([
                     ('name', '=ilike', 'Old Gold'),
                     ('company_id', 'in', [company_id, False])
                 ], limit=1)
+
                 if not product:
                     product = self.env['product.product'].sudo().search([
                         ('is_old_gold', '=', True),
                         ('name', 'not ilike', 'Scrap'),
                         ('company_id', 'in', [company_id, False])
                     ], limit=1)
-                    
+
             if not product:
                 raise ValidationError(_("Old Gold product not configured for company."))
 
@@ -232,18 +239,23 @@ class SaleOrder(models.Model):
                 if not total_weight:
                     continue
 
-                rate = total_amount / total_weight  # 👈 derived gold rate
+                rate = total_amount / total_weight
 
                 PurchaseLine.create({
                     'order_id': po.id,
                     'product_id': product.id,
                     'name': f'Old Gold Purchase ({purity.name})',
-                    'product_qty': total_weight,  # ✅ grams
+
+                    # ADDED: Purity in Purchase Order Line
+                    'purity_id': purity.id,
+
+                    'product_qty': total_weight,
                     'gold_rate': rate,
                     'price_unit': rate,  # ✅ gold rate
                     'product_uom': product.uom_po_id.id,
                     'taxes_id': [(6, 0, [])],
                 })
+
             # ------------------------------------------------
             # 4️⃣ CONFIRM PO
             # ------------------------------------------------
@@ -268,6 +280,12 @@ class SaleOrder(models.Model):
             # ------------------------------------------------
             bill_action = po.action_create_invoice()
             bill = AccountMove.browse(bill_action['res_id'])
+
+            for bill_line in bill.invoice_line_ids:
+                purchase_line = bill_line.purchase_line_id
+
+                if purchase_line and purchase_line.purity_id:
+                    bill_line.purity_id = purchase_line.purity_id.id
 
             target_date = self.env.context.get('old_gold_invoice_date')
             if not target_date:
