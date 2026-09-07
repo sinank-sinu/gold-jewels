@@ -1,9 +1,75 @@
 import json
+import random
+import datetime
+import logging
 from odoo import http, fields
 from odoo.http import request, Response
 
+_logger = logging.getLogger(__name__)
+
 
 class EcommerceBranchAPI(http.Controller):
+
+    def _resolve_branch(self, kwargs, customer=None):
+        """
+        Resolve Branch object prioritizing:
+        1. Registered customer's saved branch (from customer parameter, customer_id, or auth_token)
+        2. Active HTTP Session saved branch (from registration or previous login)
+        3. Explicit kwargs['branch_id'] / kwargs['branch_name'] if no authenticated customer branch exists
+        4. Default fallback branch (Calicut ID 11 / First available branch)
+        """
+        Branch = request.env['res.branch'].sudo()
+        branch_id = kwargs.get('branch_id')
+        branch_name = (kwargs.get('branch_name') or '').strip()
+        customer_id = kwargs.get('customer_id')
+
+        branch = None
+
+        # 1. From customer object or customer_id
+        if not customer and customer_id:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+
+        if not customer or not customer.exists():
+            token = None
+            auth_header = request.httprequest.headers.get('Authorization', '')
+            if auth_header.startswith('Token '):
+                token = auth_header[6:].strip()
+            if not token:
+                token = kwargs.get('auth_token')
+            if token:
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                if cust and cust.exists():
+                    customer = cust
+
+        if customer and customer.exists() and customer.branch_id:
+            branch = customer.branch_id
+
+        # 2. From request session (saved from registration / login)
+        if (not branch or not branch.exists()) and request.session and request.session.get('branch_id'):
+            sess_branch = Branch.browse(int(request.session['branch_id']))
+            if sess_branch.exists():
+                branch = sess_branch
+
+        # 3. Explicit branch_id or branch_name parameter (only if no customer/session branch exists)
+        if (not branch or not branch.exists()):
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                found_branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+                if found_branch:
+                    branch = found_branch
+
+        # 4. Default fallback to Calicut (ID 11) or first available branch
+        if not branch or not branch.exists():
+            branch = Branch.search([('id', '=', 11)], limit=1)
+        if not branch or not branch.exists():
+            branch = Branch.search([], limit=1)
+
+        # Store into session for continuity across subsequent API calls
+        if branch and branch.exists() and request.session:
+            request.session['branch_id'] = branch.id
+
+        return branch
 
     # ─────────────────────────────────────────────
     # BRANCH PRODUCTS
@@ -11,15 +77,16 @@ class EcommerceBranchAPI(http.Controller):
     @http.route('/api/ecommerce/branch_products', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_branch_products(self, **kwargs):
         try:
-            branch_id   = kwargs.get('branch_id')
-            branch_name = (kwargs.get('branch_name') or '').strip()
+            branch = self._resolve_branch(kwargs)
+            if not branch or not branch.exists():
+                return {"status": "error", "message": "Branch not found"}
+
+            branch_id = branch.id
+            resolved_branch_name = branch.name
             location_id = kwargs.get('location_id')
             location_name = (kwargs.get('location_name') or '').strip()
             currency_code = kwargs.get('currency')
             customer_id = kwargs.get('customer_id')
-
-            if not branch_id and not branch_name:
-                return {"status": "error", "message": "branch_id or branch_name is required"}
 
             # ── Resolve target currency for price conversion ──
             Currency = request.env['res.currency'].sudo()
@@ -30,18 +97,6 @@ class EcommerceBranchAPI(http.Controller):
                 customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
                 if customer.exists() and customer.currency_id:
                     target_currency = customer.currency_id
-            
-            # ── Resolve branch_name → branch_id if name was given ──
-            Branch = request.env['res.branch'].sudo()
-            if branch_name and not branch_id:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
-                if not branch:
-                    return {"status": "error", "message": f"Branch '{branch_name}' not found"}
-                branch_id = branch.id
-                resolved_branch_name = branch.name
-            else:
-                branch = Branch.browse(int(branch_id))
-                resolved_branch_name = branch.name if branch else str(branch_id)
 
             company = branch.company_id if branch and branch.company_id else request.env.company
             company_currency = company.currency_id
@@ -154,8 +209,8 @@ class EcommerceBranchAPI(http.Controller):
                         "price": round(prod_price, 2),
                         "description": description,
                         "image_url": f"/web/image/product.template/{prod.id}/image_1920",
-                        "branch_id": prod.branch_id.id if prod.branch_id else None,
-                        "branch_name": prod.branch_id.name if prod.branch_id else "All Branches",
+                        "branch_id": prod.branch_id.id if prod.branch_id else branch_id,
+                        "branch_name": prod.branch_id.name if prod.branch_id else resolved_branch_name,
                         "total_stock": total_stock,
                         "available_locations": available_locations,
                         "location_stocks": location_stocks,
@@ -167,6 +222,7 @@ class EcommerceBranchAPI(http.Controller):
             response_data = {
                 "status": "success",
                 "branch": resolved_branch_name,
+                "branch_id": branch_id,
                 "count": len(product_data),
                 "data": product_data,
                 "currency": target_currency.name,
@@ -206,13 +262,8 @@ class EcommerceBranchAPI(http.Controller):
             currency_code = kwargs.get('currency')
             customer_id = kwargs.get('customer_id')
 
-            # Resolve branch if branch_id/branch_name is provided
-            Branch = request.env['res.branch'].sudo()
-            branch = None
-            if branch_id:
-                branch = Branch.browse(int(branch_id))
-            elif branch_name:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+            # ── Resolve Branch ──
+            branch = self._resolve_branch(kwargs)
 
             # Resolve currency
             Currency = request.env['res.currency'].sudo()
@@ -328,8 +379,8 @@ class EcommerceBranchAPI(http.Controller):
                         "price": round(prod_price, 2),
                         "description": description,
                         "image_url": f"/web/image/product.template/{prod.id}/image_1920",
-                        "branch_id": prod.branch_id.id if prod.branch_id else None,
-                        "branch_name": prod.branch_id.name if prod.branch_id else "All Branches",
+                        "branch_id": prod.branch_id.id if prod.branch_id else (branch.id if branch else None),
+                        "branch_name": prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches"),
                         "total_stock": total_stock,
                         "available_locations": available_locations,
                         "location_stocks": location_stocks,
@@ -340,6 +391,8 @@ class EcommerceBranchAPI(http.Controller):
             return {
                 "status": "success",
                 "query": query,
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "count": len(product_data),
                 "data": product_data,
                 "currency": target_currency.name,
@@ -462,25 +515,31 @@ class EcommerceBranchAPI(http.Controller):
 
             customer = Customer.create(customer_vals)
 
-            # ── Generate authentication token ──
             token = customer._generate_token()
+
+            # Store in request session for continuous API calls
+            if request.session:
+                request.session['customer_id'] = customer.id
+                if customer.branch_id:
+                    request.session['branch_id'] = customer.branch_id.id
 
             return {
                 "status": "success",
                 "message": "Registration successful",
+                "branch": customer.branch_id.name if customer.branch_id else "All Branches",
+                "branch_id": customer.branch_id.id if customer.branch_id else None,
                 "data": {
                     "customer_id": customer.id,
                     "name": customer.name,
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
-                    "branch_id": customer.branch_id.id if hasattr(customer, 'branch_id') and customer.branch_id else None,
-                    "branch_name": customer.branch_id.name if hasattr(customer, 'branch_id') and customer.branch_id else None,
+                    "branch_id": customer.branch_id.id if customer.branch_id else None,
+                    "branch_name": customer.branch_id.name if customer.branch_id else None,
                     "auth_token": token,
                     "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
             }
-
 
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -493,6 +552,8 @@ class EcommerceBranchAPI(http.Controller):
         try:
             email    = (kwargs.get('email') or '').strip().lower()
             password = kwargs.get('password') or ''
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
 
             if not email or not password:
                 return {"status": "error", "message": "Email and password are required"}
@@ -506,12 +567,35 @@ class EcommerceBranchAPI(http.Controller):
             if not customer._verify_password(password):
                 return {"status": "error", "message": "Invalid email or password"}
 
+            # Only set preferred branch if customer doesn't already have a saved branch
+            if not customer.branch_id:
+                if branch_id:
+                    branch = request.env['res.branch'].sudo().browse(int(branch_id))
+                    if branch.exists():
+                        customer.write({'branch_id': branch.id})
+                elif branch_name:
+                    branch = request.env['res.branch'].sudo().search([('name', 'ilike', branch_name)], limit=1)
+                    if branch.exists():
+                        customer.write({'branch_id': branch.id})
+
             # Generate authentication token
             token = customer._generate_token()
+
+            resolved_branch = customer.branch_id
+            if not resolved_branch or not resolved_branch.exists():
+                resolved_branch = self._resolve_branch(kwargs, customer=customer)
+
+            # Store in request session for continuous API calls
+            if request.session:
+                request.session['customer_id'] = customer.id
+                if resolved_branch:
+                    request.session['branch_id'] = resolved_branch.id
 
             return {
                 "status": "success",
                 "message": "Login successful",
+                "branch": resolved_branch.name if resolved_branch else "All Branches",
+                "branch_id": resolved_branch.id if resolved_branch else None,
                 "data": {
                     "customer_id": customer.id,
                     "name": customer.name,
@@ -520,6 +604,8 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "branch_id": resolved_branch.id if resolved_branch else None,
+                    "branch_name": resolved_branch.name if resolved_branch else None,
                     "auth_token": token,
                     "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
@@ -554,9 +640,15 @@ class EcommerceBranchAPI(http.Controller):
             if not customer._verify_token(token):
                 return {"status": "error", "message": "Authentication token expired or invalid"}
 
+            resolved_branch = customer.branch_id
+            if not resolved_branch or not resolved_branch.exists():
+                resolved_branch = self._resolve_branch(kwargs, customer=customer)
+
             return {
                 "status": "success",
                 "message": "Biometric login successful",
+                "branch": resolved_branch.name if resolved_branch else "All Branches",
+                "branch_id": resolved_branch.id if resolved_branch else None,
                 "data": {
                     "customer_id": customer.id,
                     "name": customer.name,
@@ -565,13 +657,192 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "branch_id": resolved_branch.id if resolved_branch else None,
+                    "branch_name": resolved_branch.name if resolved_branch else None,
                     "auth_token": token,
                     "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
                 }
             }
-
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    def _send_otp_sms(self, phone, otp):
+        _logger.info("\n=== ECOMMERCE OTP LOG ===")
+        _logger.info("PHONE: %s | OTP: %s", phone, otp)
+        _logger.info("==========================\n")
+        if not phone:
+            return False
+        try:
+            api_url = request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_api_url', 'https://api.xpresssms.in/api/v2/SendBulkSMS')
+            api_key = request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_api_key', 'nUvKhbmpknZTeVr8WzjBKx180Qd6p/pQ6smsMv0e6Y8=')
+            client_id = request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_client_id', 'fd4e0c95-91f6-40d1-80d0-eab5d913a4e3')
+            sender_id = request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_sender_id', 'NAKGND')
+            msg_template = request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_message_template', '{otp} is your OTP to login to the NAKSHATHRA GOLD AND DIAMOND LLP application. OTP is valid for 5 minutes. Please do not share the OTP.')
+            peid = (request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_peid') or '1601764169804801352').strip()
+            otp_template_id = (request.env['ir.config_parameter'].sudo().get_param('em_otp_login.xpresssms_otp_template_id') or '1607100000000289598').strip()
+
+            digits = ''.join(c for c in phone if c.isdigit())
+            if len(digits) == 11 and digits.startswith('0'):
+                digits = digits[1:]
+            if len(digits) == 10:
+                digits = '91' + digits
+
+            if api_key and client_id and digits:
+                body = msg_template.format(otp=otp) if msg_template else f"Your verification code is {otp}."
+                payload = {
+                    'SenderId': sender_id or 'NAKGND',
+                    'templateId': otp_template_id or '1607100000000289598',
+                    'principleEntityId': peid or '1601764169804801352',
+                    'MessageParameters': [
+                        {
+                            'Number': digits,
+                            'Text': body
+                        }
+                    ],
+                    'ApiKey': api_key,
+                    'ClientId': client_id
+                }
+                import requests
+                requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'}, timeout=5)
+        except Exception as e:
+            _logger.warning("Could not send OTP SMS: %s", e)
+
+    # ─────────────────────────────────────────────
+    # OTP SEND / REQUEST API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/otp/send', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def otp_send(self, **kwargs):
+        """
+        Send / Request OTP for phone or email.
+        """
+        try:
+            phone = (kwargs.get('phone') or '').strip()
+            email = (kwargs.get('email') or '').strip()
+
+            if not phone and not email:
+                return {"status": "error", "message": "phone or email is required"}
+
+            Customer = request.env['ecommerce.customer'].sudo()
+            domain = []
+            if phone:
+                domain.append(('phone', '=', phone))
+            elif email:
+                domain.append(('email', '=', email))
+
+            customer = Customer.search(domain, limit=1)
+            branch = self._resolve_branch(kwargs, customer=customer)
+
+            otp_code = f"{random.randint(100000, 999999)}"
+            expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
+
+            if customer:
+                customer.write({
+                    'login_otp': otp_code,
+                    'login_otp_expiry': expiry
+                })
+                if branch and not customer.branch_id:
+                    customer.write({'branch_id': branch.id})
+            else:
+                customer_vals = {
+                    'first_name': kwargs.get('first_name', 'Customer'),
+                    'last_name': kwargs.get('last_name', phone or 'User'),
+                    'email': email or f"user_{phone}@example.com",
+                    'phone': phone,
+                    'login_otp': otp_code,
+                    'login_otp_expiry': expiry,
+                    'branch_id': branch.id if branch else None,
+                }
+                customer = Customer.create(customer_vals)
+
+            # Send SMS
+            self._send_otp_sms(customer.phone or phone, otp_code)
+
+            return {
+                "status": "success",
+                "message": "OTP sent successfully",
+                "otp": otp_code,
+                "phone": customer.phone or phone,
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # OTP VERIFY API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/otp/verify', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def otp_verify(self, **kwargs):
+        """
+        Verify OTP and authenticate user.
+        """
+        try:
+            phone = (kwargs.get('phone') or '').strip()
+            email = (kwargs.get('email') or '').strip()
+            otp_entered = (str(kwargs.get('otp') or kwargs.get('otp_code') or '')).strip()
+
+            if not phone and not email:
+                return {"status": "error", "message": "phone or email is required"}
+            if not otp_entered:
+                return {"status": "error", "message": "otp is required"}
+
+            Customer = request.env['ecommerce.customer'].sudo()
+            domain = []
+            if phone:
+                domain.append(('phone', '=', phone))
+            elif email:
+                domain.append(('email', '=', email))
+
+            customer = Customer.search(domain, limit=1)
+            if not customer:
+                return {"status": "error", "message": "Customer not found"}
+
+            if not customer.login_otp or str(customer.login_otp).strip() != otp_entered:
+                return {"status": "error", "message": "Invalid OTP code"}
+
+            if customer.login_otp_expiry and customer.login_otp_expiry < fields.Datetime.now():
+                return {"status": "error", "message": "OTP has expired. Please request a new OTP."}
+
+            branch = self._resolve_branch(kwargs, customer=customer)
+
+            # OTP is valid -> generate token & clear OTP
+            token = customer._generate_token()
+            customer.write({
+                'login_otp': False,
+                'login_otp_expiry': False
+            })
+
+            return {
+                "status": "success",
+                "message": "OTP verified successfully. Login successful.",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
+                "data": {
+                    "customer_id": customer.id,
+                    "name": customer.name,
+                    "first_name": customer.first_name,
+                    "last_name": customer.last_name,
+                    "email": customer.email,
+                    "phone": customer.phone,
+                    "city": customer.city,
+                    "branch_id": branch.id if branch else None,
+                    "branch_name": branch.name if branch else None,
+                    "auth_token": token,
+                    "token_expiry": customer.token_expiry.strftime('%Y-%m-%d %H:%M:%S') if customer.token_expiry else None,
+                }
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # OTP RESEND API
+    # ─────────────────────────────────────────────
+    @http.route('/api/ecommerce/otp/resend', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def otp_resend(self, **kwargs):
+        """
+        Resend OTP.
+        """
+        return self.otp_send(**kwargs)
 
     # ─────────────────────────────────────────────
     # GET LANGUAGES
@@ -1283,6 +1554,16 @@ class EcommerceBranchAPI(http.Controller):
             if 'city' in kwargs:
                 vals['city'] = kwargs['city']
 
+            # Update branch preference if provided
+            if 'branch_id' in kwargs and kwargs['branch_id']:
+                b = request.env['res.branch'].sudo().browse(int(kwargs['branch_id']))
+                if b.exists():
+                    vals['branch_id'] = b.id
+            elif 'branch_name' in kwargs and kwargs['branch_name']:
+                b = request.env['res.branch'].sudo().search([('name', 'ilike', kwargs['branch_name'])], limit=1)
+                if b.exists():
+                    vals['branch_id'] = b.id
+
             # Update notification preferences
             for pref in ['push_notifications', 'order_updates', 'offer_alerts', 'email_newsletter']:
                 if pref in kwargs:
@@ -1291,9 +1572,15 @@ class EcommerceBranchAPI(http.Controller):
             if vals:
                 customer.write(vals)
 
+            resolved_branch = customer.branch_id
+            if request.session and resolved_branch:
+                request.session['branch_id'] = resolved_branch.id
+
             return {
                 "status": "success",
                 "message": "Profile updated successfully",
+                "branch": resolved_branch.name if resolved_branch else "All Branches",
+                "branch_id": resolved_branch.id if resolved_branch else None,
                 "customer": {
                     "id": customer.id,
                     "first_name": customer.first_name,
@@ -1302,6 +1589,8 @@ class EcommerceBranchAPI(http.Controller):
                     "email": customer.email,
                     "phone": customer.phone,
                     "city": customer.city,
+                    "branch_id": resolved_branch.id if resolved_branch else None,
+                    "branch_name": resolved_branch.name if resolved_branch else None,
                     "push_notifications": customer.push_notifications,
                     "order_updates": customer.order_updates,
                     "offer_alerts": customer.offer_alerts,
@@ -1364,7 +1653,12 @@ class EcommerceBranchAPI(http.Controller):
         try:
             customer_id = kwargs.get('customer_id')
             category = kwargs.get('category')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
             
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs)
+
             domain = [('active', '=', True)]
             
             if category:
@@ -1389,11 +1683,15 @@ class EcommerceBranchAPI(http.Controller):
                     "message": item.message,
                     "image": item.image.decode('utf-8') if isinstance(item.image, bytes) else item.image,
                     "category": item.notification_category,
+                    "branch_id": branch.id if branch else None,
+                    "branch_name": branch.name if branch else "All Branches",
                     "created_at": item.created_at.strftime('%Y-%m-%d %H:%M:%S') if item.created_at else None
                 })
             
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "offers": offers
             }
         except Exception as e:
@@ -1406,6 +1704,12 @@ class EcommerceBranchAPI(http.Controller):
     def get_categories(self, **kwargs):
         try:
             parent_name = kwargs.get('parent_name', 'Saleable')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs)
+
             domain = []
             if parent_name:
                 parent = request.env['product.category'].sudo().search([('name', '=', parent_name)], limit=1)
@@ -1426,6 +1730,8 @@ class EcommerceBranchAPI(http.Controller):
                 })
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "categories": category_list
             }
         except Exception as e:
@@ -1469,14 +1775,7 @@ class EcommerceBranchAPI(http.Controller):
                     target_currency = customer.currency_id
 
             # Resolve Branch
-            Branch = request.env['res.branch'].sudo()
-            branch = None
-            if branch_id:
-                branch = Branch.browse(int(branch_id))
-            elif branch_name:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
-            else:
-                branch = Branch.search([], limit=1)
+            branch = self._resolve_branch(kwargs)
 
             company = branch.company_id if branch and branch.company_id else request.env.company
             company_currency = company.currency_id
@@ -1543,6 +1842,8 @@ class EcommerceBranchAPI(http.Controller):
                     "description": description,
                     "price": round(converted_price, 2),
                     "currency": target_currency.name if target_currency else "INR",
+                    "branch_id": prod.branch_id.id if prod.branch_id else (branch.id if branch else None),
+                    "branch_name": prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches"),
                     "purity": purity_name,
                     "purity_percentage": purity_percentage,
                     "total_stock": total_stock,
@@ -1553,6 +1854,8 @@ class EcommerceBranchAPI(http.Controller):
 
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "category": {
                     "id": category.id,
                     "name": category.name
@@ -1594,14 +1897,7 @@ class EcommerceBranchAPI(http.Controller):
                     target_currency = customer.currency_id
 
             # Resolve Branch
-            Branch = request.env['res.branch'].sudo()
-            branch = None
-            if branch_id:
-                branch = Branch.browse(int(branch_id))
-            elif branch_name:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
-            else:
-                branch = Branch.search([], limit=1)
+            branch = self._resolve_branch(kwargs)
 
             company = branch.company_id if branch and branch.company_id else request.env.company
             company_currency = company.currency_id
@@ -1673,6 +1969,8 @@ class EcommerceBranchAPI(http.Controller):
                 "discount_percentage": discount_percentage,
                 "currency": target_currency.name if target_currency else "INR",
                 "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                "branch_id": prod.branch_id.id if prod.branch_id else (branch.id if branch else None),
+                "branch_name": prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches"),
                 "purity": purity_name,
                 "purity_percentage": purity_percentage,
                 "total_stock": total_stock,
@@ -1685,6 +1983,8 @@ class EcommerceBranchAPI(http.Controller):
 
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "product": product_details
             }
         except Exception as e:
@@ -1713,14 +2013,7 @@ class EcommerceBranchAPI(http.Controller):
                     target_currency = customer.currency_id
 
             # Resolve Branch
-            Branch = request.env['res.branch'].sudo()
-            branch = None
-            if branch_id:
-                branch = Branch.browse(int(branch_id))
-            elif branch_name:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
-            else:
-                branch = Branch.search([], limit=1)
+            branch = self._resolve_branch(kwargs)
 
             company = branch.company_id if branch and branch.company_id else request.env.company
             company_currency = company.currency_id
@@ -1802,6 +2095,8 @@ class EcommerceBranchAPI(http.Controller):
                     "discount_percentage": discount_percentage,
                     "currency": target_currency.name if target_currency else "INR",
                     "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                    "branch_id": prod.branch_id.id if prod.branch_id else (branch.id if branch else None),
+                    "branch_name": prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches"),
                     "purity": purity_name,
                     "purity_percentage": purity_percentage,
                     "total_stock": total_stock,
@@ -1815,6 +2110,8 @@ class EcommerceBranchAPI(http.Controller):
 
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "count": len(product_data),
                 "products": product_data
             }
@@ -1844,14 +2141,7 @@ class EcommerceBranchAPI(http.Controller):
                     target_currency = customer.currency_id
 
             # Resolve Branch
-            Branch = request.env['res.branch'].sudo()
-            branch = None
-            if branch_id:
-                branch = Branch.browse(int(branch_id))
-            elif branch_name:
-                branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
-            else:
-                branch = Branch.search([], limit=1)
+            branch = self._resolve_branch(kwargs)
 
             company = branch.company_id if branch and branch.company_id else request.env.company
             company_currency = company.currency_id
@@ -1944,6 +2234,8 @@ class EcommerceBranchAPI(http.Controller):
                     "discount_percentage": discount_percentage,
                     "currency": target_currency.name if target_currency else "INR",
                     "currency_symbol": target_currency.symbol or (target_currency.name if target_currency else "₹"),
+                    "branch_id": prod.branch_id.id if prod.branch_id else (branch.id if branch else None),
+                    "branch_name": prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches"),
                     "purity": purity_name,
                     "purity_percentage": purity_percentage,
                     "total_stock": total_stock,
@@ -1956,6 +2248,8 @@ class EcommerceBranchAPI(http.Controller):
 
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "count": len(product_data),
                 "products": product_data
             }

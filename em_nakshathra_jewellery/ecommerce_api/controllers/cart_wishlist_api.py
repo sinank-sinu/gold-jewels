@@ -43,6 +43,62 @@ class EcommerceCartWishlistAPI(http.Controller):
 
         return customer, None
 
+    def _resolve_branch(self, kwargs, customer=None):
+        """
+        Resolve Branch object prioritizing:
+        1. Registered customer's saved branch (from customer parameter, customer_id, or auth_token)
+        2. Active HTTP Session saved branch (from registration or previous login)
+        3. Explicit kwargs['branch_id'] / kwargs['branch_name'] if no authenticated customer branch exists
+        4. Default fallback branch (Calicut ID 11 / First available branch)
+        """
+        Branch = request.env['res.branch'].sudo()
+        branch_id = kwargs.get('branch_id')
+        branch_name = (kwargs.get('branch_name') or '').strip()
+        customer_id = kwargs.get('customer_id')
+
+        branch = None
+
+        # 1. From customer object or customer_id
+        if not customer and customer_id:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+
+        if not customer or not customer.exists():
+            token = self._get_token_from_request(kwargs)
+            if token:
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                if cust and cust.exists():
+                    customer = cust
+
+        if customer and customer.exists() and customer.branch_id:
+            branch = customer.branch_id
+
+        # 2. From request session (saved from registration / login)
+        if (not branch or not branch.exists()) and request.session and request.session.get('branch_id'):
+            sess_branch = Branch.browse(int(request.session['branch_id']))
+            if sess_branch.exists():
+                branch = sess_branch
+
+        # 3. Explicit branch_id or branch_name parameter (only if no customer/session branch exists)
+        if (not branch or not branch.exists()):
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                found_branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+                if found_branch:
+                    branch = found_branch
+
+        # 4. Default fallback to Calicut (ID 11) or first available branch
+        if not branch or not branch.exists():
+            branch = Branch.search([('id', '=', 11)], limit=1)
+        if not branch or not branch.exists():
+            branch = Branch.search([], limit=1)
+
+        # Store into session for continuity across subsequent API calls
+        if branch and branch.exists() and request.session:
+            request.session['branch_id'] = branch.id
+
+        return branch
+
     def _json_response(self, data, status=200):
         """Return a proper JSON HTTP response (used for GET-type routes)."""
         return Response(
@@ -136,6 +192,8 @@ class EcommerceCartWishlistAPI(http.Controller):
             customer_id = kwargs.get('customer_id')
             product_id = kwargs.get('product_id')
             quantity   = float(kwargs.get('quantity', 1))
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
 
             if not customer_id or not product_id:
                 return {"status": "error", "message": "customer_id and product_id are required"}
@@ -144,14 +202,15 @@ class EcommerceCartWishlistAPI(http.Controller):
             if not customer.exists():
                 return {"status": "error", "message": "Customer not found"}
 
-
-
             if quantity <= 0:
                 return {"status": "error", "message": "Quantity must be greater than 0"}
 
             product = request.env['product.template'].sudo().browse(int(product_id))
             if not product.exists():
                 return {"status": "error", "message": "Product not found"}
+
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
 
             # Check stock availability
             quants = request.env['stock.quant'].sudo().search([
@@ -186,6 +245,8 @@ class EcommerceCartWishlistAPI(http.Controller):
             return {
                 "status": "success",
                 "message": "Item added to cart",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "cart": self._format_cart(cart),
             }
         except Exception as e:
@@ -266,6 +327,9 @@ class EcommerceCartWishlistAPI(http.Controller):
         """
         try:
             customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
 
@@ -273,13 +337,27 @@ class EcommerceCartWishlistAPI(http.Controller):
             if not customer.exists():
                 return {"status": "error", "message": "Customer not found"}
 
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
+
             cart = request.env['ecommerce.cart'].sudo().search(
                 [('customer_id', '=', customer.id)], limit=1
             )
             if not cart:
-                return {"status": "success", "message": "Cart is empty", "cart": {"items": [], "total_amount": 0.0}}
+                return {
+                    "status": "success",
+                    "message": "Cart is empty",
+                    "branch": branch.name if branch else "All Branches",
+                    "branch_id": branch.id if branch else None,
+                    "cart": {"items": [], "total_amount": 0.0}
+                }
 
-            return {"status": "success", "cart": self._format_cart(cart)}
+            return {
+                "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
+                "cart": self._format_cart(cart)
+            }
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
@@ -511,7 +589,7 @@ class EcommerceCartWishlistAPI(http.Controller):
     #  WISHLIST APIs
     # ══════════════════════════════════════════════
 
-    def _format_wishlist_item(self, item):
+    def _format_wishlist_item(self, item, branch=None):
         prod = item.product_id
         customer = item.customer_id
         
@@ -539,12 +617,17 @@ class EcommerceCartWishlistAPI(http.Controller):
         if target_currency != company_currency:
             price = company_currency._convert(price, target_currency, company, fields.Date.today())
 
+        b_id = prod.branch_id.id if prod.branch_id else (branch.id if branch else None)
+        b_name = prod.branch_id.name if prod.branch_id else (branch.name if branch else "All Branches")
+
         return {
             "wishlist_id": item.id,
             "product_id": prod.id,
             "product_name": prod.name,
             "price": round(price, 2),
             "image_url": f"/web/image/product.template/{prod.id}/image_1920",
+            "branch_id": b_id,
+            "branch_name": b_name,
             "added_on": item.added_on.strftime('%Y-%m-%d %H:%M:%S') if item.added_on else None,
             "currency": target_currency.name,
             "currency_symbol": target_currency.symbol or target_currency.name
@@ -559,6 +642,8 @@ class EcommerceCartWishlistAPI(http.Controller):
         try:
             customer_id = kwargs.get('customer_id')
             product_id = kwargs.get('product_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
 
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
@@ -573,6 +658,9 @@ class EcommerceCartWishlistAPI(http.Controller):
             product = request.env['product.template'].sudo().browse(int(product_id))
             if not product.exists():
                 return {"status": "error", "message": "Product not found"}
+
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
 
             Wishlist = request.env['ecommerce.wishlist'].sudo()
             existing = Wishlist.search([
@@ -591,7 +679,9 @@ class EcommerceCartWishlistAPI(http.Controller):
             return {
                 "status": "success",
                 "message": "Added to wishlist",
-                "item": self._format_wishlist_item(item),
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
+                "item": self._format_wishlist_item(item, branch=branch),
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -652,6 +742,9 @@ class EcommerceCartWishlistAPI(http.Controller):
         """
         try:
             customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
 
@@ -659,13 +752,18 @@ class EcommerceCartWishlistAPI(http.Controller):
             if not customer.exists():
                 return {"status": "error", "message": "Customer not found"}
 
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
+
             items = request.env['ecommerce.wishlist'].sudo().search(
                 [('customer_id', '=', customer.id)]
             )
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "count": len(items),
-                "data": [self._format_wishlist_item(i) for i in items],
+                "data": [self._format_wishlist_item(i, branch=branch) for i in items],
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}

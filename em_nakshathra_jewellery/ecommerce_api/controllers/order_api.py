@@ -40,6 +40,62 @@ class EcommerceOrderAPI(http.Controller):
 
         return customer, None
 
+    def _resolve_branch(self, kwargs, customer=None):
+        """
+        Resolve Branch object prioritizing:
+        1. Registered customer's saved branch (from customer parameter, customer_id, or auth_token)
+        2. Active HTTP Session saved branch (from registration or previous login)
+        3. Explicit kwargs['branch_id'] / kwargs['branch_name'] if no authenticated customer branch exists
+        4. Default fallback branch (Calicut ID 11 / First available branch)
+        """
+        Branch = request.env['res.branch'].sudo()
+        branch_id = kwargs.get('branch_id')
+        branch_name = (kwargs.get('branch_name') or '').strip()
+        customer_id = kwargs.get('customer_id')
+
+        branch = None
+
+        # 1. From customer object or customer_id
+        if not customer and customer_id:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+
+        if not customer or not customer.exists():
+            token = self._get_token_from_request(kwargs)
+            if token:
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                if cust and cust.exists():
+                    customer = cust
+
+        if customer and customer.exists() and customer.branch_id:
+            branch = customer.branch_id
+
+        # 2. From request session (saved from registration / login)
+        if (not branch or not branch.exists()) and request.session and request.session.get('branch_id'):
+            sess_branch = Branch.browse(int(request.session['branch_id']))
+            if sess_branch.exists():
+                branch = sess_branch
+
+        # 3. Explicit branch_id or branch_name parameter (only if no customer/session branch exists)
+        if (not branch or not branch.exists()):
+            if branch_id:
+                branch = Branch.browse(int(branch_id))
+            elif branch_name:
+                found_branch = Branch.search([('name', 'ilike', branch_name)], limit=1)
+                if found_branch:
+                    branch = found_branch
+
+        # 4. Default fallback to Calicut (ID 11) or first available branch
+        if not branch or not branch.exists():
+            branch = Branch.search([('id', '=', 11)], limit=1)
+        if not branch or not branch.exists():
+            branch = Branch.search([], limit=1)
+
+        # Store into session for continuity across subsequent API calls
+        if branch and branch.exists() and request.session:
+            request.session['branch_id'] = branch.id
+
+        return branch
+
     def _json_response(self, data, status=200):
         """Return a proper JSON HTTP response."""
         return Response(
@@ -65,6 +121,8 @@ class EcommerceOrderAPI(http.Controller):
             "order_number": order.order_number,
             "customer_id": order.customer_id.id,
             "customer_name": order.customer_id.name,
+            "branch_id": order.branch_id.id if order.branch_id else None,
+            "branch_name": order.branch_id.name if order.branch_id else "All Branches",
             "subtotal_amount": round(order.subtotal_amount, 2) if order.subtotal_amount else 0.0,
             "tax_amount": round(order.tax_amount, 2) if order.tax_amount else 0.0,
             "total_amount": round(order.total_amount, 2) if order.total_amount else 0.0,
@@ -97,6 +155,8 @@ class EcommerceOrderAPI(http.Controller):
             shipping_city = kwargs.get('shipping_city')
             shipping_phone = kwargs.get('shipping_phone')
             notes = kwargs.get('notes')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
 
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
@@ -110,6 +170,9 @@ class EcommerceOrderAPI(http.Controller):
             customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
             if not customer.exists():
                 return {"status": "error", "message": "Customer not found"}
+
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
 
             # Get customer's cart
             cart = request.env['ecommerce.cart'].sudo().search(
@@ -132,6 +195,7 @@ class EcommerceOrderAPI(http.Controller):
             Order = request.env['ecommerce.order'].sudo()
             order = Order.create({
                 'customer_id': customer.id,
+                'branch_id': branch.id if branch else False,
                 'payment_method': payment_method,
                 'shipping_address': shipping_address,
                 'shipping_city': shipping_city,
@@ -155,6 +219,8 @@ class EcommerceOrderAPI(http.Controller):
             return {
                 "status": "success",
                 "message": "Order created successfully",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "order": self._format_order(order),
             }
         except Exception as e:
@@ -248,6 +314,9 @@ class EcommerceOrderAPI(http.Controller):
         """
         try:
             customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
 
@@ -255,12 +324,21 @@ class EcommerceOrderAPI(http.Controller):
             if not customer.exists():
                 return {"status": "error", "message": "Customer not found"}
 
+            # Resolve Branch
+            branch = self._resolve_branch(kwargs, customer=customer)
+
+            domain = [('customer_id', '=', customer.id)]
+            if branch_id:
+                domain.append(('branch_id', '=', branch.id))
+
             orders = request.env['ecommerce.order'].sudo().search(
-                [('customer_id', '=', customer.id)],
+                domain,
                 order='created_at desc'
             )
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "count": len(orders),
                 "data": [self._format_order(order) for order in orders],
             }
@@ -301,6 +379,9 @@ class EcommerceOrderAPI(http.Controller):
         """
         try:
             customer_id = kwargs.get('customer_id')
+            branch_id = kwargs.get('branch_id')
+            branch_name = kwargs.get('branch_name')
+
             if not customer_id:
                 return {"status": "error", "message": "customer_id is required"}
 
@@ -315,8 +396,13 @@ class EcommerceOrderAPI(http.Controller):
             if order.customer_id.id != customer.id:
                 return {"status": "error", "message": "Access denied"}
 
+            # Resolve Branch
+            branch = order.branch_id if order.branch_id and order.branch_id.exists() else self._resolve_branch(kwargs, customer=customer)
+
             return {
                 "status": "success",
+                "branch": branch.name if branch else "All Branches",
+                "branch_id": branch.id if branch else None,
                 "order": self._format_order(order),
             }
         except Exception as e:

@@ -22,6 +22,8 @@ class EcommerceCustomer(models.Model):
     password_salt = fields.Char(string='Password Salt')
     auth_token = fields.Char(string='Authentication Token')
     token_expiry = fields.Datetime(string='Token Expiry')
+    login_otp = fields.Char(string='Login OTP', copy=False)
+    login_otp_expiry = fields.Datetime(string='Login OTP Expiry', copy=False)
     active = fields.Boolean(default=True)
     created_at = fields.Datetime(string='Registered On', default=fields.Datetime.now)
     address_ids = fields.One2many('ecommerce.address', 'customer_id', string='Saved Addresses')

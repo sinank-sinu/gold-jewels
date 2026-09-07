@@ -384,21 +384,34 @@ class JwBusinessDashboard(models.Model):
             SELECT
                 to_char(so.date_order, 'Mon YYYY') AS month,
                 date_trunc('month', so.date_order) AS month_start,
+                COALESCE(gp.name, 'Unknown') AS purity,
                 COALESCE(SUM(sol.product_uom_qty), 0) AS revenue,
                 COUNT(DISTINCT so.id) AS orders
             FROM sale_order so
-            LEFT JOIN sale_order_line sol ON sol.order_id = so.id
+            JOIN sale_order_line sol ON sol.order_id = so.id
+            LEFT JOIN gold_purity gp ON gp.id = sol.purity_id
             WHERE so.state IN ('sale','done')
-              AND so.date_order::DATE BETWEEN %s AND %s
+              AND so.date_order::DATE >= (%s::DATE - INTERVAL '12 months')
+              AND so.date_order::DATE <= %s::DATE
         """
-        params = [d_from, d_to]
+        params = [d_to, d_to]
         if branch_id:
             q += " AND so.branch_id = %s"
             params.append(branch_id)
-        q += " GROUP BY month, month_start ORDER BY month_start"
+        q += """
+            GROUP BY to_char(so.date_order, 'Mon YYYY'), date_trunc('month', so.date_order), COALESCE(gp.name, 'Unknown')
+            HAVING COALESCE(SUM(sol.product_uom_qty), 0) > 0
+            ORDER BY month_start, purity
+        """
         cr.execute(q, params)
         rows = cr.fetchall()
-        return [{'month': r[0], 'revenue': round(float(r[2]), 3), 'orders': int(r[3])} for r in rows]
+        return [{
+            'month': r[0],
+            'purity': r[2],
+            'revenue': round(float(r[3]), 3),
+            'weight': round(float(r[3]), 3),
+            'orders': int(r[4])
+        } for r in rows]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Monthly Purchase (12 months) – Bar Chart
@@ -414,9 +427,10 @@ class JwBusinessDashboard(models.Model):
             FROM purchase_order po
             LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
             WHERE po.state IN ('purchase','done')
-              AND po.date_order::DATE BETWEEN %s AND %s
+              AND po.date_order::DATE >= (%s::DATE - INTERVAL '12 months')
+              AND po.date_order::DATE <= %s::DATE
         """
-        params = [d_from, d_to]
+        params = [d_to, d_to]
         if branch_id:
             q += " AND po.branch_id = %s"
             params.append(branch_id)
@@ -775,7 +789,7 @@ class JwBusinessDashboard(models.Model):
             LEFT JOIN gold_purity gp ON gp.id = sol.purity_id
             WHERE so.state IN ('sale','done')
               AND so.date_order::DATE BETWEEN %s AND %s
-              AND UPPER(TRIM(gp.name)) IN ('22K', '18CT', '22KT')
+              AND (gp.name ~ '22|18' OR gp.id IS NULL)
         """
         params = [d_from, d_to]
         if branch_id:
@@ -1500,7 +1514,7 @@ class JwBusinessDashboard(models.Model):
                 LEFT JOIN gold_purity gp ON gp.id = sol.purity_id
                 WHERE so.state IN ('sale','done')
                   AND so.date_order::DATE BETWEEN %s AND %s
-                  AND UPPER(TRIM(gp.name)) IN ('22K', '18CT', '22KT')
+                  AND (gp.name ~ '22|18' OR gp.id IS NULL)
                 GROUP BY so.branch_id
             ) act ON act.branch_id = rb.id
             LEFT JOIN (

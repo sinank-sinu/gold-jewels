@@ -9,6 +9,7 @@ class EcommerceOrder(models.Model):
 
     order_number = fields.Char(string='Order Number', required=True, copy=False, readonly=True, default='New')
     customer_id = fields.Many2one('ecommerce.customer', string='Customer', required=True, ondelete='cascade', index=True)
+    branch_id = fields.Many2one('res.branch', string='Branch', index=True)
     line_ids = fields.One2many('ecommerce.order.line', 'order_id', string='Order Items')
     
     subtotal_amount = fields.Float(string='Subtotal', compute='_compute_amounts', store=True)

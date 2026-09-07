@@ -336,31 +336,144 @@ class JwBusinessDashboard extends Component {
         return opts;
     }
 
+    _prepareMonthlySalesDatasets(data) {
+        if (!data || !data.length) {
+            return { labels: [], datasets: [] };
+        }
+        const uniqueMonths = [];
+        data.forEach(item => {
+            if (item.month && !uniqueMonths.includes(item.month)) {
+                uniqueMonths.push(item.month);
+            }
+        });
+
+        const purityTotals = {};
+        data.forEach(item => {
+            const p = item.purity || 'Gross Weight';
+            purityTotals[p] = (purityTotals[p] || 0) + (item.weight || item.revenue || 0);
+        });
+
+        const uniquePurities = Object.keys(purityTotals).sort((a, b) => purityTotals[b] - purityTotals[a]);
+
+        const getPurityStyle = (purity, idx) => {
+            const p = (purity || '').toUpperCase().trim();
+            if (p.includes('22CT') || p.includes('22 CT') || p === '22K' || p === '22KT') {
+                return { bg: 'rgba(245, 158, 11, 0.85)', border: '#f59e0b' };
+            }
+            if (p.includes('22 KT')) {
+                return { bg: 'rgba(217, 119, 6, 0.85)', border: '#d97706' };
+            }
+            if (p.includes('18KTD') || p.includes('18 KTD') || p.includes('DIAMOND')) {
+                return { bg: 'rgba(139, 92, 246, 0.85)', border: '#8b5cf6' };
+            }
+            if (p.includes('18CT') || p.includes('18 CT') || p === '18K' || p === '18KT') {
+                return { bg: 'rgba(239, 68, 68, 0.85)', border: '#ef4444' };
+            }
+            if (p.includes('24K') || p.includes('24KT')) {
+                return { bg: 'rgba(16, 185, 129, 0.85)', border: '#10b981' };
+            }
+            if (p.includes('ALP')) {
+                return { bg: 'rgba(6, 182, 212, 0.85)', border: '#06b6d4' };
+            }
+            if (p.includes('UNKNOWN')) {
+                return { bg: 'rgba(100, 116, 139, 0.85)', border: '#64748b' };
+            }
+            const defaultPalette = [
+                { bg: 'rgba(245, 158, 11, 0.85)', border: '#f59e0b' },
+                { bg: 'rgba(239, 68, 68, 0.85)', border: '#ef4444' },
+                { bg: 'rgba(139, 92, 246, 0.85)', border: '#8b5cf6' },
+                { bg: 'rgba(6, 182, 212, 0.85)', border: '#06b6d4' },
+                { bg: 'rgba(16, 185, 129, 0.85)', border: '#10b981' },
+                { bg: 'rgba(236, 72, 153, 0.85)', border: '#ec4899' },
+                { bg: 'rgba(99, 102, 241, 0.85)', border: '#6366f1' },
+            ];
+            return defaultPalette[idx % defaultPalette.length];
+        };
+
+        const datasets = uniquePurities.map((purity, idx) => {
+            const dataValues = uniqueMonths.map(month => {
+                const match = data.find(item => item.month === month && (item.purity || 'Gross Weight') === purity);
+                return match ? (match.weight || match.revenue || 0) : 0;
+            });
+            const style = getPurityStyle(purity, idx);
+            return {
+                label: purity,
+                data: dataValues,
+                backgroundColor: style.bg,
+                borderColor: style.border,
+                borderWidth: 1,
+                borderRadius: { topLeft: 4, topRight: 4 },
+            };
+        });
+
+        return { labels: uniqueMonths, datasets };
+    }
+
     _renderSalesLine() {
         const canvas = this._getCanvas('salesLineChart');
         if (!canvas) return;
         this._destroyChart('salesLineChart');
-        const data = this.state.salesMonthly;
-        const labels = data.map(d => d.month);
-        const revenues = data.map(d => d.revenue);
+        const data = this.state.salesMonthly || [];
+        const { labels, datasets } = this._prepareMonthlySalesDatasets(data);
 
         this.charts.salesLineChart = new window.Chart(canvas, {
             type: 'bar',
             data: {
                 labels,
-                datasets: [
-                    {
-                        label: 'Gross Weight Sold (gms)',
-                        data: revenues,
-                        backgroundColor: 'rgba(99, 102, 241, 0.85)',
-                        borderColor: '#6366f1',
-                        borderWidth: 1,
-                        borderRadius: 6,
-                    },
-                ],
+                datasets,
             },
             options: {
-                ...this._baseWeightOptions('Sales Weight'),
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#64748b',
+                            font: { size: 10, weight: '500' },
+                            boxWidth: 12,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.9)',
+                        padding: 10,
+                        titleColor: '#fff',
+                        bodyColor: '#cbd5e1',
+                        footerColor: '#f8fafc',
+                        footerFont: { weight: 'bold' },
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.raw || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} gms`,
+                            footer: (items) => {
+                                const total = items.reduce((sum, item) => sum + (Number(item.raw) || 0), 0);
+                                return `Total: ${total.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} gms`;
+                            },
+                        },
+                        filter: (item) => Number(item.raw) > 0,
+                    },
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8', font: { size: 11 } },
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { color: 'rgba(148,163,184,0.08)' },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { size: 11 },
+                            callback: (v) => this.shortNum(v) + ' gms',
+                        },
+                    },
+                },
                 onHover: (event, chartElement) => {
                     event.native.target.style.cursor = chartElement.length ? 'pointer' : 'default';
                 },
@@ -368,6 +481,9 @@ class JwBusinessDashboard extends Component {
                     if (activeElements && activeElements.length > 0) {
                         const firstPoint = activeElements[0];
                         const label = labels[firstPoint.index];
+                        if (event && event.native && event.native.stopPropagation) {
+                            event.native.stopPropagation();
+                        }
                         this.openMonthlySalesOrders(label);
                     }
                 },
@@ -1785,23 +1901,64 @@ class JwBusinessDashboard extends Component {
 
         if (chartId === 'salesLineChart') {
             const data = this.state.salesMonthly || [];
+            const { labels, datasets } = this._prepareMonthlySalesDatasets(data);
             this.charts.maximizedChartCanvas = new window.Chart(canvas, {
                 type: 'bar',
                 data: {
-                    labels: data.map(d => d.month),
-                    datasets: [
-                        {
-                            label: 'Gross Weight Sold (gms)',
-                            data: data.map(d => d.revenue),
-                            backgroundColor: 'rgba(99, 102, 241, 0.85)',
-                            borderColor: '#6366f1',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                        },
-                    ],
+                    labels,
+                    datasets,
                 },
                 options: {
-                    ...this._baseWeightOptions('Sales Weight'),
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#64748b',
+                                font: { size: 11, weight: '500' },
+                                boxWidth: 12,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                            },
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.9)',
+                            padding: 10,
+                            titleColor: '#fff',
+                            bodyColor: '#cbd5e1',
+                            footerColor: '#f8fafc',
+                            footerFont: { weight: 'bold' },
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.raw || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} gms`,
+                                footer: (items) => {
+                                    const total = items.reduce((sum, item) => sum + (Number(item.raw) || 0), 0);
+                                    return `Total: ${total.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} gms`;
+                                },
+                            },
+                            filter: (item) => Number(item.raw) > 0,
+                        },
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8' },
+                        },
+                        y: {
+                            stacked: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: (v) => this.shortNum(v) + ' gms',
+                            },
+                        },
+                    },
                 },
             });
         } else if (chartId === 'purchaseBarChart') {
