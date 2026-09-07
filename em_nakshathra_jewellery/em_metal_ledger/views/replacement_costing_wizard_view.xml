@@ -10,7 +10,6 @@
                         <field name="date_from"/>
                         <field name="date_to"/>
                         <field name="branch_ids" widget="many2many_tags" options="{'no_create': True}"/>
-                        <field name="only_vault" invisible="1"/>
                     </group>
                 </group>
                 
@@ -32,15 +31,6 @@
         <field name="res_model">replacement.costing.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
-        <field name="context">{'default_only_vault': False}</field>
-    </record>
-
-    <record id="action_replacement_costing_vault_wizard" model="ir.actions.act_window">
-        <field name="name">Replacement Costing Vault Item Report</field>
-        <field name="res_model">replacement.costing.wizard</field>
-        <field name="view_mode">form</field>
-        <field name="target">new</field>
-        <field name="context">{'default_only_vault': True}</field>
     </record>
 
     <menuitem id="menu_replacement_costing_wizard" 
@@ -48,10 +38,4 @@
               action="action_replacement_costing_wizard" 
               parent="menu_replacement_costing_item_head"
               sequence="55"/>
-
-    <menuitem id="menu_replacement_costing_vault_wizard" 
-              name="Replacement Costing Vault Item Report" 
-              action="action_replacement_costing_vault_wizard" 
-              parent="menu_replacement_costing_item_head"
-              sequence="60"/>
 </odoo>
