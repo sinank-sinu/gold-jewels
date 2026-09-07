@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_po_purity_update_log_user,po.purity.update.log.user,model_po_purity_update_log,base.group_user,1,0,0,0
+access_po_purity_update_log_purchase_user,po.purity.update.log.purchase_user,model_po_purity_update_log,purchase.group_purchase_user,1,1,1,0
+access_po_purity_update_log_manager,po.purity.update.log.manager,model_po_purity_update_log,purchase.group_purchase_manager,1,1,1,1

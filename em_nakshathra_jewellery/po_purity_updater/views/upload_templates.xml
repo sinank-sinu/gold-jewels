@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="upload_form_template" name="PO Purity Upload">
+        <t t-call="web.layout">
+            <div class="container mt-4" style="max-width:600px;">
+                <h2>Upload OG Excel to Update PO Purity</h2>
+                <p class="text-muted">
+                    Upload the sales/purchase excel file. The script reads the
+                    "OG" sheet and updates the purity of the matching Purchase
+                    Order line(s).
+                </p>
+                <form action="/po_purity/upload/submit" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                    <div class="form-group mb-3">
+                        <input type="file" name="excel_file" accept=".xlsx" class="form-control" required="required"/>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload &amp; Update</button>
+                </form>
+                <p class="mt-3"><a href="/po_purity/diagnose">Run field diagnostics first &#187;</a></p>
+            </div>
+        </t>
+    </template>
+
+    <template id="diagnose_template" name="PO Purity Field Diagnostics">
+        <t t-call="web.layout">
+            <div class="container mt-4" style="max-width:800px;">
+                <h2>Field Diagnostics</h2>
+                <p class="text-muted">
+                    This checks which technical fields the script auto-detected,
+                    without processing any file.
+                </p>
+
+                <table class="table table-bordered">
+                    <tr>
+                        <th>Sale Order voucher field (Source Document)</th>
+                        <td><code t-esc="data.get('so_voucher_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>Sale Order -&gt; Purchase Order field (Source Purchase Order)</th>
+                        <td><code t-esc="data.get('so_to_po_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>Purchase Order -&gt; Sale Order field (fallback)</th>
+                        <td><code t-esc="data.get('po_sale_order_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>PO Line Gross Weight field</th>
+                        <td><code t-esc="data.get('line_gross_wt_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>PO Line Purity field</th>
+                        <td>
+                            <code t-esc="data.get('line_purity_field') or '(not found)'"/>
+                            <t t-if="data.get('purity_field_type')">
+                                — type: <t t-esc="data['purity_field_type']"/>
+                                <t t-if="data.get('purity_comodel')"> (Many2one to <t t-esc="data['purity_comodel']"/>)</t>
+                            </t>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Sale Order -&gt; Vendor Bill field (Old Gold Vendor Bill)</th>
+                        <td><code t-esc="data.get('so_to_bill_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>Vendor Bill Line Quantity field</th>
+                        <td><code t-esc="data.get('bill_line_qty_field') or '(not found)'"/></td>
+                    </tr>
+                    <tr>
+                        <th>Vendor Bill Line Purity field</th>
+                        <td>
+                            <code t-esc="data.get('bill_line_purity_field') or '(not found)'"/>
+                            <t t-if="data.get('bill_purity_field_type')">
+                                — type: <t t-esc="data['bill_purity_field_type']"/>
+                                <t t-if="data.get('bill_purity_comodel')"> (Many2one to <t t-esc="data['bill_purity_comodel']"/>)</t>
+                            </t>
+                        </td>
+                    </tr>
+                </table>
+
+                <h4>All Many2one fields on Sale Order pointing to Purchase Order</h4>
+                <ul>
+                    <li t-foreach="data.get('so_to_po_candidates') or []" t-as="c" t-esc="c"/>
+                    <li t-if="not data.get('so_to_po_candidates')">None found - is the field a Many2one to purchase.order?</li>
+                </ul>
+
+                <h4>All Many2one fields on Purchase Order pointing to Sale Order</h4>
+                <ul>
+                    <li t-foreach="data.get('po_to_so_candidates') or []" t-as="c" t-esc="c"/>
+                    <li t-if="not data.get('po_to_so_candidates')">None found.</li>
+                </ul>
+
+                <a href="/po_purity/upload" class="btn btn-secondary mt-3">Back to upload</a>
+            </div>
+        </t>
+    </template>
+
+    <template id="upload_result_template" name="PO Purity Upload Result">
+        <t t-call="web.layout">
+            <div class="container mt-4">
+                <h2>Update Result</h2>
+
+                <t t-if="error">
+                    <div class="alert alert-danger" t-esc="error"/>
+                </t>
+
+                <t t-if="result">
+                    <div class="alert alert-info" t-if="result.get('resolved_fields')">
+                        <strong>Fields used this run:</strong>
+                        <ul class="mb-0">
+                            <li>Sale Order voucher field: <code t-esc="result['resolved_fields'].get('so_voucher_field') or '(not found)'"/></li>
+                            <li>Sale Order -&gt; Purchase Order field: <code t-esc="result['resolved_fields'].get('so_to_po_field') or '(not found)'"/></li>
+                            <li>Purchase Order -&gt; Sale Order field (fallback): <code t-esc="result['resolved_fields'].get('po_sale_order_field') or '(not found)'"/></li>
+                            <li>PO Line Gross Weight field: <code t-esc="result['resolved_fields'].get('line_gross_wt_field') or '(not found)'"/></li>
+                            <li>PO Line Purity field: <code t-esc="result['resolved_fields'].get('line_purity_field') or '(not found)'"/></li>
+                            <li>Sale Order -&gt; Vendor Bill field: <code t-esc="result['resolved_fields'].get('so_to_bill_field') or '(not found)'"/></li>
+                            <li>Vendor Bill Line Quantity field: <code t-esc="result['resolved_fields'].get('bill_line_qty_field') or '(not found)'"/></li>
+                            <li>Vendor Bill Line Purity field: <code t-esc="result['resolved_fields'].get('bill_line_purity_field') or '(not found)'"/></li>
+                        </ul>
+                    </div>
+                    <h4 class="mt-4">Purchase Order lines</h4>
+                    <div class="row mb-3">
+                        <div class="col"><strong>Updated:</strong> <t t-esc="len(result['updated'])"/> lines</div>
+                        <div class="col"><strong>PO not found:</strong> <t t-esc="len(result['not_found'])"/> rows</div>
+                        <div class="col"><strong>No matching line:</strong> <t t-esc="len(result['no_line_match'])"/> rows</div>
+                        <div class="col"><strong>Errors:</strong> <t t-esc="len(result['errors'])"/> rows</div>
+                    </div>
+
+                    <t t-if="result.get('not_updated')">
+                        <h4 class="mt-4">Sale Vouchers Not Updated
+                            (<t t-esc="len(result['not_updated'])"/>)
+                        </h4>
+                        <p class="text-muted">
+                            Every excel row whose purity could <strong>not</strong> be written to the
+                            Purchase Order line, with the reason, so these can be fixed and re-uploaded.
+                        </p>
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Row</th><th>Sales Voucher No</th><th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="result['not_updated']" t-as="nu">
+                                    <td t-esc="nu[0]"/><td t-esc="nu[1]"/><td t-esc="nu[2]"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </t>
+
+                    <h4 class="mt-4">Vendor Bill lines</h4>
+                    <div class="row mb-3">
+                        <div class="col"><strong>Updated:</strong> <t t-esc="len(result.get('bill_updated', []))"/> lines</div>
+                        <div class="col"><strong>Bill not found:</strong> <t t-esc="len(result.get('bill_not_found', []))"/> rows</div>
+                        <div class="col"><strong>No matching line:</strong> <t t-esc="len(result.get('bill_no_line_match', []))"/> rows</div>
+                        <div class="col"><strong>Errors:</strong> <t t-esc="len(result.get('bill_errors', []))"/> rows</div>
+                    </div>
+
+                    <h4>Updated lines</h4>
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Row</th><th>Voucher No</th><th>PO ID</th><th>Line ID</th><th>Purity set</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="result['updated']" t-as="u">
+                                <td t-esc="u[0]"/><td t-esc="u[1]"/><td t-esc="u[2]"/><td t-esc="u[3]"/><td t-esc="u[4]"/>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <t t-if="result['not_found']">
+                        <h4>Purchase Order not found</h4>
+                        <ul>
+                            <li t-foreach="result['not_found']" t-as="nf">
+                                Row <t t-esc="nf[0]"/>: voucher <t t-esc="nf[1]"/>
+                            </li>
+                        </ul>
+                    </t>
+
+                    <t t-if="result['no_line_match']">
+                        <h4>No line matched by gross weight</h4>
+                        <ul>
+                            <li t-foreach="result['no_line_match']" t-as="nl">
+                                Row <t t-esc="nl[0]"/>: voucher <t t-esc="nl[1]"/>, gross wt <t t-esc="nl[2]"/>
+                            </li>
+                        </ul>
+                    </t>
+
+                    <t t-if="result['errors']">
+                        <h4>Errors (Purchase Order)</h4>
+                        <ul>
+                            <li t-foreach="result['errors']" t-as="er">
+                                Row <t t-esc="er[0]"/>: voucher <t t-esc="er[1]"/> - <t t-esc="er[2]"/>
+                            </li>
+                        </ul>
+                    </t>
+
+                    <h4>Updated Vendor Bill lines</h4>
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Row</th><th>Voucher No</th><th>Bill ID</th><th>Line ID</th><th>Purity set</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="result.get('bill_updated', [])" t-as="bu">
+                                <td t-esc="bu[0]"/><td t-esc="bu[1]"/><td t-esc="bu[2]"/><td t-esc="bu[3]"/><td t-esc="bu[4]"/>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <t t-if="result.get('bill_not_found')">
+                        <h4>Vendor Bill not found</h4>
+                        <ul>
+                            <li t-foreach="result['bill_not_found']" t-as="bnf">
+                                Row <t t-esc="bnf[0]"/>: voucher <t t-esc="bnf[1]"/>
+                            </li>
+                        </ul>
+                    </t>
+
+                    <t t-if="result.get('bill_no_line_match')">
+                        <h4>No Vendor Bill line matched</h4>
+                        <ul>
+                            <li t-foreach="result['bill_no_line_match']" t-as="bnl">
+                                Row <t t-esc="bnl[0]"/>: voucher <t t-esc="bnl[1]"/>, gross wt <t t-esc="bnl[2]"/>
+                            </li>
+                        </ul>
+                    </t>
+
+                    <t t-if="result.get('bill_errors')">
+                        <h4>Errors (Vendor Bill)</h4>
+                        <ul>
+                            <li t-foreach="result['bill_errors']" t-as="be">
+                                Row <t t-esc="be[0]"/>: voucher <t t-esc="be[1]"/> - <t t-esc="be[2]"/>
+                            </li>
+                        </ul>
+                    </t>
+                </t>
+
+                <a href="/po_purity/upload" class="btn btn-secondary mt-3">Upload another file</a>
+            </div>
+        </t>
+    </template>
+
+</odoo>

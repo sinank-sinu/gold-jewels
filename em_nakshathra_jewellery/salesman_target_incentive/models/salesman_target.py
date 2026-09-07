@@ -24,7 +24,9 @@ class SalesmanTarget(models.Model):
     employee_id = fields.Many2one(
         'hr.employee',
         string='Employee',
+        compute='_compute_employee_id',
         store=True,
+        readonly=False,
     )
 
     branch_id = fields.Many2one(
@@ -251,14 +253,17 @@ class SalesmanTarget(models.Model):
     incentive_add = fields.Float(string='Computed Incentive ',compute='_incentive_add', store=True)
 
     # EMPLOYEE
-    # @api.depends('salesman_id')
-    # def _compute_employee_id(self):
-    #     for rec in self:
-    #         employee = self.env['hr.employee'].search([
-    #             ('user_id', '=', rec.salesman_id.id)
-    #         ], limit=1)
-    #
-    #         rec.employee_id = employee
+    @api.depends('salesman_id')
+    def _compute_employee_id(self):
+        for rec in self:
+            employee = False
+            if rec.salesman_id:
+                employee = self.env['hr.employee'].search([
+                    '|',
+                    ('user_id', '=', rec.salesman_id.id),
+                    ('name', '=', rec.salesman_id.name)
+                ], limit=1)
+            rec.employee_id = employee
 
     @api.depends('branch_id')
     def _compute_branch_salesman_count(self):
@@ -392,19 +397,17 @@ class SalesmanTarget(models.Model):
 
                 amount = line.price_subtotal or 0.0
 
-                if purity == '22K':
-                    achieved_22k += grams
+                if '18KTD' in purity:
+                    achieved_diamond_ct += grams
                     achieved_amount += amount
-
-                elif purity == '18CT':
+                elif '18CT' in purity:
                     achieved_18ct += grams
                     achieved_amount += amount
-
-                elif purity == '22KT':
+                elif '22CT' in purity or '22KT' in purity or '22K' in purity:
                     achieved_22kt += grams
+                    achieved_22k += grams
                     achieved_amount += amount
-                elif purity == '18KTD':
-                    achieved_diamond_ct += grams
+                else:
                     achieved_amount += amount
 
 
@@ -440,17 +443,13 @@ class SalesmanTarget(models.Model):
 
                 grams = line.product_uom_qty or 0.0
 
-                if purity == '22K':
-                    branch_22k += grams
-
-                elif purity == '18CT':
-                    branch_18ct += grams
-
-                elif purity == '22KT':
-                    branch_22kt += grams
-
-                elif purity == '18KTD':
+                if '18KTD' in purity:
                     branch_diamond_ct += grams
+                elif '18CT' in purity:
+                    branch_18ct += grams
+                elif '22CT' in purity or '22KT' in purity or '22K' in purity:
+                    branch_22kt += grams
+                    branch_22k += grams
 
                 # branch_diamond_ct += line.sale_diamond_weight_ct or 0.0
 
@@ -487,13 +486,22 @@ class SalesmanTarget(models.Model):
             # FINAL ACHIEVEMENT
             # =====================================================
 
-            personal_target_hit = (
-                # achieved_amount >= rec.target_amount
-                # achieved_22k >= rec.target_gms_22k
-                achieved_18ct >= rec.target_gms_18ct
-                and achieved_22kt >= rec.target_gms_22kt
-                and achieved_diamond_ct >= rec.target_diamond_ct
-            )
+            personal_target_hit = True
+            if rec.target_gms_18ct > 0:
+                personal_target_hit = personal_target_hit and (achieved_18ct >= rec.target_gms_18ct)
+            if rec.target_gms_22kt > 0:
+                personal_target_hit = personal_target_hit and (achieved_22kt >= rec.target_gms_22kt)
+            if rec.target_diamond_ct > 0:
+                personal_target_hit = personal_target_hit and (achieved_diamond_ct >= rec.target_diamond_ct)
+            if rec.target_gms_22k > 0:
+                personal_target_hit = personal_target_hit and (achieved_22k >= rec.target_gms_22k)
+            if rec.target_amount > 0:
+                personal_target_hit = personal_target_hit and (achieved_amount >= rec.target_amount)
+
+            has_any_target = (rec.target_gms_18ct > 0 or rec.target_gms_22kt > 0 or 
+                              rec.target_diamond_ct > 0 or rec.target_gms_22k > 0 or rec.target_amount > 0)
+            if not has_any_target:
+                personal_target_hit = False
 
             # IMPORTANT:
             # ONLY PERSONAL TARGET COUNTS
@@ -507,7 +515,7 @@ class SalesmanTarget(models.Model):
             )
 
             # WRITE
-            # rec.achieved_amount = achieved_amount
+            rec.achieved_amount = achieved_amount
 
             rec.achieved_gms_22k = achieved_22k
             rec.achieved_gms_18ct = achieved_18ct
@@ -654,9 +662,10 @@ class SalesmanTarget(models.Model):
     def action_refresh_achievements(self):
         """Manual refresh button to recompute achievements."""
         self._compute_achievements()
+        self._incentive_add()
         return True
 
-    @api.depends('is_achieved', 'salesman_id', 'date_from', 'date_to', 'inc_18ct', 'dmd_inc', 'gold_inc')
+    @api.depends('is_achieved', 'salesman_id', 'branch_id', 'date_from', 'date_to', 'inc_18ct', 'dmd_inc', 'gold_inc')
     def _incentive_add(self):
         for rec in self:
             rec.incentive_add = 0.0
@@ -664,15 +673,19 @@ class SalesmanTarget(models.Model):
             rec.mc_amount_18ktd = 0.0
             rec.mc_amount_22kt = 0.0
 
-            if not (rec.is_achieved and rec.salesman_id and rec.date_from and rec.date_to):
+            if not (rec.salesman_id and rec.branch_id and rec.date_from and rec.date_to):
                 continue
+
+            start_date = fields.Datetime.to_datetime(rec.date_from)
+            end_date = fields.Datetime.to_datetime(rec.date_to).replace(hour=23, minute=59, second=59)
 
             order_lines = self.env['sale.order.line'].search([
                 ('order_id.user_id', '=', rec.salesman_id.id),
-                ('order_id.date_order', '>=', rec.date_from),
-                ('order_id.date_order', '<=', rec.date_to),
+                ('order_id.branch_id', '=', rec.branch_id.id),
+                ('order_id.date_order', '>=', start_date),
+                ('order_id.date_order', '<=', end_date),
                 ('order_id.state', 'in', ['sale', 'done']),
-                ('purity_id.name', 'in', ['18CT', '18KTD','22KT', '18ct', '18ktd','22kt']),
+                ('purity_id', '!=', False),
             ])
 
             total_additional = 0.0
@@ -681,21 +694,32 @@ class SalesmanTarget(models.Model):
             mc_22kt = 0.0
 
             for line in order_lines:
-                purity = line.purity_id.name.upper().strip() if line.purity_id.name else ''
-                mc_amount = line.mc_amount_actual or 0.0
+                if line.display_type:
+                    continue
+                purity = (line.purity_id.name or '').upper().strip()
+                mc_amount = getattr(line, 'mc_amount_actual', 0.0) or (
+                    line.metal_amount * (line.mc_percent_actual / 100.0)
+                    if hasattr(line, 'metal_amount') and hasattr(line, 'mc_percent_actual') and line.metal_amount and line.mc_percent_actual
+                    else 0.0
+                )
 
-                if purity == '18CT':
-                    total_additional += mc_amount * (rec.inc_18ct/100)
-                    mc_18ct += mc_amount
-                elif purity == '18KTD':
-                    total_additional += mc_amount * (rec.dmd_inc/100)
+                if '18KTD' in purity:
+                    total_additional += mc_amount * (rec.dmd_inc / 100.0)
                     mc_18ktd += mc_amount
-                elif purity == '22KT':
-                    total_additional += mc_amount * (rec.gold_inc/100)
+                elif '18CT' in purity:
+                    total_additional += mc_amount * (rec.inc_18ct / 100.0)
+                    mc_18ct += mc_amount
+                elif '22CT' in purity or '22KT' in purity or '22K' in purity:
+                    total_additional += mc_amount * (rec.gold_inc / 100.0)
                     mc_22kt += mc_amount
 
             rec.incentive_add = total_additional
             rec.mc_amount_18ct = mc_18ct
             rec.mc_amount_18ktd = mc_18ktd
             rec.mc_amount_22kt = mc_22kt
+
+            if rec.is_achieved:
+                rec.earned_incentive = total_additional + (rec.incentive_amount or 0.0)
+            else:
+                rec.earned_incentive = 0.0
 

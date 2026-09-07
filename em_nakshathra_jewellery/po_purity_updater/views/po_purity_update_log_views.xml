@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_po_purity_update_log_list" model="ir.ui.view">
+        <field name="name">po.purity.update.log.list</field>
+        <field name="model">po.purity.update.log</field>
+        <field name="arch" type="xml">
+            <tree string="Purity Update Log" default_order="create_date desc"
+                  decoration-danger="status == 'failed'" decoration-success="status == 'success'">
+                <field name="create_date" string="Date"/>
+                <field name="row_number"/>
+                <field name="sales_voucher_no"/>
+                <field name="purchase_voucher_no" optional="hide"/>
+                <field name="target"/>
+                <field name="status"/>
+                <field name="purity_value"/>
+                <field name="purchase_order_id"/>
+                <field name="purchase_order_line_id" optional="hide"/>
+                <field name="vendor_bill_id" optional="hide"/>
+                <field name="vendor_bill_line_id" optional="hide"/>
+                <field name="message"/>
+                <field name="upload_user_id" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_po_purity_update_log_search" model="ir.ui.view">
+        <field name="name">po.purity.update.log.search</field>
+        <field name="model">po.purity.update.log</field>
+        <field name="arch" type="xml">
+            <search string="Purity Update Log">
+                <field name="sales_voucher_no"/>
+                <field name="purchase_voucher_no"/>
+                <field name="purchase_order_id"/>
+                <filter string="Updated" name="filter_success" domain="[('status', '=', 'success')]"/>
+                <filter string="Failed" name="filter_failed" domain="[('status', '=', 'failed')]"/>
+                <separator/>
+                <filter string="PO Line" name="filter_po_line" domain="[('target', '=', 'po_line')]"/>
+                <filter string="Vendor Bill Line" name="filter_bill_line" domain="[('target', '=', 'bill_line')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Status" name="group_status" context="{'group_by': 'status'}"/>
+                    <filter string="Target" name="group_target" context="{'group_by': 'target'}"/>
+                    <filter string="Upload Date" name="group_date" context="{'group_by': 'create_date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_po_purity_update_log" model="ir.actions.act_window">
+        <field name="name">Purity Update Log</field>
+        <field name="res_model">po.purity.update.log</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_po_purity_update_log_search"/>
+    </record>
+
+    <menuitem id="menu_po_purity_update_log"
+              name="Purity Update Log"
+              parent="purchase.menu_purchase_root"
+              action="action_po_purity_update_log"
+              sequence="90"/>
+
+</odoo>
