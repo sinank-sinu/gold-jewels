@@ -206,16 +206,11 @@ class SchemeRedeemMarginXlsx(models.AbstractModel):
 
             if inst.date:
                 next_day = inst.date + timedelta(days=1)
-                start_dt = datetime.combine(next_day, time.min)
-                end_dt = datetime.combine(next_day, time.max)
-
-                rate_rec = self.env['gold.rate.update.log'].search([
-                    ('rate_datetime', '>=', start_dt),
-                    ('rate_datetime', '<=', end_dt),
-                ], order='rate_datetime desc', limit=1)
-
+                rate_rec = self.env['fine.rate.master'].search([('date', '=', next_day)], limit=1)
+                if not rate_rec:
+                    rate_rec = self.env['fine.rate.master'].search([('date', '<=', next_day)], order='date desc', limit=1)
                 if rate_rec:
-                    fine_rate = rate_rec.board_rate or 0.0
+                    fine_rate = rate_rec.fine_rate or 0.0
             
             fine_qty = inst.amount / fine_rate if fine_rate else 0.0
 

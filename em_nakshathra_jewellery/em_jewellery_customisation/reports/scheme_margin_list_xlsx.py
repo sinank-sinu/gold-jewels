@@ -78,12 +78,19 @@ class SchemeMarginListXlsx(models.AbstractModel):
                 i.date AS inst_date,
                 m.name AS voucher_no,
                 i.amount AS amount,
-                f.fine_rate AS fine_rate
+                COALESCE(f.fine_rate, f_fallback.fine_rate, 0.0) AS fine_rate
             FROM jewellery_scheme_installment i
             JOIN jewellery_scheme_enrollment e ON i.enrollment_id = e.id
             LEFT JOIN res_partner p ON e.partner_id = p.id
             LEFT JOIN account_move m ON i.move_id = m.id
             LEFT JOIN fine_rate_master f ON f.date = (i.date + INTERVAL '1 day')::date
+            LEFT JOIN LATERAL (
+                SELECT f2.fine_rate
+                FROM fine_rate_master f2
+                WHERE f2.date <= (i.date + INTERVAL '1 day')::date
+                ORDER BY f2.date DESC
+                LIMIT 1
+            ) f_fallback ON TRUE
             WHERE i.state = 'paid'
               AND e.id IN %s
         """
