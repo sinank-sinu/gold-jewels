@@ -90,6 +90,134 @@ class HRMobileAPI(http.Controller):
 
 
     # ─────────────────────────────────────────────
+    # REGISTER API
+    # ─────────────────────────────────────────────
+    @http.route(['/api/hr/register', '/api/hr/signup'], type='json', auth='none', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def register(self, **kwargs):
+        db_name = kwargs.get('db') or getattr(request, 'db', None) or (request.session.db if hasattr(request, 'session') else None)
+        try:
+            name = (kwargs.get('name') or kwargs.get('employee_name') or '').strip()
+            first_name = (kwargs.get('first_name') or '').strip()
+            last_name = (kwargs.get('last_name') or '').strip()
+            if not name and (first_name or last_name):
+                name = f"{first_name} {last_name}".strip()
+
+            username = (kwargs.get('username') or kwargs.get('email') or '').strip()
+            email = (kwargs.get('email') or kwargs.get('work_email') or '').strip().lower()
+            if not username and email:
+                username = email
+            elif not email and '@' in username:
+                email = username
+
+            password = kwargs.get('password') or ''
+            confirm_password = kwargs.get('confirm_password') or ''
+            phone = (kwargs.get('phone') or kwargs.get('work_phone') or kwargs.get('mobile') or '').strip()
+            job_title = (kwargs.get('job_title') or kwargs.get('job_position') or 'Staff').strip()
+            department_name = (kwargs.get('department') or 'Operations').strip()
+
+            # Validation
+            if not name:
+                return {"status": "error", "message": "Employee name is required"}
+            if not username:
+                return {"status": "error", "message": "Username or email is required"}
+            if not password:
+                return {"status": "error", "message": "Password is required"}
+            if confirm_password and password != confirm_password:
+                return {"status": "error", "message": "Passwords do not match"}
+            if len(password) < 3:
+                return {"status": "error", "message": "Password must be at least 3 characters"}
+
+            db_list = http.db_list()
+            if db_name and db_name not in db_list:
+                db_name = db_list[0] if db_list else False
+            elif not db_name:
+                db_name = db_list[0] if db_list else False
+
+            if not db_name:
+                return {"status": "error", "message": "No database available on server"}
+
+            import odoo
+            registry = odoo.registry(db_name)
+            with registry.cursor() as cr:
+                env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
+                User = env['res.users']
+                Employee = env['hr.employee']
+
+                # Check duplicate username / email
+                existing_user = User.search(['|', ('login', '=', username), ('login', '=', email)], limit=1) if email else User.search([('login', '=', username)], limit=1)
+                if existing_user:
+                    return {"status": "error", "message": "An account with this username/email already exists"}
+
+                # Find or assign group_user (Internal User)
+                group_user = env.ref('base.group_user', raise_if_not_found=False)
+                groups = [(6, 0, [group_user.id])] if group_user else []
+
+                user_vals = {
+                    'name': name,
+                    'login': username,
+                    'email': email or False,
+                    'password': password,
+                    'groups_id': groups,
+                }
+                user = User.create(user_vals)
+
+                # Find job and department
+                job = env['hr.job'].search([('name', 'ilike', job_title)], limit=1) if 'hr.job' in env else None
+                dept = env['hr.department'].search([('name', 'ilike', department_name)], limit=1) if 'hr.department' in env else None
+
+                emp_vals = {
+                    'name': name,
+                    'user_id': user.id,
+                    'job_id': job.id if job else False,
+                    'department_id': dept.id if dept else False,
+                    'work_email': email or username,
+                    'work_phone': phone,
+                }
+                employee = Employee.create(emp_vals)
+
+                user_id = user.id
+                emp_id = employee.id
+                user_name = user.name
+                user_login = user.login
+                final_job = job.name if job else job_title
+                final_dept = dept.name if dept else department_name
+                emp_code = f"EMP-{emp_id}"
+
+                cr.commit()
+
+            # Establish session authentication
+            sid = None
+            try:
+                request.session.authenticate(db_name, username, password)
+                sid = request.session.sid
+            except Exception:
+                sid = getattr(request.session, 'sid', None)
+
+            return {
+                "status": "success",
+                "message": "Registration successful",
+                "session_id": sid,
+                "data": {
+                    "user_id": user_id,
+                    "name": user_name,
+                    "email": user_login,
+                    "employee_id": emp_id,
+                    "employee_name": user_name,
+                    "employee_code": emp_code,
+                    "job_position": final_job,
+                    "department": final_dept,
+                    "phone": phone
+                }
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+
+
+
+    # ─────────────────────────────────────────────
     # LOGOUT API
     # ─────────────────────────────────────────────
     @http.route('/api/hr/logout', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
