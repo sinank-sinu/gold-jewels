@@ -78,40 +78,44 @@ class StockSummaryProductWiseController(StockSummaryReportController):
 
         grouped_data = defaultdict(list)
         for line in report_lines:
-            tmpl_id = line.get('product_template_id') or 0
-            grouped_data[tmpl_id].append(line)
+            p_code = _format_str(line.get('template_code'))
+            t_name = (_format_str(line.get('template_name')) or 'Unknown').strip()
+            p_name = f"[{p_code}] {t_name}" if p_code else t_name
+            grouped_data[p_name].append(line)
 
         row += 1
-        for tmpl_id, lines in grouped_data.items():
+        for p_name, lines in sorted(grouped_data.items(), key=lambda x: x[0]):
             count = len(lines)
             sample_line = lines[0]
-            p_code = _format_str(sample_line.get('template_code'))
-            t_name = _format_str(sample_line.get('template_name')) or 'Unknown'
-            p_name = f"[{p_code}] {t_name}" if p_code else t_name
-            
-            purity_val = _format_str(sample_line.get('purity_name'))
 
-            o_pcs_sum = sum(l.get('opening_pcs') or 0 for l in lines)
-            o_gross_sum = sum(l.get('opening_gross_weight') or 0.0 for l in lines)
-            o_net_sum = sum(l.get('opening_net_weight') or 0.0 for l in lines)
+            purities = []
+            for l in lines:
+                p = _format_str(l.get('purity_name'))
+                if p and p not in purities:
+                    purities.append(p)
+            purity_val = ', '.join(purities) if purities else ''
+
+            o_pcs_sum = sum(float(l.get('opening_pcs') or 0.0) for l in lines)
+            o_gross_sum = sum(float(l.get('opening_gross_weight') or 0.0) for l in lines)
+            o_net_sum = sum(float(l.get('opening_net_weight') or 0.0) for l in lines)
             
-            in_pcs_sum = sum(l.get('in_pcs') or 0 for l in lines)
-            in_gross_sum = sum(l.get('in_gross_weight') or 0.0 for l in lines)
-            in_net_sum = sum(l.get('in_net_weight') or 0.0 for l in lines)
+            in_pcs_sum = sum(float(l.get('in_pcs') or 0.0) for l in lines)
+            in_gross_sum = sum(float(l.get('in_gross_weight') or 0.0) for l in lines)
+            in_net_sum = sum(float(l.get('in_net_weight') or 0.0) for l in lines)
             
-            out_pcs_sum = sum(l.get('out_pcs') or 0 for l in lines)
-            out_gross_sum = sum(l.get('out_gross_weight') or 0.0 for l in lines)
-            out_net_sum = sum(l.get('out_net_weight') or 0.0 for l in lines)
+            out_pcs_sum = sum(float(l.get('out_pcs') or 0.0) for l in lines)
+            out_gross_sum = sum(float(l.get('out_gross_weight') or 0.0) for l in lines)
+            out_net_sum = sum(float(l.get('out_net_weight') or 0.0) for l in lines)
             
-            c_pcs_sum = sum(l.get('closing_pcs') or 0 for l in lines)
-            c_gross_sum = sum(l.get('closing_gross_weight') or 0.0 for l in lines)
-            c_net_sum = sum(l.get('closing_net_weight') or 0.0 for l in lines)
+            c_pcs_sum = sum(float(l.get('closing_pcs') or 0.0) for l in lines)
+            c_gross_sum = sum(float(l.get('closing_gross_weight') or 0.0) for l in lines)
+            c_net_sum = sum(float(l.get('closing_net_weight') or 0.0) for l in lines)
             
             avg_inv_val = (o_gross_sum + c_gross_sum) / 2.0
             if avg_inv_val <= 0.0 and out_gross_sum > 0.0:
                 avg_inv_val = out_gross_sum / 4.0
             no_of_days_val = lines[0].get('no_of_days') or 0 if lines else 0
-            min_stock_val = sum(l.get('min_stock_level') or 0.0 for l in lines)
+            min_stock_val = sum(float(l.get('min_stock_level') or 0.0) for l in lines)
             turnover_val = (out_gross_sum / avg_inv_val) if avg_inv_val > 0.0001 else 0.0
             dio_val = round(no_of_days_val / turnover_val) if turnover_val > 0.0001 else (no_of_days_val if avg_inv_val > 0.0001 else 0)
             stock_gap_val = c_gross_sum - min_stock_val

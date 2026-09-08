@@ -1,3 +1,4 @@
+from collections import defaultdict
 from odoo import models
 from datetime import timedelta
 
@@ -31,7 +32,7 @@ class SchemeMarginListXlsx(models.AbstractModel):
         if not schemes:
             return
 
-        is_redeem_report = schemes[0].is_redeemed
+        is_redeem_report = data.get('is_redeemed', schemes[0].is_redeemed if schemes else False)
         if is_redeem_report:
             sheet.set_column(8, 8, 25) # Sales Value
             sheet.set_column(9, 9, 15) # Sales Fine Qty
@@ -88,12 +89,13 @@ class SchemeMarginListXlsx(models.AbstractModel):
         """
         params = [tuple(schemes.ids)]
 
-        if start_date:
-            query += " AND i.date >= %s"
-            params.append(start_date)
-        if end_date:
-            query += " AND i.date <= %s"
-            params.append(end_date)
+        if not is_redeem_report:
+            if start_date:
+                query += " AND i.date >= %s"
+                params.append(start_date)
+            if end_date:
+                query += " AND i.date <= %s"
+                params.append(end_date)
 
         query += " ORDER BY p.name, e.id, i.date"
 
@@ -104,10 +106,15 @@ class SchemeMarginListXlsx(models.AbstractModel):
         grand_total_fine_qty = 0.0
 
         # Pre-calculate redemption data per scheme
-        redemption_data = {}
+        redemption_data = defaultdict(list)
         enrollment_fine_qtys = {}
         if is_redeem_report:
-            redemptions = self.env['scheme.redemption'].search([('scheme_id', 'in', schemes.ids)])
+            red_domain = [('scheme_id', 'in', schemes.ids)]
+            if start_date:
+                red_domain.append(('date', '>=', start_date))
+            if end_date:
+                red_domain.append(('date', '<=', end_date))
+            redemptions = self.env['scheme.redemption'].search(red_domain)
             for red in redemptions:
                 order = red.sale_order_id
                 if order:
@@ -121,13 +128,13 @@ class SchemeMarginListXlsx(models.AbstractModel):
                         else:
                             sales_fine_qty += getattr(l, 'fine_weight', 0.0)
                             
-                    redemption_data[red.scheme_id.id] = {
-                        'sale_date': order.date_order.date() if order.date_order else False,
+                    redemption_data[red.scheme_id.id].append({
+                        'sale_date': order.date_order.date() if order.date_order else (red.date or False),
                         'sale_name': order.name,
                         'redemption_amount': red.amount,
                         'sales_value': sales_value,
                         'sales_fine_qty': sales_fine_qty,
-                    }
+                    })
 
             # Calculate total fine qty per enrollment for gain/loss
             for rec in records:
@@ -137,12 +144,37 @@ class SchemeMarginListXlsx(models.AbstractModel):
                 fq = amt / fr if fr else 0.0
                 enrollment_fine_qtys[e_id] = enrollment_fine_qtys.get(e_id, 0.0) + fq
 
-            for e_id, r_data in redemption_data.items():
-                r_data['gain_loss'] = enrollment_fine_qtys.get(e_id, 0.0) - r_data['sales_fine_qty']
+            for e_id, r_list in redemption_data.items():
+                tot_sales_fine = sum(r.get('sales_fine_qty', 0.0) for r in r_list)
+                net_gain_loss = enrollment_fine_qtys.get(e_id, 0.0) - tot_sales_fine
+                if len(r_list) == 1:
+                    r_list[0]['gain_loss'] = net_gain_loss
+                else:
+                    for idx, r in enumerate(r_list):
+                        if idx == len(r_list) - 1:
+                            r['gain_loss'] = net_gain_loss
+                        else:
+                            r['gain_loss'] = 0.0
 
-        grand_total_sales_value = sum(d.get('sales_value', 0) for d in redemption_data.values())
-        grand_total_sales_fine_qty = sum(d.get('sales_fine_qty', 0) for d in redemption_data.values())
-        grand_total_gain_loss = sum(d.get('gain_loss', 0) for d in redemption_data.values())
+        enrollments_in_report = set(r['enrollment_id'] for r in records)
+        grand_total_sales_value = sum(
+            r.get('sales_value', 0)
+            for e_id, r_list in redemption_data.items()
+            if e_id in enrollments_in_report
+            for r in r_list
+        )
+        grand_total_sales_fine_qty = sum(
+            r.get('sales_fine_qty', 0)
+            for e_id, r_list in redemption_data.items()
+            if e_id in enrollments_in_report
+            for r in r_list
+        )
+        grand_total_gain_loss = sum(
+            r.get('gain_loss', 0)
+            for e_id, r_list in redemption_data.items()
+            if e_id in enrollments_in_report
+            for r in r_list
+        )
 
         for index, rec in enumerate(records):
             amount = rec['amount'] or 0.0
@@ -173,8 +205,8 @@ class SchemeMarginListXlsx(models.AbstractModel):
                 is_last_row = (index == len(records) - 1) or (records[index+1]['enrollment_id'] != rec['enrollment_id'])
                 
                 if is_last_row:
-                    r_data = redemption_data.get(rec['enrollment_id'])
-                    if r_data:
+                    r_list = redemption_data.get(rec['enrollment_id'], [])
+                    for r_data in r_list:
                         # Print Redemption / Sales Row
                         sheet.write(row, 0, rec['customer_name'] or '')
                         if r_data['sale_date']:
