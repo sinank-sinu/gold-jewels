@@ -655,17 +655,23 @@ class ImportLabelService:
         # ========================================================
 
         # ========================================================
-        # DEBUG INVOICEABLE PO LINES
+        # DEBUG PURCHASE ORDER INVOICEABILITY
         # ========================================================
 
         po.invalidate_recordset()
 
+        _logger.info("====================================================")
+        _logger.info("PO INVOICE DEBUG")
+        _logger.info("PO              : %s", po.name)
+        _logger.info("PO STATE        : %s", po.state)
+        _logger.info("PO COMPANY      : %s", po.company_id.name)
+
         for po_line in po.order_line:
             _logger.info(
-                "INVOICE CHECK | PO=%s | Product=%s | "
-                "Ordered=%s | Received=%s | Invoiced=%s | "
-                "To Invoice=%s | Purchase Method=%s",
-                po.name,
+                "PO LINE | ID=%s | PRODUCT=%s | "
+                "ORDERED=%s | RECEIVED=%s | INVOICED=%s | "
+                "TO_INVOICE=%s | PURCHASE_METHOD=%s",
+                po_line.id,
                 po_line.product_id.display_name,
                 po_line.product_qty,
                 po_line.qty_received,
@@ -675,10 +681,13 @@ class ImportLabelService:
             )
 
         _logger.info(
-            "INVOICE CHECK | PO=%s | Invoiceable lines=%s",
-            po.name,
-            po.order_line.filtered(lambda l: l.qty_to_invoice > 0).ids,
+            "INVOICEABLE LINE IDS = %s",
+            po.order_line.filtered(
+                lambda line: line.qty_to_invoice > 0
+            ).ids
         )
+
+        _logger.info("====================================================")
 
         po.action_create_invoice()
 
