@@ -57,7 +57,7 @@
                     <notebook>
                         <page name="Details">
                             <group string="Barcode">
-                                <field name="barcode" readonly="1"/>
+                                <field name="barcode" readonly="active" />
                             </group>
                             <group>
                                 <field name="job_work_id"
