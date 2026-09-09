@@ -654,41 +654,6 @@ class ImportLabelService:
         # 8. CREATE VENDOR BILL
         # ========================================================
 
-        # ========================================================
-        # DEBUG PURCHASE ORDER INVOICEABILITY
-        # ========================================================
-
-        po.invalidate_recordset()
-
-        _logger.info("====================================================")
-        _logger.info("PO INVOICE DEBUG")
-        _logger.info("PO              : %s", po.name)
-        _logger.info("PO STATE        : %s", po.state)
-        _logger.info("PO COMPANY      : %s", po.company_id.name)
-
-        for po_line in po.order_line:
-            _logger.info(
-                "PO LINE | ID=%s | PRODUCT=%s | "
-                "ORDERED=%s | RECEIVED=%s | INVOICED=%s | "
-                "TO_INVOICE=%s | PURCHASE_METHOD=%s",
-                po_line.id,
-                po_line.product_id.display_name,
-                po_line.product_qty,
-                po_line.qty_received,
-                po_line.qty_invoiced,
-                po_line.qty_to_invoice,
-                po_line.product_id.purchase_method,
-            )
-
-        _logger.info(
-            "INVOICEABLE LINE IDS = %s",
-            po.order_line.filtered(
-                lambda line: line.qty_to_invoice > 0
-            ).ids
-        )
-
-        _logger.info("====================================================")
-
         po.action_create_invoice()
 
         # --------------------------------------------------------
@@ -1567,12 +1532,9 @@ class ImportLabelService:
             else:
 
                 service_products = {
-                    "ADD OR LESS",
-                    "ROUND OFF",
-                    "HALLMARKING EXPENSES",
-                    "FREIGHT CHARGES",
-                    "TRANSPORTATION CHARGE",
-                    "CERTIFICATION CHARGE -18%"
+                    "OLD GOLD",
+                    "18KTD OLD GOLD",
+
                 }
 
                 if template_name.strip().upper() in service_products:
