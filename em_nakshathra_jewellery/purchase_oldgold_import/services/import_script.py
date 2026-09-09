@@ -654,6 +654,34 @@ class ImportLabelService:
         # 8. CREATE VENDOR BILL
         # ========================================================
 
+        # ========================================================
+        # DEBUG INVOICEABLE PO LINES
+        # ========================================================
+
+        po.invalidate_recordset()
+
+        for po_line in po.order_line:
+            _logger.info(
+                "INVOICE CHECK | PO=%s | Product=%s | "
+                "Ordered=%s | Received=%s | Invoiced=%s | "
+                "Purchase Method=%s | State=%s",
+                po.name,
+                po_line.product_id.display_name,
+                po_line.product_qty,
+                po_line.qty_received,
+                po_line.qty_invoiced,
+                po_line.product_id.purchase_method,
+                po.state,
+            )
+
+        _logger.info(
+            "INVOICE CHECK | PO=%s | Invoiceable lines=%s",
+            po.name,
+            po.order_line.filtered(lambda l: l.qty_to_invoice > 0).ids,
+        )
+
+        po.action_create_invoice()
+
         po.action_create_invoice()
 
         # --------------------------------------------------------
