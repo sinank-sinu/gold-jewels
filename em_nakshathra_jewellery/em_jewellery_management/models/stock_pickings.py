@@ -94,6 +94,46 @@ class StockMove(models.Model):
 
         return price
 
+    def _action_done(self, cancel_backorder=False):
+        res = super()._action_done(cancel_backorder=cancel_backorder)
+        for move in self:
+            if move.label_id:
+                vals = {}
+                if move.location_dest_id.usage == 'internal':
+                    vals['branch_location_id'] = move.location_dest_id.id
+                    branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
+                    if branch:
+                        vals['branch_id'] = branch.id
+                elif move.location_dest_id.usage == 'customer':
+                    vals['active'] = False
+                if vals:
+                    move.label_id.sudo().write(vals)
+        return res
+
+    @api.model
+    def _prepare_merge_moves_distinct_fields(self):
+        fields = super()._prepare_merge_moves_distinct_fields()
+        if 'label_id' not in fields:
+            fields.append('label_id')
+        return fields
+
+    def _merge_moves(self, merge_into=False):
+        """Do not merge moves for internal transfers or moves with different labels,
+        preventing lines of the same variant from being summed together into a single move."""
+        if merge_into and (
+            merge_into.picking_type_id.code == 'internal' or
+            (merge_into.picking_id and (merge_into.picking_id.picking_type_code == 'internal' or merge_into.picking_id.picking_type_id.code == 'internal'))
+        ):
+            return self
+
+        moves_to_merge = self.filtered(
+            lambda m: (m.picking_type_id.code or (m.picking_id and (m.picking_id.picking_type_code or m.picking_id.picking_type_id.code))) != 'internal'
+        )
+        moves_not_to_merge = self - moves_to_merge
+        if not moves_to_merge:
+            return self
+        return super(StockMove, moves_to_merge)._merge_moves(merge_into=merge_into) | moves_not_to_merge
+
 
 class StockMoveLine(models.Model):
     _inherit = 'stock.move.line'

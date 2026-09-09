@@ -102,11 +102,8 @@ class JewelleryWeeklyStockCheck(models.Model):
             ('quantity', '>', 0),
         ])
 
-        product_ids = quants.mapped('product_id').ids
-
-        # 2. Get active labels for these products that are in the selected locations
+        # 2. Get active labels in the selected locations
         labels = self.env['product.label'].search([
-            ('product_id', 'in', product_ids),
             ('branch_location_id', 'in', self.location_ids.ids),
             ('active', '=', True),
         ])
@@ -114,40 +111,50 @@ class JewelleryWeeklyStockCheck(models.Model):
         if not labels and not quants:
             raise UserError(_("No active labels or stock found for this location/branch."))
 
-        # Create lines per label
+        # Create lines per label and unlabelled quant lines for any remaining stock
         lines = []
-        for label in labels:
-            lines.append({
-                'stock_check_id': self.id,
-                'product_tmpl_id': label.product_id.product_tmpl_id.id,
-                'product_id': label.product_id.id,
-                'label_id': label.id,
-                'system_qty': 1.0,
-                'system_weight': label.sale_gross_weight,
-                'system_tag_weight': label.tag_weight,
-                'manual_qty': 0.0,
-                'manual_weight': 0.0,
-                'manual_tag_weight': 0.0,
-                'branch_id': label.branch_id.id,
-                'location_id': label.branch_location_id.id,
-            })
-            
-        # Add stock for products without labels (if any)
-        labeled_product_ids = labels.mapped('product_id').ids
-        for quant in quants:
-            if quant.product_id.id not in labeled_product_ids:
+        all_products = quants.mapped('product_id') | labels.mapped('product_id')
+
+        for product in all_products:
+            prod_labels = labels.filtered(lambda l: l.product_id == product)
+            prod_quants = quants.filtered(lambda q: q.product_id == product)
+            total_quant_qty = sum(prod_quants.mapped('quantity'))
+            total_label_wt = sum(prod_labels.mapped('sale_gross_weight'))
+
+            for label in prod_labels:
                 lines.append({
                     'stock_check_id': self.id,
-                    'product_tmpl_id': quant.product_id.product_tmpl_id.id,
-                    'product_id': quant.product_id.id,
+                    'product_tmpl_id': label.product_id.product_tmpl_id.id,
+                    'product_id': label.product_id.id,
+                    'label_id': label.id,
+                    'system_qty': 1.0,
+                    'system_weight': label.sale_gross_weight,
+                    'system_tag_weight': label.tag_weight,
+                    'manual_qty': 0.0,
+                    'manual_weight': 0.0,
+                    'manual_tag_weight': 0.0,
+                    'branch_id': label.branch_id.id,
+                    'location_id': label.branch_location_id.id,
+                })
+
+            # Add remaining un-labeled stock quant (or full quant if no labels)
+            remaining_weight = round(total_quant_qty - total_label_wt, 3)
+            if remaining_weight > 0.0001:
+                loc = prod_quants[0].location_id if prod_quants else self.location_ids[0]
+                branch_rec = loc.branch_id or self.branch_id
+                lines.append({
+                    'stock_check_id': self.id,
+                    'product_tmpl_id': product.product_tmpl_id.id,
+                    'product_id': product.id,
+                    'label_id': False,
                     'system_qty': 0.0,
-                    'system_weight': quant.quantity,
+                    'system_weight': remaining_weight,
                     'system_tag_weight': 0.0,
                     'manual_qty': 0.0,
                     'manual_weight': 0.0,
                     'manual_tag_weight': 0.0,
-                    'branch_id': quant.location_id.branch_id.id,
-                    'location_id': quant.location_id.id,
+                    'branch_id': branch_rec.id,
+                    'location_id': loc.id,
                 })
 
         self.env['jewellery.weekly.stock.check.line'].create(lines)
@@ -403,7 +410,8 @@ class JewelleryWeeklyStockCheckLine(models.Model):
     system_total_weight = fields.Float(
         string='System Total Wt',
         compute='_compute_total_weights',
-        digits=(16, 3)
+        digits=(16, 3),
+        store=True
     )
 
     manual_total_weight = fields.Float(
@@ -414,11 +422,13 @@ class JewelleryWeeklyStockCheckLine(models.Model):
     difference_total_weight = fields.Float(
         string='Diff Total Wt',
         compute='_compute_total_weights',
-        digits=(16, 3)
+        digits=(16, 3),
+        store=True
     )
     is_total_weight_matched = fields.Boolean(
         string='Total Weight Matched',
-        compute='_compute_is_matched'
+        compute='_compute_is_matched',
+        store=True
     )
 
     @api.onchange('manual_total_weight')
@@ -573,29 +583,30 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
     system_total_weight = fields.Float(
         string='System Total Wt',
         compute='_compute_system_totals',
-        digits=(16, 3)
+        digits=(16, 3),
+        store=True
     )
 
     manual_total_weight = fields.Float(
         string='Counted Total Wt',
         compute='_compute_manual_totals',
         readonly=False,
-        digits=(16, 3)
+        digits=(16, 3),
+        store=True
     )
     difference_total_weight = fields.Float(
         string='Diff Total Wt',
         compute='_compute_differences',
-        digits=(16, 3)
+        digits=(16, 3),
+        store=True
     )
     is_total_weight_matched = fields.Boolean(
         string='Total Weight Matched',
-        compute='_compute_differences'
+        compute='_compute_differences',
+        store=True
     )
 
-
-    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight')
-
-
+    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight', 'stock_check_id.line_ids.system_total_weight')
     def _compute_system_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
@@ -605,7 +616,7 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.system_total_weight = sum(lines.mapped('system_total_weight'))
 
 
-    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight', 'stock_check_id.line_ids.manual_tag_weight')
+    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight', 'stock_check_id.line_ids.manual_tag_weight', 'stock_check_id.line_ids.manual_total_weight')
     def _compute_manual_totals(self):
         for summary in self:
             lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
