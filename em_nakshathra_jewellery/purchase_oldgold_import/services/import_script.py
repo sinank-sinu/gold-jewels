@@ -664,14 +664,14 @@ class ImportLabelService:
             _logger.info(
                 "INVOICE CHECK | PO=%s | Product=%s | "
                 "Ordered=%s | Received=%s | Invoiced=%s | "
-                "Purchase Method=%s | State=%s",
+                "To Invoice=%s | Purchase Method=%s",
                 po.name,
                 po_line.product_id.display_name,
                 po_line.product_qty,
                 po_line.qty_received,
                 po_line.qty_invoiced,
+                po_line.qty_to_invoice,
                 po_line.product_id.purchase_method,
-                po.state,
             )
 
         _logger.info(
@@ -679,8 +679,6 @@ class ImportLabelService:
             po.name,
             po.order_line.filtered(lambda l: l.qty_to_invoice > 0).ids,
         )
-
-        po.action_create_invoice()
 
         po.action_create_invoice()
 
