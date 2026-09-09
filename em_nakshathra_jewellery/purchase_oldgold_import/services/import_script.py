@@ -387,13 +387,48 @@ class ImportLabelService:
 
         for line in lines:
 
-            product = self._resolve_product(
-                line,
-                current_company
-            )
+            product_name = str(
+                line.get('Product') or ''
+            ).strip().upper()
+
+            service_products = {
+                "OLD GOLD",
+                "18KTD OLD GOLD",
+            }
+
+            if product_name not in service_products:
+                raise UserError(
+                    "Invalid product '%s' in Bill Reference '%s'. "
+                    "Only OLD GOLD and 18KTD OLD GOLD are allowed."
+                    % (
+                        product_name,
+                        bill_ref,
+                    )
+                )
+
+            product = self.env['product.product'].with_context(
+                active_test=False
+            ).search([
+                ('name', '=ilike', product_name),
+                '|',
+                ('company_id', '=', current_company.id),
+                ('company_id', '=', False),
+            ], limit=1)
 
             if not product:
-                continue
+                raise UserError(
+                    "Product '%s' was not found in Odoo for company '%s'."
+                    % (
+                        product_name,
+                        current_company.name,
+                    )
+                )
+
+            _logger.info(
+                "OLD GOLD PRODUCT FOUND: %s | ID: %s",
+                product.display_name,
+                product.id,
+            )
 
             tax_name = str(
                 line.get("Order Lines/Taxes") or ""
