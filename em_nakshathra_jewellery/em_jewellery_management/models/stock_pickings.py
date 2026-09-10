@@ -1,4 +1,4 @@
-from odoo import models, fields,api
+from odoo import models, fields, api, _
 
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
@@ -107,7 +107,26 @@ class StockMove(models.Model):
                 elif move.location_dest_id.usage == 'customer':
                     vals['active'] = False
                 if vals:
-                    move.label_id.sudo().write(vals)
+                    move.label_id.with_context(from_stock_transfer=True).sudo().write(vals)
+
+                # Post tracking log in Chatter
+                try:
+                    transfer_ref = move.picking_id.name if move.picking_id else (move.reference or move.name)
+                    branch_name = branch.name if branch else (move.label_id.branch_id.name or _("N/A"))
+                    msg = _(
+                        "<b>Stock Transfer Completed</b> (%s)<br/>"
+                        "• From: %s<br/>"
+                        "• To: %s<br/>"
+                        "• Branch: %s"
+                    ) % (
+                        transfer_ref,
+                        move.location_id.display_name,
+                        move.location_dest_id.display_name,
+                        branch_name
+                    )
+                    move.label_id.sudo().message_post(body=msg)
+                except Exception:
+                    pass
         return res
 
     @api.model

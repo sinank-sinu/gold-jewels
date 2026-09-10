@@ -35,11 +35,12 @@ class StockPicking(models.Model):
                 continue
 
             move = picking.move_ids_without_package.filtered(
-                lambda m: m.label_id and m.label_id.source_location_id
+                lambda m: m.label_id and (m.label_id.branch_location_id or m.label_id.source_location_id)
             )[:1]
 
             if move:
-                picking.location_id = move.label_id.source_location_id.id
+                loc = move.label_id.branch_location_id or move.label_id.source_location_id
+                picking.location_id = loc.id
                 if prev_dest_loc:
                     picking.location_dest_id = prev_dest_loc
             else:

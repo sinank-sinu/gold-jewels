@@ -1,21 +1,23 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 import math
 import base64
 from io import BytesIO
 
-from odoo.exceptions import ValidationError
+from odoo.exceptions import ValidationError, UserError
 from odoo.tools import barcode as barcode_tool
 
 
 class ProductLabel(models.Model):
     _name = 'product.label'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Product Label'
     # _rec_name = 'label_name'
 
-    name = fields.Char(string="Label Reference", required=True, copy=False, default="New")
+    name = fields.Char(string="Label Reference", required=True, copy=False, default="New", tracking=True)
     active = fields.Boolean(
         string='Active',
-        default=False
+        default=False,
+        tracking=True
     )
     image = fields.Binary(string="Label Image", attachment=True)
 
@@ -26,12 +28,14 @@ class ProductLabel(models.Model):
     branch_location_id = fields.Many2one(
         'stock.location',
         string='Destination Location',
-        domain="[('usage', '=', 'internal'), ('branch_id', '=', branch_id)]"
+        domain="[('usage', '=', 'internal'), ('branch_id', '=', branch_id)]",
+        tracking=True
     )
     source_location_id = fields.Many2one(
         'stock.location',
         string='Source Location',
-        domain="[('usage', '=', 'internal')]"
+        domain="[('usage', '=', 'internal')]",
+        tracking=True
     )
     picking_id = fields.Many2one('stock.picking', string="Stock Picking", readonly=True)
     purchase_id = fields.Many2one(
@@ -41,14 +45,15 @@ class ProductLabel(models.Model):
     )
     product_id = fields.Many2one(
         'product.product',
-        ondelete='cascade'
+        ondelete='cascade',
+        tracking=True
     )
     product_tmpl_id = fields.Many2one(
         'product.template',
         string="Product",
     )
     branch_id = fields.Many2one('res.branch', string='Branch', store=True,
-                                readonly=False )
+                                readonly=False, tracking=True)
     company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
@@ -67,15 +72,15 @@ class ProductLabel(models.Model):
     diamond_certificate_filename = fields.Char(
         string="Certificate File Name"
     )
-    sale_gross_weight = fields.Float(string="Sale Gross Weight (g)",digits=(16, 3))
-    sale_stone_weight = fields.Float(string="Sale Stone Weight (g)",digits=(16, 3))
-    sale_stone_weight_ct = fields.Float(string="Sale Stone Weight (ct)",digits=(12, 4))
-    sale_diamond_weight = fields.Float(string="Sale Diamond Weight (g)",digits=(16, 3))
+    sale_gross_weight = fields.Float(string="Sale Gross Weight (g)", digits=(16, 3), tracking=True)
+    sale_stone_weight = fields.Float(string="Sale Stone Weight (g)", digits=(16, 3))
+    sale_stone_weight_ct = fields.Float(string="Sale Stone Weight (ct)", digits=(12, 4))
+    sale_diamond_weight = fields.Float(string="Sale Diamond Weight (g)", digits=(16, 3))
 
     sale_net_weight = fields.Float(
         string="Sale Net Weight (g)",
         compute="_compute_sale_net_weight",
-        store=True,digits=(16, 3)
+        store=True, digits=(16, 3)
     )
 
     sale_metal_rate = fields.Float(string="Sale Metal Amount")
@@ -100,18 +105,18 @@ class ProductLabel(models.Model):
     # =========================
     # PURCHASE JEWELLERY DETAILS
     # =========================
-    purity_id = fields.Many2one('gold.purity', string="Purity")
-    purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram",digits=(16, 3))
+    purity_id = fields.Many2one('gold.purity', string="Purity", tracking=True)
+    purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram", digits=(16, 3))
 
-    purchase_gross_weight = fields.Float(string="Purchase Gross Amount (g)",digits=(16, 3))
-    purchase_stone_weight = fields.Float(string="Purchase Stone Weight (g)",digits=(16, 3))
-    purchase_stone_weight_ct = fields.Float(string="Purchase Stone Weight (ct)",digits=(12, 4))
-    purchase_diamond_weight = fields.Float(string="Purchase Diamond Weight (g)",digits=(16, 3))
+    purchase_gross_weight = fields.Float(string="Purchase Gross Amount (g)", digits=(16, 3), tracking=True)
+    purchase_stone_weight = fields.Float(string="Purchase Stone Weight (g)", digits=(16, 3))
+    purchase_stone_weight_ct = fields.Float(string="Purchase Stone Weight (ct)", digits=(12, 4))
+    purchase_diamond_weight = fields.Float(string="Purchase Diamond Weight (g)", digits=(16, 3))
 
     purchase_net_weight = fields.Float(
         string="Purchase Net Weight (g)",
         compute="_compute_purchase_net_weight",
-        store=True,digits=(16, 3)
+        store=True, digits=(16, 3)
     )
 
     purchase_metal_rate = fields.Float(
@@ -136,13 +141,13 @@ class ProductLabel(models.Model):
         compute="_compute_purchase_making_charge",
         store=True
     )
-    mc_fine =fields.Float(string="MC Fine" ,compute="_compute_purchase_mc_fine",digits=(16, 3))
+    mc_fine = fields.Float(string="MC Fine", compute="_compute_purchase_mc_fine", digits=(16, 3))
     barcode = fields.Char(
         'Barcode', copy=False, index='btree_not_null',
         help="International Article Number used for product identification.")
     tag_weight = fields.Float(string="Tag Weight (g)")
-    sale_fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_sale_fine_weight",digits=(16, 3))
-    purchase_fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_purchase_fine_weight",digits=(16, 3))
+    sale_fine_weight = fields.Float(string="Fine Weight  (g)", compute="_compute_sale_fine_weight", digits=(16, 3))
+    purchase_fine_weight = fields.Float(string="Fine Weight  (g)", compute="_compute_purchase_fine_weight", digits=(16, 3))
 
     sale_diamond_weight_gm = fields.Float(
         string="Diamond Weight (g)",
@@ -163,7 +168,7 @@ class ProductLabel(models.Model):
         digits=(12, 4)
     )
     sync_lock = fields.Boolean(default=False)
-    is_stocked_in = fields.Boolean(string="Stock Updated", default=False, copy=False)
+    is_stocked_in = fields.Boolean(string="Stock Updated", default=False, copy=False, tracking=True)
 
     unlabelled_weight = fields.Float(
         string="Unlabelled Weight",
