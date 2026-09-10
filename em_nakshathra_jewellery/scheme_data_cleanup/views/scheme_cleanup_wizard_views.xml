@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_scheme_cleanup_wizard_form" model="ir.ui.view">
+        <field name="name">scheme.cleanup.wizard.form</field>
+        <field name="model">scheme.cleanup.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Scheme Data Cleanup &amp; Journal Reversal">
+                <field name="state" invisible="1"/>
+
+                <!-- PREVIEW STATE -->
+                <div invisible="state != 'draft'">
+                    <div class="alert alert-warning" role="alert">
+                        <h4 class="alert-heading font-weight-bold">
+                            <i class="fa fa-exclamation-triangle mr-2"/>Caution: Irreversible Deletion
+                        </h4>
+                        <p class="mb-0">
+                            This wizard will revert and permanently delete all scheme data, including enrollments, installments, and linked journal entries. You can also monitor live real-time progress using the dedicated web console link below.
+                        </p>
+                    </div>
+
+                    <group string="Database Records to be Removed">
+                        <group>
+                            <field name="enrollment_count"/>
+                            <field name="installment_count"/>
+                            <field name="redemption_count"/>
+                            <field name="pinelabs_count"/>
+                        </group>
+                        <group>
+                            <field name="move_count"/>
+                            <field name="move_line_count"/>
+                            <field name="reconcile_count"/>
+                            <field name="sale_order_scheme_count"/>
+                        </group>
+                    </group>
+
+                    <group string="Safety Authorization">
+                        <field name="confirm_deletion" widget="boolean_toggle"/>
+                    </group>
+                </div>
+
+                <!-- COMPLETED STATE -->
+                <div invisible="state != 'done'">
+                    <div class="alert alert-success" role="alert">
+                        <h4 class="alert-heading font-weight-bold">
+                            <i class="fa fa-check-circle mr-2"/>Cleanup Successfully Completed!
+                        </h4>
+                        <p class="mb-0">
+                            All scheme records and linked journal entries have been completely removed and reverted.
+                        </p>
+                    </div>
+
+                    <group string="Execution Log">
+                        <field name="log_summary" nolabel="1"/>
+                    </group>
+                </div>
+
+                <footer>
+                    <button string="Open Live Web Console (Separate Page)" name="action_open_web_console" type="object" class="btn-info" icon="fa-external-link"/>
+                    <button string="Refresh Counts" name="action_refresh_counts" type="object" class="btn-secondary" invisible="state != 'draft'"/>
+                    <button string="Revert &amp; Delete All Scheme Data" name="action_cleanup" type="object" class="btn-danger" invisible="state != 'draft' or not confirm_deletion" data-hotkey="q"/>
+                    <button string="Close" class="btn-primary" special="cancel" invisible="state != 'done'"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" invisible="state != 'draft'"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_scheme_cleanup_wizard" model="ir.actions.act_window">
+        <field name="name">Scheme Data Cleanup</field>
+        <field name="res_model">scheme.cleanup.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Separate URL Action for Live Progress Web Console -->
+    <record id="action_open_scheme_cleanup_web" model="ir.actions.act_url">
+        <field name="name">Scheme Cleanup Live Console</field>
+        <field name="url">/scheme_cleanup</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Item: Wizard Dialog -->
+    <menuitem id="menu_scheme_cleanup_wizard"
+              name="Scheme Data Cleanup"
+              parent="em_jewellery_management.menu_scheme_enrollment_category"
+              action="action_scheme_cleanup_wizard"
+              groups="base.group_system,em_jewellery_management.group_jewellery_manager"
+              sequence="98"/>
+
+    <!-- Menu Item: Dedicated Web Link (opens /scheme_cleanup in a new tab) -->
+    <menuitem id="menu_scheme_cleanup_web_link"
+              name="Scheme Cleanup (Live Web Console)"
+              parent="em_jewellery_management.menu_scheme_enrollment_category"
+              action="action_open_scheme_cleanup_web"
+              groups="base.group_system,em_jewellery_management.group_jewellery_manager"
+              sequence="99"/>
+</odoo>
