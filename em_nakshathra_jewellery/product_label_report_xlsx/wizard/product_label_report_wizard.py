@@ -116,15 +116,15 @@ class ProductLabelReportWizard(models.TransientModel):
             last_move = last_move_before_by_label.get(label.id)
             if last_move:
                 historical_loc = last_move.location_dest_id
-                historical_branch = last_move.branch_id or historical_loc.branch_id
+                historical_branch = historical_loc.branch_id or last_move.branch_id
             else:
                 first_move = first_move_by_label.get(label.id)
                 if first_move:
                     historical_loc = first_move.location_id
-                    historical_branch = first_move.branch_id or historical_loc.branch_id
+                    historical_branch = historical_loc.branch_id or first_move.branch_id
                 else:
                     historical_loc = label.branch_location_id
-                    historical_branch = label.branch_id
+                    historical_branch = historical_loc.branch_id or label.branch_id
 
             # Filter by branch / location
             if historical_loc.id not in loc_ids:
