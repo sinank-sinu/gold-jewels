@@ -1,4 +1,5 @@
 from odoo import models, fields, api, _
+from odoo.tools.float_utils import float_compare
 
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
@@ -96,37 +97,45 @@ class StockMove(models.Model):
 
     def _action_done(self, cancel_backorder=False):
         res = super()._action_done(cancel_backorder=cancel_backorder)
-        for move in self:
-            if move.label_id:
-                vals = {}
-                if move.location_dest_id.usage == 'internal':
-                    vals['branch_location_id'] = move.location_dest_id.id
-                    branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
-                    if branch:
-                        vals['branch_id'] = branch.id
-                elif move.location_dest_id.usage == 'customer':
-                    vals['active'] = False
-                if vals:
-                    move.label_id.with_context(from_stock_transfer=True).sudo().write(vals)
+        moves_done = res if isinstance(res, models.Model) and res._name == 'stock.move' else self.filtered(lambda m: m.state == 'done')
+        for move in moves_done:
+            if move.state != 'done':
+                continue
+            rounding = move.product_uom.rounding if move.product_uom else 0.001
+            if float_compare(move.quantity, 0.0, precision_rounding=rounding) <= 0:
+                continue
+            if not move.label_id:
+                continue
 
-                # Post tracking log in Chatter
-                try:
-                    transfer_ref = move.picking_id.name if move.picking_id else (move.reference or move.name)
-                    branch_name = branch.name if branch else (move.label_id.branch_id.name or _("N/A"))
-                    msg = _(
-                        "<b>Stock Transfer Completed</b> (%s)<br/>"
-                        "• From: %s<br/>"
-                        "• To: %s<br/>"
-                        "• Branch: %s"
-                    ) % (
-                        transfer_ref,
-                        move.location_id.display_name,
-                        move.location_dest_id.display_name,
-                        branch_name
-                    )
-                    move.label_id.sudo().message_post(body=msg)
-                except Exception:
-                    pass
+            vals = {}
+            if move.location_dest_id.usage == 'internal':
+                vals['branch_location_id'] = move.location_dest_id.id
+                branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
+                if branch:
+                    vals['branch_id'] = branch.id
+            elif move.location_dest_id.usage == 'customer':
+                vals['active'] = False
+            if vals:
+                move.label_id.with_context(from_stock_transfer=True).sudo().write(vals)
+
+            # Post tracking log in Chatter
+            try:
+                transfer_ref = move.picking_id.name if move.picking_id else (move.reference or move.name)
+                branch_name = branch.name if branch else (move.label_id.branch_id.name or _("N/A"))
+                msg = _(
+                    "<b>Stock Transfer Completed</b> (%s)<br/>"
+                    "• From: %s<br/>"
+                    "• To: %s<br/>"
+                    "• Branch: %s"
+                ) % (
+                    transfer_ref,
+                    move.location_id.display_name,
+                    move.location_dest_id.display_name,
+                    branch_name
+                )
+                move.label_id.sudo().message_post(body=msg)
+            except Exception:
+                pass
         return res
 
     @api.model
