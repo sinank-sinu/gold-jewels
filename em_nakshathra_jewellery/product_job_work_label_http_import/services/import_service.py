@@ -296,13 +296,13 @@ class ProductLabelImportService:
                 '|', ('complete_name', '=ilike', src_loc_name), ('name', '=ilike', src_loc_name),
                 ('company_id', 'in', [excel_company.id, False])
             ], limit=1)
-            if not src_loc:
-                src_loc = self.env['stock.location'].create({
-                    'name': src_loc_name, 
-                    'usage': 'internal',
-                    'company_id': excel_company.id
-                })
-            elif src_loc.company_id and src_loc.company_id.id != excel_company.id:
+            # if not src_loc:
+            #     src_loc = self.env['stock.location'].create({
+            #         'name': src_loc_name,
+            #         'usage': 'internal',
+            #         'company_id': excel_company.id
+            #     })
+        elif src_loc.company_id and src_loc.company_id.id != excel_company.id:
                 raise UserError(f"Source Location '{src_loc_name}' belongs to {src_loc.company_id.name}, expected {excel_company.name}")
                 
         # 4. Find Destination Location
@@ -313,14 +313,14 @@ class ProductLabelImportService:
                 '|', ('complete_name', '=ilike', dest_loc_name), ('name', '=ilike', dest_loc_name),
                 ('company_id', 'in', [excel_company.id, False])
             ], limit=1)
-            if not dest_loc:
-                dest_loc = self.env['stock.location'].create({
-                    'name': dest_loc_name,
-                    'usage': 'internal',
-                    'branch_id': branch.id if branch else False,
-                    'company_id': excel_company.id
-                })
-            elif dest_loc.company_id and dest_loc.company_id.id != excel_company.id:
+            # if not dest_loc:
+            #     dest_loc = self.env['stock.location'].create({
+            #         'name': dest_loc_name,
+            #         'usage': 'internal',
+            #         'branch_id': branch.id if branch else False,
+            #         'company_id': excel_company.id
+            #     })
+        elif dest_loc.company_id and dest_loc.company_id.id != excel_company.id:
                 raise UserError(f"Destination Location '{dest_loc_name}' belongs to {dest_loc.company_id.name}, expected {excel_company.name}")
                 
         # 5. Find Purchase Order
