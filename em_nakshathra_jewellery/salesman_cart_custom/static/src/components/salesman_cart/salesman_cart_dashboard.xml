@@ -14,10 +14,11 @@
                         <input type="text" 
                                class="form-control border-start-0 ps-0 shadow-none" 
                                placeholder="Search jewelry pieces..."
-                               t-model="state.searchQuery"/>
+                               t-model="state.searchQuery"
+                               t-on-input="onSearchInput"/>
                         <t t-if="state.searchQuery">
                             <button class="btn btn-outline-secondary border-start-0" 
-                                    t-on-click="() => this.state.searchQuery = ''">
+                                    t-on-click="clearSearch">
                                 <i class="fa fa-times"/>
                             </button>
                         </t>
@@ -43,17 +44,26 @@
                                         </div>
                                     </div>
                                     <div class="d-flex flex-wrap align-items-center justify-content-between mt-2 border-top pt-2 gap-2">
-                                        <t t-if="item.type === 'product'">
+                                        <t t-if="item.type === 'vault' || item.type === 'product'">
                                             <div class="input-group input-group-sm" style="width: 110px;">
-                                                <input type="number" class="form-control" t-model="item.inputWeight" step="0.001" min="0.001" placeholder="Wgt"/>
+                                                <input type="number" 
+                                                       class="form-control" 
+                                                       t-att-value="state.inputWeights[item.unique_id] !== undefined ? state.inputWeights[item.unique_id] : (item.inputWeight || 1.0)" 
+                                                       t-on-input="(ev) => this.onWeightInput(item.unique_id, ev)"
+                                                       step="0.001" 
+                                                       min="0.001" 
+                                                       placeholder="Wgt"/>
                                                 <span class="input-group-text">g</span>
                                             </div>
                                         </t>
                                         <div t-else=""></div>
-                                        <button class="btn btn-primary btn-sm px-3 rounded-pill" style="max-width: fit-content;"
-                                                t-att-disabled="state.loading"
+                                        <button t-attf-class="btn btn-sm px-3 rounded-pill #{item.in_tray ? 'btn-secondary text-white' : 'btn-primary'}" 
+                                                style="max-width: fit-content;"
+                                                t-att-disabled="state.loading || item.in_tray"
                                                 t-on-click="() => this.addToCart(item.unique_id)">
-                                            <i class="fa fa-shopping-basket me-1"/> Add to Tray
+                                            <i t-attf-class="fa #{item.in_tray ? 'fa-check' : 'fa-shopping-basket'} me-1"/>
+                                            <t t-if="item.in_tray">In Tray</t>
+                                            <t t-else="">Add to Tray</t>
                                         </button>
                                     </div>
                                 </div>
@@ -88,7 +98,7 @@
                                 <t t-foreach="state.cartLines" t-as="line" t-key="line.id">
                                     <div class="bg-secondary bg-opacity-20 p-2 rounded d-flex justify-content-between align-items-center border border-secondary">
                                         <div>
-                                            <span class="d-block text-truncate text-wrap font-weight-bold text-light" style="max-width: 200px;">
+                                            <span class="d-block text-truncate text-wrap font-weight-bold text-dark" style="max-width: 200px; color: #000000;">
                                                 <t t-esc="line.label_id ? line.label_id[1] : line.product_id[1]"/>
                                             </span>
                                             <small class="text-warning">Wgt: <t t-esc="line.qty"/> g</small>

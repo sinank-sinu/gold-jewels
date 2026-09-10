@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_scheme_cleanup_wizard_manager,scheme.cleanup.wizard.manager,model_scheme_cleanup_wizard,base.group_system,1,1,1,1
+access_scheme_cleanup_wizard_jewellery_mgr,scheme.cleanup.wizard.jewellery_mgr,model_scheme_cleanup_wizard,em_jewellery_management.group_jewellery_manager,1,1,1,1

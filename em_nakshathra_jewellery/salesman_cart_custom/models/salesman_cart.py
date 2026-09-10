@@ -38,9 +38,12 @@ class SalesmanCart(models.Model):
     def action_add_product(self, product_id, lot_id=False, qty=1.0, label_id=False):
         """Called by OWL Frontend to add item and immediately trigger stock transfer"""
         self.ensure_one()
-        if self.state != 'draft':
-            raise UserError(_("You can only add items to an active cart."))
-            
+        if label_id and label_id in self.cart_line_ids.mapped('label_id.id'):
+            raise UserError(_("This labeled piece is already in your tray."))
+
+        if not label_id and product_id in self.cart_line_ids.filtered(lambda l: not l.label_id).mapped('product_id.id'):
+            raise UserError(_("This vault item is already in your tray. Remove it first if you wish to adjust the weight."))
+
         if label_id:
             label_rec = self.env['product.label'].browse(label_id)
             if label_rec.sale_gross_weight:

@@ -164,6 +164,7 @@ class ImportLabelService:
 
             # ----------------------------------------------------
             # PROCESS EACH BILL
+            # EACH BILL REFERENCE IS FULLY ATOMIC
             # ----------------------------------------------------
 
             for bill_ref, lines in grouped_data.items():
@@ -175,58 +176,195 @@ class ImportLabelService:
                 bill_date = lines[0].get("Bill Date")
 
                 if isinstance(bill_date, datetime):
-
-                    date_str = bill_date.strftime('%Y-%m-%d')
-
+                    date_str = bill_date.strftime("%Y-%m-%d")
                 else:
-
                     date_str = (
                         str(bill_date).split(" ")[0]
                         if bill_date
-                        else datetime.now().strftime('%Y-%m-%d')
+                        else datetime.now().strftime("%Y-%m-%d")
                     )
+
+                # ------------------------------------------------
+                # SAVEPOINT
+                #
+                # Anything created inside this block:
+                #   PO
+                #   PO Lines
+                #   Receipt
+                #   Stock Moves
+                #   Vendor Bill
+                #   Payments
+                #
+                # will be rolled back if ANY exception occurs.
+                # ------------------------------------------------
 
                 try:
 
-                    self._process_po_group(
-                        vendor_name,
-                        bill_ref,
-                        date_str,
-                        lines
-                    )
-
-                    count += 1
-
-                    if count % 10 == 0:
-
-                        self.env.cr.commit()
+                    with self.env.cr.savepoint():
 
                         _logger.info(
-                            "Processed %s POs...",
-                            count
+                            "===================================================="
+                        )
+                        _logger.info(
+                            "STARTING BILL REFERENCE: %s",
+                            bill_ref
+                        )
+                        _logger.info(
+                            "Vendor: %s",
+                            vendor_name
+                        )
+                        _logger.info(
+                            "===================================================="
+                        )
+
+                        # --------------------------------------------
+                        # PROCESS COMPLETE PO
+                        # --------------------------------------------
+
+                        self._process_po_group(
+                            vendor_name,
+                            bill_ref,
+                            date_str,
+                            lines
+                        )
+
+                        # --------------------------------------------
+                        # SUCCESS
+                        # --------------------------------------------
+
+                        count += 1
+
+                        _logger.info(
+                            "SUCCESS: Bill Reference %s imported successfully.",
+                            bill_ref
                         )
 
                 except Exception as e:
 
-                    self.env.cr.rollback()
+                    # ------------------------------------------------
+                    # IMPORTANT:
+                    #
+                    # The savepoint automatically rolls back everything
+                    # created during this Bill Reference.
+                    #
+                    # Therefore:
+                    #   PO       -> removed
+                    #   PO lines -> removed
+                    #   Receipt  -> removed
+                    #   Moves    -> removed
+                    #   Bill     -> removed
+                    #   Payment  -> removed
+                    #
+                    # Previous successful POs remain untouched.
+                    # ------------------------------------------------
+
+                    error_message = str(e).strip()
+
+                    if not error_message:
+                        error_message = (
+                            "Unknown error occurred while processing "
+                            "this Purchase Order."
+                        )
 
                     _logger.exception(
-                        "Failed processing Bill Reference %s",
+                        "FAILED Bill Reference %s - "
+                        "Transaction rolled back completely.",
                         bill_ref
                     )
 
-                    failed_records.append(
-                        f"Bill Reference: {bill_ref}\n"
-                        f"Vendor: {vendor_name}\n"
-                        f"Reason: {str(e)}"
+                    failed_records.append({
+                        "bill_ref": bill_ref,
+                        "vendor": vendor_name,
+                        "reason": error_message,
+                    })
+
+                    _logger.error(
+                        "ROLLBACK COMPLETE | Bill Reference=%s | Vendor=%s | "
+                        "Reason=%s",
+                        bill_ref,
+                        vendor_name,
+                        error_message,
                     )
 
+                    # Continue with next PO
                     continue
+
+            # ----------------------------------------------------
+            # FINAL COMMIT
+            # ----------------------------------------------------
 
             self.env.cr.commit()
 
+            # ----------------------------------------------------
+            # FINAL IMPORT RESULT
+            # ----------------------------------------------------
+
             if failed_records:
 
+                failure_lines = []
+
+                failure_lines.append(
+                    "Import completed with failures."
+                )
+                failure_lines.append("")
+                failure_lines.append(
+                    "Successful Purchase Orders: %s" % count
+                )
+                failure_lines.append(
+                    "Failed Purchase Orders: %s" % len(failed_records)
+                )
+                failure_lines.append("")
+                failure_lines.append(
+                    "FAILED PURCHASE ORDERS"
+                )
+                failure_lines.append(
+                    "------------------------------------------------------------"
+                )
+
+                for index, failure in enumerate(
+                        failed_records,
+                        start=1
+                ):
+                    failure_lines.append(
+                        "%s. Bill Reference: %s"
+                        % (
+                            index,
+                            failure["bill_ref"],
+                        )
+                    )
+
+                    failure_lines.append(
+                        "   Vendor: %s"
+                        % failure["vendor"]
+                    )
+
+                    failure_lines.append(
+                        "   Reason: %s"
+                        % failure["reason"]
+                    )
+
+                    failure_lines.append(
+                        "   Status: PO NOT CREATED"
+                    )
+
+                    failure_lines.append("")
+
+                failure_lines.append(
+                    "IMPORTANT: No Purchase Order, Receipt, "
+                    "Vendor Bill, or Payment was retained "
+                    "for the failed entries."
+                )
+
+                raise UserError(
+                    "\n".join(failure_lines)
+                )
+
+            _logger.info(
+                "Purchase Label Bulk Import Completed Successfully. "
+                "Successful POs: %s",
+                count
+            )
+            if failed_records:
                 raise UserError(
                     "Import completed with the following failures:\n\n"
                     + "\n\n".join(failed_records)
@@ -271,6 +409,7 @@ class ImportLabelService:
             for line in lines
             if line.get('Company')
         )
+
 
         if not company_names:
 
@@ -387,48 +526,13 @@ class ImportLabelService:
 
         for line in lines:
 
-            product_name = str(
-                line.get('Product') or ''
-            ).strip().upper()
-
-            service_products = {
-                "OLD GOLD",
-                "18KTD OLD GOLD",
-            }
-
-            if product_name not in service_products:
-                raise UserError(
-                    "Invalid product '%s' in Bill Reference '%s'. "
-                    "Only OLD GOLD and 18KTD OLD GOLD are allowed."
-                    % (
-                        product_name,
-                        bill_ref,
-                    )
-                )
-
-            product = self.env['product.product'].with_context(
-                active_test=False
-            ).search([
-                ('name', '=ilike', product_name),
-                '|',
-                ('company_id', '=', current_company.id),
-                ('company_id', '=', False),
-            ], limit=1)
+            product = self._resolve_product(
+                line,
+                current_company
+            )
 
             if not product:
-                raise UserError(
-                    "Product '%s' was not found in Odoo for company '%s'."
-                    % (
-                        product_name,
-                        current_company.name,
-                    )
-                )
-
-            _logger.info(
-                "OLD GOLD PRODUCT FOUND: %s | ID: %s",
-                product.display_name,
-                product.id,
-            )
+                continue
 
             tax_name = str(
                 line.get("Order Lines/Taxes") or ""
@@ -455,6 +559,10 @@ class ImportLabelService:
                 or line.get('Unit Price')
                 or 0.0
             )
+            diamond_rate = float(
+                line.get('Sale Diamond Amount')
+                or 0.0
+            )
 
             weight = float(
                 line.get('Weight')
@@ -466,6 +574,9 @@ class ImportLabelService:
 
             gold_rate_val = str(
                 line.get("Fine Rate") or ""
+            ).strip()
+            price_subtotal = str(
+                line.get("Order Lines/Subtotal") or ""
             ).strip()
 
             try:
@@ -519,16 +630,25 @@ class ImportLabelService:
             # PO LINE
             # ----------------------------------------------------
 
+            price_subtotal = (qty *price )+ diamond_rate
+
+            price_unit = (
+                                                          price_subtotal
+                                                  ) / (qty or 1.0)
+
+
             po_line_vals = {
                 'order_id': po.id,
                 'product_id': product.id,
                 'name': product.name,
                 'product_qty': qty,
-                'price_unit': price,
+                'price_unit': price_unit,
+                # 'price_unit': price,
+                'diamond_rate': diamond_rate,
                 'gross_weight': weight,
                 'product_uom': product.uom_id.id,
                 'date_planned': date_str,
-                'gold_rate': gold_rate,
+                'price_subtotal' : price_subtotal,
                 'taxes_id': (
                     [(6, 0, [tax.id])]
                     if tax
@@ -538,6 +658,7 @@ class ImportLabelService:
 
             if purity_id:
                 po_line_vals['purity_id'] = purity_id
+            print("po_line_vals",po_line_vals)
 
             self.env['purchase.order.line'].create(
                 po_line_vals
@@ -689,8 +810,53 @@ class ImportLabelService:
         # 8. CREATE VENDOR BILL
         # ========================================================
 
-        po.action_create_invoice()
+        bill_action = po.action_create_invoice()
 
+        if not isinstance(bill_action, dict):
+            raise UserError(
+                "Unexpected result from action_create_invoice() for PO '%s': %r"
+                % (po.name, bill_action)
+            )
+
+        bill_id = bill_action.get('res_id')
+
+        if not bill_id:
+            raise UserError(
+                "Vendor bill was not created for PO '%s'. "
+                "action_create_invoice() returned: %r"
+                % (po.name, bill_action)
+            )
+
+        bill = self.env['account.move'].browse(bill_id).exists()
+
+        if bill.state == 'draft':
+            po_date = po.date_order.date()
+
+            bill.invoice_date = po_date
+            bill.date = po_date
+
+            bill.name = '/'
+            # for invoice_line in bill.invoice_line_ids:
+            #     po_line = invoice_line.purchase_line_id
+            #
+            #     if po_line:
+            #         custom_subtotal = (
+            #                 (po_line.metal_amount or 0.0)
+            #                 + (po_line.mc_amount or 0.0)
+            #                 + (po_line.stone_rate or 0.0)
+            #                 + (po_line.diamond_rate or 0.0)
+            #         )
+            #
+            #         normal_subtotal = (
+            #                 po_line.product_qty * po_line.price_unit
+            #         )
+            #
+            #         custom_difference = custom_subtotal
+            #
+            #         invoice_line.price_unit = (
+            #                                           normal_subtotal + custom_difference
+            #                                   ) / (invoice_line.quantity or 1.0)
+            bill.action_post()
         # --------------------------------------------------------
         # FIND CREATED BILL
         # --------------------------------------------------------
@@ -712,9 +878,9 @@ class ImportLabelService:
         # 10. POST BILL
         # ========================================================
 
-        if bill.state == 'draft':
-
-            bill.action_post()
+        # if bill.state == 'draft':
+        #
+        #     bill.action_post()
 
         # ========================================================
         # 11. REGISTER PAYMENT
@@ -779,6 +945,9 @@ class ImportLabelService:
         # ============================================================
 
         if bill.state == 'draft':
+            # po_/o_date
+
+            bill.name = '/'
             bill.action_post()
 
         bill.invalidate_recordset([
@@ -1008,38 +1177,39 @@ class ImportLabelService:
                     % bill.name
                 )
 
-            if cash_amount > residual_before_cash + 0.10:
-                raise UserError(
-                    "Cash payment exceeds bill residual.\n\n"
-                    "Bill: %s\n"
-                    "Bill Residual: %.2f\n"
-                    "Cash Amount: %.2f"
-                    % (
-                        bill.name,
-                        residual_before_cash,
-                        cash_amount,
-                    )
-                )
+            # if cash_amount > residual_before_cash + 0.10:
+            #     raise UserError(
+            #         "Cash payment exceeds bill residual.\n\n"
+            #         "Bill: %s\n"
+            #         "Bill Residual: %.2f\n"
+            #         "Cash Amount: %.2f"
+            #         % (
+            #             bill.name,
+            #             residual_before_cash,
+            #             cash_amount,
+            #         )
+            #     )
+
 
             # If the Cash amount is only slightly above Odoo's residual,
             # use Odoo's residual rather than failing on a rounding issue.
-            if cash_amount > residual_before_cash:
-                _logger.warning(
-                    "Small Cash rounding difference for Bill %s: "
-                    "Excel=%.2f Odoo=%.2f Difference=%.2f. "
-                    "Using Odoo residual.",
-                    bill.name,
-                    cash_amount,
-                    residual_before_cash,
-                    cash_amount - residual_before_cash,
-                )
-                cash_amount = residual_before_cash
-
-            _logger.info(
-                "Creating CASH payment for Bill %s: %.2f",
-                bill.name,
-                cash_amount,
-            )
+            # if cash_amount > residual_before_cash:
+            #     _logger.warning(
+            #         "Small Cash rounding difference for Bill %s: "
+            #         "Excel=%.2f Odoo=%.2f Difference=%.2f. "
+            #         "Using Odoo residual.",
+            #         bill.name,
+            #         cash_amount,
+            #         residual_before_cash,
+            #         cash_amount - residual_before_cash,
+            #     )
+            #     cash_amount = residual_before_cash
+            #
+            # _logger.info(
+            #     "Creating CASH payment for Bill %s: %.2f",
+            #     bill.name,
+            #     cash_amount,
+            # )
 
             payment_register = self.env[
                 'account.payment.register'
@@ -1167,38 +1337,38 @@ class ImportLabelService:
             # actual residual so that the bill becomes fully paid.
             # --------------------------------------------------------
 
-            if difference > 0:
-
-                if difference <= 0.10:
-
-                    _logger.warning(
-                        "Small Bank rounding difference for Bill %s: "
-                        "Excel Bank=%.2f, Odoo Residual=%.2f, "
-                        "Difference=%.2f. "
-                        "Using Odoo residual for final Bank payment.",
-                        bill.name,
-                        bank_amount,
-                        residual_before_bank,
-                        difference,
-                    )
-
-                    bank_amount = residual_before_bank
-
-                else:
-
-                    raise UserError(
-                        "Bank payment exceeds remaining bill amount.\n\n"
-                        "Bill: %s\n"
-                        "Remaining Bill Amount: %.2f\n"
-                        "Bank Amount from Excel: %.2f\n"
-                        "Difference: %.2f"
-                        % (
-                            bill.name,
-                            residual_before_bank,
-                            bank_amount,
-                            difference,
-                        )
-                    )
+            # if difference > 0:
+            #
+            #     if difference <= 0.10:
+            #
+            #         _logger.warning(
+            #             "Small Bank rounding difference for Bill %s: "
+            #             "Excel Bank=%.2f, Odoo Residual=%.2f, "
+            #             "Difference=%.2f. "
+            #             "Using Odoo residual for final Bank payment.",
+            #             bill.name,
+            #             bank_amount,
+            #             residual_before_bank,
+            #             difference,
+            #         )
+            #
+            #         bank_amount = residual_before_bank
+            #
+            #     else:
+            #
+            #         raise UserError(
+            #             "Bank payment exceeds remaining bill amount.\n\n"
+            #             "Bill: %s\n"
+            #             "Remaining Bill Amount: %.2f\n"
+            #             "Bank Amount from Excel: %.2f\n"
+            #             "Difference: %.2f"
+            #             % (
+            #                 bill.name,
+            #                 residual_before_bank,
+            #                 bank_amount,
+            #                 difference,
+            #             )
+            #         )
 
             # --------------------------------------------------------
             # Bank amount cannot be zero
@@ -1569,7 +1739,7 @@ class ImportLabelService:
                 service_products = {
                     "OLD GOLD",
                     "18KTD OLD GOLD",
-
+                    "GOLD BULLION"
                 }
 
                 if template_name.strip().upper() in service_products:
@@ -1632,8 +1802,40 @@ class ImportLabelService:
         # SERVICE PRODUCT
         # ========================================================
 
-        if template.type == "service":
+        # ========================================================
+        # OLD GOLD PRODUCTS - NO ATTRIBUTES
+        # ========================================================
 
+        old_gold_products = {
+            "OLD GOLD",
+            "18KTD OLD GOLD",
+        }
+
+        if template_name.strip().upper() in old_gold_products:
+            variant = template.product_variant_id
+
+            if not variant:
+                raise UserError(
+                    "No product variant found for product '%s'."
+                    % template_name
+                )
+
+            self.variant_cache[cache_key] = variant
+
+            _logger.info(
+                "OLD GOLD product resolved without attributes: "
+                "%s -> Product ID %s",
+                template_name,
+                variant.id,
+            )
+
+            return variant
+
+        # ========================================================
+        # SERVICE PRODUCT
+        # ========================================================
+
+        if template.type == "service":
             variant = template.product_variant_id
 
             self.variant_cache[
@@ -1649,6 +1851,7 @@ class ImportLabelService:
         ptav_ids = []
 
         for attr_name, attr_val in attrs.items():
+
 
             ptal = template.attribute_line_ids.filtered(
                 lambda l:
