@@ -137,12 +137,6 @@ class StockSummaryReportWizard(models.TransientModel):
             return self._open_report_view()
 
         # ---- Branch filter fragments ------------------------------------
-        branch_filter_label = ""
-        branch_args_label   = []
-        if self.branch_ids:
-            branch_filter_label = "AND pl.branch_id = ANY(%s)"
-            branch_args_label   = [self.branch_ids.ids]
-
         sol_branch = ""
         sol_branch_args = []
         if self.branch_ids:
@@ -150,26 +144,66 @@ class StockSummaryReportWizard(models.TransientModel):
             sol_branch_args = [self.branch_ids.ids]
 
         # ---- Labels created inside the period --------------------------
-        cr.execute(
-            """
-            SELECT pl.id FROM product_label pl
-            WHERE pl.create_date >= %s AND pl.create_date <= %s
-            """ + branch_filter_label,
-            [start_dt, end_dt] + branch_args_label
-        )
+        if self.branch_ids:
+            cr.execute(
+                """
+                SELECT pl.id FROM product_label pl
+                WHERE pl.create_date >= %s AND pl.create_date <= %s
+                  AND (pl.branch_location_id = ANY(%s) OR (pl.branch_location_id IS NULL AND pl.branch_id = ANY(%s)))
+                """,
+                [start_dt, end_dt, internal_loc_ids, self.branch_ids.ids]
+            )
+        else:
+            cr.execute(
+                """
+                SELECT pl.id FROM product_label pl
+                WHERE pl.create_date >= %s AND pl.create_date <= %s
+                """,
+                [start_dt, end_dt]
+            )
         created_in_period_ids = {r[0] for r in cr.fetchall()}
 
-        # ---- Labels active before the period start ---------------------
+        # ---- Labels active before the period start in selected locations ----
         cr.execute(
             """
-            SELECT pl.id FROM product_label pl
-            WHERE pl.create_date < %s AND pl.active = TRUE
-            """ + branch_filter_label,
-            [start_dt] + branch_args_label
+            SELECT sm.label_id
+            FROM stock_move sm
+            WHERE sm.state = 'done'
+              AND sm.date < %s
+              AND sm.label_id IS NOT NULL
+              AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
+            GROUP BY sm.label_id
+            HAVING SUM(CASE WHEN sm.location_dest_id = ANY(%s) THEN 1 WHEN sm.location_id = ANY(%s) THEN -1 ELSE 0 END) > 0
+            """,
+            [start_dt, internal_loc_ids, internal_loc_ids, internal_loc_ids, internal_loc_ids]
         )
         active_before_ids = {r[0] for r in cr.fetchall()}
 
-        # ---- Labels moved in period ------------------------------------
+        # Labels created before start_dt with NO moves that belong to these locations
+        if self.branch_ids:
+            cr.execute(
+                """
+                SELECT pl.id FROM product_label pl
+                LEFT JOIN stock_move sm ON sm.label_id = pl.id
+                WHERE pl.create_date < %s AND pl.active = TRUE
+                  AND sm.id IS NULL
+                  AND (pl.branch_location_id = ANY(%s) OR (pl.branch_location_id IS NULL AND pl.branch_id = ANY(%s)))
+                """,
+                [start_dt, internal_loc_ids, self.branch_ids.ids]
+            )
+        else:
+            cr.execute(
+                """
+                SELECT pl.id FROM product_label pl
+                LEFT JOIN stock_move sm ON sm.label_id = pl.id
+                WHERE pl.create_date < %s AND pl.active = TRUE
+                  AND sm.id IS NULL
+                """,
+                [start_dt]
+            )
+        active_before_ids |= {r[0] for r in cr.fetchall()}
+
+        # ---- Labels moved in period (only touching selected locations) --
         cr.execute(
             """
             SELECT DISTINCT sm.label_id
@@ -177,8 +211,9 @@ class StockSummaryReportWizard(models.TransientModel):
             WHERE sm.state = 'done'
               AND sm.date >= %s AND sm.date <= %s
               AND sm.label_id IS NOT NULL
+              AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
             """,
-            [start_dt, end_dt]
+            [start_dt, end_dt, internal_loc_ids, internal_loc_ids]
         )
         moved_label_ids = {r[0] for r in cr.fetchall()}
 
@@ -200,15 +235,26 @@ class StockSummaryReportWizard(models.TransientModel):
             created_in_period_ids | active_before_ids |
             moved_label_ids       | sold_label_ids_period
         )
-        if not active_label_ids:
-            return self._open_report_view()
 
-        # ---- Product IDs from active labels ----------------------------
+        # ---- Product IDs from active labels + unlabelled moves in locations ---
+        prod_id_set = set()
+        if active_label_ids:
+            cr.execute(
+                "SELECT DISTINCT product_id FROM product_label WHERE id = ANY(%s) AND product_id IS NOT NULL",
+                [active_label_ids]
+            )
+            prod_id_set.update(r[0] for r in cr.fetchall())
+
         cr.execute(
-            "SELECT DISTINCT product_id FROM product_label WHERE id = ANY(%s) AND product_id IS NOT NULL",
-            [active_label_ids]
+            """
+            SELECT DISTINCT product_id FROM stock_move
+            WHERE state = 'done' AND date <= %s AND label_id IS NULL
+              AND (location_id = ANY(%s) OR location_dest_id = ANY(%s))
+            """,
+            [end_dt, internal_loc_ids, internal_loc_ids]
         )
-        relevant_product_ids = [r[0] for r in cr.fetchall()]
+        prod_id_set.update(r[0] for r in cr.fetchall())
+        relevant_product_ids = list(prod_id_set)
         if not relevant_product_ids:
             return self._open_report_view()
 
@@ -248,8 +294,9 @@ class StockSummaryReportWizard(models.TransientModel):
               AND sm.product_id = ANY(%s)
               AND (sm.label_id = ANY(%s) OR sm.label_id IS NULL)
               AND (sm.location_id = ANY(%s) OR sm.location_dest_id = ANY(%s))
+            ORDER BY sm.date ASC, sm.id ASC
             """,
-            [end_dt, relevant_product_ids, active_label_ids,
+            [end_dt, relevant_product_ids, active_label_ids if active_label_ids else [0],
              internal_loc_ids, internal_loc_ids]
         )
         move_cols = [
@@ -269,39 +316,42 @@ class StockSummaryReportWizard(models.TransientModel):
                 moves_by_product.setdefault(m['product_id'], []).append(m)
 
         # ---- Labels metadata -------------------------------------------
-        cr.execute(
-            """
-            SELECT pl.id, pl.product_id, pl.create_date,
-                   pl.purchase_gross_weight, pl.purchase_net_weight,
-                   COALESCE(pl.age_import, 0) AS age_import,
-                   pl.purity_id
-            FROM product_label pl
-            WHERE pl.id = ANY(%s)
-            """,
-            [active_label_ids]
-        )
-        label_cols = ['id', 'product_id', 'create_date', 'gross', 'net', 'age_import', 'purity_id']
         labels_by_id = {}
         labels_by_product = {}
-        for row in cr.fetchall():
-            lbl = dict(zip(label_cols, row))
-            labels_by_id[lbl['id']] = lbl
-            if lbl['product_id']:
-                labels_by_product.setdefault(lbl['product_id'], []).append(lbl['id'])
+        if active_label_ids:
+            cr.execute(
+                """
+                SELECT pl.id, pl.product_id, pl.create_date,
+                       pl.purchase_gross_weight, pl.purchase_net_weight,
+                       COALESCE(pl.age_import, 0) AS age_import,
+                       pl.purity_id, pl.branch_id, pl.branch_location_id
+                FROM product_label pl
+                WHERE pl.id = ANY(%s)
+                """,
+                [active_label_ids]
+            )
+            label_cols = ['id', 'product_id', 'create_date', 'gross', 'net', 'age_import', 'purity_id', 'branch_id', 'branch_location_id']
+            for row in cr.fetchall():
+                lbl = dict(zip(label_cols, row))
+                labels_by_id[lbl['id']] = lbl
+                if lbl['product_id']:
+                    labels_by_product.setdefault(lbl['product_id'], []).append(lbl['id'])
 
         # ---- Labels sold BEFORE period ---------------------------------
-        cr.execute(
-            """
-            SELECT DISTINCT sol.label_id
-            FROM sale_order_line sol
-            JOIN sale_order so ON so.id = sol.order_id
-            WHERE sol.state IN ('sale','done')
-              AND sol.label_id = ANY(%s)
-              AND so.date_order < %s
-            """,
-            [active_label_ids, start_dt]
-        )
-        sold_before_label_ids = {r[0] for r in cr.fetchall()}
+        sold_before_label_ids = set()
+        if active_label_ids:
+            cr.execute(
+                """
+                SELECT DISTINCT sol.label_id
+                FROM sale_order_line sol
+                JOIN sale_order so ON so.id = sol.order_id
+                WHERE sol.state IN ('sale','done')
+                  AND sol.label_id = ANY(%s)
+                  AND so.date_order < %s
+                """,
+                [active_label_ids, start_dt]
+            )
+            sold_before_label_ids = {r[0] for r in cr.fetchall()}
 
         # ---- Min stock rules -------------------------------------------
         cr.execute(
@@ -442,48 +492,69 @@ class StockSummaryReportWizard(models.TransientModel):
                 opening_moves = [m for m in label_moves if m['date'] < start_dt]
                 period_moves  = [m for m in label_moves if m['date'] >= start_dt]
 
-                # ---- Opening stock ----
+                # ---- Opening, In, Out, Closing stock ----
                 if lbl:
-                    created_before = lbl['create_date'] and lbl['create_date'] < start_dt
-                    if created_before:
-                        was_sold = (
-                            any(
-                                m['location_id'] in loc_set and m['location_dest_id'] not in loc_set
-                                for m in opening_moves
-                            ) or label_id in sold_before_label_ids
+                    gross = lbl['gross'] or 0.0
+                    net   = lbl['net']   or 0.0
+
+                    # 1. Opening stock for label
+                    if opening_moves:
+                        last_op_move = opening_moves[-1]
+                        o_pcs = 1.0 if last_op_move['location_dest_id'] in loc_set else 0.0
+                    else:
+                        created_before = lbl['create_date'] and lbl['create_date'] < start_dt
+                        in_branch = (lbl.get('branch_location_id') in loc_set) or (
+                            not lbl.get('branch_location_id') and (not self.branch_ids or lbl.get('branch_id') in self.branch_ids.ids)
                         )
-                        o_pcs, o_gross, o_net = (
-                            (0.0, 0.0, 0.0) if was_sold
-                            else (1.0, lbl['gross'] or 0.0, lbl['net'] or 0.0)
+                        if created_before and in_branch and not moves_by_label.get(label_id) and (label_id not in sold_before_label_ids):
+                            o_pcs = 1.0
+                        else:
+                            o_pcs = 0.0
+
+                    # 2. Closing stock for label
+                    if label_moves:
+                        last_move = label_moves[-1]
+                        c_pcs = 1.0 if (last_move['location_dest_id'] in loc_set and label_id not in sold_label_ids_period) else 0.0
+                    else:
+                        in_branch = (lbl.get('branch_location_id') in loc_set) or (
+                            not lbl.get('branch_location_id') and (not self.branch_ids or lbl.get('branch_id') in self.branch_ids.ids)
                         )
-                    else:
-                        o_pcs = o_gross = o_net = 0.0
-                else:
-                    o_pcs, o_gross, o_net = get_stats(opening_moves, mode='opening')
+                        if in_branch and (label_id not in sold_before_label_ids) and (label_id not in sold_label_ids_period):
+                            c_pcs = 1.0
+                        else:
+                            c_pcs = 0.0
 
-                # ---- In stock (received in period) ----
-                if lbl:
-                    created_in = lbl['create_date'] and start_dt <= lbl['create_date'] <= end_dt
-                    if created_in:
-                        in_pcs, in_gross, in_net = 1.0, lbl['gross'] or 0.0, lbl['net'] or 0.0
-                    else:
-                        in_pcs = in_gross = in_net = 0.0
-                else:
-                    in_pcs = in_gross = in_net = 0.0
+                    # 3. In and Out flow for label
+                    if o_pcs == 1.0 and c_pcs == 1.0:
+                        in_pcs  = 0.0
+                        out_pcs = 0.0
+                    elif o_pcs == 0.0 and c_pcs == 1.0:
+                        in_pcs  = 1.0
+                        out_pcs = 0.0
+                    elif o_pcs == 1.0 and c_pcs == 0.0:
+                        in_pcs  = 0.0
+                        out_pcs = 1.0
+                    else:  # o_pcs == 0.0 and c_pcs == 0.0
+                        entered = any(m['location_dest_id'] in loc_set and m['location_id'] not in loc_set for m in period_moves)
+                        if entered or (label_id in sold_label_ids_period):
+                            in_pcs  = 1.0
+                            out_pcs = 1.0
+                        else:
+                            in_pcs  = 0.0
+                            out_pcs = 0.0
 
-                # ---- Out stock (sold/transferred in period) ----
-                if lbl:
-                    if label_id in sold_label_ids_period:
-                        out_pcs, out_gross, out_net = 1.0, lbl['gross'] or 0.0, lbl['net'] or 0.0
-                    else:
-                        out_pcs, out_gross, out_net = get_stats(period_moves, mode='out')
-                else:
-                    out_pcs, out_gross, out_net = get_stats(period_moves, mode='out')
+                    o_gross,   o_net   = (gross * o_pcs,   net * o_pcs)
+                    in_gross,  in_net  = (gross * in_pcs,  net * in_pcs)
+                    out_gross, out_net = (gross * out_pcs, net * out_pcs)
+                    c_gross,   c_net   = (gross * c_pcs,   net * c_pcs)
 
-                # ---- Closing / KPIs ----
-                c_pcs   = o_pcs   + in_pcs   - out_pcs
-                c_gross = o_gross + in_gross  - out_gross
-                c_net   = o_net   + in_net    - out_net
+                else:
+                    o_pcs,   o_gross,   o_net   = get_stats(opening_moves, mode='opening')
+                    in_pcs,  in_gross,  in_net  = get_stats(period_moves,  mode='in')
+                    out_pcs, out_gross, out_net = get_stats(period_moves,  mode='out')
+                    c_pcs   = max(0.0, o_pcs   + in_pcs   - out_pcs)
+                    c_gross = max(0.0, o_gross + in_gross - out_gross)
+                    c_net   = max(0.0, o_net   + in_net   - out_net)
 
                 avg_inv  = (o_gross + c_gross) / 2.0
                 if avg_inv <= 0.0 and (in_gross > 0.0 or out_gross > 0.0):
