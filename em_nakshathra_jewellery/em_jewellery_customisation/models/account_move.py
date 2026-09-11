@@ -1,6 +1,6 @@
 from collections import defaultdict
 from math import ceil
-from odoo import models, api, fields, _
+from odoo import models, api, fields, _, Command
 from odoo.exceptions import UserError
 
 
@@ -12,6 +12,124 @@ class AccountMove(models.Model):
         currency_field='currency_id',
         default=0.0,
     )
+
+    def _get_cash_difference_account(self, is_gain):
+        self.ensure_one()
+        company = self.company_id
+        if is_gain:
+            account = company.default_cash_difference_income_account_id
+            if not account:
+                account = self.env['account.account'].search([
+                    ('company_id', '=', company.id),
+                    ('code', '=', '999001'),
+                ], limit=1)
+            if not account:
+                account = self.env['account.account'].search([
+                    ('company_id', '=', company.id),
+                    ('name', 'ilike', 'Cash Difference Gain'),
+                ], limit=1)
+        else:
+            account = company.default_cash_difference_expense_account_id
+            if not account:
+                account = self.env['account.account'].search([
+                    ('company_id', '=', company.id),
+                    ('code', '=', '999002'),
+                ], limit=1)
+            if not account:
+                account = self.env['account.account'].search([
+                    ('company_id', '=', company.id),
+                    ('name', 'ilike', 'Cash Difference Loss'),
+                ], limit=1)
+
+        if not account:
+            account_type = 'income_other' if is_gain else 'expense'
+            account = self.env['account.account'].search([
+                ('company_id', '=', company.id),
+                ('account_type', '=', account_type),
+            ], limit=1)
+
+        if not account:
+            raise UserError(
+                _("Please configure the Cash Difference %s Account for company %s in Accounting Settings.",
+                  _("Gain") if is_gain else _("Loss"), company.name)
+            )
+        return account
+
+    def _recompute_cash_rounding_lines(self):
+        ''' Override to handle manual amount_rounding when standard invoice_cash_rounding_id is not set. '''
+        for move in self:
+            if move.state == 'posted':
+                continue
+
+            if move.invoice_cash_rounding_id:
+                super(AccountMove, move)._recompute_cash_rounding_lines()
+                continue
+
+            existing_cash_rounding_lines = move.line_ids.filtered(lambda line: line.display_type == 'rounding')
+
+            if not move.amount_rounding or move.currency_id.is_zero(move.amount_rounding):
+                existing_cash_rounding_lines.unlink()
+                continue
+
+            # In out_invoice (customer invoice):
+            # amount_rounding < 0 (e.g. -42.00) reduces the invoice total -> Debit 42.00 (loss, balance > 0)
+            # amount_rounding > 0 (e.g. +10.00) increases the invoice total -> Credit 10.00 (gain, balance < 0)
+            sign = -1 if move.is_sale_document(include_receipts=True) else 1
+            diff_amount_currency = sign * move.amount_rounding
+            if move.currency_id == move.company_id.currency_id:
+                diff_balance = diff_amount_currency
+            else:
+                diff_balance = move.currency_id._convert(
+                    diff_amount_currency,
+                    move.company_id.currency_id,
+                    move.company_id,
+                    move.invoice_date or move.date or fields.Date.today()
+                )
+
+            is_gain = (diff_balance < 0.0)
+            account = move._get_cash_difference_account(is_gain=is_gain)
+
+            # Check if an update is really needed to prevent unnecessary writes
+            if len(existing_cash_rounding_lines) == 1:
+                line = existing_cash_rounding_lines[0]
+                if (
+                        move.currency_id.compare_amounts(line.balance, diff_balance) == 0
+                        and move.currency_id.compare_amounts(line.amount_currency, diff_amount_currency) == 0
+                        and line.account_id == account
+                ):
+                    continue
+
+            rounding_line_vals = {
+                'name': _('Round Off'),
+                'balance': diff_balance,
+                'debit': diff_balance if diff_balance > 0.0 else 0.0,
+                'credit': -diff_balance if diff_balance < 0.0 else 0.0,
+                'amount_currency': diff_amount_currency,
+                'partner_id': move.partner_id.id,
+                'move_id': move.id,
+                'currency_id': move.currency_id.id,
+                'company_id': move.company_id.id,
+                'company_currency_id': move.company_id.currency_id.id,
+                'display_type': 'rounding',
+                'account_id': account.id,
+                'tax_ids': [Command.clear()],
+            }
+
+            if existing_cash_rounding_lines:
+                first_line = existing_cash_rounding_lines[0]
+                (existing_cash_rounding_lines - first_line).unlink()
+                first_line.write(rounding_line_vals)
+            else:
+                if isinstance(move.id, models.NewId):
+                    move.line_ids = [Command.create(rounding_line_vals)]
+                else:
+                    move.env['account.move.line'].create(rounding_line_vals)
+
+    @api.onchange('amount_rounding')
+    def _onchange_amount_rounding(self):
+        for move in self:
+            if move.state == 'draft':
+                move._recompute_cash_rounding_lines()
 
     # --- 1. Update Invoice Frontend Widget Totals ---
     @api.depends_context('lang')
@@ -59,7 +177,7 @@ class AccountMove(models.Model):
             tax_totals['display_rounding'] = True
             tax_totals['rounding_amount'] = rounding_amount
             tax_totals['formatted_rounding_amount'] = (
-                move.currency_id.symbol + " %.2f" % rounding_amount
+                    move.currency_id.symbol + " %.2f" % rounding_amount
             )
 
             tax_totals['amount_total'] = new_total
@@ -95,7 +213,12 @@ class AccountMove(models.Model):
             if has_gold_bullion:
                 continue
 
-            # Update the master total fields (Both normal and company-currency signed version)
+            # If a cash rounding line already exists in line_ids, standard Odoo's
+            # super()._compute_amount() already factored it into amount_total and amount_residual.
+            if move.line_ids.filtered(lambda l: l.display_type == 'rounding'):
+                continue
+
+            # Fallback if no rounding line exists
             move.amount_total = move.amount_total + move.amount_rounding
             move.amount_total_signed = move.amount_total_signed + move.amount_rounding
 

@@ -42,13 +42,13 @@
               name="Scheme NON redeem Report"
               parent="em_jewellery_management.menu_scheme_enrollment_category"
               action="action_scheme_margin_list_wizard_non_redeem"
-              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              groups="em_jewellery_management.group_jewellery_manager"
               sequence="26"/>
 
     <menuitem id="menu_scheme_redeem_report"
               name="Scheme redeem Report"
               parent="em_jewellery_management.menu_scheme_enrollment_category"
               action="action_scheme_margin_list_wizard_redeem"
-              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              groups="em_jewellery_management.group_jewellery_manager"
               sequence="27"/>
 </odoo>
