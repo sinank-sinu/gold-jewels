@@ -110,6 +110,8 @@ class StockMove(models.Model):
             vals = {}
             if move.location_dest_id.usage == 'internal':
                 vals['branch_location_id'] = move.location_dest_id.id
+                if move.location_dest_id.usage == 'internal':
+                     vals['source_location_id'] = move.location_id.id
                 branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
                 if branch:
                     vals['branch_id'] = branch.id
