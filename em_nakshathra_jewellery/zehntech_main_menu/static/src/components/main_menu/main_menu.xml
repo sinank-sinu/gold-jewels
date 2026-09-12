@@ -1,30 +1,147 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates>
     <t t-name="zehntech_main_menu.MainMenu">
-        <div class="background"/>
-        <div class="main-menu">
-            <div class="main-menu-content">
-                <div class="widgets" t-if="showWidgets">
-                    <WidgetHour
-                        userIsAdmin="userIsAdmin"
-                        announcement="announcement"/>
-                    <WidgetAnnouncement
-                        userIsAdmin="userIsAdmin"
-                        announcement="announcement"
-                        onChangeAnnouncement.bind="onChangeAnnouncement"
-                        onSaveAnnouncement.bind="onSaveAnnouncement"/>
+        <div t-attf-class="main-menu-root theme-{{state.currentTheme}}">
+            <div class="background"/>
+
+            <!-- Interactive Canvas for Current Theme's Entertainment Engine -->
+            <canvas class="playground-canvas" t-ref="themeCanvas"/>
+
+            <!-- Floating Theme Switcher Button (Top Right) -->
+            <button class="theme-switcher-btn" t-on-click="toggleThemeDrawer" title="Change Launcher Theme &amp; Experience">
+                <i class="fa fa-paint-brush"/>
+                <span>Themes</span>
+            </button>
+
+            <!-- Theme Selection Drawer Backdrop & Modal -->
+            <div class="theme-drawer-backdrop" t-if="state.isThemeDrawerOpen" t-on-click="closeThemeDrawer"/>
+            <div class="theme-drawer" t-att-class="{'open': state.isThemeDrawerOpen}">
+                <div class="theme-drawer-header">
+                    <div class="header-title">
+                        <i class="fa fa-magic mr-2"/> Select Experience
+                    </div>
+                    <button class="drawer-close-btn" t-on-click="closeThemeDrawer">
+                        <i class="fa fa-times"/>
+                    </button>
                 </div>
-                <div class="apps-container">
-                    <t t-foreach="apps" t-as="app" t-key="app.id">
-                        <a class="app-card" t-on-click="() => this.onClickModule(app)" t-att-title="app.name">
-                            <div class="app-icon-container">
-                                <img t-if="app.webIcon &amp;&amp; app.webIcon.includes('.png')" class="module-icon" t-attf-src="data:image/png;base64,{{app.webIconData}}"/>
-                                <img t-if="app.webIcon &amp;&amp; app.webIcon.includes('.svg')" class="module-icon" t-attf-src="data:image/svg+xml;base64,{{app.webIconData}}"/>
-                                <img t-if="!app.webIcon" class="module-icon" src="/zehntech_main_menu/static/src/img/default_icon.png"/>
-                            </div>
-                            <span class="app-title" t-esc="app.name"/>
-                        </a>
-                    </t>
+                <div class="theme-options-list">
+                    <!-- Category 1: Productivity & Standard -->
+                    <div class="theme-category-header">
+                        <i class="fa fa-briefcase mr-1"/> Standard &amp; Productivity
+                    </div>
+
+                    <!-- Standard Enterprise (Non-Entertainment) -->
+                    <div class="theme-option-card"
+                         t-att-class="{'active': state.currentTheme === 'standard'}"
+                         t-on-click="() => this.selectTheme('standard')">
+                        <div class="theme-swatch swatch-standard">
+                            <span class="swatch-badge">💼 Classic</span>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-name">Standard Enterprise</div>
+                            <div class="theme-desc">Minimalist, zero-entertainment launcher for daily focus</div>
+                        </div>
+                        <i class="fa fa-check-circle active-check" t-if="state.currentTheme === 'standard'"/>
+                    </div>
+
+                    <!-- Category 2: Interactive Experiences -->
+                    <div class="theme-category-header mt-2">
+                        <i class="fa fa-gamepad mr-1"/> Interactive Experiences
+                    </div>
+
+                    <!-- Option 1: Molten Liquid Gold -->
+                    <div class="theme-option-card"
+                         t-att-class="{'active': state.currentTheme === 'liquid_gold'}"
+                         t-on-click="() => this.selectTheme('liquid_gold')">
+                        <div class="theme-swatch swatch-liquid-gold">
+                            <span class="swatch-badge">🍎 macOS</span>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-name">Molten Liquid Gold</div>
+                            <div class="theme-desc">macOS Launchpad &amp; 3D Magnetic liquid fluid shockwaves</div>
+                        </div>
+                        <i class="fa fa-check-circle active-check" t-if="state.currentTheme === 'liquid_gold'"/>
+                    </div>
+
+                    <!-- Option 2: Nakshathra Cyber Star -->
+                    <div class="theme-option-card"
+                         t-att-class="{'active': state.currentTheme === 'cyber_star'}"
+                         t-on-click="() => this.selectTheme('cyber_star')">
+                        <div class="theme-swatch swatch-cyber-star">
+                            <span class="swatch-badge">⚡ Cyber</span>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-name">Nakshathra Cyber Star</div>
+                            <div class="theme-desc">Holographic neon edge &amp; interactive cursor constellations</div>
+                        </div>
+                        <i class="fa fa-check-circle active-check" t-if="state.currentTheme === 'cyber_star'"/>
+                    </div>
+
+                    <!-- Option 3: Pearl & Diamond Studio -->
+                    <div class="theme-option-card"
+                         t-att-class="{'active': state.currentTheme === 'pearl_studio'}"
+                         t-on-click="() => this.selectTheme('pearl_studio')">
+                        <div class="theme-swatch swatch-pearl-studio">
+                            <span class="swatch-badge">💎 Haute</span>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-name">Pearl &amp; Diamond Studio</div>
+                            <div class="theme-desc">Velvet champagne luxury &amp; floating pop-able jewels</div>
+                        </div>
+                        <i class="fa fa-check-circle active-check" t-if="state.currentTheme === 'pearl_studio'"/>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-menu">
+                <div class="main-menu-content">
+                    <!-- Dynamic Search Pill: Hidden by default, appears instantly when typing on keyboard -->
+                    <div class="launchpad-search-container" t-att-class="{'visible': state.search.length > 0}">
+                        <div class="launchpad-search-pill">
+                            <i class="fa fa-search search-icon"/>
+                            <input type="text"
+                                   t-ref="searchInput"
+                                   class="launchpad-search-input"
+                                   placeholder="Search Applications..."
+                                   t-model="state.search"
+                                   autocomplete="off"
+                                   spellcheck="false"/>
+                            <button class="search-clear-btn" t-if="state.search" t-on-click="() => this.state.search = ''" title="Clear search (Esc)">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Widgets (Hour & Announcement) if enabled in Company Settings -->
+                    <div class="widgets" t-if="showWidgets">
+                        <WidgetHour
+                            userIsAdmin="userIsAdmin"
+                            announcement="announcement"/>
+                        <WidgetAnnouncement
+                            userIsAdmin="userIsAdmin"
+                            announcement="announcement"
+                            onChangeAnnouncement.bind="onChangeAnnouncement"
+                            onSaveAnnouncement.bind="onSaveAnnouncement"/>
+                    </div>
+
+                    <!-- Centered Apps Grid with 3D Physics -->
+                    <div class="apps-container" t-ref="appsContainer">
+                        <t t-foreach="displayedApps" t-as="app" t-key="app.id">
+                            <a class="app-card" t-on-click="() => this.onClickModule(app)" t-att-title="app.name">
+                                <div class="app-icon-container">
+                                    <img t-if="app.webIcon &amp;&amp; app.webIcon.includes('.png')" class="module-icon" t-attf-src="data:image/png;base64,{{app.webIconData}}"/>
+                                    <img t-if="app.webIcon &amp;&amp; app.webIcon.includes('.svg')" class="module-icon" t-attf-src="data:image/svg+xml;base64,{{app.webIconData}}"/>
+                                    <img t-if="!app.webIcon" class="module-icon" src="/zehntech_main_menu/static/src/img/default_icon.png"/>
+                                </div>
+                                <span class="app-title" t-esc="app.name"/>
+                            </a>
+                        </t>
+                        <div t-if="displayedApps.length === 0" class="no-apps-found">
+                            <i class="fa fa-search mb-2" style="font-size: 2.2rem; opacity: 0.35; display: block;"/>
+                            <p>No applications found matching "<t t-esc="state.search"/>"</p>
+                            <span class="no-apps-hint">Press <b>Esc</b> to clear</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
