@@ -6,7 +6,7 @@
     'summary': """module manage jewellery""",
     'description': 'Jewellery Management Customisations',
 
-    'depends': ['em_jewellery_management','report_xlsx'],
+    'depends': ['em_jewellery_management', 'report_xlsx', 'purchase'],
     'data': [
         'security/ir.model.access.csv',
         'views/jewellery_menu.xml',
@@ -19,10 +19,9 @@
         'views/fine_rate_master_view.xml',
         'views/stock_picking_views.xml',
         'views/sale_order_views.xml',
+        'views/purchase_order_views.xml',
         'views/account_move_views.xml',
         'views/product_template_views.xml',
-        
-
     ],
 
     'auto_install': False,

@@ -44,6 +44,15 @@ class SaleOrder(models.Model):
                 ('state', 'in', ('running', 'completed')),
             ])
 
+    def action_confirm(self):
+        for order in self:
+            if order.has_old_gold:
+                if not order.old_gold_line_ids:
+                    raise ValidationError(_("Please add Old Gold lines and click 'Apply Old Gold' before confirming the order."))
+                if not order.old_gold_bill_id:
+                    raise ValidationError(_("Please click 'Apply Old Gold' before confirming the order."))
+        return super().action_confirm()
+
     # def action_apply_scheme(self):
     #     for order in self:
     #         if not order.partner_id:

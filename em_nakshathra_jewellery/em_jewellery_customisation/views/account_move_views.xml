@@ -15,6 +15,12 @@
                             confirm="Are you sure you want to redeem the outstanding scheme payment(s) against this invoice?"/>
                 </div>
             </xpath>
+            <xpath expr="//field[@name='old_gold_price']" position="after">
+                <field name="has_customer_payment" invisible="1"/>
+                <field name="amount_rounding" string="Edit Round Off"
+                       invisible="not has_customer_payment"
+                       readonly="is_paid"/>
+            </xpath>
         </field>
     </record>
 </odoo>

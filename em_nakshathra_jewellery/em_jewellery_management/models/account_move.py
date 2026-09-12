@@ -104,13 +104,22 @@ class AccountMove(models.Model):
             deduction += self.vendor_bill_amount or 0.0
         
         if deduction:
-            self.custom_total = 0.0
-            if self.amount_residual < deduction:
-                self.custom_total = self.amount_residual - deduction
+            if not self.is_paid:
+                self.custom_total = 0.0
+            if self.amount_residual == 0.0 and (self.custom_total < 0 or self.is_paid or self.state == 'posted'):
+                effective_residual = self.amount_total
+            else:
+                effective_residual = self.amount_residual
+                if hasattr(self, 'amount_rounding') and self.amount_rounding and not self.line_ids.filtered(lambda l: l.display_type == 'rounding'):
+                    effective_residual += self.amount_rounding
+
+            if effective_residual < deduction:
+                if not self.is_paid:
+                    self.custom_total = effective_residual - deduction
                 self.amount_residual = 0.0
                 self.payment_state = 'paid'
             else:
-                self.amount_residual = self.amount_residual - deduction
+                self.amount_residual = effective_residual - deduction
 
     @api.depends(
         "line_ids.matched_debit_ids.debit_move_id.move_id.payment_id.is_matched",

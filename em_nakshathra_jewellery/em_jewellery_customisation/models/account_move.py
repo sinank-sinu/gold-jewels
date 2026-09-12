@@ -13,6 +13,35 @@ class AccountMove(models.Model):
         default=0.0,
     )
 
+    has_customer_payment = fields.Boolean(
+        string="Has Customer Payment",
+        compute="_compute_has_customer_payment",
+    )
+
+    @api.depends(
+        'custom_total',
+        'is_paid',
+        'payment_to_id',
+        'old_gold_price',
+        'sale_return_price',
+        'move_type',
+        'amount_total',
+        'unfix',
+    )
+    def _compute_has_customer_payment(self):
+        for move in self:
+            deduction = (move.old_gold_price or 0.0) + (move.sale_return_price or 0.0)
+            if move.unfix and move.move_type == 'out_invoice':
+                deduction += move.vendor_bill_amount or 0.0
+            move.has_customer_payment = (
+                move.move_type == 'out_invoice' and (
+                    move.currency_id.compare_amounts(move.custom_total, 0.0) < 0
+                    or move.is_paid
+                    or bool(move.payment_to_id)
+                    or (deduction > 0 and deduction > move.amount_total)
+                )
+            )
+
     def _get_cash_difference_account(self, is_gain):
         self.ensure_one()
         company = self.company_id
@@ -131,6 +160,22 @@ class AccountMove(models.Model):
             if move.state == 'draft':
                 move._recompute_cash_rounding_lines()
 
+            deduction = (move.old_gold_price or 0.0) + (move.sale_return_price or 0.0)
+            if move.unfix and move.move_type == 'out_invoice':
+                deduction += move.vendor_bill_amount or 0.0
+
+            if deduction and not move.is_paid:
+                base_total = sum(move.invoice_line_ids.mapped('price_total'))
+                eff_tot = base_total + (move.amount_rounding or 0.0)
+                if eff_tot < deduction:
+                    move.custom_total = eff_tot - deduction
+                    move.amount_residual = 0.0
+                else:
+                    move.amount_residual = eff_tot - deduction
+                    move.custom_total = 0.0
+
+            move._compute_tax_totals()
+
     # --- 1. Update Invoice Frontend Widget Totals ---
     @api.depends_context('lang')
     @api.depends(
@@ -146,7 +191,7 @@ class AccountMove(models.Model):
         super()._compute_tax_totals()
 
         for move in self:
-            if move.move_type != 'out_invoice':
+            if move.move_type not in ('out_invoice', 'in_invoice'):
                 continue
 
             if not move.tax_totals:
@@ -200,7 +245,7 @@ class AccountMove(models.Model):
         super()._compute_amount()
 
         for move in self:
-            if move.move_type != 'out_invoice':
+            if move.move_type not in ('out_invoice', 'in_invoice'):
                 continue
 
             if not move.amount_rounding:
@@ -219,13 +264,113 @@ class AccountMove(models.Model):
                 continue
 
             # Fallback if no rounding line exists
+            sign = move.direction_sign
             move.amount_total = move.amount_total + move.amount_rounding
-            move.amount_total_signed = move.amount_total_signed + move.amount_rounding
+            move.amount_total_signed = move.amount_total_signed + (sign * move.amount_rounding)
 
             # Update the residual fields so the UI "Amount Due" matches perfectly
-            move.amount_residual = move.amount_residual + move.amount_rounding
-            move.amount_residual_signed = move.amount_residual_signed + move.amount_rounding
-            # move.amount_total_in_currency_signed = move.amount_total_in_currency_signed + move.amount_rounding
+            has_deduction = bool(getattr(move, 'old_gold_price', 0.0) or getattr(move, 'sale_return_price', 0.0) or (getattr(move, 'unfix', False) and move.move_type == 'out_invoice'))
+            if not has_deduction and not move.currency_id.is_zero(move.amount_residual) and move.payment_state != 'paid':
+                move.amount_residual = move.amount_residual + move.amount_rounding
+                move.amount_residual_signed = move.amount_residual_signed + (sign * move.amount_rounding)
+                if move.currency_id.is_zero(move.amount_residual):
+                    move.amount_residual = 0.0
+                    move.amount_residual_signed = 0.0
+                    move.payment_state = 'paid'
+
+        for move in self:
+            if hasattr(move, '_compute_amount_one'):
+                move._compute_amount_one()
+
+    def _update_posted_cash_rounding(self, new_rounding):
+        self.ensure_one()
+        rounding_lines = self.line_ids.filtered(lambda l: l.display_type == 'rounding')
+        sign = -1 if self.is_sale_document(include_receipts=True) else 1
+        diff_amount_currency = sign * new_rounding
+        if self.currency_id == self.company_id.currency_id:
+            diff_balance = diff_amount_currency
+        else:
+            diff_balance = self.currency_id._convert(
+                diff_amount_currency,
+                self.company_id.currency_id,
+                self.company_id,
+                self.invoice_date or self.date or fields.Date.today()
+            )
+
+        if not new_rounding or self.currency_id.is_zero(new_rounding):
+            if rounding_lines:
+                rounding_lines.with_context(check_move_validity=False).write({
+                    'balance': 0.0,
+                    'debit': 0.0,
+                    'credit': 0.0,
+                    'amount_currency': 0.0,
+                })
+            diff_balance = 0.0
+            diff_amount_currency = 0.0
+        else:
+            is_gain = (diff_balance < 0.0)
+            account = self._get_cash_difference_account(is_gain=is_gain)
+            rounding_vals = {
+                'name': _('Round Off'),
+                'balance': diff_balance,
+                'debit': diff_balance if diff_balance > 0.0 else 0.0,
+                'credit': -diff_balance if diff_balance < 0.0 else 0.0,
+                'amount_currency': diff_amount_currency,
+                'account_id': account.id,
+            }
+            if rounding_lines:
+                first_line = rounding_lines[0]
+                first_line.with_context(check_move_validity=False).write(rounding_vals)
+                if len(rounding_lines) > 1:
+                    (rounding_lines - first_line).with_context(check_move_validity=False).write({
+                        'balance': 0.0,
+                        'debit': 0.0,
+                        'credit': 0.0,
+                        'amount_currency': 0.0,
+                    })
+            else:
+                create_vals = {
+                    **rounding_vals,
+                    'partner_id': self.partner_id.id,
+                    'move_id': self.id,
+                    'currency_id': self.currency_id.id,
+                    'company_id': self.company_id.id,
+                    'company_currency_id': self.company_id.currency_id.id,
+                    'display_type': 'rounding',
+                }
+                self.env['account.move.line'].with_context(check_move_validity=False).create(create_vals)
+
+        term_lines = self.line_ids.filtered(lambda l: l.display_type == 'payment_term')
+        if not term_lines:
+            term_lines = self.line_ids.filtered(lambda l: l.account_id.account_type in ('asset_receivable', 'liability_payable'))
+        if term_lines:
+            other_lines = self.line_ids.filtered(lambda l: l not in term_lines and l.display_type != 'rounding')
+            other_balance = sum(other_lines.mapped('balance'))
+            new_term_balance = -(other_balance + diff_balance)
+            term_vals = {
+                'balance': new_term_balance,
+                'debit': new_term_balance if new_term_balance > 0.0 else 0.0,
+                'credit': -new_term_balance if new_term_balance < 0.0 else 0.0,
+            }
+            if self.currency_id == self.company_id.currency_id:
+                term_vals['amount_currency'] = new_term_balance
+            else:
+                term_sign = 1 if self.is_sale_document(include_receipts=True) else -1
+                term_vals['amount_currency'] = term_sign * (abs(sum(self.invoice_line_ids.mapped('price_total'))) + new_rounding)
+            term_lines[0].with_context(check_move_validity=False).write(term_vals)
+
+        self._compute_tax_totals()
+        self._compute_amount()
+        if hasattr(self, '_compute_amount_one'):
+            self._compute_amount_one()
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'amount_rounding' in vals:
+            for move in self:
+                if move.state == 'posted' and move.has_customer_payment and not move.is_paid:
+                    move._update_posted_cash_rounding(vals['amount_rounding'])
+        return res
 
     has_outstanding_scheme_payment = fields.Boolean(
         string="Has Outstanding Scheme Payment",
@@ -355,6 +500,9 @@ class AccountMove(models.Model):
         return True
 
     def action_post(self):
+        for move in self:
+            if move.state == 'draft' and move.amount_rounding and not move.invoice_cash_rounding_id:
+                move._recompute_cash_rounding_lines()
         res = super().action_post()
         for move in self:
             if move.move_type == 'out_invoice':
