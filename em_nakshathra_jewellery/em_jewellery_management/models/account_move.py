@@ -99,27 +99,56 @@ class AccountMove(models.Model):
 
     def _compute_amount_one(self):
         """Perform totals computation of a move with global discounts."""
-        deduction = (self.old_gold_price or 0.0) + (self.sale_return_price or 0.0)
-        if self.unfix and self.move_type == 'out_invoice':
-            deduction += self.vendor_bill_amount or 0.0
-        
-        if deduction:
-            if not self.is_paid:
-                self.custom_total = 0.0
-            if self.amount_residual == 0.0 and (self.custom_total < 0 or self.is_paid or self.state == 'posted'):
-                effective_residual = self.amount_total
-            else:
-                effective_residual = self.amount_residual
-                if hasattr(self, 'amount_rounding') and self.amount_rounding and not self.line_ids.filtered(lambda l: l.display_type == 'rounding'):
-                    effective_residual += self.amount_rounding
+        for move in self:
+            deduction = (move.old_gold_price or 0.0) + (move.sale_return_price or 0.0)
+            if move.unfix and move.move_type == 'out_invoice':
+                deduction += move.vendor_bill_amount or 0.0
 
-            if effective_residual < deduction:
-                if not self.is_paid:
-                    self.custom_total = effective_residual - deduction
-                self.amount_residual = 0.0
-                self.payment_state = 'paid'
+            if not deduction:
+                continue
+
+            term_lines = move.line_ids.filtered(lambda l: l.display_type == 'payment_term')
+            if not term_lines:
+                term_lines = move.line_ids.filtered(lambda l: l.account_id.account_type in ('asset_receivable', 'liability_payable'))
+
+            sign = move.direction_sign
+            if term_lines:
+                raw_residual = -sign * sum(term_lines.mapped('amount_residual_currency'))
             else:
-                self.amount_residual = effective_residual - deduction
+                raw_residual = move.amount_total
+
+            if hasattr(move, 'amount_rounding') and move.amount_rounding and not move.line_ids.filtered(lambda l: l.display_type == 'rounding'):
+                raw_residual += move.amount_rounding
+
+            net_residual = raw_residual - deduction
+
+            if move.currency_id.compare_amounts(net_residual, 0.0) > 0:
+                # Customer owes balance to the store
+                move.custom_total = 0.0
+                move.amount_residual = net_residual
+                net_residual_signed = move.currency_id._convert(
+                    net_residual,
+                    move.company_currency_id,
+                    move.company_id,
+                    move.invoice_date or move.date or fields.Date.today()
+                )
+                move.amount_residual_signed = -sign * net_residual_signed if sign != 0 else net_residual_signed
+                if move.state == 'posted':
+                    total_base = move.amount_total
+                    if move.currency_id.compare_amounts(raw_residual, total_base) < 0:
+                        move.payment_state = 'partial'
+                    else:
+                        move.payment_state = 'not_paid'
+            else:
+                # Deduction covers or exceeds invoice total
+                move.amount_residual = 0.0
+                move.amount_residual_signed = 0.0
+                if move.state == 'posted':
+                    move.payment_state = 'paid'
+                if not move.is_paid:
+                    move.custom_total = net_residual  # Negative amount store owes customer
+                else:
+                    move.custom_total = 0.0
 
     @api.depends(
         "line_ids.matched_debit_ids.debit_move_id.move_id.payment_id.is_matched",
