@@ -179,6 +179,7 @@
         <field name="arch" type="xml">
             <search>
                 <field name="name" string="Label Reference"/>
+                <field name="barcode"/>
                 <field name="product_tmpl_id"/>
                 <separator/>
                 <filter string="Sold / Archived" name="inactive" domain="[('active', '=', False)]"/>

@@ -47,7 +47,7 @@
             </xpath>
 
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="before">
-                <field name="label_id" domain="[('product_id', '=', product_id),('active', '=', True)]" />
+                <field name="label_id" domain="[('active', '=', True), ('product_id', '=?', product_id)]" options="{'no_create': True}" />
                 <field name="purity_id"/>
                 <field name="product_uom" string="UOM" optional="show"/>
 

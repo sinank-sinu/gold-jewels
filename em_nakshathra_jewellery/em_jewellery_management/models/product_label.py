@@ -11,6 +11,7 @@ class ProductLabel(models.Model):
     _name = 'product.label'
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Product Label'
+    _rec_names_search = ['name', 'barcode']
     # _rec_name = 'label_name'
 
     name = fields.Char(string="Label Reference", required=True, copy=False, default="New", tracking=True)

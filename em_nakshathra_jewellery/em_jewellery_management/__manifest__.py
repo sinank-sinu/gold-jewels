@@ -20,6 +20,7 @@
         'wizard/wizard_old_ho.xml',
         'wizard/old_gold_batch_wizard.xml',
         'wizard/old_gold_smith_transfer.xml',
+        'wizard/customer_payment_wizard_views.xml',
         'views/product_template_view.xml',
         'views/purity_view.xml',
         'views/product_label.xml',
