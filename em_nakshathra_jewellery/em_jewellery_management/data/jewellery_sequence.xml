@@ -107,6 +107,8 @@
     <record id="product_scrap" model="product.product">
         <field name="name">Scrap Bar</field>
         <field name="type">product</field> <!-- stockable product -->
+        <field name="uom_id" ref="uom.product_uom_gram"/>
+        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="sale_ok">False</field> <!-- Not for sale -->
         <field name="purchase_ok">False</field> <!-- Not for purchase -->
         <field name="is_old_gold">True</field>
