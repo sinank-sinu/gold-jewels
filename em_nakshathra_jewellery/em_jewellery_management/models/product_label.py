@@ -693,11 +693,11 @@ class ProductLabel(models.Model):
         res.barcode = '21' + ean[2:]
 
         if res.purchase_id:
-            res.purchase_id._compute_total_labelled()
-            res.purchase_id._compute_unlabelled_totals()
+            res.purchase_id.sudo()._compute_total_labelled()
+            res.purchase_id.sudo()._compute_unlabelled_totals()
         if res.job_work_id:
-            res.job_work_id._compute_total_labelled()
-            res.job_work_id._compute_unlabelled_totals()
+            res.purchase_id.sudo()._compute_total_labelled()
+            res.purchase_id.sudo()._compute_unlabelled_totals()
 
         return res
 

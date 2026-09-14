@@ -33,13 +33,15 @@ class PurchaseOrder(models.Model):
     total_labelled = fields.Float(
         string="Total Labelled",
         compute="_compute_total_labelled",
-        store=True
+        store=True,
+        compute_sudo=True,
     )
 
     total_unlabelled = fields.Float(
         string="Total Unlabelled",
         compute="_compute_unlabelled_totals",
-        store=True
+        store=True,
+        compute_sudo=True,
     )
     label_ids = fields.One2many(
         'product.label',
