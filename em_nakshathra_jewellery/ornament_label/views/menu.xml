@@ -6,7 +6,7 @@
         id="menu_product_label_app"
         name="Product Labels"
         sequence="5"
-        groups="custom_label_user.group_product_label_user"
+        groups="custom_label_user.group_product_label_user,base.group_system"
     />
 
     <!-- Ornament Labels -->
@@ -16,7 +16,7 @@
         parent="menu_product_label_app"
         action="em_jewellery_management.action_product_label"
         sequence="10"
-        groups="custom_label_user.group_product_label_user"
+        groups="custom_label_user.group_product_label_user,base.group_system"
     />
 
     <!-- Location Wise Products -->
@@ -26,7 +26,7 @@
         parent="menu_product_label_app"
         action="custom_label_user.action_location_wise_stock"
         sequence="20"
-        groups="custom_label_user.group_product_label_user"
+        groups="custom_label_user.group_product_label_user,base.group_system"
     />
 
     <!-- Internal Transfers -->
@@ -36,7 +36,7 @@
         parent="menu_product_label_app"
         action="stock.action_picking_tree_internal"
         sequence="30"
-        groups="custom_label_user.group_product_label_user"
+        groups="custom_label_user.group_product_label_user,base.group_system"
     />
 
 </odoo>

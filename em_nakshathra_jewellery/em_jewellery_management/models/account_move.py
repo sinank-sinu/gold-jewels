@@ -201,31 +201,49 @@ class AccountMove(models.Model):
             move.with_context(bypass_negative_total_check=False)._compute_amount()
         return posted
 
-    def action_create_old_gold_vendor_payment(self):
+    def action_open_customer_payment_wizard(self):
+        self.ensure_one()
+        if self.custom_total >= 0 and self.amount_total >= 0:
+            raise ValidationError(_("Invoice is not negative."))
+        return {
+            'name': _('Create Customer Payment'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'customer.payment.wizard',
+            'view_mode': 'form',
+            'views': [(self.env.ref('em_jewellery_management.view_customer_payment_wizard_form').id, 'form')],
+            'target': 'new',
+            'context': {
+                'default_invoice_id': self.id,
+            },
+        }
+
+    def action_create_old_gold_vendor_payment(self, journal=None, payment_date=None, memo=None, amount=None):
         Payment = self.env['account.payment']
 
         for move in self:
             if move.custom_total >= 0 and move.amount_total >= 0:
                 raise ValidationError(_("Invoice is not negative."))
 
-            amount = abs(move.custom_total) if move.custom_total < 0 else abs(move.amount_total)
+            pay_amount = amount if amount is not None else (abs(move.custom_total) if move.custom_total < 0 else abs(move.amount_total))
 
-            journal = self.env['account.journal'].search([
-                ('type', 'in', ('bank', 'cash')),
-                ('company_id', '=', move.company_id.id),
-                ('default_account_id', '!=', False)
-            ], limit=1)
-            
-            if not journal:
-                journal = self.env['account.journal'].search([
+            pay_journal = journal
+            if not pay_journal:
+                pay_journal = self.env['account.journal'].search([
                     ('type', 'in', ('bank', 'cash')),
-                    ('company_id', '=', move.company_id.id)
+                    ('company_id', '=', move.company_id.id),
+                    ('default_account_id', '!=', False)
                 ], limit=1)
+                
+                if not pay_journal:
+                    pay_journal = self.env['account.journal'].search([
+                        ('type', 'in', ('bank', 'cash')),
+                        ('company_id', '=', move.company_id.id)
+                    ], limit=1)
 
-            if not journal:
+            if not pay_journal:
                 raise ValidationError(_("No bank/cash journal found."))
-            elif not journal.default_account_id:
-                raise ValidationError(_("The selected journal '%s' is missing a Default Account. Please configure its accounts in Accounting settings to allow payments.") % journal.name)
+            elif not pay_journal.default_account_id:
+                raise ValidationError(_("The selected journal '%s' is missing a Default Account. Please configure its accounts in Accounting settings to allow payments.") % pay_journal.name)
 
             payable_line = move.line_ids.filtered(lambda l: l.display_type == 'payment_term' or l.account_type == 'liability_payable')
             destination_account_id = payable_line[0].account_id.id if payable_line else move.partner_id.with_company(move.company_id).property_account_payable_id.id
@@ -234,22 +252,21 @@ class AccountMove(models.Model):
                 'payment_type': 'outbound',
                 'partner_type': 'supplier',
                 'partner_id': move.partner_id.id,
-                'amount': amount,
-                'journal_id': journal.id,
-                'date': fields.Date.today(),
-                'ref': move.name,
+                'amount': pay_amount,
+                'journal_id': pay_journal.id,
+                'date': payment_date or fields.Date.today(),
+                'ref': memo or move.name,
                 'destination_account_id': destination_account_id,
             })
             
             # Force the outstanding account if Odoo's internal compute failed to find one
-            if not payment.outstanding_account_id and journal.default_account_id:
-                payment.outstanding_account_id = journal.default_account_id.id
+            if not payment.outstanding_account_id and pay_journal.default_account_id:
+                payment.outstanding_account_id = pay_journal.default_account_id.id
 
             payment.action_post()
             if payment.state == 'posted':
-                self.custom_total =0.0
+                self.custom_total = 0.0
                 self.is_paid = True
                 self.payment_to_id = payment.id
-
 
         return True

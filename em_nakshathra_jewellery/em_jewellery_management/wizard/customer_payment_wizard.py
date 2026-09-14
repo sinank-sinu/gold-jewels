@@ -40,24 +40,31 @@ class CustomerPaymentWizard(models.TransientModel):
         required=True,
     )
 
-    @api.depends('company_id', 'branch_id')
+    @api.depends('invoice_id', 'company_id', 'branch_id')
     def _compute_available_journals(self):
         for rec in self:
+            company = rec.company_id or rec.invoice_id.company_id or self.env.company
+            branch = rec.branch_id or (rec.invoice_id.branch_id if hasattr(rec.invoice_id, 'branch_id') else False)
             domain = [
                 ('type', 'in', ('bank', 'cash')),
-                ('company_id', '=', rec.company_id.id if rec.company_id else self.env.company.id),
+                ('company_id', '=', company.id),
                 ('default_account_id', '!=', False),
             ]
-            if rec.branch_id:
-                branch_journals = self.env['account.journal'].search(domain + [('branch_id', '=', rec.branch_id.id)])
+            if branch:
+                branch_journals = self.env['account.journal'].search(domain + [('branch_id', '=', branch.id)])
                 if branch_journals:
                     rec.available_journal_ids = branch_journals
                 else:
                     rec.available_journal_ids = self.env['account.journal'].search(
-                        domain + ['|', ('branch_id', '=', rec.branch_id.id), ('branch_id', '=', False)]
+                        domain + ['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)]
                     )
             else:
                 rec.available_journal_ids = self.env['account.journal'].search(domain)
+            if not rec.available_journal_ids:
+                rec.available_journal_ids = self.env['account.journal'].search([
+                    ('type', 'in', ('bank', 'cash')),
+                    ('company_id', '=', company.id),
+                ])
 
     @api.model
     def _get_default_journal_static(self, invoice):
@@ -83,7 +90,9 @@ class CustomerPaymentWizard(models.TransientModel):
     @api.model
     def default_get(self, fields_list):
         res = super().default_get(fields_list)
-        invoice_id = self.env.context.get('default_invoice_id') or res.get('invoice_id')
+        invoice_id = self.env.context.get('default_invoice_id') or res.get('invoice_id') or (
+            self.env.context.get('active_model') == 'account.move' and self.env.context.get('active_id')
+        )
         if invoice_id:
             invoice = self.env['account.move'].browse(invoice_id)
             res['invoice_id'] = invoice.id

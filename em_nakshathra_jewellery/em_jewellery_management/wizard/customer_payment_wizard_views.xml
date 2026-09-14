@@ -32,4 +32,12 @@
             </form>
         </field>
     </record>
+
+    <record id="action_customer_payment_wizard" model="ir.actions.act_window">
+        <field name="name">Create Customer Payment</field>
+        <field name="res_model">customer.payment.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="view_id" ref="view_customer_payment_wizard_form"/>
+    </record>
 </odoo>

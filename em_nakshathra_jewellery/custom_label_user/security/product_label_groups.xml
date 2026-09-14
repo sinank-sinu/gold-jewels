@@ -3,5 +3,6 @@
     <record id="group_product_label_user" model="res.groups">
         <field name="name">Product Label User</field>
         <field name="category_id" ref="base.module_category_inventory"/>
+        <field name="users" eval="[(4, ref('base.user_admin'))]"/>
     </record>
 </odoo>

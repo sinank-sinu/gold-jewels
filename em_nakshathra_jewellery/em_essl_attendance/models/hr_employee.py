@@ -40,3 +40,8 @@ class HrEmployee(models.Model):
                         'active': True
                     })
 
+class HrEmployeePublic(models.Model):
+    _inherit = 'hr.employee.public'
+
+    essl_emp_code = fields.Char(string='eSSL Employee Code', readonly=True)
+    essl_location_id = fields.Many2one('res.branch', string='eSSL Location', readonly=True)
