@@ -16,32 +16,24 @@
         <field name="name">Sample</field>
         <field name="active">False</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="tracking">none</field>
     </record>
     <record id="product_bullion_gold_issue" model="product.product">
         <field name="name">Gold Bullion Issue</field>
         <field name="active">False</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="tracking">none</field>
     </record>
     <record id="product_bullion_gold_reciept" model="product.product">
         <field name="name">Gold Bullion Receipt</field>
         <field name="active">False</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="tracking">none</field>
     </record>
     <record id="product_old_gold_melt" model="product.product">
         <field name="name">Old gold to melt</field>
         <field name="active">False</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="tracking">none</field>
     </record>
     <record id="loc_branch_old_gold" model="stock.location">
@@ -72,8 +64,6 @@
     <record id="product_bullion_gold" model="product.product">
         <field name="name">Gold Bullion</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
 <!--        <field name="sale_ok">True</field>-->
         <field name="purchase_ok">True</field>
         <field name="tracking">none</field>
@@ -110,8 +100,6 @@
     <record id="product_add_less_old_gold" model="product.product">
         <field name="name">Add/Less Old Gold</field>
         <field name="type">product</field> <!-- stockable product -->
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="sale_ok">False</field> <!-- Not for sale -->
         <field name="purchase_ok">False</field> <!-- Not for purchase -->
         <field name="tracking">none</field>
@@ -119,8 +107,6 @@
     <record id="product_scrap" model="product.product">
         <field name="name">Scrap Bar</field>
         <field name="type">product</field> <!-- stockable product -->
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="sale_ok">False</field> <!-- Not for sale -->
         <field name="purchase_ok">False</field> <!-- Not for purchase -->
         <field name="is_old_gold">True</field>
