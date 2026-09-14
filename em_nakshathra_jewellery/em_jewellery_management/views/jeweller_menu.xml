@@ -22,7 +22,7 @@
         id="menu_jewellery_root"
         name="Jewellery"
         sequence="10"
-        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_billing_staff,em_jewellery_management.group_jewellery_salesman"/>
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,base.group_system"/>
 
 <menuitem
         id="menu_jewellery_configuration_root"

@@ -5,8 +5,6 @@
     <record id="product_old_gold" model="product.product">
         <field name="name">Old Gold</field>
         <field name="type">product</field>
-        <field name="uom_id" ref="uom.product_uom_gram"/>
-        <field name="uom_po_id" ref="uom.product_uom_gram"/>
         <field name="sale_ok">True</field>
         <field name="purchase_ok">True</field>
         <field name="is_old_gold">True</field>

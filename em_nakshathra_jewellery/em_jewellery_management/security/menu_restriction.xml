@@ -122,16 +122,6 @@
               action="dynamic_accounts_report.action_cash_book"
               sequence="1"/>
 
-    <!-- ============================================================
-         JEWELLERY MODULE RESTRICTION
-    ============================================================ -->
-    <record id="em_jewellery_management.menu_jewellery_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [
-            ref('em_jewellery_management.group_jewellery_manager'),
-            ref('em_jewellery_management.group_jewellery_salesman'),
-            ref('base.group_system')
-        ])]"/>
-    </record>
     <!-- Restrict Attendances -->
     <record id="hr_attendance.menu_hr_attendance_root" model="ir.ui.menu">
         <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
