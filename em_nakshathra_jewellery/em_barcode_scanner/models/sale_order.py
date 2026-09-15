@@ -86,55 +86,118 @@ class SaleOrder(models.Model):
         }
 
     @api.model
-    def action_scan_barcode_old_gold(self, order_id, barcode):
-        pass
+    def action_scan_barcode_sale_return(self, order_id, barcode):
         """
-        Called via RPC when a barcode is scanned on the Apply Old Gold section.
-        # """
-        # barcode = (barcode or '').strip()
-        # if not barcode:
-        #     return {'error': _('Empty barcode received.')}
-        #
-        # label = self.env['product.label'].search([('barcode', '=', barcode)], limit=1)
-        # if label:
-        #     product = label.product_id
-        #     source_label = label.name
-        #     purity_id = label.purity_id.id if label.purity_id else False
-        #     gross_weight = label.sale_gross_weight or 1.0
-        #     stone_weight = label.sale_stone_weight or 0.0
-        # else:
-        #     return {'error': _('Only labeled items with purity can be scanned as Old Gold. Barcode: %s') % barcode}
-        #
-        # if not purity_id:
-        #     return {'error': _('Purity is required for old gold lines. Barcode %s does not have purity.') % barcode}
-        #
-        # order = self.browse(order_id)
-        # if not order.exists():
-        #     return {'error': _('Sale Order not found.')}
-        #
-        # # Fetch old gold rate
-        # today = fields.Date.today()
-        # gold_rate_rec = self.env['gold.rate.master'].search([
-        #     ('purity_id', '=', purity_id),
-        #     ('date', '<=', today),
-        #     ('active', '=', True),
-        #     ('rate_type', '=', 'old_gold')
-        # ], order='date desc', limit=1)
-        #
-        # rate = gold_rate_rec.board_rate if gold_rate_rec else 0.0
-        #
-        # create_vals = {
-        #     'sale_id': order.id,
-        #     'purity_id': purity_id,
-        #     'gross_weight': gross_weight,
-        #     'stone_weight': stone_weight,
-        #     'rate': rate,
-        # }
-        #
-        # self.env['sale.old.gold.line'].create(create_vals)
-        #
-        # return {
-        #     'success': True,
-        #     'label': source_label,
-        #     'product': product.display_name,
-        # }
+        Called via RPC when a barcode is scanned on the Sale Return section.
+        Looks up product.label (including inactive/non-active labels) by barcode, name, or label_number.
+        If found, creates a new sale.return.line.
+        Falls back to product.product by barcode or default_code if no label is found.
+        """
+        barcode = (barcode or '').strip()
+        if not barcode:
+            return {'error': _('Empty barcode received.')}
+
+        # ── 1. Try product.label search with active_test=False (supports non-active labels)
+        label = self.env['product.label'].with_context(active_test=False).search(
+            ['|', '|', ('barcode', '=', barcode), ('name', '=', barcode), ('label_number', '=', barcode)],
+            limit=1
+        )
+
+        if label:
+            product = label.product_id or (label.product_tmpl_id.product_variant_ids and label.product_tmpl_id.product_variant_ids[0])
+            source_label = label.name or label.barcode or barcode
+        else:
+            # ── 2. Fallback: product.product barcode or default_code ──────────
+            product = self.env['product.product'].search(
+                ['|', ('barcode', '=', barcode), ('default_code', '=', barcode)], limit=1
+            )
+            if not product:
+                return {
+                    'error': _(
+                        'No product label or product found for barcode: %s'
+                    ) % barcode
+                }
+            source_label = product.display_name
+
+        if not product:
+            return {'error': _('Product not found for barcode: %s') % barcode}
+
+        order = self.browse(order_id)
+        if not order.exists():
+            return {'error': _('Sale Order not found.')}
+
+        # Ensure Sale Return is enabled on the order
+        if not order.is_sale_return:
+            order.write({'is_sale_return': True})
+
+        # Fetch Gold Rate for return line
+        purity = False
+        if label:
+            purity = label.purity_id or label.sale_purity_id
+        if not purity and hasattr(product, 'purity_id'):
+            purity = product.purity_id
+
+        rate = 0.0
+        if purity:
+            today = fields.Date.today()
+            gold_rate_rec = self.env['gold.rate.master'].search([
+                ('purity_id', '=', purity.id),
+                ('date', '<=', today),
+                ('active', '=', True),
+                ('rate_type', '=', 'old_gold')
+            ], order='date desc', limit=1)
+            if not gold_rate_rec:
+                gold_rate_rec = self.env['gold.rate.master'].search([
+                    ('purity_id', '=', purity.id),
+                    ('date', '<=', today),
+                    ('active', '=', True),
+                    ('rate_type', '=', 'sale')
+                ], order='date desc', limit=1)
+            if gold_rate_rec:
+                rate = gold_rate_rec.board_rate or gold_rate_rec.rate_per_gram
+
+        create_vals = {
+            'sale_id': order.id,
+            'product_id': product.id,
+            'product_template_id': product.product_tmpl_id.id,
+            'name': label.name if label else (product.display_name or product.name),
+            'product_uom': product.uom_id.id if product.uom_id else False,
+            'rate': rate,
+        }
+
+        if purity:
+            create_vals['purity_id'] = purity.id
+
+        if product.taxes_id and order.company_id:
+            taxes = product.taxes_id.filtered(lambda t: t.company_id == order.company_id)
+            if taxes:
+                create_vals['tax_id'] = [(6, 0, taxes.ids)]
+
+        if label:
+            gross_wt = label.sale_gross_weight or 0.0
+            st_wt = label.sale_stone_weight or 0.0
+            create_vals.update({
+                'label_id': label.id,
+                'gross_weight': gross_wt,
+                'stone_weight': st_wt,
+                'sale_stone_weight': st_wt,
+                'sale_stone_weight_ct': label.sale_stone_weight_ct or 0.0,
+                'sale_diamond_weight_gm': label.sale_diamond_weight_gm or 0.0,
+                'sale_diamond_weight_ct': label.sale_diamond_weight_ct or 0.0,
+                'sale_stone_rate': label.sale_stone_rate or 0.0,
+                'sale_diamond_rate': label.sale_diamond_rate or 0.0,
+                'mc_percent': label.sale_making_charge_value or 0.0,
+                'mc_percent_actual': label.sale_making_charge_value or 0.0,
+            })
+            if hasattr(label, 'other_weight_g'):
+                create_vals['other_weight_g'] = label.other_weight_g or 0.0
+            if hasattr(label, 'other_weight_amount'):
+                create_vals['other_weight_amount'] = label.other_weight_amount or 0.0
+
+        self.env['sale.return.line'].create(create_vals)
+
+        return {
+            'success': True,
+            'label': source_label,
+            'product': product.display_name,
+        }

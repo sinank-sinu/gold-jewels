@@ -39,6 +39,7 @@ class PurchaseOrderLine(models.Model):
         readonly=False
     )
 
+    label_id = fields.Many2one('product.label', string="Label")
     purity_id = fields.Many2one('gold.purity', string="Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
     metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount")
@@ -162,4 +163,47 @@ class PurchaseOrderLine(models.Model):
             self.purity_id = self.product_id.purity_id.id
             if self.order_id.is_old_gold:
                 self.purchase_making_charge_type = 'rate_per_gram'
+
+    @api.onchange('label_id')
+    def _onchange_purchase_label_id(self):
+        if self.label_id:
+            if self.label_id.product_id:
+                self.product_id = self.label_id.product_id.id
+                self.product_template_id = self.label_id.product_id.product_tmpl_id.id
+            purity = self.label_id.purity_id or self.label_id.sale_purity_id
+            if purity:
+                self.purity_id = purity.id
+            if hasattr(self.label_id, 'sale_gross_weight') and self.label_id.sale_gross_weight:
+                self.product_qty = self.label_id.sale_gross_weight
+                self.gross_weight = self.label_id.sale_gross_weight
+            if hasattr(self.label_id, 'sale_stone_weight') and self.label_id.sale_stone_weight:
+                self.stone_weight = self.label_id.sale_stone_weight
+            if hasattr(self.label_id, 'sale_diamond_weight_gm') and self.label_id.sale_diamond_weight_gm:
+                self.diamond_weight_gm = self.label_id.sale_diamond_weight_gm
+            if hasattr(self.label_id, 'sale_stone_rate') and self.label_id.sale_stone_rate:
+                self.stone_rate = self.label_id.sale_stone_rate
+            if hasattr(self.label_id, 'sale_diamond_rate') and self.label_id.sale_diamond_rate:
+                self.diamond_rate = self.label_id.sale_diamond_rate
+            if hasattr(self.label_id, 'sale_making_charge_value') and self.label_id.sale_making_charge_value:
+                self.mc_percent = self.label_id.sale_making_charge_value
+            # Gold Rate
+            today = fields.Date.today()
+            if purity:
+                gold_rate_rec = self.env['gold.rate.master'].search([
+                    ('purity_id', '=', purity.id),
+                    ('date', '<=', today),
+                    ('active', '=', True),
+                    ('rate_type', '=', 'old_gold')
+                ], order='date desc', limit=1)
+                if not gold_rate_rec:
+                    gold_rate_rec = self.env['gold.rate.master'].search([
+                        ('purity_id', '=', purity.id),
+                        ('date', '<=', today),
+                        ('active', '=', True),
+                        ('rate_type', '=', 'sale')
+                    ], order='date desc', limit=1)
+                if gold_rate_rec:
+                    rate = gold_rate_rec.board_rate or gold_rate_rec.rate_per_gram
+                    self.gold_rate = rate
+                    self.price_unit = rate
 

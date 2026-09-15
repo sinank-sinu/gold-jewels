@@ -16,11 +16,10 @@ class PurchaseOrder(models.Model):
         default=False
     )
     is_sale_return_po = fields.Boolean(
-        string='Is Sale Return PO',
+        string='Sale Return',
         default=False
     )
     unfix = fields.Boolean(
-
         string='Unfix',
         default=False
     )
@@ -48,6 +47,24 @@ class PurchaseOrder(models.Model):
         'purchase_id',
         string="Labels"
     )
+
+    @api.onchange('is_old_gold')
+    def _onchange_is_old_gold(self):
+        if self.is_old_gold:
+            self.unfix = False
+            self.is_sale_return_po = False
+
+    @api.onchange('unfix')
+    def _onchange_unfix(self):
+        if self.unfix:
+            self.is_old_gold = False
+            self.is_sale_return_po = False
+
+    @api.onchange('is_sale_return_po')
+    def _onchange_is_sale_return_po(self):
+        if self.is_sale_return_po:
+            self.is_old_gold = False
+            self.unfix = False
 
 
     def action_create_sale_order(self):

@@ -15,14 +15,14 @@
                 />
             </xpath>
 
-            <!-- Inject the barcode scanner widget just before old_gold_line_ids -->
-            <xpath expr="//field[@name='old_gold_line_ids']" position="before">
-<!--                <widget-->
-<!--                    name="barcode_scanner"-->
-<!--                    model="sale.order"-->
-<!--                    method="action_scan_barcode_old_gold"-->
-<!--                    invisible="has_old_gold == False or old_gold_bill_id != False"-->
-<!--                />-->
+            <!-- Inject the active barcode scanner widget just before sale_return_line_ids -->
+            <xpath expr="//field[@name='sale_return_line_ids']" position="before">
+                <widget
+                    name="barcode_scanner"
+                    model="sale.order"
+                    method="action_scan_barcode_sale_return"
+                    invisible="is_sale_return == False"
+                />
             </xpath>
         </field>
     </record>
