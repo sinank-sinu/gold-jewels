@@ -43,28 +43,6 @@ class SaleReturnLine(models.Model):
         readonly=False,
         store=True,
     )
-    event_id = fields.Many2one(
-        'event.event',
-        string="Event",
-    )
-    event_ticket_id = fields.Many2one(
-        'event.event.ticket',
-        string="Event Ticket",
-    )
-    route_id = fields.Many2one(
-        'stock.route',
-        string="Route",
-    )
-    customer_lead = fields.Float(
-        string="Lead Time",
-        default=0.0,
-    )
-    analytic_precision = fields.Integer(
-        store=False,
-        default=lambda self: self.env['decimal.precision'].precision_get("Percentage Analytic"),
-    )
-    qty_delivered = fields.Float(string="Delivered", digits=(16, 3))
-    qty_invoiced = fields.Float(string="Invoiced", digits=(16, 3))
 
     gross_weight = fields.Float(string="Gross Weight (g)", digits=(16, 3))
     stone_weight = fields.Float(string="Stone Weight (g)", digits=(16, 3))
@@ -90,9 +68,7 @@ class SaleReturnLine(models.Model):
 
     amount = fields.Monetary(string="Subtotal", compute='_compute_amount', store=True, currency_field='currency_id')
     price_subtotal_actual = fields.Monetary(string="MRP", store=True, currency_field='currency_id')
-    price_total = fields.Monetary(string="Tax incl.", compute='_compute_price_total', store=True, currency_field='currency_id')
     price_unit = fields.Float(string="Unit Price", compute='_compute_price_unit', store=True)
-    tax_id = fields.Many2many('account.tax', string="Taxes")
 
     @api.depends('product_id')
     def _compute_product_template_id(self):
@@ -171,20 +147,6 @@ class SaleReturnLine(models.Model):
             rec.amount = (rec.metal_amount or 0.0) + mc - (rec.mc_discount or 0.0) + extra
             rec.price_subtotal_actual = (rec.metal_amount or 0.0) + (rec.mc_amount or 0.0) + extra
 
-    @api.depends('amount', 'tax_id')
-    def _compute_price_total(self):
-        for rec in self:
-            if rec.tax_id and rec.amount and rec.sale_id.partner_id:
-                taxes = rec.tax_id.compute_all(
-                    rec.amount,
-                    currency=rec.currency_id,
-                    quantity=1.0,
-                    product=rec.product_id,
-                    partner=rec.sale_id.partner_id
-                )
-                rec.price_total = taxes['total_included']
-            else:
-                rec.price_total = rec.amount or 0.0
 
     @api.depends('amount', 'gross_weight', 'net_weight', 'rate')
     def _compute_price_unit(self):
@@ -213,8 +175,6 @@ class SaleReturnLine(models.Model):
             self.name = self.product_id.display_name or self.product_id.name
             if hasattr(self.product_id, 'purity_id') and self.product_id.purity_id:
                 self.purity_id = self.product_id.purity_id.id
-            if self.product_id.taxes_id and self.sale_id.company_id:
-                self.tax_id = self.product_id.taxes_id.filtered(lambda t: t.company_id == self.sale_id.company_id)
 
     @api.onchange('label_id')
     def _onchange_label_id(self):

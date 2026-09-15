@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Action to open web console directly in a new tab -->
+    <record id="action_open_scheme_ob_transfer_web" model="ir.actions.act_url">
+        <field name="name">Scheme Opening Balance Transfer</field>
+        <field name="url">/scheme_ob_transfer</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Item in Accounting -> Actions -->
+    <menuitem id="menu_scheme_ob_transfer_web"
+              name="Scheme Opening Balance Transfer"
+              parent="account.menu_finance_entries"
+              action="action_open_scheme_ob_transfer_web"
+              groups="base.group_system,account.group_account_manager"
+              sequence="999"/>
+</odoo>

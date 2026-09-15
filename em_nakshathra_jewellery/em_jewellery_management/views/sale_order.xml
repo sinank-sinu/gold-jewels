@@ -175,9 +175,6 @@
                                domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []"
                                options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                         <field name="name" string="Description" optional="hide"/>
-                        <field name="event_id" string="Event" optional="hide"/>
-                        <field name="event_ticket_id" string="Event Ticket" optional="hide"/>
-                        <field name="route_id" string="Route" optional="hide"/>
                         <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []"
                                context="{'active_test': False}" string="Label"/>
                         <field name="purity_id"
@@ -200,17 +197,11 @@
                         <field name="other_weight_amount" string="Other Weight Amount" optional="hide"/>
                         <field name="fine_weight" string="Fine Weight (g)"/>
                         <field name="price_subtotal_actual" string="MRP" optional="hide"/>
-                        <field name="amount" string="Subtotal" readonly="1"/>
                         <field name="mc_discount" string="Discount" optional="hide"/>
                         <field name="mc_amount_actual" string="MC" readonly="1"/>
                         <field name="mc_percent_actual" string="MC%"/>
-                        <field name="qty_delivered" string="Delivered" optional="hide"/>
-                        <field name="qty_invoiced" string="Invoiced" optional="hide"/>
-                        <field name="customer_lead" string="Lead Time" optional="hide"/>
-                        <field name="analytic_distribution" widget="analytic_distribution" optional="hide"/>
-                        <field name="price_unit" string="Unit Price" readonly="1"/>
-                        <field name="tax_id" string="Taxes" widget="many2many_tags" optional="show"/>
-                        <field name="price_total" string="Tax incl." optional="show"/>
+                        <field name="amount" string="Subtotal" readonly="1"/>
+
                     </tree>
                 </field>
                 <!--                </group>-->
