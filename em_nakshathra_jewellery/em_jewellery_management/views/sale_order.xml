@@ -32,6 +32,9 @@
             <xpath expr="//sheet/group" position="before">
                 <field name="is_editing_main_so" invisible="1"/>
             </xpath>
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="phone" widget="phone"/>
+            </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="attributes">
                 <attribute name="string">Gross Weight</attribute>
                 <attribute name="digits">[16, 3]</attribute>
@@ -47,8 +50,8 @@
             </xpath>
 
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="before">
-                <field name="label_id" domain="[('active', '=', True), ('product_id', '=?', product_id)]" options="{'no_create': True}" />
-                <field name="purity_id"/>
+                <field name="label_id" domain="[('active', '=', True), ('product_id', '=?', product_id)]" options="{'no_create': True, 'no_create_edit': True, 'no_open': True, 'no_quick_create': True}" />
+                <field name="purity_id" options="{'no_create': True, 'no_create_edit': True, 'no_open': True, 'no_quick_create': True}"/>
                 <field name="product_uom" string="UOM" optional="show"/>
 
             </xpath>
@@ -84,10 +87,14 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="attributes">
                 <attribute name="string">Product</attribute>
+                <attribute name="options">{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}</attribute>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="after">
-                <field name="product_id" string="Variety"/>
+                <field name="product_id" string="Variety" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
 <!--                <attribute name="optional">hide</attribute>-->
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="attributes">
+                <attribute name="options">{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}</attribute>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='name']" position="attributes">
                 <attribute name="optional">hide</attribute>
@@ -161,9 +168,9 @@
                     <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False" readonly="sale_return_bill_id != False and not is_editing_sale_return">
                         <tree editable="bottom">
                             <field name="product_template_id" string="Product"/>
-                            <field name="product_id" string="Variety" domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []"/>
+                            <field name="product_id" string="Variety" domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                             <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []" context="{'active_test': False}"/>
-                            <field name="purity_id"/>
+                            <field name="purity_id" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                             <field name="product_uom" string="UOM" optional="show"/>
                             <field name="gross_weight" string="Gross Weight"/>
                             <field name="sale_stone_weight" string="Stone Weight (g)" optional="hide"/>
@@ -212,9 +219,9 @@
             </xpath>
             <xpath expr="//field[@name='order_line']" position="after">
                 <field name="scheme_line_id" invisible="1"/>
-                <field name="active_scheme_id" invisible="1"/>
                 <group>
                     <field name="apply_scheme" widget="boolean_toggle"/>
+                    <field name="active_scheme_id" readonly="1" invisible="not apply_scheme"/>
 <!--                    <button-->
 <!--                        name="action_apply_scheme"-->
 <!--                        string="Apply Scheme"-->

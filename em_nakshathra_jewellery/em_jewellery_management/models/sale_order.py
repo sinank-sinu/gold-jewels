@@ -111,11 +111,80 @@ class SaleOrder(models.Model):
             },
         }
 
+    phone = fields.Char(string="Phone Number", copy=False, tracking=True)
     active_scheme_id = fields.Many2one(
         'jewellery.scheme.enrollment',
         string="Customer Scheme",
         readonly=True
     )
+
+    @api.onchange('phone')
+    def _onchange_phone_set_partner_and_scheme(self):
+        for rec in self:
+            if not rec.phone:
+                continue
+
+            phone_input = rec.phone.strip()
+            digits = ''.join(filter(str.isdigit, phone_input))
+            search_digits = digits[-10:] if len(digits) >= 10 else digits
+
+            if not search_digits:
+                continue
+
+            # 1. Search in jewellery.scheme.enrollment by normalized phone
+            self.env.cr.execute("""
+                SELECT id FROM jewellery_scheme_enrollment 
+                WHERE (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                    OR regexp_replace(COALESCE(whatsapp_number, ''), '[^0-9]', '', 'g') LIKE %s)
+                ORDER BY (state IN ('running', 'completed') AND NOT is_redeemed) DESC, active DESC, id DESC
+                LIMIT 10
+            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            matched_ids = [r[0] for r in self.env.cr.fetchall()]
+
+            if matched_ids:
+                schemes = self.env['jewellery.scheme.enrollment'].browse(matched_ids)
+                target_scheme = schemes.filtered(
+                    lambda s: s.state in ('running', 'completed') and not s.is_redeemed
+                )[:1] or schemes[:1]
+
+                rec.partner_id = target_scheme.partner_id.id
+                rec.active_scheme_id = target_scheme.id
+                rec.apply_scheme = True
+                if target_scheme.phone:
+                    rec.phone = target_scheme.phone
+                continue
+
+            # 2. Fallback: Search res.partner if no scheme matched
+            self.env.cr.execute("""
+                SELECT id FROM res_partner 
+                WHERE (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                    OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+                ORDER BY customer_rank DESC, id DESC
+                LIMIT 1
+            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            partner_res = self.env.cr.fetchone()
+
+            if partner_res:
+                partner = self.env['res.partner'].browse(partner_res[0])
+                rec.partner_id = partner.id
+                scheme = self.env['jewellery.scheme.enrollment'].search([
+                    ('partner_id', '=', partner.id),
+                    ('state', 'in', ('running', 'completed')),
+                    ('is_redeemed', '=', False),
+                ], order='active desc, id desc', limit=1)
+                if scheme:
+                    rec.active_scheme_id = scheme.id
+                    rec.apply_scheme = True
+                else:
+                    rec.active_scheme_id = False
+                    rec.apply_scheme = False
+            else:
+                return {
+                    'warning': {
+                        'title': _("No Match Found"),
+                        'message': _("No customer or scheme enrollment found matching phone number: %s") % rec.phone
+                    }
+                }
 
     @api.onchange('partner_id')
     def _onchange_partner_set_scheme(self):
@@ -124,14 +193,12 @@ class SaleOrder(models.Model):
             rec.active_scheme_id = False
 
             if not rec.partner_id:
+                rec.phone = False
                 continue
 
-            # Search for active scheme with balance
-            # scheme = self.env['jewellery.scheme.enrollment'].search([
-            #     ('partner_id', '=', rec.partner_id.id),
-            #     ('active', '=', True),
-            #     ('balance_amount', '=', 0)
-            # ], limit=1)
+            if not rec.phone:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
+
             scheme = self.env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', rec.partner_id.id),
                 ('active', '=', True),
@@ -141,6 +208,8 @@ class SaleOrder(models.Model):
             if scheme:
                 rec.apply_scheme = True
                 rec.active_scheme_id = scheme
+                if not rec.phone and scheme.phone:
+                    rec.phone = scheme.phone
 
     def action_apply_old_gold(self):
         PurchaseOrder = self.env['purchase.order']
