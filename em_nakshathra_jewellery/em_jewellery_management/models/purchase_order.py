@@ -19,6 +19,10 @@ class PurchaseOrder(models.Model):
         string='Sale Return',
         default=False
     )
+    is_sale_return_shop = fields.Boolean(
+        string='Sale Return Shop',
+        default=False
+    )
     unfix = fields.Boolean(
         string='Unfix',
         default=False
@@ -52,17 +56,24 @@ class PurchaseOrder(models.Model):
     def _onchange_is_old_gold(self):
         if self.is_old_gold:
             self.unfix = False
-            self.is_sale_return_po = False
+            self.is_sale_return_shop = False
 
     @api.onchange('unfix')
     def _onchange_unfix(self):
         if self.unfix:
             self.is_old_gold = False
-            self.is_sale_return_po = False
+            self.is_sale_return_shop = False
 
     @api.onchange('is_sale_return_po')
     def _onchange_is_sale_return_po(self):
         if self.is_sale_return_po:
+            self.is_old_gold = False
+            self.unfix = False
+            self.is_sale_return_shop = False
+
+    @api.onchange('is_sale_return_shop')
+    def _onchange_is_sale_return_shop(self):
+        if self.is_sale_return_shop:
             self.is_old_gold = False
             self.unfix = False
 

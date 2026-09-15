@@ -104,10 +104,14 @@ class PurchaseOrderLine(models.Model):
         for rec in self:
             rec.fine_weight = rec.net_weight * (rec.purity_id.percentage)/100
 
-    @api.depends('gold_rate', 'fine_weight')
+    @api.depends('gold_rate', 'fine_weight', 'net_weight', 'order_id.is_sale_return_shop')
     def _compute_metal_amount(self):
         for rec in self:
-            rec.metal_amount = rec.gold_rate * rec.fine_weight
+            gold_rate = rec.gold_rate or 0.0
+            if rec.order_id and rec.order_id.is_sale_return_shop:
+                rec.metal_amount = gold_rate * (rec.net_weight or 0.0)
+            else:
+                rec.metal_amount = gold_rate * (rec.fine_weight or 0.0)
 
     @api.depends('net_weight','mc_percent','purchase_making_charge_type')
     def _compute_purchase_mc_fine(self):

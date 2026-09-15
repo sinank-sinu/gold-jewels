@@ -9,7 +9,7 @@
                 <widget
                     name="barcode_scanner"
                     model="purchase.order"
-                    invisible="not is_sale_return_po or state in ('purchase', 'done', 'cancel')"
+                    invisible="not is_sale_return_shop or state in ('purchase', 'done', 'cancel')"
                 />
             </xpath>
         </field>
