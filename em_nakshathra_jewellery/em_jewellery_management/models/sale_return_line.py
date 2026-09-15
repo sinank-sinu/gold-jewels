@@ -63,6 +63,8 @@ class SaleReturnLine(models.Model):
         store=False,
         default=lambda self: self.env['decimal.precision'].precision_get("Percentage Analytic"),
     )
+    qty_delivered = fields.Float(string="Delivered", digits=(16, 3))
+    qty_invoiced = fields.Float(string="Invoiced", digits=(16, 3))
 
     gross_weight = fields.Float(string="Gross Weight (g)", digits=(16, 3))
     stone_weight = fields.Float(string="Stone Weight (g)", digits=(16, 3))

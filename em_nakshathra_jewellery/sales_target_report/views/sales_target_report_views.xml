@@ -30,5 +30,6 @@
               name="Sales Target Report"
               parent="salesman_target_incentive.menu_salesman_target_root"
               action="action_salesman_target_report_wizard"
+              groups="base.group_system"
               sequence="999"/>
 </odoo>

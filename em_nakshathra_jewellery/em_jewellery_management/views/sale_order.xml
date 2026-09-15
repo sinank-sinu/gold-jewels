@@ -153,34 +153,67 @@
 
                             <div class="clearfix"/>
 
-<!--                <group invisible="has_old_gold == False">-->
-                    <field name="old_gold_line_ids" no_label="1" invisible="has_old_gold == False" readonly="old_gold_bill_id != False and not is_editing_old_gold">
-                        <tree editable="bottom" >
-                            <field name="purity_id"/>
-                            <field name="gross_weight"/>
-                            <field name="stone_weight"/>
-                            <field name="net_weight" readonly="1"/>
-                            <field name="rate"/>
-                            <field name="diamond_amount"/>
-                            <field name="amount" readonly="1"/>
-                        </tree>
-                    </field>
-                    <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False" readonly="sale_return_bill_id != False and not is_editing_sale_return">
-                        <tree editable="bottom">
-                            <field name="product_template_id" string="Product"/>
-                            <field name="product_id" string="Variety" domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
-                            <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []" context="{'active_test': False}"/>
-                            <field name="purity_id" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
-                            <field name="product_uom" string="UOM" optional="show"/>
-                            <field name="gross_weight" string="Gross Weight"/>
-                            <field name="sale_stone_weight" string="Stone Weight (g)" optional="hide"/>
-                            <field name="net_weight" string="Net Weight (g)" optional="hide"/>
-                            <field name="rate" string="Gold Rate"/>
-                            <field name="metal_amount" string="Metal Amt" readonly="1"/>
-                            <field name="amount" string="Subtotal" readonly="1"/>
-                        </tree>
-                    </field>
-<!--                </group>-->
+                <!--                <group invisible="has_old_gold == False">-->
+                <field name="old_gold_line_ids" no_label="1" invisible="has_old_gold == False"
+                       readonly="old_gold_bill_id != False and not is_editing_old_gold">
+                    <tree editable="bottom">
+                        <field name="purity_id"/>
+                        <field name="gross_weight"/>
+                        <field name="stone_weight"/>
+                        <field name="net_weight" readonly="1"/>
+                        <field name="rate"/>
+                        <field name="diamond_amount"/>
+                        <field name="amount" readonly="1"/>
+                    </tree>
+                </field>
+                <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False"
+                       readonly="sale_return_bill_id != False and not is_editing_sale_return">
+                    <tree editable="bottom">
+                        <field name="product_template_id" string="Product"
+                               options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                        <field name="product_id" string="Variety"
+                               domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []"
+                               options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                        <field name="name" string="Description" optional="hide"/>
+                        <field name="event_id" string="Event" optional="hide"/>
+                        <field name="event_ticket_id" string="Event Ticket" optional="hide"/>
+                        <field name="route_id" string="Route" optional="hide"/>
+                        <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []"
+                               context="{'active_test': False}" string="Label"/>
+                        <field name="purity_id"
+                               options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"
+                               string="Purity"/>
+                        <field name="product_uom" string="UOM" optional="show"/>
+                        <field name="gross_weight" string="Gross Weight"/>
+                        <field name="sale_stone_weight" string="Stone Weight (g)" optional="hide"/>
+                        <field name="sale_stone_weight_ct" string="Stone Weight (ct)" optional="hide"/>
+                        <field name="sale_diamond_weight_gm" string="Diamond Weight (g)" optional="show"/>
+                        <field name="sale_diamond_weight_ct" string="Diamond Weight (ct)" optional="show"/>
+                        <field name="net_weight" string="Net Weight (g)" optional="hide"/>
+                        <field name="rate" string="Gold Rate(g)"/>
+                        <field name="mc_percent" string="Max mc" optional="hide"/>
+                        <field name="mc_amount" string="MC Amt" optional="hide"/>
+                        <field name="metal_amount" string="Metal Amt" readonly="1"/>
+                        <field name="sale_stone_rate" string="Stone Amt" optional="hide"/>
+                        <field name="sale_diamond_rate" string="Diamond Amt" optional="hide"/>
+                        <field name="other_weight_g" string="Other Weight (g)" optional="hide"/>
+                        <field name="other_weight_amount" string="Other Weight Amount" optional="hide"/>
+                        <field name="fine_weight" string="Fine Weight (g)"/>
+                        <field name="price_subtotal_actual" string="MRP" optional="hide"/>
+                        <field name="amount" string="Subtotal" readonly="1"/>
+                        <field name="mc_discount" string="Discount" optional="hide"/>
+                        <field name="mc_amount_actual" string="MC" readonly="1"/>
+                        <field name="mc_percent_actual" string="MC%"/>
+                        <field name="qty_delivered" string="Delivered" optional="hide"/>
+                        <field name="qty_invoiced" string="Invoiced" optional="hide"/>
+                        <field name="customer_lead" string="Lead Time" optional="hide"/>
+                        <field name="analytic_distribution" widget="analytic_distribution" optional="hide"/>
+                        <field name="price_unit" string="Unit Price" readonly="1"/>
+                        <field name="tax_id" string="Taxes" widget="many2many_tags" optional="show"/>
+                        <field name="price_total" string="Tax incl." optional="show"/>
+                    </tree>
+                </field>
+                <!--                </group>-->
             </xpath>
             <xpath expr="//field[@name='source_id']" position="after">
                 <field name="purchase_order_id"/>

@@ -16,14 +16,7 @@
             </xpath>
 
             <!-- Inject the active barcode scanner widget just before sale_return_line_ids -->
-            <xpath expr="//field[@name='sale_return_line_ids']" position="before">
-                <widget
-                    name="barcode_scanner"
-                    model="sale.order"
-                    method="action_scan_barcode_sale_return"
-                    invisible="is_sale_return == False"
-                />
-            </xpath>
+
         </field>
     </record>
 </odoo>

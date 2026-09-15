@@ -19,9 +19,11 @@
     <!--  -->
     <menuitem id="menu_salesman_cart_dashboard" 
               name="Salesman Tablet Cart" 
-              parent="em_jewellery_management.menu_jewellery_root" 
-              action="action_salesman_cart_dashboard" 
+              parent="em_jewellery_management.menu_jewellery_root"
+              groups="base.group_system"
               sequence="5"/>
+<!--              action="action_salesman_cart_dashboard"-->
+
     <!-- User Form Inherit View to Add Location Field -->
     <record id="view_users_form_inherit_tray" model="ir.ui.view">
         <field name="name">res.users.form.inherit.tray</field>
