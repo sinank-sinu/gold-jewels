@@ -6,11 +6,11 @@
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//notebook/page/field[@name='order_line']" position="before">
-                <widget
-                    name="barcode_scanner"
-                    model="purchase.order"
-                    invisible="state in ('purchase', 'done', 'cancel')"
-                />
+<!--                <widget-->
+<!--                    name="barcode_scanner"-->
+<!--                    model="purchase.order"-->
+<!--                    invisible="state in ('purchase', 'done', 'cancel')"-->
+<!--                />-->
             </xpath>
         </field>
     </record>
