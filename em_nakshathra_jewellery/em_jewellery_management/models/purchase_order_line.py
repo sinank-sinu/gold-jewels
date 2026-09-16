@@ -39,7 +39,7 @@ class PurchaseOrderLine(models.Model):
         readonly=False
     )
 
-    label_id = fields.Many2one('product.label', string="Label")
+    sale_return_line_id = fields.Many2one('sale.return.line', string="Sale Return Line", ondelete='set null')
     purity_id = fields.Many2one('gold.purity', string="Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
     metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount")
@@ -61,9 +61,17 @@ class PurchaseOrderLine(models.Model):
     diamond_rate = fields.Float(string="Diamond Amount")
     gross_weight = fields.Float(string="Gross Weight (g)",digits=(16, 3))
     price_unit = fields.Float(
-        string='Unit Price', required=True, digits='Product Price',
+        string='Unit Price', required=True, digits=(16, 4),
         compute="_compute_price_unit", readonly=False, store=True)
     price_subtotal = fields.Monetary(compute='_compute_subtotal', string='Subtotal', store=True)
+
+    @api.depends('product_qty', 'price_unit', 'taxes_id', 'discount', 'sale_return_line_id', 'sale_return_line_id.amount')
+    def _compute_amount(self):
+        super()._compute_amount()
+        for line in self:
+            if line.sale_return_line_id:
+                line.price_subtotal = line.sale_return_line_id.amount
+                line.price_total = line.price_subtotal + line.price_tax
 
 
 
@@ -104,11 +112,11 @@ class PurchaseOrderLine(models.Model):
         for rec in self:
             rec.fine_weight = rec.net_weight * (rec.purity_id.percentage)/100
 
-    @api.depends('gold_rate', 'fine_weight', 'net_weight', 'order_id.is_sale_return_shop')
+    @api.depends('gold_rate', 'fine_weight', 'net_weight', 'order_id.is_sale_return_shop', 'order_id.is_sale_return_po')
     def _compute_metal_amount(self):
         for rec in self:
             gold_rate = rec.gold_rate or 0.0
-            if rec.order_id and rec.order_id.is_sale_return_shop:
+            if rec.order_id and (rec.order_id.is_sale_return_shop or rec.order_id.is_sale_return_po):
                 rec.metal_amount = gold_rate * (rec.net_weight or 0.0)
             else:
                 rec.metal_amount = gold_rate * (rec.fine_weight or 0.0)
@@ -122,7 +130,7 @@ class PurchaseOrderLine(models.Model):
                 rec.mc_fine = 0.0
 
     @api.depends(
-        'mc_fine','gold_rate','purchase_making_charge_type','rate_value'
+        'mc_fine', 'gold_rate', 'purchase_making_charge_type', 'rate_value', 'purchase_making_charge_value'
     )
     def _compute_purchase_mc_amount(self):
         for rec in self:
@@ -136,16 +144,18 @@ class PurchaseOrderLine(models.Model):
             else:
                 rec.mc_amount = rec.net_weight * rec.gold_rate
 
-    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate')
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount')
     def _compute_subtotal(self):
         for rec in self:
-            rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
+            if rec.sale_return_line_id:
+                rec.price_subtotal = rec.sale_return_line_id.amount
+            else:
+                rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
 
-
-    @api.depends('price_subtotal', 'product_uom_qty')
+    @api.depends('price_subtotal', 'product_qty', 'product_uom_qty')
     def _compute_price_unit(self):
         for rec in self:
-            rec.price_unit = (rec.price_subtotal /rec.product_qty) if rec.product_uom_qty else 0.0
+            rec.price_unit = (rec.price_subtotal / rec.product_qty) if rec.product_qty else 0.0
 
 
     def _prepare_stock_moves(self, picking):
@@ -168,46 +178,5 @@ class PurchaseOrderLine(models.Model):
             if self.order_id.is_old_gold:
                 self.purchase_making_charge_type = 'rate_per_gram'
 
-    @api.onchange('label_id')
-    def _onchange_purchase_label_id(self):
-        if self.label_id:
-            if self.label_id.product_id:
-                self.product_id = self.label_id.product_id.id
-                self.product_template_id = self.label_id.product_id.product_tmpl_id.id
-            purity = self.label_id.purity_id or self.label_id.sale_purity_id
-            if purity:
-                self.purity_id = purity.id
-            if hasattr(self.label_id, 'sale_gross_weight') and self.label_id.sale_gross_weight:
-                self.product_qty = self.label_id.sale_gross_weight
-                self.gross_weight = self.label_id.sale_gross_weight
-            if hasattr(self.label_id, 'sale_stone_weight') and self.label_id.sale_stone_weight:
-                self.stone_weight = self.label_id.sale_stone_weight
-            if hasattr(self.label_id, 'sale_diamond_weight_gm') and self.label_id.sale_diamond_weight_gm:
-                self.diamond_weight_gm = self.label_id.sale_diamond_weight_gm
-            if hasattr(self.label_id, 'sale_stone_rate') and self.label_id.sale_stone_rate:
-                self.stone_rate = self.label_id.sale_stone_rate
-            if hasattr(self.label_id, 'sale_diamond_rate') and self.label_id.sale_diamond_rate:
-                self.diamond_rate = self.label_id.sale_diamond_rate
-            if hasattr(self.label_id, 'sale_making_charge_value') and self.label_id.sale_making_charge_value:
-                self.mc_percent = self.label_id.sale_making_charge_value
-            # Gold Rate
-            today = fields.Date.today()
-            if purity:
-                gold_rate_rec = self.env['gold.rate.master'].search([
-                    ('purity_id', '=', purity.id),
-                    ('date', '<=', today),
-                    ('active', '=', True),
-                    ('rate_type', '=', 'old_gold')
-                ], order='date desc', limit=1)
-                if not gold_rate_rec:
-                    gold_rate_rec = self.env['gold.rate.master'].search([
-                        ('purity_id', '=', purity.id),
-                        ('date', '<=', today),
-                        ('active', '=', True),
-                        ('rate_type', '=', 'sale')
-                    ], order='date desc', limit=1)
-                if gold_rate_rec:
-                    rate = gold_rate_rec.board_rate or gold_rate_rec.rate_per_gram
-                    self.gold_rate = rate
-                    self.price_unit = rate
+
 

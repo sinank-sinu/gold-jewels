@@ -14,6 +14,7 @@
                 <field name="is_old_gold" widget="boolean_toggle"/>
                 <field name="unfix" widget="boolean_toggle"/>
                 <field name="is_sale_return_shop" widget="boolean_toggle" string="Sale Return Shop"/>
+                <field name="is_sale_return_po" invisible="1"/>
                 <field name="company_id" invisible="1"/>
                 <field name="date_order" invisible="1"/>
             </xpath>
@@ -89,7 +90,6 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="after">
                 <field name="product_id" string="Variety" widget="sol_product_many2one" column_invisible="parent.is_old_gold"/>
-                <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []" context="{'active_test': False}" column_invisible="not parent.is_sale_return_shop"/>
                 <field name="product_uom" string="UOM"/>
                 <field name="purity_id" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                 <field name="product_template_attribute_value_ids" column_invisible="1"/>

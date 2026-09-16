@@ -9,3 +9,7 @@ class AccountMoveLine(models.Model):
         string="Label",
     )
     purity_id = fields.Many2one('gold.purity', string="Purity")
+    price_unit = fields.Float(
+        string='Unit Price',
+        digits=(16, 4),
+    )

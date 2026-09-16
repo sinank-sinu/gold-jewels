@@ -175,8 +175,6 @@
                                domain="[('product_tmpl_id', '=', product_template_id)] if product_template_id else []"
                                options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                         <field name="name" string="Description" optional="hide"/>
-                        <field name="label_id" domain="[('product_id', '=', product_id)] if product_id else []"
-                               context="{'active_test': False}" string="Label"/>
                         <field name="purity_id"
                                options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"
                                string="Purity"/>
@@ -201,7 +199,6 @@
                         <field name="mc_amount_actual" string="MC" readonly="1"/>
                         <field name="mc_percent_actual" string="MC%"/>
                         <field name="amount" string="Subtotal" readonly="1"/>
-
                     </tree>
                 </field>
                 <!--                </group>-->

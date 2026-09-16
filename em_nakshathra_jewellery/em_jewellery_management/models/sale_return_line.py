@@ -22,10 +22,7 @@ class SaleReturnLine(models.Model):
         string="Variety",
         required=True,
     )
-    label_id = fields.Many2one(
-        'product.label',
-        string="Label",
-    )
+
     name = fields.Text(
         string="Description",
         compute='_compute_name',
@@ -176,40 +173,6 @@ class SaleReturnLine(models.Model):
             if hasattr(self.product_id, 'purity_id') and self.product_id.purity_id:
                 self.purity_id = self.product_id.purity_id.id
 
-    @api.onchange('label_id')
-    def _onchange_label_id(self):
-        if self.label_id:
-            if self.label_id.product_id:
-                self.product_id = self.label_id.product_id.id
-                self.product_template_id = self.label_id.product_id.product_tmpl_id.id
-                self.name = self.label_id.product_id.display_name or self.label_id.product_id.name
-            if hasattr(self.label_id, 'purity_id') and self.label_id.purity_id:
-                self.purity_id = self.label_id.purity_id.id
-            elif hasattr(self.label_id, 'sale_purity_id') and self.label_id.sale_purity_id:
-                self.purity_id = self.label_id.sale_purity_id.id
-            if hasattr(self.label_id, 'sale_gross_weight') and self.label_id.sale_gross_weight:
-                self.gross_weight = self.label_id.sale_gross_weight
-            if hasattr(self.label_id, 'sale_stone_weight') and self.label_id.sale_stone_weight:
-                self.stone_weight = self.label_id.sale_stone_weight
-                self.sale_stone_weight = self.label_id.sale_stone_weight
-            if hasattr(self.label_id, 'sale_stone_weight_ct') and self.label_id.sale_stone_weight_ct:
-                self.sale_stone_weight_ct = self.label_id.sale_stone_weight_ct
-            if hasattr(self.label_id, 'sale_diamond_weight_gm') and self.label_id.sale_diamond_weight_gm:
-                self.sale_diamond_weight_gm = self.label_id.sale_diamond_weight_gm
-            if hasattr(self.label_id, 'sale_diamond_weight_ct') and self.label_id.sale_diamond_weight_ct:
-                self.sale_diamond_weight_ct = self.label_id.sale_diamond_weight_ct
-            if hasattr(self.label_id, 'sale_stone_rate') and self.label_id.sale_stone_rate:
-                self.sale_stone_rate = self.label_id.sale_stone_rate
-            if hasattr(self.label_id, 'sale_diamond_rate') and self.label_id.sale_diamond_rate:
-                self.sale_diamond_rate = self.label_id.sale_diamond_rate
-            if hasattr(self.label_id, 'other_weight_g') and self.label_id.other_weight_g:
-                self.other_weight_g = self.label_id.other_weight_g
-            if hasattr(self.label_id, 'other_weight_amount') and self.label_id.other_weight_amount:
-                self.other_weight_amount = self.label_id.other_weight_amount
-            if hasattr(self.label_id, 'sale_making_charge_value') and self.label_id.sale_making_charge_value:
-                self.mc_percent = self.label_id.sale_making_charge_value
-                self.mc_percent_actual = self.label_id.sale_making_charge_value
-            self._onchange_purity()
 
     @api.onchange('purity_id')
     def _onchange_purity(self):

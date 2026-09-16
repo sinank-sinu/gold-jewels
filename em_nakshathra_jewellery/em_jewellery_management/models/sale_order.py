@@ -948,42 +948,55 @@ class SaleOrder(models.Model):
         #      write() only updates the line record, and our custom PurchaseOrderLine.write 
         #      SQL interceptor will handle the stock and valuation updates silently.
         if po:
-            # Enable silent SQL update mode for the PO
-            po.is_editing_main_po = True
+            # Enable silent SQL update mode for the PO if em_purchase_edit is installed
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = True
             
             existing_po_lines = list(po.order_line)
             sale_return_lines = list(self.sale_return_line_ids)
 
             for i, sr_line in enumerate(sale_return_lines):
-                qty = sr_line.net_weight or 1.0
+                gross_wt = sr_line.gross_weight or 1.0
+                unit_price = round(sr_line.amount / gross_wt, 4) if gross_wt else sr_line.rate
+                mc_pct = sr_line.mc_percent_actual or sr_line.mc_percent or 0.0
+                mc_amt = sr_line.mc_amount_actual or sr_line.mc_amount or 0.0
+                line_vals = {
+                    'product_id': sr_line.product_id.id,
+                    'name': f'Sale Return ({sr_line.product_id.name})',
+                    'sale_return_line_id': sr_line.id,
+                    'product_qty': gross_wt,
+                    'gross_weight': gross_wt,
+                    'stone_weight': sr_line.sale_stone_weight or sr_line.stone_weight or 0.0,
+                    'diamond_weight_gm': sr_line.sale_diamond_weight_gm or 0.0,
+                    'purity_id': sr_line.purity_id.id if sr_line.purity_id else False,
+                    'gold_rate': sr_line.rate,
+                    'purchase_making_charge_type': 'percent' if mc_pct else 'amount',
+                    'mc_percent': mc_pct,
+                    'purchase_making_charge_value': mc_amt,
+                    'stone_rate': sr_line.sale_stone_rate or 0.0,
+                    'diamond_rate': sr_line.sale_diamond_rate or 0.0,
+                    'price_unit': unit_price,
+                    'price_subtotal': sr_line.amount,
+                }
                 if i < len(existing_po_lines):
                     # Update the existing PO line in place (triggers our SQL logic)
-                    existing_po_lines[i].write({
-                        'product_id': sr_line.product_id.id,
-                        'name': f'Sale Return ({sr_line.product_id.name})',
-                        'product_qty': qty,
-                        'price_unit': sr_line.rate,
-                    })
-                    existing_po_lines[i].qty_received = qty
+                    existing_po_lines[i].write(line_vals)
+                    existing_po_lines[i].qty_received = gross_wt
                 else:
                     # More sale return lines than original PO lines → create new
-                    new_line = self.env['purchase.order.line'].create({
+                    line_vals.update({
                         'order_id': po.id,
-                        'product_id': sr_line.product_id.id,
-                        'name': f'Sale Return ({sr_line.product_id.name})',
-                        'product_qty': qty,
-                        'purity_id': sr_line.purity_id.id if sr_line.purity_id else False,
-                        'gold_rate': sr_line.rate,
-                        'price_unit': sr_line.rate,
-                        'product_uom': sr_line.product_id.uom_po_id.id,
+                        'product_uom': sr_line.product_id.uom_po_id.id if sr_line.product_id.uom_po_id else (sr_line.product_uom.id if sr_line.product_uom else False),
                         'taxes_id': [(6, 0, [])],
                     })
-                    new_line.qty_received = qty
+                    new_line = self.env['purchase.order.line'].create(line_vals)
+                    new_line.qty_received = gross_wt
 
         # ─ 2. Create fresh pickings from updated PO to link stock properly ──────
         if po:
             # Temporarily disable edit mode so _create_picking functions normally
-            po.is_editing_main_po = False
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = False
             # Trigger PO to create new pickings for any NEW lines
             po._create_picking()
             
@@ -1032,19 +1045,22 @@ class SaleOrder(models.Model):
             sale_return_lines = list(self.sale_return_line_ids)
 
             for i, sr_line in enumerate(sale_return_lines):
-                qty = sr_line.net_weight or 1.0
+                gross_wt = sr_line.gross_weight or 1.0
+                unit_price = round(sr_line.amount / gross_wt, 4) if gross_wt else sr_line.rate
                 po_line = po_line_map.get(sr_line.product_id.id)
                 if i < len(existing_list):
                     # Update the existing bill line in-place (keeps purchase_line_id)
                     write_vals = {
                         'product_id': sr_line.product_id.id,
                         'name': f'Sale Return ({sr_line.product_id.name})',
-                        'quantity': qty,
-                        'price_unit': sr_line.rate,
+                        'quantity': gross_wt,
+                        'price_unit': unit_price,
                         'tax_ids': [(5, 0, 0)],
                     }
                     if po_line:
                         write_vals['purchase_line_id'] = po_line.id
+                        if po_line.purity_id:
+                            write_vals['purity_id'] = po_line.purity_id.id
                     existing_list[i].with_context(check_move_validity=False).write(write_vals)
                 else:
                     # More sale return lines than existing bill lines → create new
@@ -1052,12 +1068,14 @@ class SaleOrder(models.Model):
                         'move_id': bill.id,
                         'product_id': sr_line.product_id.id,
                         'name': f'Sale Return ({sr_line.product_id.name})',
-                        'quantity': qty,
-                        'price_unit': sr_line.rate,
+                        'quantity': gross_wt,
+                        'price_unit': unit_price,
                         'tax_ids': [(5, 0, 0)],
                     }
                     if po_line:
                         create_vals['purchase_line_id'] = po_line.id
+                        if po_line.purity_id:
+                            create_vals['purity_id'] = po_line.purity_id.id
                     self.env['account.move.line'].with_context(check_move_validity=False).create(create_vals)
 
             # Remove surplus old bill lines beyond the count of sale return lines
@@ -1101,6 +1119,7 @@ class SaleOrder(models.Model):
 
             po = PurchaseOrder.create({
                 'partner_id': order.partner_id.id,
+                'company_id': order.company_id.id,
                 'date_order': fields.Date.today(),
                 'origin': order.name,
                 'branch_id': order.branch_id.id,
@@ -1109,16 +1128,30 @@ class SaleOrder(models.Model):
             })
 
             for line in order.sale_return_line_ids:
+                gross_wt = line.gross_weight or 1.0
+                unit_price = round(line.amount / gross_wt, 4) if gross_wt else line.rate
+                mc_pct = line.mc_percent_actual or line.mc_percent or 0.0
+                mc_amt = line.mc_amount_actual or line.mc_amount or 0.0
+
                 PurchaseLine.create({
                     'order_id': po.id,
                     'product_id': line.product_id.id,
                     'name': f'Sale Return ({line.product_id.name})',
-                    'product_qty': line.net_weight or 1.0,
-                    'purity_id': line.purity_id.id,
+                    'sale_return_line_id': line.id,
+                    'product_qty': gross_wt,
+                    'gross_weight': gross_wt,
+                    'stone_weight': line.sale_stone_weight or line.stone_weight or 0.0,
+                    'diamond_weight_gm': line.sale_diamond_weight_gm or 0.0,
+                    'purity_id': line.purity_id.id if line.purity_id else False,
                     'gold_rate': line.rate,
-                    'price_unit': line.rate,
-                    'product_uom': line.product_id.uom_po_id.id,
-                    'taxes_id': [(6, 0, [])],
+                    'purchase_making_charge_type': 'percent' if mc_pct else 'amount',
+                    'mc_percent': mc_pct,
+                    'purchase_making_charge_value': mc_amt,
+                    'stone_rate': line.sale_stone_rate or 0.0,
+                    'diamond_rate': line.sale_diamond_rate or 0.0,
+                    'price_unit': unit_price,
+                    'price_subtotal': line.amount,
+                    'product_uom': line.product_id.uom_po_id.id if line.product_id.uom_po_id else (line.product_uom.id if line.product_uom else False),
                 })
 
             # Confirm PO
@@ -1154,6 +1187,17 @@ class SaleOrder(models.Model):
             # Create & Post Vendor Bill
             bill_action = po.action_create_invoice()
             bill = AccountMove.browse(bill_action['res_id'])
+            for bill_line in bill.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
+                po_line = bill_line.purchase_line_id
+                if po_line:
+                    bill_line.purity_id = po_line.purity_id.id if po_line.purity_id else False
+                    gw = po_line.gross_weight or bill_line.quantity or 1.0
+                    sr_amt = po_line.sale_return_line_id.amount if po_line.sale_return_line_id else po_line.price_subtotal
+                    u_price = round(sr_amt / gw, 4) if gw else po_line.price_unit
+                    bill_line.with_context(check_move_validity=False).write({
+                        'quantity': gw,
+                        'price_unit': u_price,
+                    })
             bill.invoice_date = fields.Date.context_today(self)
             bill.action_post()
             order.sale_return_bill_id = bill.id
