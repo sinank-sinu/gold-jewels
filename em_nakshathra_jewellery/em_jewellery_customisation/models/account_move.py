@@ -103,7 +103,7 @@ class AccountMove(models.Model):
             # In out_invoice (customer invoice):
             # amount_rounding < 0 (e.g. -42.00) reduces the invoice total -> Debit 42.00 (loss, balance > 0)
             # amount_rounding > 0 (e.g. +10.00) increases the invoice total -> Credit 10.00 (gain, balance < 0)
-            sign = -1 if move.is_sale_document(include_receipts=True) else 1
+            sign = move.direction_sign
             diff_amount_currency = sign * move.amount_rounding
             if move.currency_id == move.company_id.currency_id:
                 diff_balance = diff_amount_currency
@@ -115,7 +115,11 @@ class AccountMove(models.Model):
                     move.invoice_date or move.date or fields.Date.today()
                 )
 
-            is_gain = (diff_balance < 0.0)
+            if move.is_sale_document(include_receipts=True):
+                is_gain = (move.amount_rounding > 0.0)
+            else:
+                is_gain = (move.amount_rounding < 0.0)
+
             account = move._get_cash_difference_account(is_gain=is_gain)
 
             # Check if an update is really needed to prevent unnecessary writes
@@ -191,7 +195,7 @@ class AccountMove(models.Model):
         super()._compute_tax_totals()
 
         for move in self:
-            if move.move_type not in ('out_invoice', 'in_invoice'):
+            if move.move_type not in ('out_invoice', 'in_invoice', 'out_refund', 'in_refund'):
                 continue
 
             if not move.tax_totals:
@@ -245,7 +249,7 @@ class AccountMove(models.Model):
         super()._compute_amount()
 
         for move in self:
-            if move.move_type not in ('out_invoice', 'in_invoice'):
+            if move.move_type not in ('out_invoice', 'in_invoice', 'out_refund', 'in_refund'):
                 continue
 
             if not move.amount_rounding:
@@ -285,7 +289,7 @@ class AccountMove(models.Model):
     def _update_posted_cash_rounding(self, new_rounding):
         self.ensure_one()
         rounding_lines = self.line_ids.filtered(lambda l: l.display_type == 'rounding')
-        sign = -1 if self.is_sale_document(include_receipts=True) else 1
+        sign = self.direction_sign
         diff_amount_currency = sign * new_rounding
         if self.currency_id == self.company_id.currency_id:
             diff_balance = diff_amount_currency
@@ -308,7 +312,10 @@ class AccountMove(models.Model):
             diff_balance = 0.0
             diff_amount_currency = 0.0
         else:
-            is_gain = (diff_balance < 0.0)
+            if self.is_sale_document(include_receipts=True):
+                is_gain = (new_rounding > 0.0)
+            else:
+                is_gain = (new_rounding < 0.0)
             account = self._get_cash_difference_account(is_gain=is_gain)
             rounding_vals = {
                 'name': _('Round Off'),
@@ -355,7 +362,7 @@ class AccountMove(models.Model):
             if self.currency_id == self.company_id.currency_id:
                 term_vals['amount_currency'] = new_term_balance
             else:
-                term_sign = 1 if self.is_sale_document(include_receipts=True) else -1
+                term_sign = -self.direction_sign
                 term_vals['amount_currency'] = term_sign * (abs(sum(self.invoice_line_ids.mapped('price_total'))) + new_rounding)
             term_lines[0].with_context(check_move_validity=False).write(term_vals)
 

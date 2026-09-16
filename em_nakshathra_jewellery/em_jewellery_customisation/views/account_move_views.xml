@@ -18,8 +18,8 @@
             <xpath expr="//field[@name='old_gold_price']" position="after">
                 <field name="has_customer_payment" invisible="1"/>
                 <field name="amount_rounding" string="Edit Round Off"
-                       invisible="not has_customer_payment"
-                       readonly="is_paid"/>
+                       invisible="not has_customer_payment and (state != 'draft' or move_type not in ('out_invoice', 'out_refund', 'in_invoice', 'in_refund'))"
+                       readonly="state == 'posted' and is_paid"/>
             </xpath>
         </field>
     </record>
