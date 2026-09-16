@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Action to open Cart Remediation Console in new browser tab -->
+    <record id="action_cart_cleanup_console" model="ir.actions.act_url">
+        <field name="name">Cart Transfer Remediation Console</field>
+        <field name="url">/cart_cleanup</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Item under Jewellery Management -->
+    <menuitem id="menu_cart_cleanup_console"
+              name="Cart Remediation Console"
+              parent="em_jewellery_management.menu_jewellery_root"
+              action="action_cart_cleanup_console"
+              groups="base.group_system"
+              sequence="95"/>
+</odoo>
