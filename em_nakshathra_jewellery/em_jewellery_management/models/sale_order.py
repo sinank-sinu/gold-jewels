@@ -977,6 +977,7 @@ class SaleOrder(models.Model):
                     'diamond_rate': sr_line.sale_diamond_rate or 0.0,
                     'price_unit': unit_price,
                     'price_subtotal': sr_line.amount,
+                    'taxes_id': [(6, 0, [])],
                 }
                 if i < len(existing_po_lines):
                     # Update the existing PO line in place (triggers our SQL logic)
@@ -991,6 +992,8 @@ class SaleOrder(models.Model):
                     })
                     new_line = self.env['purchase.order.line'].create(line_vals)
                     new_line.qty_received = gross_wt
+
+            po.order_line.write({'taxes_id': [(5, 0, 0)]})
 
         # ─ 2. Create fresh pickings from updated PO to link stock properly ──────
         if po:
@@ -1152,7 +1155,10 @@ class SaleOrder(models.Model):
                     'price_unit': unit_price,
                     'price_subtotal': line.amount,
                     'product_uom': line.product_id.uom_po_id.id if line.product_id.uom_po_id else (line.product_uom.id if line.product_uom else False),
+                    'taxes_id': [(6, 0, [])],
                 })
+
+            po.order_line.write({'taxes_id': [(5, 0, 0)]})
 
             # Confirm PO
             po.button_confirm()
@@ -1197,6 +1203,7 @@ class SaleOrder(models.Model):
                     bill_line.with_context(check_move_validity=False).write({
                         'quantity': gw,
                         'price_unit': u_price,
+                        'tax_ids': [(5, 0, 0)],
                     })
             bill.invoice_date = fields.Date.context_today(self)
             bill.action_post()
