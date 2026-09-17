@@ -51,6 +51,12 @@ class SaleOrder(models.Model):
                     raise ValidationError(_("Please add Old Gold lines and click 'Apply Old Gold' before confirming the order."))
                 if not order.old_gold_bill_id:
                     raise ValidationError(_("Please click 'Apply Old Gold' before confirming the order."))
+            if order.is_sale_return:
+                if not order.sale_return_line_ids:
+                    raise ValidationError(_("Please add Sale Return lines and click 'Apply Sale Return' before confirming the order."))
+                if not order.sale_return_bill_id:
+                    raise ValidationError(_("Please click 'Apply Sale Return' before confirming the order."))
+
         return super().action_confirm()
 
     # def action_apply_scheme(self):
