@@ -112,6 +112,10 @@ class JewellerySchemeInstallment(models.Model):
             raise UserError(_("Outstanding Receipts Account missing for company '%s'.") % target_company.name)
 
         # ------------------------------------------------------------------
+        branch_id = self.enrollment_id.branch_id.id if self.enrollment_id.branch_id else False
+        entry_date = self.date or fields.Date.today()
+
+        # ------------------------------------------------------------------
         # ENTRY 2 (Miscellaneous Journal - Suspense Partner Clearing):
         # Line 1 (Debit): Debtor / Suspense Account (Debit) - Suspense Partner
         # Line 2 (Credit): Outstanding Receipts Account (Credit) - Suspense Partner
@@ -119,9 +123,10 @@ class JewellerySchemeInstallment(models.Model):
         entry2_vals = {
             'journal_id': journal.id,
             'company_id': target_company_id,
-            'date': fields.Date.today(),
+            'date': entry_date,
             'ref': f"Scheme Transfer (Suspense) - {self.enrollment_id.name or partner.name}",
             'partner_id': suspense_partner.id,
+            'branch_id': branch_id,
             'line_ids': [
                 (0, 0, {
                     'account_id': debtors_account.id,
@@ -130,6 +135,7 @@ class JewellerySchemeInstallment(models.Model):
                     'debit': self.amount,
                     'credit': 0.0,
                     'company_id': target_company_id,
+                    'branch_id': branch_id,
                 }),
                 (0, 0, {
                     'account_id': outstanding_receipt_account.id,
@@ -138,6 +144,7 @@ class JewellerySchemeInstallment(models.Model):
                     'debit': 0.0,
                     'credit': self.amount,
                     'company_id': target_company_id,
+                    'branch_id': branch_id,
                 })
             ]
         }
@@ -153,9 +160,10 @@ class JewellerySchemeInstallment(models.Model):
         entry3_vals = {
             'journal_id': journal.id,
             'company_id': target_company_id,
-            'date': fields.Date.today(),
+            'date': entry_date,
             'ref': f"Scheme Transfer - {self.enrollment_id.name or partner.name}",
             'partner_id': partner.id,
+            'branch_id': branch_id,
             'line_ids': [
                 (0, 0, {
                     'account_id': outstanding_receipt_account.id,
@@ -164,6 +172,7 @@ class JewellerySchemeInstallment(models.Model):
                     'debit': self.amount,
                     'credit': 0.0,
                     'company_id': target_company_id,
+                    'branch_id': branch_id,
                 }),
                 (0, 0, {
                     'account_id': debtors_account.id,
@@ -172,6 +181,7 @@ class JewellerySchemeInstallment(models.Model):
                     'debit': 0.0,
                     'credit': self.amount,
                     'company_id': target_company_id,
+                    'branch_id': branch_id,
                 })
             ]
         }
@@ -180,45 +190,73 @@ class JewellerySchemeInstallment(models.Model):
         move3.action_post()
 
         # ------------------------------------------------------------------
-        # Auto-reconcile Entry 1 (Bank Suspense) with Entry 2 (Misc Suspense)
+        # 1. Cancel Move 2 and Move 3 against each other on Outstanding Receipts
+        # (Both entries have the same account, same amount; debit & credit cancel each other)
         # ------------------------------------------------------------------
         try:
-            for acc_id in [debtors_account.id, outstanding_receipt_account.id]:
-                # 1. Match this transfer's move2 line with corresponding unreconciled payment line
-                m2_line = move2.line_ids.filtered(lambda l: l.account_id.id == acc_id and not l.reconciled)
-                if m2_line:
-                    counterpart_domain = [
-                        ('partner_id', '=', suspense_partner.id),
-                        ('account_id', '=', acc_id),
-                        ('reconciled', '=', False),
-                        ('company_id', '=', target_company_id),
-                        ('id', '!=', m2_line.id),
-                    ]
-                    if m2_line.debit > 0:
-                        counterpart_domain.append(('credit', '=', m2_line.debit))
-                    else:
-                        counterpart_domain.append(('debit', '=', m2_line.credit))
+            m2_out_line = move2.line_ids.filtered(
+                lambda l: l.account_id.id == outstanding_receipt_account.id and not l.reconciled
+            )
+            m3_out_line = move3.line_ids.filtered(
+                lambda l: l.account_id.id == outstanding_receipt_account.id and not l.reconciled
+            )
+            if m2_out_line and m3_out_line:
+                (m2_out_line + m3_out_line).reconcile()
+        except Exception:
+            pass
 
-                    counterpart = self.env['account.move.line'].search(counterpart_domain, limit=1)
-                    if counterpart:
-                        (m2_line + counterpart).reconcile()
-
-                # 2. Pairwise reconcile any remaining matching amounts for suspense partner
-                unreconciled_lines = self.env['account.move.line'].search([
+        # ------------------------------------------------------------------
+        # 2. Clear Suspense Partner in Debtors Account
+        # Reconcile Move 2's Suspense Debtor line with Customer Payment's Debtor line.
+        # NOTE: The Customer Payment's Outstanding Receipts line is NOT touched,
+        # so it remains available for Bank Statement Reconciliation.
+        # ------------------------------------------------------------------
+        try:
+            m2_debtor_line = move2.line_ids.filtered(
+                lambda l: l.account_id.id == debtors_account.id and not l.reconciled
+            )
+            if m2_debtor_line:
+                counterpart_domain = [
                     ('partner_id', '=', suspense_partner.id),
-                    ('account_id', '=', acc_id),
+                    ('account_id', '=', debtors_account.id),
                     ('reconciled', '=', False),
                     ('company_id', '=', target_company_id),
-                ])
-                debit_lines = list(unreconciled_lines.filtered(lambda l: l.debit > 0))
-                credit_lines = list(unreconciled_lines.filtered(lambda l: l.credit > 0))
-                for d in debit_lines[:]:
-                    for c in credit_lines[:]:
-                        if float_compare(d.debit, c.credit, precision_rounding=0.01) == 0:
-                            (d + c).reconcile()
-                            debit_lines.remove(d)
-                            credit_lines.remove(c)
-                            break
+                    ('id', '!=', m2_debtor_line.id),
+                    ('credit', '=', self.amount),
+                ]
+
+                counterpart = False
+                # If transaction_id is present, try matching specific payment first
+                if self.transaction_id:
+                    counterpart = self.env['account.move.line'].search(counterpart_domain + [
+                        '|', '|',
+                        ('move_id.ref', '=', self.transaction_id),
+                        ('move_id.payment_id.bank_reference', '=', self.transaction_id),
+                        ('move_id.payment_id.ref', '=', self.transaction_id),
+                    ], limit=1)
+
+                if not counterpart:
+                    counterpart = self.env['account.move.line'].search(counterpart_domain, limit=1)
+
+                if counterpart:
+                    (m2_debtor_line + counterpart).reconcile()
+
+            # Pairwise reconcile any remaining matching amounts for suspense partner on Debtors ONLY
+            unreconciled_lines = self.env['account.move.line'].search([
+                ('partner_id', '=', suspense_partner.id),
+                ('account_id', '=', debtors_account.id),
+                ('reconciled', '=', False),
+                ('company_id', '=', target_company_id),
+            ])
+            debit_lines = list(unreconciled_lines.filtered(lambda l: l.debit > 0))
+            credit_lines = list(unreconciled_lines.filtered(lambda l: l.credit > 0))
+            for d in debit_lines[:]:
+                for c in credit_lines[:]:
+                    if float_compare(d.debit, c.credit, precision_rounding=0.01) == 0:
+                        (d + c).reconcile()
+                        debit_lines.remove(d)
+                        credit_lines.remove(c)
+                        break
         except Exception:
             pass
 
@@ -228,7 +266,7 @@ class JewellerySchemeInstallment(models.Model):
         self.journal_id = journal.id
         self.is_transferred = True
         self.state = 'paid'
-        self.transaction_id = ''
+        self.transaction_id = self.transaction_id or 'BANK-TRANSFER'
 
         # Return action to view created transfer entries
         return {
