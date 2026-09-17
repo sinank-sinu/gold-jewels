@@ -120,7 +120,11 @@ class AccountMove(models.Model):
             if hasattr(move, 'amount_rounding') and move.amount_rounding and not move.line_ids.filtered(lambda l: l.display_type == 'rounding'):
                 raw_residual += move.amount_rounding
 
-            net_residual = raw_residual - deduction
+            # Account for any amount already reconciled on this invoice to avoid double-deduction
+            already_reconciled = max(0.0, move.amount_total - raw_residual)
+            effective_deduction = max(0.0, deduction - already_reconciled)
+
+            net_residual = raw_residual - effective_deduction
 
             if move.currency_id.compare_amounts(net_residual, 0.0) > 0:
                 # Customer owes balance to the store
@@ -191,7 +195,38 @@ class AccountMove(models.Model):
                 if move.is_old_gold_bill or move.is_sale_return or move.unfix or is_old_gold_po or is_sale_return_po:
                     continue
                 raise ValidationError(_("This vendor bill must be approved by a manager before it can be confirmed."))
-        return super().action_post()
+        res = super().action_post()
+        for move in self:
+            if move.move_type == 'out_invoice':
+                sale_orders = move.line_ids.mapped('sale_line_ids.order_id')
+                for order in sale_orders:
+                    if order.old_gold_entry_id:
+                        entry = order.old_gold_entry_id
+                        entry_debtors = entry.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        inv_debtors = move.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        if entry_debtors and inv_debtors:
+                            try:
+                                (entry_debtors + inv_debtors).reconcile()
+                            except Exception:
+                                pass
+                    if order.sale_return_entry_id:
+                        sr_entry = order.sale_return_entry_id
+                        sr_entry_debtors = sr_entry.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        inv_debtors = move.line_ids.filtered(
+                            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                        )
+                        if sr_entry_debtors and inv_debtors:
+                            try:
+                                (sr_entry_debtors + inv_debtors).reconcile()
+                            except Exception:
+                                pass
+        return res
 
 
 
@@ -205,17 +240,58 @@ class AccountMove(models.Model):
         self.ensure_one()
         if self.custom_total >= 0 and self.amount_total >= 0:
             raise ValidationError(_("Invoice is not negative."))
+
+        domain = [
+            ('company_id', '=', self.company_id.id),
+            ('type', 'in', ('cash', 'bank')),
+            ('default_account_id', '!=', False),
+        ]
+        journal = False
+        if hasattr(self, 'branch_id') and self.branch_id:
+            journal = self.env['account.journal'].search(
+                domain + [('branch_id', '=', self.branch_id.id), ('type', '=', 'cash')], limit=1
+            ) or self.env['account.journal'].search(
+                domain + [('branch_id', '=', self.branch_id.id)], limit=1
+            )
+        if not journal:
+            journal = self.env['account.journal'].search(domain, limit=1)
+        if not journal:
+            journal = self.env['account.journal'].search([
+                ('company_id', '=', self.company_id.id),
+                ('type', 'in', ('cash', 'bank')),
+            ], limit=1)
+
+        sale_order_id = False
+        if hasattr(self, 'sale_id') and self.sale_id:
+            sale_order_id = self.sale_id.id
+        elif hasattr(self, 'line_ids'):
+            sale_lines = self.line_ids.sale_line_ids
+            if sale_lines:
+                sale_order_id = sale_lines.order_id[0].id
+
         return {
-            'name': _('Create Customer Payment'),
+            'name': _('Customer Payment'),
             'type': 'ir.actions.act_window',
-            'res_model': 'customer.payment.wizard',
+            'res_model': 'account.payment',
             'view_mode': 'form',
-            'views': [(self.env.ref('em_jewellery_management.view_customer_payment_wizard_form').id, 'form')],
-            'target': 'new',
+            'views': [(False, 'form')],
+            'target': 'current',
             'context': {
+                'default_payment_type': 'outbound',
+                'default_partner_type': 'customer',
+                'default_partner_id': self.partner_id.id,
+                'default_amount': abs(self.custom_total) if self.custom_total < 0 else abs(self.amount_total),
+                'default_journal_id': journal.id if journal else False,
+                'default_branch_id': self.branch_id.id if hasattr(self, 'branch_id') and self.branch_id else False,
+                'default_company_id': self.company_id.id,
+                'default_ref': self.name,
                 'default_invoice_id': self.id,
+                'default_sale_id': sale_order_id,
             },
         }
+
+    def action_customer_payment_wizard(self):
+        return self.action_open_customer_payment_wizard()
 
     def action_create_old_gold_vendor_payment(self, journal=None, payment_date=None, memo=None, amount=None):
         Payment = self.env['account.payment']
@@ -228,12 +304,17 @@ class AccountMove(models.Model):
 
             pay_journal = journal
             if not pay_journal:
-                pay_journal = self.env['account.journal'].search([
+                domain = [
                     ('type', 'in', ('bank', 'cash')),
                     ('company_id', '=', move.company_id.id),
                     ('default_account_id', '!=', False)
-                ], limit=1)
-                
+                ]
+                if hasattr(move, 'branch_id') and move.branch_id:
+                    pay_journal = self.env['account.journal'].search(
+                        domain + [('branch_id', '=', move.branch_id.id)], limit=1
+                    )
+                if not pay_journal:
+                    pay_journal = self.env['account.journal'].search(domain, limit=1)
                 if not pay_journal:
                     pay_journal = self.env['account.journal'].search([
                         ('type', 'in', ('bank', 'cash')),
@@ -245,28 +326,36 @@ class AccountMove(models.Model):
             elif not pay_journal.default_account_id:
                 raise ValidationError(_("The selected journal '%s' is missing a Default Account. Please configure its accounts in Accounting settings to allow payments.") % pay_journal.name)
 
-            payable_line = move.line_ids.filtered(lambda l: l.display_type == 'payment_term' or l.account_type == 'liability_payable')
-            destination_account_id = payable_line[0].account_id.id if payable_line else move.partner_id.with_company(move.company_id).property_account_payable_id.id
-            
+            receivable_account = move.partner_id.with_company(move.company_id).property_account_receivable_id
+            inv_receivable = move.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_receivable')
+            destination_account_id = inv_receivable[0].account_id.id if inv_receivable else receivable_account.id
+
+            sale_order_id = False
+            if hasattr(move, 'sale_id') and move.sale_id:
+                sale_order_id = move.sale_id.id
+            elif hasattr(move, 'line_ids'):
+                sale_lines = move.line_ids.sale_line_ids
+                if sale_lines:
+                    sale_order_id = sale_lines.order_id[0].id
+
             payment = Payment.create({
                 'payment_type': 'outbound',
-                'partner_type': 'supplier',
+                'partner_type': 'customer',
                 'partner_id': move.partner_id.id,
                 'amount': pay_amount,
                 'journal_id': pay_journal.id,
                 'date': payment_date or fields.Date.today(),
                 'ref': memo or move.name,
+                'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
                 'destination_account_id': destination_account_id,
+                'invoice_id': move.id,
+                'sale_id': sale_order_id,
             })
-            
+
             # Force the outstanding account if Odoo's internal compute failed to find one
             if not payment.outstanding_account_id and pay_journal.default_account_id:
                 payment.outstanding_account_id = pay_journal.default_account_id.id
 
             payment.action_post()
-            if payment.state == 'posted':
-                self.custom_total = 0.0
-                self.is_paid = True
-                self.payment_to_id = payment.id
 
         return True

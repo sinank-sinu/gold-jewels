@@ -207,9 +207,11 @@
                 <field name="purchase_order_id"/>
                 <field name="old_gold_bill_id"/>
                 <field name="old_gold_bill_amount"/>
+                <field name="old_gold_entry_id" invisible="old_gold_entry_id == False"/>
                 <field name="sale_return_po_id" invisible="is_sale_return == False"/>
                 <field name="sale_return_bill_id" invisible="is_sale_return == False"/>
                 <field name="sale_return_bill_amount" invisible="is_sale_return == False"/>
+                <field name="sale_return_entry_id" invisible="sale_return_entry_id == False"/>
                 <field name="unfix" widget="boolean_toggle"/>
                 <field name="is_editing_old_gold" invisible="1"/>
                 <field name="is_editing_sale_return" invisible="1"/>

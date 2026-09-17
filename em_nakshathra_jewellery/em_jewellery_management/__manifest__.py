@@ -26,6 +26,7 @@
         'views/product_label.xml',
         'views/sale_order.xml',
         'views/account_move.xml',
+        'views/account_payment_views.xml',
         'views/job_work.xml',
         'views/res_partner.xml',
         'views/receive_voucher.xml',

@@ -44,6 +44,12 @@ class SaleOrder(models.Model):
         string='Bill Amount',
         readonly=True,
     )
+    old_gold_entry_id = fields.Many2one(
+        'account.move',
+        string='Old Gold Journal Entry',
+        readonly=True,
+        copy=False,
+    )
     is_sale_return = fields.Boolean(string='Sale Return', default=False)
     sale_return_line_ids = fields.One2many('sale.return.line', 'sale_id')
     sale_return_po_id = fields.Many2one('purchase.order', string='Sale Return PO', readonly=True, copy=False)
@@ -53,6 +59,12 @@ class SaleOrder(models.Model):
         currency_field='currency_id',
         string='Return Bill Amount',
         readonly=True,
+    )
+    sale_return_entry_id = fields.Many2one(
+        'account.move',
+        string='Sale Return Journal Entry',
+        readonly=True,
+        copy=False,
     )
     sale_return_branch_location_id = fields.Many2one(
         'stock.location',
@@ -368,9 +380,143 @@ class SaleOrder(models.Model):
             })
 
             bill.action_post()
-            self.old_gold_bill_id = bill.id
+            order.old_gold_bill_id = bill.id
+
+            # ------------------------------------------------
+            # 6️⃣ CREATE & POST CONTRA JOURNAL ENTRY (CREDITORS -> DEBTORS)
+            # ------------------------------------------------
+            order._create_or_update_old_gold_journal_entry(bill, target_date=target_date)
 
         return True
+
+    def _get_old_gold_journal(self):
+        self.ensure_one()
+        company_id = self.company_id.id or self.env.company.id
+        Journal = self.env['account.journal']
+        journal = Journal.search([
+            ('company_id', '=', company_id),
+            ('type', '=', 'general'),
+            ('code', 'ilike', 'MISC'),
+        ], limit=1) or Journal.search([
+            ('company_id', '=', company_id),
+            ('type', '=', 'general'),
+            ('name', 'ilike', 'Miscellaneous'),
+        ], limit=1) or Journal.search([
+            ('company_id', '=', company_id),
+            ('type', '=', 'general'),
+            ('code', 'not in', ('OPN', 'STJ', 'INV', 'POSS', 'EXCH', 'CABA', 'OPPO', 'OB')),
+        ], limit=1) or Journal.search([
+            ('company_id', '=', company_id),
+            ('type', '=', 'general'),
+        ], limit=1)
+        return journal
+
+    def _create_or_update_old_gold_journal_entry(self, bill, target_date=None):
+        self.ensure_one()
+        if not bill or bill.amount_total <= 0:
+            return False
+
+        AccountMove = self.env['account.move']
+        company_id = (self.company_id or self.env.company).id
+        entry_date = target_date or bill.date or bill.invoice_date or fields.Date.context_today(self)
+
+        journal = self._get_old_gold_journal()
+        if not journal:
+            raise ValidationError(_("General/Miscellaneous journal not found for company %s.") % (self.company_id.name or self.env.company.name))
+
+        # Find Creditors account (Account Payable)
+        creditors_line = bill.line_ids.filtered(lambda l: l.account_id.account_type == 'liability_payable')
+        creditors_account = creditors_line[0].account_id if creditors_line else self.partner_id.with_company(company_id).property_account_payable_id
+        if not creditors_account:
+            creditors_account = self.env['account.account'].search([
+                ('company_id', '=', company_id),
+                ('account_type', '=', 'liability_payable'),
+                ('code', 'not in', ('202005', '000999', '1000999')),
+            ], limit=1)
+
+        # Find Debtors account (Account Receivable)
+        debtors_account = self.partner_id.with_company(company_id).property_account_receivable_id
+        if not debtors_account:
+            debtors_account = self.env['account.account'].search([
+                ('company_id', '=', company_id),
+                ('account_type', '=', 'asset_receivable'),
+            ], limit=1)
+
+        if not creditors_account or not debtors_account:
+            raise ValidationError(_("Creditors or Debtors account not configured for partner %s.") % self.partner_id.name)
+
+        entry = self.old_gold_entry_id
+        if entry:
+            if entry.state == 'posted':
+                entry.button_draft()
+            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
+            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
+            if creditors_move_line and debtors_move_line:
+                creditors_move_line.write({
+                    'account_id': creditors_account.id,
+                    'debit': bill.amount_total,
+                    'credit': 0.0,
+                })
+                debtors_move_line.write({
+                    'account_id': debtors_account.id,
+                    'debit': 0.0,
+                    'credit': bill.amount_total,
+                })
+            entry.write({
+                'date': entry_date,
+                'ref': f"Old Gold - {self.name}",
+            })
+            entry.action_post()
+        else:
+            entry_vals = {
+                'move_type': 'entry',
+                'date': entry_date,
+                'journal_id': journal.id,
+                'company_id': company_id,
+                'partner_id': self.partner_id.id,
+                'ref': f"Old Gold - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Old Gold Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': bill.amount_total,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Old Gold Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': bill.amount_total,
+                    }),
+                ],
+            }
+            entry = AccountMove.create(entry_vals)
+            entry.action_post()
+            self.old_gold_entry_id = entry.id
+
+        # Reconcile Creditors between bill and entry
+        bill_creditors_lines = bill.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+        entry_creditors_lines = entry.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+        if bill_creditors_lines and entry_creditors_lines:
+            try:
+                (bill_creditors_lines + entry_creditors_lines).reconcile()
+            except Exception:
+                pass
+
+        # If any customer invoice already exists for this order, reconcile with Debtors
+        posted_invoices = self.invoice_ids.filtered(lambda m: m.move_type == 'out_invoice' and m.state == 'posted')
+        for inv in posted_invoices:
+            entry_debtors = entry.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled)
+            inv_debtors = inv.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled)
+            if entry_debtors and inv_debtors:
+                try:
+                    (entry_debtors + inv_debtors).reconcile()
+                except Exception:
+                    pass
+
+        return entry
 
     def _get_customer_scheme_records(self):
         self.ensure_one()
@@ -835,6 +981,7 @@ class SaleOrder(models.Model):
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
             bill.action_post()
+            self._create_or_update_old_gold_journal_entry(bill)
 
     # ────────────────────────────────────────────────────────────────────────────
     # EDIT / SAVE – Main Order buttons
@@ -1090,6 +1237,7 @@ class SaleOrder(models.Model):
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_sale_return = True
             bill.action_post()
+            self._create_or_update_sale_return_journal_entry(bill)
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
@@ -1209,7 +1357,119 @@ class SaleOrder(models.Model):
             bill.action_post()
             order.sale_return_bill_id = bill.id
 
+            # ------------------------------------------------
+            # CREATE & POST CONTRA JOURNAL ENTRY (CREDITORS -> DEBTORS)
+            # ------------------------------------------------
+            order._create_or_update_sale_return_journal_entry(bill)
+
         return True
+
+    def _create_or_update_sale_return_journal_entry(self, bill, target_date=None):
+        self.ensure_one()
+        if not bill or bill.amount_total <= 0:
+            return False
+
+        AccountMove = self.env['account.move']
+        company_id = (self.company_id or self.env.company).id
+        entry_date = target_date or bill.date or bill.invoice_date or fields.Date.context_today(self)
+
+        journal = self._get_old_gold_journal()
+        if not journal:
+            raise ValidationError(_("General/Miscellaneous journal not found for company %s.") % (self.company_id.name or self.env.company.name))
+
+        # Find Creditors account (Account Payable)
+        creditors_line = bill.line_ids.filtered(lambda l: l.account_id.account_type == 'liability_payable')
+        creditors_account = creditors_line[0].account_id if creditors_line else self.partner_id.with_company(company_id).property_account_payable_id
+        if not creditors_account:
+            creditors_account = self.env['account.account'].search([
+                ('company_id', '=', company_id),
+                ('account_type', '=', 'liability_payable'),
+                ('code', 'not in', ('202005', '000999', '1000999')),
+            ], limit=1)
+
+        # Find Debtors account (Account Receivable)
+        debtors_account = self.partner_id.with_company(company_id).property_account_receivable_id
+        if not debtors_account:
+            debtors_account = self.env['account.account'].search([
+                ('company_id', '=', company_id),
+                ('account_type', '=', 'asset_receivable'),
+            ], limit=1)
+
+        if not creditors_account or not debtors_account:
+            raise ValidationError(_("Creditors or Debtors account not configured for partner %s.") % self.partner_id.name)
+
+        entry = self.sale_return_entry_id
+        if entry:
+            if entry.state == 'posted':
+                entry.button_draft()
+            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
+            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
+            if creditors_move_line and debtors_move_line:
+                creditors_move_line.write({
+                    'account_id': creditors_account.id,
+                    'debit': bill.amount_total,
+                    'credit': 0.0,
+                })
+                debtors_move_line.write({
+                    'account_id': debtors_account.id,
+                    'debit': 0.0,
+                    'credit': bill.amount_total,
+                })
+            entry.write({
+                'date': entry_date,
+                'ref': f"Sale Return - {self.name}",
+            })
+            entry.action_post()
+        else:
+            entry_vals = {
+                'move_type': 'entry',
+                'date': entry_date,
+                'journal_id': journal.id,
+                'company_id': company_id,
+                'partner_id': self.partner_id.id,
+                'ref': f"Sale Return - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Sale Return Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': bill.amount_total,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Sale Return Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': bill.amount_total,
+                    }),
+                ],
+            }
+            entry = AccountMove.create(entry_vals)
+            entry.action_post()
+            self.sale_return_entry_id = entry.id
+
+        # Reconcile Creditors between bill and entry
+        bill_creditors_lines = bill.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+        entry_creditors_lines = entry.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+        if bill_creditors_lines and entry_creditors_lines:
+            try:
+                (bill_creditors_lines + entry_creditors_lines).reconcile()
+            except Exception:
+                pass
+
+        # If any customer invoice already exists for this order, reconcile with Debtors
+        posted_invoices = self.invoice_ids.filtered(lambda m: m.move_type == 'out_invoice' and m.state == 'posted')
+        for inv in posted_invoices:
+            entry_debtors = entry.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled)
+            inv_debtors = inv.line_ids.filtered(lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled)
+            if entry_debtors and inv_debtors:
+                try:
+                    (entry_debtors + inv_debtors).reconcile()
+                except Exception:
+                    pass
+
+        return entry
 
     def action_create_invoice_and_pay(self):
         for order in self:
@@ -1220,6 +1480,32 @@ class SaleOrder(models.Model):
             invoices.invoice_date = fields.Date.context_today(self)
             invoices.date = fields.Date.context_today(self)
             invoices.action_post()
+
+            if order.old_gold_entry_id:
+                entry_debtors = order.old_gold_entry_id.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                )
+                inv_debtors = invoices.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                )
+                if entry_debtors and inv_debtors:
+                    try:
+                        (entry_debtors + inv_debtors).reconcile()
+                    except Exception:
+                        pass
+
+            if order.sale_return_entry_id:
+                sr_entry_debtors = order.sale_return_entry_id.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                )
+                inv_debtors = invoices.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled
+                )
+                if sr_entry_debtors and inv_debtors:
+                    try:
+                        (sr_entry_debtors + inv_debtors).reconcile()
+                    except Exception:
+                        pass
 
         return True
 
