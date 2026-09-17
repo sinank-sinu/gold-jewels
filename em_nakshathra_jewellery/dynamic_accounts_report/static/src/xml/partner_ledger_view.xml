@@ -15,8 +15,8 @@
                             <t t-esc="state.title"/>
                         </h1>
                     </div>
-                    <div style="margin-right: 10px; margin-left: 10px;margin-bottom: 15px;display: flex;">
-                        <div class="sub_container_left" style="width:70%; display: flex; align-items: center;">
+                    <div style="margin-right: 10px; margin-left: 10px;margin-bottom: 15px;display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div class="sub_container_left" style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
                             <div class="report_print">
                                 <!-- Print (PDF) Button -->
                                 <button type="button"
@@ -33,7 +33,7 @@
                                 </button>
                             </div>
                             <!-- Partner Name Search Input -->
-                            <div class="partner_name_search d-inline-block ms-3" style="min-width: 250px;">
+                            <div class="partner_name_search d-inline-block" style="min-width: 250px;">
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-white border-end-0">
                                         <i class="fa fa-search text-muted"/>
@@ -43,6 +43,7 @@
                                            placeholder="Search Partner Name..."
                                            t-att-value="state.search_partner_term || ''"
                                            t-on-input="onSearchPartner"
+                                           t-on-keydown="onSearchPartnerKeydown"
                                            style="box-shadow: none; outline: none;"/>
                                     <t t-if="state.search_partner_term">
                                         <button class="btn btn-sm btn-outline-secondary border-start-0"
@@ -52,6 +53,44 @@
                                         </button>
                                     </t>
                                 </div>
+                            </div>
+                            <!-- Pagination Controls (Top) -->
+                            <div class="d-inline-flex align-items-center bg-white border rounded px-2 py-1 shadow-sm" style="font-size: 13px; gap: 5px;">
+                                <button class="btn btn-sm btn-light border py-0 px-2"
+                                        type="button"
+                                        title="First Page"
+                                        t-att-disabled="isFirstPageDisabled"
+                                        t-on-click="onFirstPage">
+                                    <i class="fa fa-angle-double-left"/>
+                                </button>
+                                <button class="btn btn-sm btn-light border py-0 px-2"
+                                        type="button"
+                                        title="Previous Page"
+                                        t-att-disabled="isFirstPageDisabled"
+                                        t-on-click="onPrevPage">
+                                    <i class="fa fa-chevron-left"/>
+                                </button>
+                                <span class="text-muted mx-1">
+                                    Page <strong><t t-esc="state.current_page"/></strong> of <strong><t t-esc="state.total_pages"/></strong>
+                                    <span class="text-secondary ms-1">(<t t-esc="state.total_partners"/> partners)</span>
+                                </span>
+                                <button class="btn btn-sm btn-light border py-0 px-2"
+                                        type="button"
+                                        title="Next Page"
+                                        t-att-disabled="isLastPageDisabled"
+                                        t-on-click="onNextPage">
+                                    <i class="fa fa-chevron-right"/>
+                                </button>
+                                <button class="btn btn-sm btn-light border py-0 px-2"
+                                        type="button"
+                                        title="Last Page"
+                                        t-att-disabled="isLastPageDisabled"
+                                        t-on-click="onLastPage">
+                                    <i class="fa fa-angle-double-right"/>
+                                </button>
+                                <t t-if="state.is_loading">
+                                    <i class="fa fa-spinner fa-spin text-primary ms-1"/>
+                                </t>
                             </div>
                         </div>
                         <div class="sub_container_right">
@@ -356,11 +395,10 @@
                                                         </th>
                                                     </t>
                                                 </t>
-                                            <!-- Iterate over partner's value list -->
-                                            <t t-foreach="state.data[partner]"
+                                            <!-- Iterate over partner's value list (paginated in batches of 80) -->
+                                            <t t-foreach="getPartnerLines(partner)"
                                                t-as="valuelist"
                                                t-key="valuelist_index">
-                                                <t t-log="valuelist"/>
                                                 <tr class="border-bottom border-gainsboro collapse"
                                                     t-attf-id="partner-{{i}}"
                                                     t-att-data-id="valuelist[0]['move_id'][0]">
@@ -403,7 +441,7 @@
                                                     <th>
                                                         <span>
                                                             <t t-if="valuelist[0]['move_name']"
-                                                               t-esc="valuelist[0]['move_id']"/>
+                                                               t-esc="valuelist[0]['move_name']"/>
                                                         </span>
                                                     </th>
                                                     <th>
@@ -444,6 +482,43 @@
                                                     </th>
                                                 </tr>
                                             </t>
+                                            <t t-if="getPartnerTotalLinePages(partner) &gt; 1">
+                                                <tr class="border-bottom border-gainsboro collapse bg-light"
+                                                    t-attf-id="partner-{{i}}">
+                                                    <th colspan="15" class="py-2 px-3 text-center">
+                                                        <div class="d-flex justify-content-center align-items-center" style="gap: 15px; flex-wrap: wrap;">
+                                                            <span class="text-muted" style="font-size: 13px;">
+                                                                Showing transactions <strong><t t-esc="getPartnerLineRangeText(partner)"/></strong>
+                                                                (Page <strong><t t-esc="getPartnerLinePage(partner)"/></strong> of <strong><t t-esc="getPartnerTotalLinePages(partner)"/></strong>)
+                                                            </span>
+                                                            <div class="btn-group btn-group-sm">
+                                                                <button class="btn btn-outline-primary"
+                                                                        type="button"
+                                                                        title="Previous 80 Lines"
+                                                                        t-att-data-partner="partner"
+                                                                        t-att-disabled="isPartnerFirstLinePage(partner)"
+                                                                        t-on-click="onPrevPartnerLines">
+                                                                    <i class="fa fa-chevron-left me-1"/> Prev 80
+                                                                </button>
+                                                                <button class="btn btn-outline-primary"
+                                                                        type="button"
+                                                                        title="Next 80 Lines"
+                                                                        t-att-data-partner="partner"
+                                                                        t-att-disabled="isPartnerLastLinePage(partner)"
+                                                                        t-on-click="onNextPartnerLines">
+                                                                    Next 80 <i class="fa fa-chevron-right ms-1"/>
+                                                                </button>
+                                                            </div>
+                                                            <button class="btn btn-sm btn-outline-secondary"
+                                                                    type="button"
+                                                                    t-att-data-id="state.total[partner]['partner_id']"
+                                                                    t-on-click="gotoJournalItem">
+                                                                <i class="fa fa-external-link me-1"/> View All <t t-esc="getTotalLinesCount(partner)"/> in Journal Items
+                                                            </button>
+                                                        </div>
+                                                    </th>
+                                                </tr>
+                                            </t>
                                         </t>
                                     </t>
                                     <t t-if="state.visible_partners and state.visible_partners.length == 0">
@@ -480,6 +555,49 @@
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+            <!-- Bottom Pagination Controls -->
+            <div class="d-flex justify-content-between align-items-center mt-2 mx-2 px-3 py-2 bg-light border rounded shadow-sm">
+                <div class="text-muted" style="font-size: 13px;">
+                    Showing page <strong><t t-esc="state.current_page"/></strong> of <strong><t t-esc="state.total_pages"/></strong>
+                    <span class="ms-1">(<t t-esc="state.total_partners"/> total partners)</span>
+                </div>
+                <div class="d-flex align-items-center" style="gap: 6px;">
+                    <button class="btn btn-sm btn-outline-secondary"
+                            type="button"
+                            title="First Page"
+                            t-att-disabled="isFirstPageDisabled"
+                            t-on-click="onFirstPage">
+                        <i class="fa fa-angle-double-left me-1"/> First
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            type="button"
+                            title="Previous Page"
+                            t-att-disabled="isFirstPageDisabled"
+                            t-on-click="onPrevPage">
+                        <i class="fa fa-chevron-left me-1"/> Prev
+                    </button>
+                    <span class="mx-2 font-weight-bold" style="font-size: 13px;">
+                        Page <t t-esc="state.current_page"/> / <t t-esc="state.total_pages"/>
+                    </span>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            type="button"
+                            title="Next Page"
+                            t-att-disabled="isLastPageDisabled"
+                            t-on-click="onNextPage">
+                        Next <i class="fa fa-chevron-right ms-1"/>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            type="button"
+                            title="Last Page"
+                            t-att-disabled="isLastPageDisabled"
+                            t-on-click="onLastPage">
+                        Last <i class="fa fa-angle-double-right ms-1"/>
+                    </button>
+                    <t t-if="state.is_loading">
+                        <i class="fa fa-spinner fa-spin text-primary ms-2"/>
+                    </t>
                 </div>
             </div>
             <div class="foot_note">

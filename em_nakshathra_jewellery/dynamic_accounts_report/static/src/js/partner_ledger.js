@@ -16,6 +16,7 @@ class PartnerLedger extends owl.Component {
         this.tbody = useRef('tbody');
         this.unfoldButton = useRef('unfoldButton');
         this.dialog = useService("dialog");
+        this._searchTimeout = null;
         this.state = useState({
             partners: null,
             visible_partners: null,
@@ -35,51 +36,174 @@ class PartnerLedger extends owl.Component {
             options: null,
             search_partner_term: "",
             message_list : [],
+            // Server-side pagination state (80 records per page)
+            current_page: 1,
+            page_size: 80,
+            total_pages: 1,
+            total_partners: 0,
+            is_loading: false,
+            partner_line_page: {},
         });
-        this.load_data(self.initial_render = true);
-
+        this.load_data();
     }
+
+    get isFirstPageDisabled() {
+        return this.state.current_page <= 1 || this.state.is_loading;
+    }
+
+    get isLastPageDisabled() {
+        return this.state.current_page >= this.state.total_pages || this.state.is_loading;
+    }
+
+    getPartnerLines(partner) {
+        const lines = (this.state.data && this.state.data[partner]) || [];
+        const page = (this.state.partner_line_page && this.state.partner_line_page[partner]) || 1;
+        const pageSize = 80;
+        const start = (page - 1) * pageSize;
+        return lines.slice(start, start + pageSize);
+    }
+
+    getPartnerLinePage(partner) {
+        return (this.state.partner_line_page && this.state.partner_line_page[partner]) || 1;
+    }
+
+    getPartnerTotalLinePages(partner) {
+        const total = (this.state.data && this.state.data[partner] && this.state.data[partner].length) || 0;
+        return Math.max(1, Math.ceil(total / 80));
+    }
+
+    getPartnerLineRangeText(partner) {
+        const total = (this.state.data && this.state.data[partner] && this.state.data[partner].length) || 0;
+        if (total === 0) return "0 transactions";
+        const page = this.getPartnerLinePage(partner);
+        const start = (page - 1) * 80 + 1;
+        const end = Math.min(page * 80, total);
+        return `${start}–${end} of ${total}`;
+    }
+
+    getTotalLinesCount(partner) {
+        const lines = (this.state.data && this.state.data[partner]) || [];
+        return lines.length;
+    }
+
+    isPartnerFirstLinePage(partner) {
+        return this.getPartnerLinePage(partner) <= 1;
+    }
+
+    isPartnerLastLinePage(partner) {
+        return this.getPartnerLinePage(partner) >= this.getPartnerTotalLinePages(partner);
+    }
+
+    onPrevPartnerLines(ev) {
+        const partner = ev.currentTarget.getAttribute("data-partner");
+        if (partner) {
+            if (!this.state.partner_line_page) {
+                this.state.partner_line_page = {};
+            }
+            const currentPage = this.state.partner_line_page[partner] || 1;
+            if (currentPage > 1) {
+                this.state.partner_line_page[partner] = currentPage - 1;
+            }
+        }
+    }
+
+    onNextPartnerLines(ev) {
+        const partner = ev.currentTarget.getAttribute("data-partner");
+        if (partner) {
+            if (!this.state.partner_line_page) {
+                this.state.partner_line_page = {};
+            }
+            const currentPage = this.state.partner_line_page[partner] || 1;
+            const maxPages = this.getPartnerTotalLinePages(partner);
+            if (currentPage < maxPages) {
+                this.state.partner_line_page[partner] = currentPage + 1;
+            }
+        }
+    }
+
     async load_data() {
         /**
-         * Loads the data for the partner ledger report.
+         * Loads the initial data for the partner ledger report (page 1).
          */
-        let partner_list = []
-        let partner_totals = ''
+        await this.fetchLedgerData(1);
+    }
+
+    async fetchLedgerData(page = 1) {
+        /**
+         * Fetches paginated partner ledger data from backend (80 partners per page).
+         */
+        this.state.is_loading = true;
+        let partner_list = [];
+        let partner_totals = {};
         let totalDebitSum = 0;
         let totalCreditSum = 0;
-        let currency;
-        var self = this;
-        var action_title = self.props.action.display_name;
+        let currency = this.state.currency;
+        let pagination = null;
+        const action_title = this.props.action.display_name;
+
         try {
-            var self = this;
-            self.state.data = await self.orm.call("account.partner.ledger", "view_report", [[this.wizard_id], action_title,]);
-            // Extract partner information from the data
-            $.each(self.state.data, function (index, value) {
-                if (index !== 'partner_totals') {
-                    partner_list.push(index)
-                }
-                else {
-                    partner_totals = value
-                    Object.values(partner_totals).forEach(partner_list => {
-                        currency = partner_list.currency_id
-                        totalDebitSum += partner_list.total_debit || 0;
-                        totalCreditSum += partner_list.total_credit || 0;
+            const result = await this.orm.call(
+                "account.partner.ledger",
+                "get_filter_values",
+                [
+                    this.state.selected_partner,
+                    this.state.date_range,
+                    this.state.account,
+                    this.state.options,
+                    page,
+                    this.state.page_size || 80,
+                    this.state.search_partner_term || null,
+                ]
+            );
+
+            $.each(result, function (index, value) {
+                if (index === 'partner_totals') {
+                    partner_totals = value;
+                    Object.values(partner_totals).forEach(pTot => {
+                        if (pTot && pTot.currency_id) {
+                            currency = pTot.currency_id;
+                        }
+                        totalDebitSum += pTot.total_debit || 0;
+                        totalCreditSum += pTot.total_credit || 0;
                     });
+                } else if (index === 'pagination') {
+                    pagination = value;
+                } else {
+                    partner_list.push(index);
                 }
-            })
-            self.state.partners = partner_list
-            self.state.partner_list = partner_list
-            self.state.total_list = partner_totals
-            self.state.total = partner_totals
-            self.state.currency = currency
-            self.state.total_debit = totalDebitSum
-            self.state.total_credit = totalCreditSum
-            self.state.title = action_title
-            self.state.visible_partners = partner_list;
-            self._applyPartnerSearch((self.state.search_partner_term || "").toLowerCase().trim());
-        }
-        catch (el) {
-            window.location.href;
+            });
+
+            this.state.data = result;
+            this.state.partners = partner_list;
+            this.state.visible_partners = partner_list;
+            this.state.partner_list = partner_list;
+            this.state.total_list = partner_totals;
+            this.state.total = partner_totals;
+            this.state.currency = currency;
+            this.state.total_debit = Math.round(totalDebitSum * 100) / 100;
+            this.state.total_credit = Math.round(totalCreditSum * 100) / 100;
+            this.state.title = action_title;
+            this.state.partner_line_page = {};
+
+            if (pagination) {
+                this.state.current_page = pagination.current_page;
+                this.state.page_size = pagination.page_size;
+                this.state.total_partners = pagination.total_partners;
+                this.state.total_pages = pagination.total_pages;
+            } else {
+                this.state.current_page = page;
+                this.state.page_size = 80;
+                this.state.total_pages = 1;
+                this.state.total_partners = partner_list.length;
+            }
+
+            if (this.unfoldButton && this.unfoldButton.el && this.unfoldButton.el.classList.contains("selected-filter")) {
+                this.unfoldButton.el.classList.remove("selected-filter");
+            }
+        } catch (e) {
+            console.error("Error fetching partner ledger data:", e);
+        } finally {
+            this.state.is_loading = false;
         }
     }
 
@@ -356,29 +480,7 @@ class PartnerLedger extends owl.Component {
                 }
             }
         }
-        let filtered_data = await this.orm.call("account.partner.ledger", "get_filter_values", [this.state.selected_partner, this.state.date_range, this.state.account, this.state.options,]);
-        $.each(filtered_data, function (index, value) {
-            if (index !== 'partner_totals') {
-                partner_list.push(index)
-            }
-            else {
-                partner_totals = value
-                Object.values(partner_totals).forEach(partner_list => {
-                        totalDebitSum += partner_list.total_debit || 0;
-                        totalCreditSum += partner_list.total_credit || 0;
-                    });
-            }
-        })
-        this.state.partners = partner_list
-        this.state.data = filtered_data
-        this.state.total = partner_totals
-        this.state.total_debit = totalDebitSum
-        this.state.total_credit = totalCreditSum
-        this.state.visible_partners = partner_list;
-        this._applyPartnerSearch((this.state.search_partner_term || "").toLowerCase().trim());
-        if ($(this.unfoldButton.el.classList).find("selected-filter")) {
-            this.unfoldButton.el.classList.remove("selected-filter")
-        }
+        await this.fetchLedgerData(1);
     }
     getDomain() {
         return [];
@@ -402,35 +504,70 @@ class PartnerLedger extends owl.Component {
             ev.target.classList.remove("selected-filter");
         }
     }
+
+    // Pagination handlers
+    async onFirstPage() {
+        if (this.state.current_page > 1 && !this.state.is_loading) {
+            await this.fetchLedgerData(1);
+        }
+    }
+
+    async onPrevPage() {
+        if (this.state.current_page > 1 && !this.state.is_loading) {
+            await this.fetchLedgerData(this.state.current_page - 1);
+        }
+    }
+
+    async onNextPage() {
+        if (this.state.current_page < this.state.total_pages && !this.state.is_loading) {
+            await this.fetchLedgerData(this.state.current_page + 1);
+        }
+    }
+
+    async onLastPage() {
+        if (this.state.current_page < this.state.total_pages && !this.state.is_loading) {
+            await this.fetchLedgerData(this.state.total_pages);
+        }
+    }
+
+    async onPageInputKeydown(ev) {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            let p = parseInt(ev.target.value, 10);
+            if (isNaN(p) || p < 1) p = 1;
+            if (p > this.state.total_pages) p = this.state.total_pages;
+            await this.fetchLedgerData(p);
+        }
+    }
+
+    // Search partner handlers (queries database live with debounce)
     onSearchPartner(ev) {
-        /**
-         * Real-time search partner by name in the partner ledger list.
-         */
         const term = ev.target.value;
         this.state.search_partner_term = term;
-        this._applyPartnerSearch(term.toLowerCase().trim());
+        if (this._searchTimeout) {
+            clearTimeout(this._searchTimeout);
+        }
+        this._searchTimeout = setTimeout(() => {
+            this.fetchLedgerData(1);
+        }, 350);
     }
+
+    onSearchPartnerKeydown(ev) {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            if (this._searchTimeout) {
+                clearTimeout(this._searchTimeout);
+            }
+            this.fetchLedgerData(1);
+        }
+    }
+
     clearPartnerSearch() {
-        /**
-         * Clears partner search input and restores full partner list.
-         */
         this.state.search_partner_term = "";
-        this.state.visible_partners = this.state.partners;
-    }
-    _applyPartnerSearch(term) {
-        /**
-         * Filters visible_partners by partner name substring.
-         */
-        if (!term) {
-            this.state.visible_partners = this.state.partners;
-            return;
+        if (this._searchTimeout) {
+            clearTimeout(this._searchTimeout);
         }
-        if (this.state.partners) {
-            this.state.visible_partners = this.state.partners.filter(partnerName => {
-                if (!partnerName || partnerName === 'false') return false;
-                return partnerName.toLowerCase().includes(term);
-            });
-        }
+        this.fetchLedgerData(1);
     }
 }
 PartnerLedger.defaultProps = {
