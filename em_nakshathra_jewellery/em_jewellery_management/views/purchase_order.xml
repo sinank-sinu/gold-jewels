@@ -10,6 +10,8 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='price_subtotal']" position="replace">
             </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='qty_invoiced']/following-sibling::field[@name='product_uom']" position="replace">
+            </xpath>
              <xpath expr="//field[@name='effective_date']" position="after">
                 <field name="is_old_gold" widget="boolean_toggle"/>
                 <field name="unfix" widget="boolean_toggle"/>
