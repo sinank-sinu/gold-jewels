@@ -33,19 +33,20 @@
                 <sheet>
                     <group>
                         <group>
-                            <field name="ticket_number"/>
-                            <field name="partner_id"/>
-                            <field name="phone"/>
+                            <field name="ticket_number" readonly="active"/>
+                            <field name="partner_id" readonly="active"/>
+                            <field name="phone" readonly="active"/>
                             <field name="whatsapp_number"/>
                             <field name="address"/>
-                            <field name="nominee"/>
+                            <field name="nominee" readonly="active"/>
+                            <field name="nominee_phone" readonly="active"/>
                         </group>
                         <group>
                             <field name="user_id"/>
-                            <field name="date_of_joining"/>
-                            <field name="duration"/>
+                            <field name="date_of_joining" readonly="active"/>
+                            <field name="duration" readonly="1"/>
                             <field name="branch_id"/>
-                            <field name="installment_amount"/>
+                            <field name="installment_amount" readonly="active"/>
                             <field name="total_paid" readonly="1"/>
                             <field name="balance_amount" readonly="1"/>
                             <field name="state" invisible="1"/>
@@ -79,6 +80,11 @@
                     </notebook>
 
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
@@ -93,6 +99,8 @@
                 <field name="partner_id" string="Customer"/>
                 <field name="phone"/>
                 <field name="whatsapp_number"/>
+                <field name="nominee"/>
+                <field name="nominee_phone"/>
                 <separator/>
                 <filter string="Running" name="filter_running" domain="[('state', '=', 'running')]"/>
                 <filter string="Redeemed" name="filter_redeemed" domain="[('state', '=', 'redeemed')]"/>

@@ -3,11 +3,11 @@ from odoo import models, fields, api
 class JewellerySchemeEnrollment(models.Model):
     _inherit = 'jewellery.scheme.enrollment'
 
-    priority = fields.Integer(string="Priority", default=10)
+    priority = fields.Integer(string="Priority", default=10, tracking=True)
     state = fields.Selection(
         selection_add=[('redeemed', 'Redeemed')]
     )
-    is_redeemed = fields.Boolean(default=False)
+    is_redeemed = fields.Boolean(default=False, tracking=True)
 
     def action_print_single_scheme_report(self):
         """Action for printing the individual detailed report directly"""

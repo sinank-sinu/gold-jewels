@@ -2,6 +2,7 @@ from odoo import models, fields, _, api
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_compare
 from dateutil.relativedelta import relativedelta  # Added for safe month arithmetic
+from markupsafe import Markup, escape
 
 
 class JewellerySchemeInstallment(models.Model):
@@ -27,6 +28,116 @@ class JewellerySchemeInstallment(models.Model):
     ], default='draft')
     remark = fields.Char(string="Remark")
     is_transferred = fields.Boolean(string="Transferred", default=False, copy=False)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        if not self.env.context.get('skip_scheme_tracking'):
+            enrollment_map = {}
+            for rec in records:
+                if rec.enrollment_id:
+                    enrollment_map.setdefault(rec.enrollment_id, []).append(rec)
+            for enrollment, inst_list in enrollment_map.items():
+                if len(inst_list) == 1:
+                    rec = inst_list[0]
+                    state_label = dict(rec._fields['state'].selection).get(rec.state, rec.state)
+                    body = Markup(
+                        '<p><strong>Installment Added:</strong> Amount: %s, Date: %s, State: %s</p>'
+                    ) % (
+                        f"{rec.amount:,.2f}",
+                        rec.date or '',
+                        state_label,
+                    )
+                    enrollment.message_post(body=body, subtype_xmlid='mail.mt_note')
+                else:
+                    lines_html = Markup("").join(
+                        Markup('<li>Amount: %s, Date: %s, State: %s</li>') % (
+                            f"{r.amount:,.2f}",
+                            r.date or '',
+                            dict(r._fields['state'].selection).get(r.state, r.state),
+                        )
+                        for r in inst_list
+                    )
+                    body = Markup('<p><strong>%s Installments Added:</strong></p><ul>%s</ul>') % (
+                        len(inst_list),
+                        lines_html,
+                    )
+                    enrollment.message_post(body=body, subtype_xmlid='mail.mt_note')
+        return records
+
+    def write(self, vals):
+        tracked_fields = {
+            'amount': 'Amount',
+            'date': 'Date',
+            'journal_id': 'Journal',
+            'state': 'State',
+            'transaction_id': 'Transaction ID',
+            'remark': 'Remark',
+            'is_transferred': 'Transferred',
+        }
+        old_values = {}
+        do_track = not self.env.context.get('skip_scheme_tracking') and not self.env.context.get('skip_installment_write_note')
+        if do_track:
+            for rec in self:
+                if rec.enrollment_id:
+                    old_values[rec.id] = {f: rec[f] for f in tracked_fields if f in vals}
+
+        res = super().write(vals)
+
+        if do_track:
+            for rec in self:
+                if rec.enrollment_id and rec.id in old_values:
+                    changes = []
+                    for f, label in tracked_fields.items():
+                        if f in vals:
+                            old_val = old_values[rec.id].get(f)
+                            new_val = rec[f]
+                            if f == 'amount':
+                                old_str = f"{old_val:,.2f}" if isinstance(old_val, (int, float)) else str(old_val or '')
+                                new_str = f"{new_val:,.2f}" if isinstance(new_val, (int, float)) else str(new_val or '')
+                            elif f == 'journal_id':
+                                old_str = old_val.display_name if old_val else 'None'
+                                new_str = new_val.display_name if new_val else 'None'
+                            elif f == 'state':
+                                sel_map = dict(rec._fields['state'].selection)
+                                old_str = sel_map.get(old_val, str(old_val))
+                                new_str = sel_map.get(new_val, str(new_val))
+                            else:
+                                old_str = str(old_val if old_val is not False else '')
+                                new_str = str(new_val if new_val is not False else '')
+
+                            if old_str != new_str:
+                                changes.append(
+                                    Markup('<li><strong>%s:</strong> %s &rarr; %s</li>') % (
+                                        label, escape(old_str), escape(new_str)
+                                    )
+                                )
+
+                    if changes:
+                        body = Markup(
+                            '<p><strong>Installment (Date: %s, Amount: %s) Updated:</strong></p><ul>%s</ul>'
+                        ) % (
+                            rec.date or '',
+                            f"{rec.amount:,.2f}",
+                            Markup("").join(changes),
+                        )
+                        rec.enrollment_id.message_post(body=body, subtype_xmlid='mail.mt_note')
+        return res
+
+    def unlink(self):
+        if not self.env.context.get('skip_scheme_tracking'):
+            for rec in self:
+                if rec.enrollment_id:
+                    state_label = dict(rec._fields['state'].selection).get(rec.state, rec.state)
+                    body = Markup(
+                        '<p><strong>Installment Removed:</strong> Date: %s, Amount: %s, State: %s</p>'
+                    ) % (
+                        rec.date or '',
+                        f"{rec.amount:,.2f}",
+                        state_label,
+                    )
+                    rec.enrollment_id.message_post(body=body, subtype_xmlid='mail.mt_note')
+        return super().unlink()
 
     def action_transfer(self):
         self.ensure_one()
@@ -261,12 +372,43 @@ class JewellerySchemeInstallment(models.Model):
             pass
 
         # Link moves to the installment record
-        self.suspense_move_id = move2.id
-        self.move_id = move3.id
-        self.journal_id = journal.id
-        self.is_transferred = True
-        self.state = 'paid'
-        self.transaction_id = self.transaction_id or 'BANK-TRANSFER'
+        self.with_context(skip_installment_write_note=True).write({
+            'suspense_move_id': move2.id,
+            'move_id': move3.id,
+            'journal_id': journal.id,
+            'is_transferred': True,
+            'state': 'paid',
+            'transaction_id': self.transaction_id or 'BANK-TRANSFER',
+        })
+
+        # Track transfer in enrollment chatter
+        if self.enrollment_id:
+            move3_str = Markup('<a href="#" data-oe-model="account.move" data-oe-id="%s">%s</a>') % (
+                move3.id, escape(move3.name or move3.ref or str(move3.id))
+            )
+            move2_str = Markup('<a href="#" data-oe-model="account.move" data-oe-id="%s">%s</a>') % (
+                move2.id, escape(move2.name or move2.ref or str(move2.id))
+            )
+            body = Markup(
+                '<p><strong>Installment Transferred</strong></p>'
+                '<ul>'
+                '<li><strong>Amount:</strong> %s</li>'
+                '<li><strong>Date:</strong> %s</li>'
+                '<li><strong>Customer Entry:</strong> %s</li>'
+                '<li><strong>Suspense Entry:</strong> %s</li>'
+                '<li><strong>Transaction ID:</strong> %s</li>'
+                '</ul>'
+            ) % (
+                f"{self.amount:,.2f}",
+                self.date or '',
+                move3_str,
+                move2_str,
+                escape(self.transaction_id or 'BANK-TRANSFER'),
+            )
+            self.enrollment_id.message_post(
+                body=body,
+                subtype_xmlid='mail.mt_note'
+            )
 
         # Return action to view created transfer entries
         return {
