@@ -78,6 +78,9 @@ class BarcodeScannerFormWidget extends Component {
     }
 
     async _processBarcode() {
+        if (this.state.isScanning) {
+            return;
+        }
         const barcode = (this.state.barcode || "").trim();
         if (!barcode) return;
 

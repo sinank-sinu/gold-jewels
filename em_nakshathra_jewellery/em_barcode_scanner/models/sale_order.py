@@ -44,6 +44,19 @@ class SaleOrder(models.Model):
         if not order.exists():
             return {'error': _('Sale Order not found.')}
 
+        # Check if barcode / label has already been scanned in this order
+        if label:
+            already_scanned = order.order_line.filtered(
+                lambda l: l.label_id == label or (l.label_id and l.label_id.barcode == barcode)
+            )
+        else:
+            already_scanned = order.order_line.filtered(
+                lambda l: not l.label_id and (l.product_id == product or (l.product_id and l.product_id.barcode == barcode))
+            )
+
+        if already_scanned:
+            return {'error': _('Barcode "%s" has already been scanned.') % barcode}
+
         create_vals = {
             'order_id': order.id,
             'product_id': product.id,
@@ -125,6 +138,19 @@ class SaleOrder(models.Model):
         order = self.browse(order_id)
         if not order.exists():
             return {'error': _('Sale Order not found.')}
+
+        # Check if barcode / label has already been scanned in sale return
+        if label:
+            already_scanned = order.sale_return_line_ids.filtered(
+                lambda l: (hasattr(l, 'label_id') and l.label_id == label) or (l.product_id and l.product_id.barcode == barcode)
+            )
+        else:
+            already_scanned = order.sale_return_line_ids.filtered(
+                lambda l: l.product_id == product or (l.product_id and l.product_id.barcode == barcode)
+            )
+
+        if already_scanned:
+            return {'error': _('Barcode "%s" has already been scanned.') % barcode}
 
         # Ensure Sale Return is enabled on the order
         if not order.is_sale_return:

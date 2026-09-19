@@ -28,6 +28,19 @@ class PurchaseOrder(models.Model):
         if not order.exists():
             return {'error': _('Purchase Order not found.')}
 
+        # Check if barcode / label has already been scanned in this purchase order
+        if label:
+            already_scanned = order.order_line.filtered(
+                lambda l: (hasattr(l, 'label_id') and l.label_id == label) or (l.product_id and l.product_id.barcode == barcode)
+            )
+        else:
+            already_scanned = order.order_line.filtered(
+                lambda l: l.product_id == product or (l.product_id and l.product_id.barcode == barcode)
+            )
+
+        if already_scanned:
+            return {'error': _('Barcode "%s" has already been scanned.') % barcode}
+
         create_vals = {
             'order_id': order.id,
             'product_id': product.id,

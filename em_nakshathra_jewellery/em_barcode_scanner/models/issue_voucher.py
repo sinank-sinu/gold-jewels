@@ -54,6 +54,19 @@ class JewelleryIssueVoucher(models.Model):
         if not voucher.exists():
             return {'error': _('Issue Voucher not found.')}
 
+        # Check if barcode / label has already been scanned in this issue voucher
+        if label:
+            already_scanned = voucher.line_ids.filtered(
+                lambda l: (hasattr(l, 'label_id') and l.label_id == label) or (l.product_id and l.product_id.barcode == barcode)
+            )
+        else:
+            already_scanned = voucher.line_ids.filtered(
+                lambda l: l.product_id == product or (l.product_id and l.product_id.barcode == barcode)
+            )
+
+        if already_scanned:
+            return {'error': _('Barcode "%s" has already been scanned.') % barcode}
+
         uom_id = product.uom_id.id if product.uom_id else False
 
         self.env['jewellery.issue.voucher.line'].create({

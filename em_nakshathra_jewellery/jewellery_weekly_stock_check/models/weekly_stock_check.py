@@ -254,7 +254,14 @@ class JewelleryWeeklyStockCheck(models.Model):
             ('branch_id', '=', check.branch_id.id),
             ('branch_location_id', 'in', check.location_ids.ids)
         ], limit=1)
-        if label:    # Create new line for label (Surplus)
+        if label:
+            already_scanned = check.line_ids.filtered(
+                lambda l: l.label_id == label and (l.manual_qty > 0 or l.manual_weight > 0)
+            )
+            if already_scanned:
+                return {'error': _('Barcode "%s" (Label: %s) has already been scanned.') % (barcode, label.name)}
+
+            # Create new line for label (Surplus)
             line = self.env['jewellery.weekly.stock.check.line'].create({
                 'stock_check_id': check.id,
                 'product_tmpl_id': label.product_id.product_tmpl_id.id,

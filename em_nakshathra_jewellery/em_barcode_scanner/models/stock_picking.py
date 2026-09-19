@@ -28,6 +28,19 @@ class StockPicking(models.Model):
         if not picking.exists():
             return {'error': _('Stock Picking not found.')}
 
+        # Check if barcode / label has already been scanned in this picking
+        if label:
+            already_scanned = picking.move_ids.filtered(
+                lambda m: m.state != 'cancel' and (m.label_id == label or (m.label_id and m.label_id.barcode == barcode))
+            )
+        else:
+            already_scanned = picking.move_ids.filtered(
+                lambda m: m.state != 'cancel' and not m.label_id and (m.product_id == product or (m.product_id and m.product_id.barcode == barcode))
+            )
+
+        if already_scanned:
+            return {'error': _('Barcode "%s" has already been scanned.') % barcode}
+
         create_vals = {
             'picking_id': picking.id,
             'name': product.display_name,

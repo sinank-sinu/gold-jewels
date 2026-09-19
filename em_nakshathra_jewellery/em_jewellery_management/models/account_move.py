@@ -19,6 +19,20 @@ class AccountMove(models.Model):
     is_paid = fields.Boolean(string="Is Paid")
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
+    is_old_gold = fields.Boolean(
+        string="Old Gold",
+        compute="_compute_is_old_gold",
+        store=True,
+        readonly=True,
+        copy=False,
+    )
+    is_diamond_og = fields.Boolean(
+        string="Diamond OG",
+        compute="_compute_is_diamond_og",
+        store=True,
+        readonly=True,
+        copy=False,
+    )
     unfix = fields.Boolean(string="Unfix", copy=False)
     is_approved = fields.Boolean(string="Manager Approved", default=False, copy=False)
     vendor_bill_amount = fields.Monetary(
@@ -26,6 +40,62 @@ class AccountMove(models.Model):
         compute='_compute_vendor_bill_amount',
         store=False,
     )
+    show_approve_bill = fields.Boolean(
+        string="Show Approve Bill",
+        compute="_compute_show_approve_bill",
+    )
+
+    @api.depends(
+        'is_old_gold_bill',
+        'invoice_line_ids.purchase_line_id.order_id.is_old_gold',
+        'line_ids.purchase_line_id.order_id.is_old_gold',
+    )
+    def _compute_is_old_gold(self):
+        for move in self:
+            pos = (move.invoice_line_ids | move.line_ids).mapped('purchase_line_id.order_id')
+            is_og_po = any(po.is_old_gold for po in pos)
+            move.is_old_gold = bool(is_og_po or move.is_old_gold_bill)
+
+    @api.depends(
+        'is_sale_return',
+        'invoice_line_ids.purchase_line_id.order_id.is_sale_return_shop',
+        'invoice_line_ids.purchase_line_id.order_id.is_sale_return_po',
+        'line_ids.purchase_line_id.order_id.is_sale_return_shop',
+        'line_ids.purchase_line_id.order_id.is_sale_return_po',
+    )
+    def _compute_is_diamond_og(self):
+        for move in self:
+            pos = (move.invoice_line_ids | move.line_ids).mapped('purchase_line_id.order_id')
+            is_diamond_po = any(
+                (getattr(po, 'is_sale_return_shop', False) or getattr(po, 'is_sale_return_po', False))
+                for po in pos
+            )
+            move.is_diamond_og = bool(is_diamond_po or move.is_sale_return)
+
+    def _is_og_or_diamond_og(self):
+        self.ensure_one()
+        return bool(
+            self.is_old_gold
+            or self.is_diamond_og
+            or getattr(self, 'is_old_gold_bill', False)
+            or getattr(self, 'is_sale_return', False)
+            or getattr(self, 'is_sale_return_shop', False)
+        )
+
+    @api.depends('move_type', 'state', 'is_approved', 'is_old_gold', 'is_diamond_og', 'is_old_gold_bill', 'is_sale_return')
+    def _compute_show_approve_bill(self):
+        is_manager = self.env.user.has_group('em_jewellery_management.group_jewellery_manager')
+        is_billing = self.env.user.has_group('em_jewellery_management.group_jewellery_billing_staff')
+        for move in self:
+            if move.move_type != 'in_invoice' or move.state != 'draft' or move.is_approved:
+                move.show_approve_bill = False
+            elif is_manager:
+                move.show_approve_bill = True
+            elif is_billing and move._is_og_or_diamond_og():
+                move.show_approve_bill = True
+            else:
+                move.show_approve_bill = False
+
 # need to hide method after import saleorder
     def _set_next_sequence(self):
         """
@@ -83,6 +153,10 @@ class AccountMove(models.Model):
             if move_type == 'in_invoice':
                 vals.setdefault('invoice_date', today)
                 vals.setdefault('date', today)
+                if vals.get('is_old_gold'):
+                    vals['is_old_gold_bill'] = True
+                if vals.get('is_diamond_og'):
+                    vals['is_sale_return_shop'] = True
         return super().create(vals_list)
 
 
@@ -182,9 +256,12 @@ class AccountMove(models.Model):
                 record.amount_total = 0.0
         return res
     def action_approve_bill(self):
+        is_manager = self.env.user.has_group('em_jewellery_management.group_jewellery_manager')
+        is_billing = self.env.user.has_group('em_jewellery_management.group_jewellery_billing_staff')
         for move in self:
-            if not self.env.user.has_group('em_jewellery_management.group_jewellery_manager'):
-                raise ValidationError(_("Only managers can approve vendor bills."))
+            if not is_manager:
+                if not (is_billing and move._is_og_or_diamond_og()):
+                    raise ValidationError(_("Only managers can approve vendor bills."))
             move.is_approved = True
 
     def action_post(self):
