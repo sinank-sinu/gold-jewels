@@ -467,7 +467,7 @@ class ProductLabel(models.Model):
             except ValueError:
                 raise ValidationError("Internal transfer picking type not found.")
 
-        picking = self.env['stock.picking'].create({
+        picking = self.env['stock.picking'].with_context(skip_label_location_overwrite=True).create({
             'picking_type_id': picking_type.id,
             'location_id': self.source_location_id.id,
             'location_dest_id': self.branch_location_id.id,
@@ -475,7 +475,7 @@ class ProductLabel(models.Model):
             'branch_id': self.branch_id.id,
         })
 
-        self.env['stock.move'].create({
+        self.env['stock.move'].with_context(skip_label_location_overwrite=True).create({
             'name': f"Stock In: {self.name}",
             'product_id': self.product_id.id,
             'product_uom_qty': self.purchase_gross_weight or 1.0,
