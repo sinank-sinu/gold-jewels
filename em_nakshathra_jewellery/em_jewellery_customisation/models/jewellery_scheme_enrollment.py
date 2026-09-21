@@ -8,6 +8,16 @@ class JewellerySchemeEnrollment(models.Model):
         selection_add=[('redeemed', 'Redeemed')]
     )
     is_redeemed = fields.Boolean(default=False, tracking=True)
+    total_scheme_amount = fields.Float(
+        string="Total Scheme Amount", 
+        compute="_compute_total_scheme_amount", 
+        tracking=True
+    )
+
+    @api.depends('duration', 'installment_amount')
+    def _compute_total_scheme_amount(self):
+        for rec in self:
+            rec.total_scheme_amount = rec.duration * rec.installment_amount
 
     def action_print_single_scheme_report(self):
         """Action for printing the individual detailed report directly"""
@@ -40,7 +50,7 @@ class JewellerySchemeEnrollment(models.Model):
             duration = rec.duration or 0
             inst_amount = rec.installment_amount or 0.0
             
-            expected_total = duration * inst_amount
+            expected_total = rec.total_scheme_amount if rec.total_scheme_amount > 0 else (duration * inst_amount)
             rec.balance_amount = expected_total - total
 
             # NOTE: If state is not a computed field, setting it here 

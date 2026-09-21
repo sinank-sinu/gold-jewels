@@ -438,6 +438,44 @@ class AccountMove(models.Model):
             else:
                 move.has_outstanding_scheme_payment = False
 
+    scheme_balance_to_pay_customer = fields.Float(
+        string="Scheme Balance to Pay", 
+        compute="_compute_scheme_balance_to_pay_customer"
+    )
+
+    @api.depends('state', 'partner_id', 'payment_state', 'invoice_outstanding_credits_debits_widget')
+    def _compute_scheme_balance_to_pay_customer(self):
+        for move in self:
+            if move.state == 'posted' and move.move_type == 'out_invoice':
+                scheme_lines = move._get_outstanding_scheme_payment_lines()
+                total = 0.0
+                for l in scheme_lines:
+                    if l.currency_id and l.currency_id == move.currency_id:
+                        total += abs(l.amount_residual_currency)
+                    else:
+                        total += abs(l.amount_residual)
+                move.scheme_balance_to_pay_customer = total
+            else:
+                move.scheme_balance_to_pay_customer = 0.0
+
+    def action_pay_scheme_balance_to_customer(self):
+        self.ensure_one()
+        return {
+            'name': 'Customer Payment',
+            'type': 'ir.actions.act_window',
+            'res_model': 'account.payment',
+            'view_mode': 'form',
+            'context': {
+                'default_partner_id': self.partner_id.id,
+                'default_payment_type': 'outbound',
+                'default_partner_type': 'customer',
+                'default_amount': self.scheme_balance_to_pay_customer,
+                'default_is_scheme_refund': True,
+                'default_scheme_refund_invoice_id': self.id,
+            },
+            'target': 'new',
+        }
+
     def action_redeem_outstanding_schemes(self):
         self.ensure_one()
         scheme_lines = self._get_outstanding_scheme_payment_lines()
@@ -781,5 +819,23 @@ class AccountMove(models.Model):
 #             adjusted_total = move.amount_total + move.amount_rounding
 
 #             move.amount_total = ceil(adjusted_total / 100.0) * 100
+
+class AccountPayment(models.Model):
+    _inherit = 'account.payment'
+
+    is_scheme_refund = fields.Boolean(string="Is Scheme Refund")
+    scheme_refund_invoice_id = fields.Many2one('account.move', string="Refund Invoice")
+
+    def action_post(self):
+        res = super().action_post()
+        for payment in self:
+            if payment.is_scheme_refund and payment.scheme_refund_invoice_id:
+                scheme_lines = payment.scheme_refund_invoice_id._get_outstanding_scheme_payment_lines()
+                payment_line = payment.line_ids.filtered(
+                    lambda l: l.account_id.account_type == 'asset_receivable' and l.debit > 0
+                )
+                if scheme_lines and payment_line:
+                    (scheme_lines + payment_line).reconcile()
+        return res
 
 

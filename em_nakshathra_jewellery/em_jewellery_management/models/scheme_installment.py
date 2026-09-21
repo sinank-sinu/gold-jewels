@@ -122,6 +122,59 @@ class JewellerySchemeInstallment(models.Model):
                             Markup("").join(changes),
                         )
                         rec.enrollment_id.message_post(body=body, subtype_xmlid='mail.mt_note')
+                        
+        # POST-WRITE SPLIT LOGIC
+        if not self.env.context.get('skip_installment_split'):
+            if vals.get('state') == 'paid' or 'amount' in vals:
+                for rec in self:
+                    if rec.state == 'paid':
+                        enrollment = rec.enrollment_id
+                        if enrollment and enrollment.installment_amount > 0:
+                            inst_amt = enrollment.installment_amount
+                            if rec.amount > inst_amt:
+                                remaining = rec.amount - inst_amt
+                                
+                                # Cap this record's amount
+                                rec.with_context(skip_installment_split=True, skip_scheme_tracking=True, skip_installment_write_note=True).write({'amount': inst_amt})
+                                
+                                base_date = rec.date or fields.Date.today()
+                                i = 1
+                                extra_vals = []
+                                while remaining > 0:
+                                    split_amt = inst_amt if remaining >= inst_amt else remaining
+                                    remaining -= split_amt
+                                    
+                                    extra_vals.append({
+                                        'enrollment_id': enrollment.id,
+                                        'amount': split_amt,
+                                        'date': base_date + relativedelta(months=i),
+                                        'state': 'paid',
+                                        'journal_id': rec.journal_id.id,
+                                        'transaction_id': rec.transaction_id,
+                                        'move_id': rec.move_id.id,
+                                        'suspense_move_id': rec.suspense_move_id.id,
+                                        'remark': rec.remark,
+                                    })
+                                    i += 1
+                                
+                                if extra_vals:
+                                    # Create the extra installment lines silently
+                                    self.env['jewellery.scheme.installment'].with_context(
+                                        skip_installment_split=True, 
+                                        skip_scheme_tracking=True
+                                    ).create(extra_vals)
+                                    
+                                    # Manually log the split to chatter if tracking is enabled
+                                    if not self.env.context.get('skip_scheme_tracking'):
+                                        lines_html = Markup("").join(
+                                            Markup('<li>Amount: %s, Date: %s, State: Paid</li>') % (
+                                                f"{v['amount']:,.2f}",
+                                                v['date']
+                                            ) for v in extra_vals
+                                        )
+                                        body = Markup('<p><strong>Payment Split into Additional Installments:</strong></p><ul>%s</ul>') % lines_html
+                                        enrollment.message_post(body=body, subtype_xmlid='mail.mt_note')
+
         return res
 
     def unlink(self):
@@ -153,7 +206,7 @@ class JewellerySchemeInstallment(models.Model):
             raise UserError(_("No partner found on the scheme enrollment."))
 
         enrollment = self.enrollment_id
-        expected_total = enrollment.duration * enrollment.installment_amount
+        expected_total = enrollment.total_scheme_amount if hasattr(enrollment, 'total_scheme_amount') and enrollment.total_scheme_amount > 0 else (enrollment.duration * enrollment.installment_amount)
         if expected_total > 0 and (enrollment.total_paid + self.amount) > expected_total:
             raise UserError(
                 _("Transfer limit exceeded. Total allowed amount for this scheme is %s. You cannot transfer more than the allowed duration.") % expected_total)
@@ -434,16 +487,8 @@ class JewellerySchemeInstallment(models.Model):
             if inst_amt <= 0:
                 raise UserError(_("Invalid installment amount."))
 
-            if payment_amount < inst_amt:
-                raise UserError(_("Payment amount must be at least one installment."))
 
-            if payment_amount % inst_amt != 0:
-                raise UserError(
-                    _("Payment amount must be a multiple of installment amount (%s).")
-                    % inst_amt
-                )
-
-            expected_total = enrollment.duration * inst_amt
+            expected_total = enrollment.total_scheme_amount if hasattr(enrollment, 'total_scheme_amount') and enrollment.total_scheme_amount > 0 else (enrollment.duration * inst_amt)
             if expected_total > 0 and (enrollment.total_paid + payment_amount) > expected_total:
                 raise UserError(_("Payment limit exceeded. Total allowed amount for this scheme is %s. You cannot pay more than the allowed duration.") % expected_total)
 

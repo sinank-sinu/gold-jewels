@@ -14,6 +14,14 @@
                             class="btn btn-primary"
                             confirm="Are you sure you want to redeem the outstanding scheme payment(s) against this invoice?"/>
                 </div>
+                <div class="mt-2" invisible="scheme_balance_to_pay_customer &lt;= 0">
+                    <strong>Scheme Balance to Pay Customer: </strong>
+                    <field name="scheme_balance_to_pay_customer" readonly="1" class="oe_inline mr-2"/>
+                    <button name="action_pay_scheme_balance_to_customer"
+                            type="object"
+                            string="Pay Customer"
+                            class="btn btn-secondary"/>
+                </div>
             </xpath>
             <xpath expr="//field[@name='old_gold_price']" position="after">
                 <field name="has_customer_payment" invisible="1"/>

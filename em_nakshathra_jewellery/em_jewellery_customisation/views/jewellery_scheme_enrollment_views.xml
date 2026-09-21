@@ -9,6 +9,7 @@
             </xpath>
             <xpath expr="//field[@name='balance_amount']" position="after">
                 <field name="is_redeemed"/>
+                <field name="total_scheme_amount"/>
             </xpath>
             <xpath expr="//header" position="inside">
                 <button name="action_print_single_scheme_report"
