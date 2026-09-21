@@ -2,6 +2,7 @@ from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from datetime import datetime, timedelta
 
+
 class SalesmanCart(models.Model):
     _name = 'salesman.cart'
     _description = 'Salesman Digital Cart'
@@ -10,14 +11,14 @@ class SalesmanCart(models.Model):
     name = fields.Char(string='Cart Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'))
     salesman_id = fields.Many2one('res.users', string='Salesman', default=lambda self: self.env.user, required=True)
     partner_id = fields.Many2one('res.partner', string='Customer')
-    opportunity_id = fields.Many2one('crm.lead', string='Source Opportunity') 
+    opportunity_id = fields.Many2one('crm.lead', string='Source Opportunity')
     cart_line_ids = fields.One2many('salesman.cart.line', 'cart_id', string='Cart Lines')
     state = fields.Selection([
         ('draft', 'Active'),
         ('checked_out', 'Sent to Billing'),
         ('cancelled', 'Expired/Cancelled')
     ], string='Status', default='draft', tracking=True)
-    
+
     total_weight = fields.Float(string='Total Gross Weight', compute='_compute_totals', store=True)
     total_amount = fields.Monetary(string='Estimated Total', compute='_compute_totals', store=True)
     currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
@@ -42,7 +43,8 @@ class SalesmanCart(models.Model):
             raise UserError(_("This labeled piece is already in your tray."))
 
         if not label_id and product_id in self.cart_line_ids.filtered(lambda l: not l.label_id).mapped('product_id.id'):
-            raise UserError(_("This vault item is already in your tray. Remove it first if you wish to adjust the weight."))
+            raise UserError(
+                _("This vault item is already in your tray. Remove it first if you wish to adjust the weight."))
 
         if label_id:
             label_rec = self.env['product.label'].browse(label_id)
@@ -50,7 +52,7 @@ class SalesmanCart(models.Model):
                 qty = label_rec.sale_gross_weight
             elif label_rec.purchase_gross_weight:
                 qty = label_rec.purchase_gross_weight
-            
+
         salesman_loc = self.salesman_id.salesman_location_id
         if not salesman_loc:
             raise UserError(_("Please assign a dedicated Stock Location to your user profile first."))
@@ -59,48 +61,67 @@ class SalesmanCart(models.Model):
         _logger = logging.getLogger(__name__)
 
         product = self.env['product.product'].browse(product_id)
-        
-        company_id = self.env.company
-        
+
+        # Always use the salesman's own company for warehouse/picking type lookups
+        # (self.env.company can be wrong if called as SUPERUSER or from a different company session)
+        company_id = self.salesman_id.company_id or self.env.company
+
         # Find the user's branch internal locations
         user_branch = self.salesman_id.branch_id
         if not user_branch:
             raise UserError(_("Salesman has no branch configured on their user profile."))
-        
+
         branch_locations = self.env['stock.location'].search([
             ('branch_id', '=', user_branch.id),
             ('usage', '=', 'internal')
         ])
-        
+
         if not branch_locations:
             raise UserError(_("No internal stock locations found for branch '%s'.") % user_branch.name)
-        
-        # Find which branch location actually has stock for this product (via stock.quant)
-        quant = self.env['stock.quant'].search([
-            ('product_id', '=', product.id),
-            ('location_id', 'in', branch_locations.ids),
-            ('quantity', '>', 0),
-        ], order='quantity desc', limit=1)
-        
-        if quant:
-            src_location = quant.location_id
-        else:
-            # Fallback: use first branch location if no quant found (rare edge case)
-            src_location = branch_locations[0]
-        
-        _logger.info("Transfer: %s (%s) FROM %s TO %s", product.display_name, product.id, src_location.complete_name, salesman_loc.complete_name)
-        
-        # Find an internal picking type (prefer one on any warehouse)
-        picking_type = self.env['stock.picking.type'].sudo().search([
-            ('code', '=', 'internal'),
+
+        # Determine source location: prefer the label's branch_location_id (where it physically is now)
+        # then fall back to quant search, then first branch location
+        src_location = False
+        if label_id:
+            label_rec = self.env['product.label'].browse(label_id)
+            if label_rec.branch_location_id and label_rec.branch_location_id.id in branch_locations.ids:
+                src_location = label_rec.branch_location_id
+
+        if not src_location:
+            quant = self.env['stock.quant'].search([
+                ('product_id', '=', product.id),
+                ('location_id', 'in', branch_locations.ids),
+                ('quantity', '>', 0),
+            ], order='quantity desc', limit=1)
+            src_location = quant.location_id if quant else branch_locations[0]
+
+        _logger.info("Transfer: %s (%s) FROM %s TO %s", product.display_name, product.id, src_location.complete_name,
+                     salesman_loc.complete_name)
+
+        # Find the picking type from the branch's warehouse (int_type_id) so the sequence
+        # name matches the branch/warehouse (e.g. NTN/INT/... instead of SLV/INT/...)
+        warehouse = self.env['stock.warehouse'].sudo().search([
+            ('branch_id', '=', user_branch.id),
             ('company_id', '=', company_id.id),
         ], limit=1)
-        
+
+        if warehouse and warehouse.int_type_id:
+            picking_type = warehouse.int_type_id
+        else:
+            # Fallback to any internal picking type for the company
+            picking_type = self.env['stock.picking.type'].sudo().search([
+                ('code', '=', 'internal'),
+                ('company_id', '=', company_id.id),
+            ], limit=1)
+
         if not picking_type:
             raise UserError(_("No internal transfer operation type found for company %s.") % company_id.name)
 
+        # Context to prevent _compute_location_id from overwriting our explicit locations
+        picking_ctx = dict(self.env.context, skip_label_location_overwrite=True)
+
         # 1. Create the picking directly with correct locations
-        picking = self.env['stock.picking'].sudo().create({
+        picking = self.env['stock.picking'].sudo().with_context(picking_ctx).create({
             'picking_type_id': picking_type.id,
             'origin': f"Salesman Cart {self.name}",
             'company_id': company_id.id,
@@ -109,8 +130,11 @@ class SalesmanCart(models.Model):
             'user_id': self.salesman_id.id,
         })
 
+        # Ensure locations are pinned correctly after create (compute may fire async)
+        picking.sudo().write({'location_id': src_location.id, 'location_dest_id': salesman_loc.id})
+
         # 2. Create the stock move
-        move = self.env['stock.move'].sudo().create({
+        move = self.env['stock.move'].sudo().with_context(picking_ctx).create({
             'name': product.display_name,
             'product_id': product.id,
             'product_uom_qty': qty,
@@ -123,9 +147,11 @@ class SalesmanCart(models.Model):
         })
 
         # 3. Confirm and assign
-        picking.action_confirm()
-        picking.action_assign()
-        
+        picking.with_context(picking_ctx).action_confirm()
+        # Re-assert locations after confirm (rules/procurement may adjust them)
+        picking.sudo().write({'location_id': src_location.id, 'location_dest_id': salesman_loc.id})
+        picking.with_context(picking_ctx).action_assign()
+
         # 4. Force correct locations on all generated move lines
         for ml in move.move_line_ids:
             ml.sudo().write({
@@ -141,7 +167,7 @@ class SalesmanCart(models.Model):
         # 5. Validate if ready
         try:
             if picking.state == 'assigned':
-                picking.sudo().button_validate()
+                picking.sudo().with_context(picking_ctx).button_validate()
         except Exception as e:
             _logger.warning("Picking validation warning: %s", str(e))
 
@@ -155,70 +181,98 @@ class SalesmanCart(models.Model):
         })
         return cart_line.id
 
-
-
     def action_remove_line(self, line_id):
-        """Unreserves stock via automated return if 'Done', cancels if pending, then deletes line"""
+        """Unreserves stock via automated return if 'Done', cancels if pending, then deletes line.
+
+        Return logic:
+          - Original cart picking moved FROM src_location (e.g. FINAL) TO salesman_loc (SM/C1).
+          - Return must move FROM salesman_loc (SM/C1) BACK TO src_location (FINAL).
+          - We explicitly set and protect these locations using skip_label_location_overwrite.
+        """
         self.ensure_one()
         line = self.env['salesman.cart.line'].browse(line_id)
         if not line.exists() or line.cart_id.id != self.id:
             return False
-            
+
         if self.state != 'draft':
             raise UserError(_("You can only remove items from an active draft tray."))
+
+        # Context that prevents _compute_location_id from overwriting our explicit locations
+        skip_ctx = dict(self.env.context, skip_label_location_overwrite=True)
 
         picking = line.picking_id.sudo()
         if picking:
             if picking.state == 'done':
-                # 1. Initialize the stock return wizard object setup
-                return_wizard_obj = self.env['stock.return.picking'].sudo().with_context(
-                    active_id=picking.id, 
-                    active_model='stock.picking'
-                ).create({})
-                
+                # The original picking: FROM orig_src TO salesman_loc
+                # The return must go: FROM salesman_loc BACK TO orig_src
+                salesman_loc_id = picking.location_dest_id.id  # SM/C1
+                orig_src_id = picking.location_id.id  # FINAL
+
+                # 1. Resolve actual source from the move (move.location_id is the real source)
                 original_move = picking.move_ids.filtered(lambda m: m.product_id.id == line.product_id.id)
                 if original_move:
-                    return_wizard_obj.location_id = original_move[0].location_id.id
-                else:
-                    return_wizard_obj.location_id = picking.location_id.id
-                
-                # 2. FIXED FOR ODOO 17: Explicitly locate the specific move line to return inside the wizard
-                # matching it precisely to avoid empty quantity validation exceptions
+                    orig_src_id = original_move[0].location_id.id
+                    # Salesman loc is the dest of the original cart picking move
+                    salesman_loc_id = original_move[0].location_dest_id.id
+
+                # 2. Build return wizard: return goes from salesman_loc back to orig_src
+                return_wizard_obj = self.env['stock.return.picking'].sudo().with_context(
+                    active_id=picking.id,
+                    active_model='stock.picking',
+                    **skip_ctx
+                ).create({})
+
+                # Return destination = where the piece was originally picked from
+                return_wizard_obj.location_id = orig_src_id
+
+                # 3. Set return quantity on wizard lines
                 wizard_move_line = return_wizard_obj.product_return_moves.filtered(
                     lambda m: m.product_id.id == line.product_id.id
                 )
-                
                 if wizard_move_line:
                     wizard_move_line.quantity = line.qty
                 else:
-                    # Fallback context safe safeguard if filtered match isn't immediate
                     for move_item in return_wizard_obj.product_return_moves:
                         move_item.quantity = line.qty
 
-                # 3. Process the explicit return mapping creation pipeline
+                # 4. Create the return picking
                 return_res = return_wizard_obj._create_returns()
                 return_picking_id = return_res[0]
                 return_picking = self.env['stock.picking'].sudo().browse(return_picking_id)
-                
-                # 4. Finalize the movement confirmation tracking ledgers
-                return_picking.action_assign()
+
+                # 5. Force correct locations: FROM salesman_loc TO orig_src
+                return_picking.with_context(skip_ctx).write({
+                    'location_id': salesman_loc_id,
+                    'location_dest_id': orig_src_id,
+                })
+
+                return_picking.with_context(skip_ctx).action_assign()
+
                 for move in return_picking.move_ids:
-                    move.quantity = line.qty  
+                    move.sudo().write({
+                        'location_id': salesman_loc_id,
+                        'location_dest_id': orig_src_id,
+                    })
+                    move.quantity = line.qty
                     for move_line in move.move_line_ids:
-                        move_line.quantity = line.qty
+                        move_line.sudo().write({
+                            'quantity': line.qty,
+                            'location_id': salesman_loc_id,
+                            'location_dest_id': orig_src_id,
+                        })
                         if line.lot_id:
                             move_line.lot_id = line.lot_id.id
-                            
-                return_picking.button_validate()
-                
+
+                return_picking.with_context(skip_ctx).button_validate()
+
             elif picking.state not in ['cancel', 'done']:
-                # If the picking was just sitting in draft/assigned state, cancel it normally
+                # Picking was never validated — simply cancel it
                 picking.action_cancel()
 
-        # Safely remove the line row from your UI tray
+        # Safely remove the line row from the UI tray
         line.unlink()
         return True
-        
+
     def action_checkout_to_so(self):
         """Converts Tray items into a draft Quotation safely handling multi-company branch alignment"""
         self.ensure_one()
@@ -247,10 +301,12 @@ class SalesmanCart(models.Model):
             branch = self.env['res.branch'].search([], limit=1)
 
         if not branch:
-            raise UserError(_("No branch could be determined. Please configure a branch on the customer or your user profile."))
+            raise UserError(
+                _("No branch could be determined. Please configure a branch on the customer or your user profile."))
 
         if not branch.branch_code:
-            raise UserError(_("The selected branch does not have a Branch Code configured. Please configure it in branch settings."))
+            raise UserError(
+                _("The selected branch does not have a Branch Code configured. Please configure it in branch settings."))
 
         # Derive the company from the resolved branch
         target_company = branch.company_id if branch.company_id else self.env.company
@@ -289,7 +345,7 @@ class SalesmanCart(models.Model):
             'branch_id': branch.id,
             'state': 'draft',
         }
-        
+
         # 5. Create the Sales Order
         sale_order = sale_order_model.with_context(skip_partner_branch_check=True).create(so_vals)
 
@@ -297,10 +353,9 @@ class SalesmanCart(models.Model):
         locked_lines = self.cart_line_ids.filtered(lambda l: l.is_locked)
         if not locked_lines:
             raise UserError(_("Please lock at least one item before sending to the billing counter."))
-            
+
         lines_to_checkout = locked_lines
         lines_to_trash = self.cart_line_ids - locked_lines
-
 
         for line in lines_to_checkout:
             # Use the label directly from the salesman cart line only.
@@ -358,7 +413,6 @@ class SalesmanCart(models.Model):
         self.write({'state': 'checked_out'})
         sale_order._compute_amounts()
         return sale_order.id
-   
 
         # This core adjustment forces the delivery creation interceptor:
         def custom_picking_origin_override(so):
@@ -366,24 +420,74 @@ class SalesmanCart(models.Model):
             pass
 
         self.write({'state': 'checked_out'})
-        
+
         # Return the ID context link
         return sale_order.id
 
     def action_cancel_and_release(self):
-        """Reverses picking, returns jewelry pieces to main showroom floor"""
+        """Reverses picking, returns jewelry pieces to main showroom floor.
+
+        Return must go FROM salesman_loc BACK TO the original source location.
+        skip_label_location_overwrite prevents _compute_location_id from clobbering these.
+        """
+        skip_ctx = dict(self.env.context, skip_label_location_overwrite=True)
+
         for cart in self:
             for line in cart.cart_line_ids:
-                if line.picking_id and line.picking_id.state == 'done':
-                    # Create a reverse picking return
-                    return_wizard = self.env['stock.return.picking'].with_context(active_id=line.picking_id.id).create({})
-                    
-                    original_move = line.picking_id.move_ids.filtered(lambda m: m.product_id.id == line.product_id.id)
-                    if original_move:
-                        return_wizard.location_id = original_move[0].location_id.id
-                    else:
-                        return_wizard.location_id = line.picking_id.location_id.id
-                    return_wizard._create_returns()
+                picking = line.picking_id
+                if not picking or picking.state != 'done':
+                    continue
+
+                # Determine original src (FINAL) and salesman dest (SM/C)
+                original_move = picking.move_ids.filtered(lambda m: m.product_id.id == line.product_id.id)
+                if original_move:
+                    orig_src_id = original_move[0].location_id.id
+                    salesman_loc_id = original_move[0].location_dest_id.id
+                else:
+                    orig_src_id = picking.location_id.id
+                    salesman_loc_id = picking.location_dest_id.id
+
+                return_wizard = self.env['stock.return.picking'].sudo().with_context(
+                    active_id=picking.id,
+                    active_model='stock.picking',
+                    **skip_ctx
+                ).create({})
+
+                # Return destination = original source
+                return_wizard.location_id = orig_src_id
+
+                for move_item in return_wizard.product_return_moves.filtered(
+                        lambda m: m.product_id.id == line.product_id.id
+                ):
+                    move_item.quantity = line.qty
+
+                ret_res = return_wizard._create_returns()
+                ret_picking = self.env['stock.picking'].sudo().browse(ret_res[0])
+
+                # Force return locations: FROM salesman_loc BACK TO orig_src
+                ret_picking.with_context(skip_ctx).write({
+                    'location_id': salesman_loc_id,
+                    'location_dest_id': orig_src_id,
+                })
+                ret_picking.with_context(skip_ctx).action_assign()
+
+                for move in ret_picking.move_ids:
+                    move.sudo().write({
+                        'location_id': salesman_loc_id,
+                        'location_dest_id': orig_src_id,
+                    })
+                    for ml in move.move_line_ids:
+                        ml.sudo().write({
+                            'quantity': line.qty,
+                            'location_id': salesman_loc_id,
+                            'location_dest_id': orig_src_id,
+                        })
+
+                try:
+                    ret_picking.with_context(skip_ctx).button_validate()
+                except Exception:
+                    pass
+
             cart.write({'state': 'cancelled'})
 
     @api.model
