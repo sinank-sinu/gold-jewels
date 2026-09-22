@@ -29,6 +29,8 @@ class EcommerceCustomer(models.Model):
     address_ids = fields.One2many('ecommerce.address', 'customer_id', string='Saved Addresses')
     currency_id = fields.Many2one('res.currency', string='Preferred Currency')
     branch_id = fields.Many2one('res.branch', string='Preferred Branch')
+    card_ids = fields.One2many('ecommerce.card', 'customer_id', string='Saved Cards')
+    upi_ids = fields.One2many('ecommerce.upi', 'customer_id', string='Saved UPI Profiles')
 
 
     push_notifications = fields.Boolean(string='Push Notifications Preference', default=True)

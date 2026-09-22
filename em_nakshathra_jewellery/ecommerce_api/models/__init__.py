@@ -7,4 +7,6 @@ from . import ecommerce_address
 from . import ecommerce_product_review
 from . import ecommerce_referral
 from . import ecommerce_notification
+from . import ecommerce_card
+from . import ecommerce_upi
 

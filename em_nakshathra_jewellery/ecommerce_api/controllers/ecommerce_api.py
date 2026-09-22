@@ -1514,6 +1514,151 @@ class EcommerceBranchAPI(http.Controller):
             return self._json_response({"status": "error", "message": str(e)}, 500)
 
     # ─────────────────────────────────────────────
+    # GET CUSTOMER PROFILE API (JSON & HTTP)
+    # ─────────────────────────────────────────────
+    def _get_customer_profile_data(self, **kwargs):
+        customer_id = kwargs.get('customer_id')
+        if not customer_id:
+            # Fallback to session or Authorization token if provided
+            if request.session and request.session.get('customer_id'):
+                customer_id = request.session.get('customer_id')
+            elif request.httprequest and request.httprequest.headers.get('Authorization'):
+                token = request.httprequest.headers.get('Authorization', '').replace('Bearer ', '').strip()
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                if cust:
+                    customer_id = cust.id
+
+        if not customer_id:
+            return {"status": "error", "message": "customer_id is required"}
+
+        try:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+        except (ValueError, TypeError):
+            return {"status": "error", "message": "Invalid customer_id format"}
+
+        if not customer.exists():
+            return {"status": "error", "message": "Customer not found"}
+
+        orders_count = request.env['ecommerce.order'].sudo().search_count([('customer_id', '=', customer.id)])
+        wishlist_count = request.env['ecommerce.wishlist'].sudo().search_count([('customer_id', '=', customer.id)])
+        reviews_count = request.env['ecommerce.product.review'].sudo().search_count([('customer_id', '=', customer.id)])
+
+        saved_addresses_count = len(customer.address_ids)
+        saved_cards_count = len(customer.card_ids)
+        saved_upi_count = len(customer.upi_ids)
+        payment_methods_count = saved_cards_count + saved_upi_count
+
+        membership = "Gold Member"
+        if orders_count >= 10:
+            membership = "Gold Member"
+        elif orders_count >= 5:
+            membership = "Silver Member"
+        else:
+            membership = "Gold Member" if customer.id == 1 else "Bronze Member"
+
+        resolved_branch = customer.branch_id
+
+        my_account = [
+            {
+                "key": "orders",
+                "title": "My Orders",
+                "subtitle": "Track, return or buy again",
+                "count": orders_count,
+                "icon": "orders"
+            },
+            {
+                "key": "addresses",
+                "title": "Saved Addresses",
+                "subtitle": "Manage delivery addresses",
+                "count": saved_addresses_count,
+                "icon": "addresses"
+            },
+            {
+                "key": "payment_methods",
+                "title": "Payment Methods",
+                "subtitle": "Cards, UPI, net banking",
+                "count": payment_methods_count,
+                "icon": "payment_methods"
+            }
+        ]
+
+        return {
+            "status": "success",
+            "customer": {
+                "id": customer.id,
+                "name": customer.name,
+                "first_name": customer.first_name,
+                "last_name": customer.last_name,
+                "email": customer.email,
+                "phone": customer.phone or "",
+                "city": customer.city or "",
+                "branch_id": resolved_branch.id if resolved_branch else None,
+                "branch_name": resolved_branch.name if resolved_branch else None,
+                "membership": membership,
+                "member_tier": membership,
+                "badge": membership,
+                "orders_count": orders_count,
+                "wishlist_count": wishlist_count,
+                "reviews_count": reviews_count,
+                "push_notifications": customer.push_notifications,
+                "order_updates": customer.order_updates,
+                "offer_alerts": customer.offer_alerts,
+                "email_newsletter": customer.email_newsletter
+            },
+            "stats": {
+                "orders": orders_count,
+                "wishlist": wishlist_count,
+                "reviews": reviews_count
+            },
+            "orders_count": orders_count,
+            "wishlist_count": wishlist_count,
+            "reviews_count": reviews_count,
+            "orders": orders_count,
+            "wishlist": wishlist_count,
+            "reviews": reviews_count,
+            "membership": membership,
+            "member_tier": membership,
+            "badge": membership,
+            "my_account": my_account
+        }
+
+    @http.route([
+        '/api/ecommerce/customer/profile',
+        '/api/ecommerce/profile'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_customer_profile(self, **kwargs):
+        try:
+            return self._get_customer_profile_data(**kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/profile',
+        '/api/ecommerce/profile'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def get_customer_profile_http(self, **kwargs):
+        try:
+            params = dict(kwargs)
+            if request.httprequest.is_json:
+                try:
+                    data = request.get_json_data() or {}
+                    if isinstance(data, dict):
+                        # Extract params if wrapped in JSON-RPC style or direct
+                        if 'params' in data and isinstance(data['params'], dict):
+                            params.update(data['params'])
+                        else:
+                            params.update(data)
+                except Exception:
+                    pass
+            if 'customer_id' not in params and request.httprequest.args.get('customer_id'):
+                params['customer_id'] = request.httprequest.args.get('customer_id')
+            data = self._get_customer_profile_data(**params)
+            status_code = 200 if data.get('status') == 'success' else 400
+            return self._json_response(data, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
     # UPDATE CUSTOMER PROFILE API (JSON)
     # ─────────────────────────────────────────────
     @http.route('/api/ecommerce/customer/update', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
@@ -1599,6 +1744,385 @@ class EcommerceBranchAPI(http.Controller):
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # NOTIFICATION PREFERENCES CONSTANTS & HELPERS
+    # ─────────────────────────────────────────────
+    NOTIFICATION_METADATA = {
+        'push_notifications': {
+            'title': 'Push Notifications',
+            'subtitle': 'Alerts on new arrivals & deals',
+        },
+        'order_updates': {
+            'title': 'Order Updates',
+            'subtitle': 'Shipping & delivery status',
+        },
+        'offer_alerts': {
+            'title': 'Offer Alerts',
+            'subtitle': 'Festive discounts & flash sales',
+        },
+        'email_newsletter': {
+            'title': 'Email Newsletter',
+            'subtitle': 'Monthly trends & new collections',
+        },
+    }
+
+    def _parse_notification_bool(self, val):
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return bool(val)
+        if isinstance(val, str):
+            clean = val.strip().lower()
+            if clean in ('true', '1', 'yes', 'on', 'enable', 'enabled'):
+                return True
+            if clean in ('false', '0', 'no', 'off', 'disable', 'disabled'):
+                return False
+        return bool(val)
+
+    def _extract_request_params(self, kwargs):
+        params = dict(kwargs)
+        if hasattr(request, 'httprequest'):
+            for k, v in request.httprequest.args.items():
+                if k not in params:
+                    params[k] = v
+            if getattr(request.httprequest, 'is_json', False):
+                try:
+                    data = request.get_json_data() or {}
+                    if isinstance(data, dict):
+                        if 'params' in data and isinstance(data['params'], dict):
+                            params.update(data['params'])
+                        else:
+                            params.update(data)
+                except Exception:
+                    pass
+            elif getattr(request.httprequest, 'data', None):
+                try:
+                    data = json.loads(request.httprequest.data.decode('utf-8'))
+                    if isinstance(data, dict):
+                        if 'params' in data and isinstance(data['params'], dict):
+                            params.update(data['params'])
+                        else:
+                            params.update(data)
+                except Exception:
+                    pass
+        return params
+
+    def _resolve_customer_for_notifications(self, **kwargs):
+        customer_id = kwargs.get('customer_id')
+        if not customer_id:
+            if request.session and request.session.get('customer_id'):
+                customer_id = request.session.get('customer_id')
+            elif hasattr(request, 'httprequest') and request.httprequest.headers.get('Authorization'):
+                token = request.httprequest.headers.get('Authorization', '').replace('Bearer ', '').replace('Token ', '').strip()
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                if cust:
+                    customer_id = cust.id
+            elif kwargs.get('auth_token'):
+                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', kwargs.get('auth_token'))], limit=1)
+                if cust:
+                    customer_id = cust.id
+
+        if not customer_id:
+            return None, {"status": "error", "message": "customer_id is required"}
+
+        try:
+            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+        except (ValueError, TypeError):
+            return None, {"status": "error", "message": "Invalid customer_id format"}
+
+        if not customer.exists():
+            return None, {"status": "error", "message": "Customer not found"}
+
+        return customer, None
+
+    def _update_single_notification_pref(self, pref_key, **kwargs):
+        try:
+            customer, err = self._resolve_customer_for_notifications(**kwargs)
+            if err:
+                return err
+
+            meta = self.NOTIFICATION_METADATA.get(pref_key, {
+                'title': pref_key.replace('_', ' ').title(),
+                'subtitle': ''
+            })
+
+            # Determine whether a new value is provided
+            val_to_set = None
+            has_val = False
+            for k in [pref_key, 'enabled', 'value', 'status', 'state']:
+                if k in kwargs and kwargs[k] is not None:
+                    val_to_set = self._parse_notification_bool(kwargs[k])
+                    has_val = True
+                    break
+
+            if not has_val and kwargs.get('action') == 'toggle':
+                current = bool(getattr(customer, pref_key))
+                val_to_set = not current
+                has_val = True
+
+            if has_val:
+                customer.write({pref_key: val_to_set})
+                action_word = "enabled" if val_to_set else "disabled"
+                message = f"{meta['title']} {action_word} successfully"
+            else:
+                message = f"{meta['title']} preference retrieved successfully"
+
+            current_val = bool(getattr(customer, pref_key))
+            all_prefs = {
+                "push_notifications": customer.push_notifications,
+                "order_updates": customer.order_updates,
+                "offer_alerts": customer.offer_alerts,
+                "email_newsletter": customer.email_newsletter
+            }
+
+            return {
+                "status": "success",
+                "message": message,
+                "customer_id": customer.id,
+                "key": pref_key,
+                "title": meta['title'],
+                "subtitle": meta['subtitle'],
+                "enabled": current_val,
+                pref_key: current_val,
+                "data": {
+                    "customer_id": customer.id,
+                    "key": pref_key,
+                    "title": meta['title'],
+                    "subtitle": meta['subtitle'],
+                    "enabled": current_val,
+                    pref_key: current_val,
+                    "preferences": all_prefs
+                },
+                "preferences": all_prefs
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # 1. PUSH NOTIFICATIONS API
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/customer/push_notifications',
+        '/api/ecommerce/customer/push-notifications',
+        '/api/ecommerce/customer/notification/push_notifications',
+        '/api/ecommerce/notifications/push_notifications',
+        '/api/ecommerce/push_notifications'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_push_notifications_json(self, **kwargs):
+        try:
+            return self._update_single_notification_pref('push_notifications', **kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/push_notifications',
+        '/api/ecommerce/customer/push-notifications',
+        '/api/ecommerce/customer/notification/push_notifications',
+        '/api/ecommerce/notifications/push_notifications',
+        '/api/ecommerce/push_notifications'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_push_notifications_http(self, **kwargs):
+        try:
+            params = self._extract_request_params(kwargs)
+            res = self._update_single_notification_pref('push_notifications', **params)
+            status_code = 200 if res.get('status') == 'success' else 400
+            return self._json_response(res, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # 2. ORDER UPDATES API
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/customer/order_updates',
+        '/api/ecommerce/customer/order-updates',
+        '/api/ecommerce/customer/notification/order_updates',
+        '/api/ecommerce/notifications/order_updates',
+        '/api/ecommerce/order_updates'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_order_updates_json(self, **kwargs):
+        try:
+            return self._update_single_notification_pref('order_updates', **kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/order_updates',
+        '/api/ecommerce/customer/order-updates',
+        '/api/ecommerce/customer/notification/order_updates',
+        '/api/ecommerce/notifications/order_updates',
+        '/api/ecommerce/order_updates'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_order_updates_http(self, **kwargs):
+        try:
+            params = self._extract_request_params(kwargs)
+            res = self._update_single_notification_pref('order_updates', **params)
+            status_code = 200 if res.get('status') == 'success' else 400
+            return self._json_response(res, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # 3. OFFER ALERTS API
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/customer/offer_alerts',
+        '/api/ecommerce/customer/offer-alerts',
+        '/api/ecommerce/customer/notification/offer_alerts',
+        '/api/ecommerce/notifications/offer_alerts',
+        '/api/ecommerce/offer_alerts'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_offer_alerts_json(self, **kwargs):
+        try:
+            return self._update_single_notification_pref('offer_alerts', **kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/offer_alerts',
+        '/api/ecommerce/customer/offer-alerts',
+        '/api/ecommerce/customer/notification/offer_alerts',
+        '/api/ecommerce/notifications/offer_alerts',
+        '/api/ecommerce/offer_alerts'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_offer_alerts_http(self, **kwargs):
+        try:
+            params = self._extract_request_params(kwargs)
+            res = self._update_single_notification_pref('offer_alerts', **params)
+            status_code = 200 if res.get('status') == 'success' else 400
+            return self._json_response(res, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # 4. EMAIL NEWSLETTER API
+    # ─────────────────────────────────────────────
+    @http.route([
+        '/api/ecommerce/customer/email_newsletter',
+        '/api/ecommerce/customer/email-newsletter',
+        '/api/ecommerce/customer/notification/email_newsletter',
+        '/api/ecommerce/notifications/email_newsletter',
+        '/api/ecommerce/email_newsletter'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_email_newsletter_json(self, **kwargs):
+        try:
+            return self._update_single_notification_pref('email_newsletter', **kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/email_newsletter',
+        '/api/ecommerce/customer/email-newsletter',
+        '/api/ecommerce/customer/notification/email_newsletter',
+        '/api/ecommerce/notifications/email_newsletter',
+        '/api/ecommerce/email_newsletter'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def update_email_newsletter_http(self, **kwargs):
+        try:
+            params = self._extract_request_params(kwargs)
+            res = self._update_single_notification_pref('email_newsletter', **params)
+            status_code = 200 if res.get('status') == 'success' else 400
+            return self._json_response(res, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
+
+    # ─────────────────────────────────────────────
+    # ALL NOTIFICATION PREFERENCES (LIST & BULK UPDATE)
+    # ─────────────────────────────────────────────
+    def _handle_all_notification_preferences(self, **kwargs):
+        try:
+            customer, err = self._resolve_customer_for_notifications(**kwargs)
+            if err:
+                return err
+
+            vals = {}
+            for pref in ['push_notifications', 'order_updates', 'offer_alerts', 'email_newsletter']:
+                if pref in kwargs and kwargs[pref] is not None:
+                    vals[pref] = self._parse_notification_bool(kwargs[pref])
+
+            if vals:
+                customer.write(vals)
+                message = "Notification preferences updated successfully"
+            else:
+                message = "Notification preferences retrieved successfully"
+
+            preferences_list = [
+                {
+                    "key": "push_notifications",
+                    "title": "Push Notifications",
+                    "subtitle": "Alerts on new arrivals & deals",
+                    "enabled": customer.push_notifications
+                },
+                {
+                    "key": "order_updates",
+                    "title": "Order Updates",
+                    "subtitle": "Shipping & delivery status",
+                    "enabled": customer.order_updates
+                },
+                {
+                    "key": "offer_alerts",
+                    "title": "Offer Alerts",
+                    "subtitle": "Festive discounts & flash sales",
+                    "enabled": customer.offer_alerts
+                },
+                {
+                    "key": "email_newsletter",
+                    "title": "Email Newsletter",
+                    "subtitle": "Monthly trends & new collections",
+                    "enabled": customer.email_newsletter
+                }
+            ]
+
+            all_prefs = {
+                "push_notifications": customer.push_notifications,
+                "order_updates": customer.order_updates,
+                "offer_alerts": customer.offer_alerts,
+                "email_newsletter": customer.email_newsletter
+            }
+
+            return {
+                "status": "success",
+                "message": message,
+                "customer_id": customer.id,
+                "preferences": preferences_list,
+                "data": {
+                    "customer_id": customer.id,
+                    "title": "Notifications",
+                    "preferences": preferences_list,
+                    "values": all_prefs
+                },
+                "values": all_prefs
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/notifications',
+        '/api/ecommerce/customer/notification_preferences',
+        '/api/ecommerce/customer/notification-preferences',
+        '/api/ecommerce/notifications/preferences'
+    ], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def notification_preferences_json(self, **kwargs):
+        try:
+            return self._handle_all_notification_preferences(**kwargs)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @http.route([
+        '/api/ecommerce/customer/notifications',
+        '/api/ecommerce/customer/notification_preferences',
+        '/api/ecommerce/customer/notification-preferences',
+        '/api/ecommerce/notifications/preferences'
+    ], type='http', auth='public', methods=['GET', 'POST', 'OPTIONS'], cors='*', csrf=False)
+    def notification_preferences_http(self, **kwargs):
+        try:
+            params = self._extract_request_params(kwargs)
+            res = self._handle_all_notification_preferences(**params)
+            status_code = 200 if res.get('status') == 'success' else 400
+            return self._json_response(res, status=status_code)
+        except Exception as e:
+            return self._json_response({"status": "error", "message": str(e)}, 500)
 
     # ─────────────────────────────────────────────
     # CUSTOMER LOGOUT API

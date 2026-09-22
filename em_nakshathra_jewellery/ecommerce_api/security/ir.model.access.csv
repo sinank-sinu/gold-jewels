@@ -13,3 +13,7 @@ access_ecommerce_product_review_user,ecommerce.product.review user,model_ecommer
 access_ecommerce_product_review_public,ecommerce.product.review public,model_ecommerce_product_review,base.group_public,1,1,1,1
 access_ecommerce_referral_user,ecommerce.referral user,model_ecommerce_referral,base.group_user,1,1,1,1
 access_ecommerce_referral_public,ecommerce.referral public,model_ecommerce_referral,base.group_public,1,1,1,1
+access_ecommerce_card_user,ecommerce.card user,model_ecommerce_card,base.group_user,1,1,1,1
+access_ecommerce_card_public,ecommerce.card public,model_ecommerce_card,base.group_public,1,1,1,1
+access_ecommerce_upi_user,ecommerce.upi user,model_ecommerce_upi,base.group_user,1,1,1,1
+access_ecommerce_upi_public,ecommerce.upi public,model_ecommerce_upi,base.group_public,1,1,1,1
