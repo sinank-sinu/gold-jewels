@@ -7,10 +7,18 @@
             <form string="Create Customer Payment">
                 <field name="available_journal_ids" invisible="1"/>
                 <field name="invoice_id" invisible="1" force_save="1"/>
+                <field name="company_id" invisible="1"/>
                 <sheet>
                     <group>
                         <group>
+                            <field name="payment_method_type" widget="radio"/>
                             <field name="journal_id" domain="[('id', 'in', available_journal_ids)]"
+                                   options="{'no_create': True, 'no_open': True}"
+                                   invisible="payment_method_type == 'cash'"
+                                   required="payment_method_type == 'bank'"/>
+                            <field name="account_id" 
+                                   invisible="payment_method_type == 'bank'"
+                                   required="payment_method_type == 'cash'"
                                    options="{'no_create': True, 'no_open': True}"/>
                             <field name="amount"/>
                             <field name="currency_id" invisible="1"/>

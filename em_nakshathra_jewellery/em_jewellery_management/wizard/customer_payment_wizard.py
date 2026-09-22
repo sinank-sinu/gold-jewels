@@ -34,10 +34,19 @@ class CustomerPaymentWizard(models.TransientModel):
         compute='_compute_available_journals',
         string='Available Journals'
     )
+    payment_method_type = fields.Selection([
+        ('cash', 'Cash'),
+        ('bank', 'Bank')
+    ], string='Payment Method', default='bank', required=True)
+
     journal_id = fields.Many2one(
         'account.journal',
         string='Journal',
-        required=True,
+    )
+    account_id = fields.Many2one(
+        'account.account',
+        string='Cash Account',
+        domain="[('company_id', '=', company_id)]"
     )
 
     @api.depends('invoice_id', 'company_id', 'branch_id')
@@ -115,16 +124,27 @@ class CustomerPaymentWizard(models.TransientModel):
             raise UserError(_("No invoice linked to this payment."))
         if move.state != 'posted':
             raise UserError(_("Payment can only be created for posted invoices."))
-        if not self.journal_id:
-            raise UserError(_("Please select a journal to proceed with payment."))
         if self.amount <= 0:
             raise UserError(_("Payment amount must be greater than zero."))
 
-        move.action_create_old_gold_vendor_payment(
-            journal=self.journal_id,
-            payment_date=self.payment_date,
-            memo=self.communication,
-            amount=self.amount,
-        )
+        if self.payment_method_type == 'bank':
+            if not self.journal_id:
+                raise UserError(_("Please select a journal to proceed with payment."))
+            move.action_create_old_gold_vendor_payment(
+                journal=self.journal_id,
+                payment_date=self.payment_date,
+                memo=self.communication,
+                amount=self.amount,
+            )
+        else:
+            if not self.account_id:
+                raise UserError(_("Please select a Cash Account to proceed with payment."))
+            move.action_create_old_gold_vendor_payment(
+                journal=None,
+                account=self.account_id,
+                payment_date=self.payment_date,
+                memo=self.communication,
+                amount=self.amount,
+            )
 
         return {'type': 'ir.actions.act_window_close'}

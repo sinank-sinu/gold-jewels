@@ -34,6 +34,25 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-12 col-lg-6 o_setting_box">
+                    <div class="o_setting_left_pane"/>
+                    <div class="o_setting_right_pane">
+                        <span class="o_form_label">Default Accounts</span>
+                        <div class="text-muted">
+                            Default accounts for new customers &amp; vendors
+                        </div>
+                        <div class="content-group">
+                            <div class="row mt16">
+                                <label for="property_account_receivable_id" class="col-lg-4 o_light_label"/>
+                                <field name="property_account_receivable_id"/>
+                            </div>
+                            <div class="row mt16">
+                                <label for="property_account_payable_id" class="col-lg-4 o_light_label"/>
+                                <field name="property_account_payable_id"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </xpath>
         </field>
     </record>

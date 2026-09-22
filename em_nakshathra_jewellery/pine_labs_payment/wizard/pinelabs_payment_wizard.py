@@ -44,6 +44,33 @@ class PineLabsPaymentWizard(models.TransientModel):
         ('cash', 'Cash Payment'),
     ], string='Payment Mode', required=True, default='card')
 
+    cash_account_id = fields.Many2one(
+        'account.account',
+        string='Cash Account',
+    )
+
+    @api.onchange('payment_method_type')
+    def _onchange_payment_method_type(self):
+        if self.payment_method_type == 'cash' and not self.cash_account_id:
+            branch = None
+            if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
+                branch = self.invoice_id.branch_id
+            if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
+                branch = self.sale_order_id.branch_id
+            if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
+                branch = self.scheme_installment_id.enrollment_id.branch_id
+            if not branch:
+                branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
+
+            target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
+            domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
+            if branch:
+                domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
+
+            cash_journal = self.env['account.journal'].search(domain, limit=1)
+            if cash_journal and cash_journal.default_account_id:
+                self.cash_account_id = cash_journal.default_account_id
+
     state = fields.Selection([
         ('draft', 'Ready'),
         ('waiting', 'Waiting for Terminal...'),
@@ -80,6 +107,26 @@ class PineLabsPaymentWizard(models.TransientModel):
     def _set_mode_and_refresh(self, mode):
         """Set payment_method_type and re-open the wizard to show selection."""
         self.payment_method_type = mode
+        if mode == 'cash' and not self.cash_account_id:
+            branch = None
+            if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
+                branch = self.invoice_id.branch_id
+            if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
+                branch = self.sale_order_id.branch_id
+            if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
+                branch = self.scheme_installment_id.enrollment_id.branch_id
+            if not branch:
+                branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
+
+            target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
+            domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
+            if branch:
+                domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
+
+            cash_journal = self.env['account.journal'].search(domain, limit=1)
+            if cash_journal and cash_journal.default_account_id:
+                self.cash_account_id = cash_journal.default_account_id
+                
         return {
             'type': 'ir.actions.act_window',
             'res_model': 'pinelabs.payment.wizard',
@@ -291,6 +338,14 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.payment_id and self.payment_id.state == 'draft':
             self.payment_id.amount = self.amount
             self.payment_id.journal_id = cash_journal.id
+            
+            if self.cash_account_id:
+                liquidity_line = self.payment_id.move_id.line_ids.filtered(
+                    lambda l: l.account_id.id == self.payment_id.outstanding_account_id.id
+                )
+                if liquidity_line:
+                    liquidity_line.with_context(check_move_validity=False).account_id = self.cash_account_id.id
+                    
             self.payment_id.action_post()
             return {'type': 'ir.actions.act_window_close'}
 
@@ -314,9 +369,9 @@ class PineLabsPaymentWizard(models.TransientModel):
                 raise UserError(_("Debtors account not found in Chart of Accounts for company %s.") % payment_journal.company_id.name)
 
             out_accs = payment_journal._get_journal_inbound_outstanding_payment_accounts()
-            liability_account = out_accs[0] if out_accs else payment_journal.default_account_id
+            liability_account = self.cash_account_id if self.cash_account_id else (out_accs[0] if out_accs else payment_journal.default_account_id)
             if not liability_account:
-                raise UserError(_("Please configure a default account on Journal: %s") % payment_journal.name)
+                raise UserError(_("Please select a Cash Account or configure a default account on Journal: %s") % payment_journal.name)
 
             # Generate the financial transaction entry document exactly like your original custom button
             move_vals = {
@@ -359,45 +414,58 @@ class PineLabsPaymentWizard(models.TransientModel):
             # Close the wizard popup upon success
             return {'type': 'ir.actions.act_window_close'}
 
-        active_ids = []
-        if self.invoice_id:
-            active_ids = self.invoice_id.ids
-        elif self.sale_order_id:
-            # For SO, find the related invoice
-            invoices = self.sale_order_id.invoice_ids.filtered(
-                lambda inv: inv.state == 'posted' and inv.payment_state in ('not_paid', 'partial')
+        # Handle both invoice_id and sale_order_id
+        if self.invoice_id or self.sale_order_id:
+            if not self.cash_account_id:
+                raise UserError(_("Please select a Cash Account for Cash Payment."))
+            
+            invoices = self.invoice_id
+            if not invoices and self.sale_order_id:
+                invoices = self.sale_order_id.invoice_ids.filtered(
+                    lambda inv: inv.state == 'posted' and inv.payment_state in ('not_paid', 'partial')
+                )
+                if not invoices:
+                    raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
+
+            first_inv = invoices[0]
+            is_outbound = first_inv.move_type in ('in_invoice', 'out_refund')
+            
+            payment_vals = {
+                'payment_type': 'outbound' if is_outbound else 'inbound',
+                'partner_type': 'supplier' if is_outbound else 'customer',
+                'partner_id': first_inv.partner_id.id,
+                'amount': self.amount,
+                'currency_id': self.currency_id.id,
+                'journal_id': cash_journal.id,
+                'ref': first_inv.name,
+            }
+            
+            if is_outbound and cash_journal.outbound_payment_method_line_ids:
+                payment_vals['payment_method_line_id'] = cash_journal.outbound_payment_method_line_ids[:1].id
+            elif not is_outbound and cash_journal.inbound_payment_method_line_ids:
+                payment_vals['payment_method_line_id'] = cash_journal.inbound_payment_method_line_ids[:1].id
+                
+            payment = self.env['account.payment'].create(payment_vals)
+            
+            if self.cash_account_id:
+                # Update the liquidity line before posting to use the selected cash account
+                liquidity_line = payment.move_id.line_ids.filtered(
+                    lambda l: l.account_id.id == payment.outstanding_account_id.id or l.account_id.id == cash_journal.default_account_id.id
+                )
+                if liquidity_line:
+                    liquidity_line.with_context(check_move_validity=False).account_id = self.cash_account_id.id
+                    
+            payment.action_post()
+            
+            # Reconcile with the invoice(s)
+            lines = (payment.move_id | invoices).mapped('line_ids').filtered(
+                lambda l: not l.reconciled and l.account_id.account_type in ('asset_receivable', 'liability_payable')
             )
-            if invoices:
-                active_ids = invoices.ids
-            else:
-                raise UserError(_('No posted unpaid invoice found for this Sale Order.'))
-        else:
-            raise UserError(_('Cash Payment is only available for invoices or sale orders.'))
+            if len(lines) > 1:
+                lines.reconcile()
 
-        # Create the standard payment register wizard and explicitly set the amount
-        wizard = self.env['account.payment.register'].with_context(
-            active_model='account.move',
-            active_ids=active_ids,
-        ).create({
-            'is_pine_labs_payment': True,
-            'pine_labs_amount': self.amount,
-            'journal_id': cash_journal.id,
-        })
+            return {'type': 'ir.actions.act_window_close'}
 
-        return {
-            'name': _('Register Cash Payment'),
-            'type': 'ir.actions.act_window',
-            'res_model': 'account.payment.register',
-            'res_id': wizard.id,
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {
-                'active_model': 'account.move',
-                'active_ids': active_ids,
-                'pine_labs_wizard_amount': self.amount,
-                'default_journal_id': cash_journal.id,
-            },
-        }
 
     # ─────────────────────────────────────────────────────────────────
     # Pine Labs: Card or UPI

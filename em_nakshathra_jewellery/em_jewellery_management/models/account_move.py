@@ -370,7 +370,7 @@ class AccountMove(models.Model):
     def action_customer_payment_wizard(self):
         return self.action_open_customer_payment_wizard()
 
-    def action_create_old_gold_vendor_payment(self, journal=None, payment_date=None, memo=None, amount=None):
+    def action_create_old_gold_vendor_payment(self, journal=None, payment_date=None, memo=None, amount=None, account=None):
         Payment = self.env['account.payment']
 
         for move in self:
@@ -410,10 +410,56 @@ class AccountMove(models.Model):
             sale_order_id = False
             if hasattr(move, 'sale_id') and move.sale_id:
                 sale_order_id = move.sale_id.id
-            elif hasattr(move, 'line_ids'):
+            if hasattr(move, 'line_ids'):
                 sale_lines = move.line_ids.sale_line_ids
                 if sale_lines:
                     sale_order_id = sale_lines.order_id[0].id
+
+            # NEW LOGIC: "every cash journal change to ca"
+            # If account is not explicitly passed, but a cash journal is used, force the CA (Cash Account).
+            if not account and pay_journal.type == 'cash' and pay_journal.default_account_id:
+                account = pay_journal.default_account_id
+
+            if account:
+                # Bypass account.payment to avoid Odoo 17 outstanding account synchronization issues.
+                # Create a direct journal entry to guarantee the chosen Cash Account is used.
+                move_vals = {
+                    'journal_id': pay_journal.id,
+                    'date': payment_date or fields.Date.today(),
+                    'ref': memo or move.name,
+                    'move_type': 'entry',
+                    'company_id': move.company_id.id,
+                    'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
+                    'line_ids': [
+                        (0, 0, {
+                            'account_id': account.id,
+                            'name': memo or move.name,
+                            'debit': pay_amount,
+                            'credit': 0.0,
+                            'partner_id': move.partner_id.id,
+                            'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
+                        }),
+                        (0, 0, {
+                            'account_id': destination_account_id,
+                            'name': memo or move.name,
+                            'debit': 0.0,
+                            'credit': pay_amount,
+                            'partner_id': move.partner_id.id,
+                            'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
+                        }),
+                    ]
+                }
+                new_move = self.env['account.move'].create(move_vals)
+                new_move.action_post()
+                
+                # Reconcile the new move with the invoice
+                lines_to_reconcile = new_move.line_ids.filtered(lambda l: l.account_id.id == destination_account_id) + inv_receivable
+                if len(lines_to_reconcile) > 1:
+                    try:
+                        lines_to_reconcile.reconcile()
+                    except Exception:
+                        pass
+                continue
 
             payment = Payment.create({
                 'payment_type': 'outbound',
@@ -429,7 +475,6 @@ class AccountMove(models.Model):
                 'sale_id': sale_order_id,
             })
 
-            # Force the outstanding account if Odoo's internal compute failed to find one
             if not payment.outstanding_account_id and pay_journal.default_account_id:
                 payment.outstanding_account_id = pay_journal.default_account_id.id
 

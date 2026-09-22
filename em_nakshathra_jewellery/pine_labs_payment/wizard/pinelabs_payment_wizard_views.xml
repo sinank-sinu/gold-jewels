@@ -154,11 +154,12 @@
                         <div class="alert alert-info" style="border-radius: 8px; margin-bottom: 16px; background-color: #d1fae5; border-color: #34d399; color: #065f46;"
                              invisible="payment_method_type != 'cash'">
                             <i class="fa fa-money me-2"/>
-                            Odoo's standard <strong>Register Payment</strong> window will open with the <strong>Cash</strong> journal auto-selected.
+                            A <strong>Cash Payment</strong> will be processed using the selected Cash Account.
                         </div>
 
                         <!-- Amount & Currency -->
                         <group>
+                            <field name="cash_account_id" invisible="payment_method_type != 'cash'" required="payment_method_type == 'cash'"/>
                             <field name="amount"/>
                             <field name="currency_id"/>
                         </group>
@@ -226,7 +227,7 @@
 
                     <!-- Cash: Register Payment -->
                     <button name="action_initiate_payment"
-                            string="Register Payment (Cash)"
+                            string="Confirm Cash Payment"
                             type="object"
                             class="btn-success"
                             invisible="state != 'draft' or payment_method_type != 'cash'"/>
