@@ -59,9 +59,13 @@ class ResConfigSettings(models.TransientModel):
         receivable_id = False
         payable_id = False
         if receivable_prop and receivable_prop.value_reference and receivable_prop.value_reference.startswith('account.account,'):
-            receivable_id = int(receivable_prop.value_reference.split(',')[1])
+            rec_id = int(receivable_prop.value_reference.split(',')[1])
+            if self.env['account.account'].sudo().browse(rec_id).exists():
+                receivable_id = rec_id
         if payable_prop and payable_prop.value_reference and payable_prop.value_reference.startswith('account.account,'):
-            payable_id = int(payable_prop.value_reference.split(',')[1])
+            pay_id = int(payable_prop.value_reference.split(',')[1])
+            if self.env['account.account'].sudo().browse(pay_id).exists():
+                payable_id = pay_id
 
         res.update(
             customer_credit_limit=customer_credit_limit,
@@ -96,6 +100,3 @@ class ResConfigSettings(models.TransientModel):
                             'company_id': company.id,
                             'type': 'many2one',
                         })
-            else:
-                if prop:
-                    prop.unlink()
