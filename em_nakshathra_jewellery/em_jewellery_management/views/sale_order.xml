@@ -64,7 +64,8 @@
                 <field name="gold_rate"/>
                 <field name="mc_percent" optional="hide"/>
                 <field name="sale_making_charge_min" column_invisible="1"/>
-                <field name="mc_amount" optional="hide"/>
+                <field name="sale_making_charge_fixed_amount_min" column_invisible="1"/>
+                <field name="mc_amount" optional="hide" readonly="0" force_save="1"/>
                 <field name="metal_amount" />
                 <field name="sale_stone_rate" optional="hide"/>
                 <field name="sale_diamond_rate" optional="hide"/>
@@ -76,7 +77,7 @@
                     <field name="price_subtotal_actual" optional="hide"/>
                     <field name="price_subtotal"/>
                     <field name="mc_discount" optional="hide"/>
-                    <field name="mc_amount_actual"/>
+                    <field name="mc_amount_actual" readonly="0" force_save="1"/>
                     <field name="mc_percent_actual"/>
                     <field name="tag_weight" column_invisible="1"/>
 
@@ -196,7 +197,7 @@
                         <field name="fine_weight" string="Fine Weight (g)"/>
                         <field name="price_subtotal_actual" string="MRP" optional="hide"/>
                         <field name="mc_discount" string="Discount" optional="hide"/>
-                        <field name="mc_amount_actual" string="MC" readonly="1"/>
+                        <field name="mc_amount_actual" string="MC"/>
                         <field name="mc_percent_actual" string="MC%"/>
                         <field name="amount" string="Subtotal" readonly="1"/>
                     </tree>

@@ -29,7 +29,7 @@ class SaleOrderLine(models.Model):
     gold_rate =fields.Float(string="Gold Rate(g)")
 
     mc_percent = fields.Float(string="Max mc")
-    mc_amount = fields.Float(string="MC Amt",compute="_compute_mc_amount",)
+    mc_amount = fields.Float(string="MC Amt", compute="_compute_mc_amount", store=True, readonly=False)
     metal_amount = fields.Float(string="Metal Amt", compute="_compute_metal_amounts",store=True)
 
     fine_weight = fields.Float(string="Fine Weight  (g)",digits=(16, 3))
@@ -49,27 +49,25 @@ class SaleOrderLine(models.Model):
     price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True)
     price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True)
     mc_percent_actual = fields.Float(string="MC%",readonly=False)
-    mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual" )
+    mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual", inverse="_inverse_mc_amount_actual", store=True, readonly=False)
     mc_discount = fields.Float(string="Discount", compute="_compute_mc_discount")
     sale_making_charge_min = fields.Float(string="Sale Making Charge Min")
+    sale_making_charge_fixed_amount_min = fields.Float(string="Sale Fixed Making Charge Min")
     other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
     other_weight_amount = fields.Float(string="Other Weight Amount")
 
-    # @api.depends('mc_amount_actual', 'metal_amount')
-    # def _compute_effective_mc_percent(self):
-    #     for rec in self:
-    #         if rec.mc_amount_actual:
-    #             rec.mc_percent_actual = (rec.mc_amount_actual / rec.metal_amount) * 100
-    #         else:
-    #             rec.mc_percent_actual = 0.0
+    def _inverse_mc_amount_actual(self):
+        for rec in self:
+            if rec.metal_amount and rec.mc_amount_actual:
+                rec.mc_percent_actual = (rec.mc_amount_actual / rec.metal_amount) * 100
+            else:
+                rec.mc_percent_actual = 0.0
 
-    @api.depends('mc_amount', 'mc_discount','mc_percent_actual', 'label_id.sale_making_charge_type', 'label_id.sale_making_charge_fixed_amount')
+    @api.depends('metal_amount', 'mc_percent_actual', 'label_id.sale_making_charge_type', 'label_id.sale_making_charge_fixed_amount_max')
     def _compute_mc_amount_actual(self):
         for rec in self:
             if rec.mc_percent_actual:
                 rec.mc_amount_actual = rec.metal_amount * (rec.mc_percent_actual / 100.0)
-            elif rec.label_id and rec.label_id.sale_making_charge_type == 'amount':
-                rec.mc_amount_actual = rec.label_id.sale_making_charge_fixed_amount
             else:
                 rec.mc_amount_actual=0.0
 
@@ -82,11 +80,11 @@ class SaleOrderLine(models.Model):
             else:
                rec.mc_discount = 0.0
 
-    @api.depends('metal_amount', 'mc_percent', 'label_id.sale_making_charge_type', 'label_id.sale_making_charge_fixed_amount')
+    @api.depends('metal_amount', 'mc_percent', 'label_id.sale_making_charge_type', 'label_id.sale_making_charge_fixed_amount_max')
     def _compute_mc_amount(self):
         for rec in self:
             if rec.label_id and rec.label_id.sale_making_charge_type == 'amount':
-                rec.mc_amount = rec.label_id.sale_making_charge_fixed_amount
+                rec.mc_amount = rec.label_id.sale_making_charge_fixed_amount_max
             else:
                 rec.mc_amount = rec.metal_amount * (rec.mc_percent / 100.0)
 
@@ -96,7 +94,7 @@ class SaleOrderLine(models.Model):
             self.purity_id = self.label_id.purity_id.id
             self.mc_percent = self.label_id.sale_making_charge_value
             self.sale_making_charge_min = self.label_id.sale_making_charge_min
-            self.mc_amount_actual=self.label_id.sale_making_charge_fixed_amount
+            self.mc_amount =self.label_id.sale_making_charge_fixed_amount_max
             self.product_uom_qty = self.label_id.sale_gross_weight
             self.sale_stone_weight = self.label_id.sale_stone_weight
             self.sale_stone_weight_ct = self.label_id.sale_stone_weight_ct
