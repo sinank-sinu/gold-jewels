@@ -116,6 +116,27 @@
               groups="em_jewellery_management.group_jewellery_billing_staff"
               sequence="1"/>
 
+    <record id="action_billing_internal_transfers" model="ir.actions.act_window">
+        <field name="name">Internal Transfers</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('picking_type_id.code', '=', 'internal')]</field>
+        <field name="context">{'contact_display': 'partner_address'}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No internal transfers found. Let's create one!
+            </p>
+        </field>
+    </record>
+
+
+    <menuitem id="menu_billing_internal_transfers"
+              name="Internal Transfers"
+              action="action_billing_internal_transfers"
+              parent="menu_billing_staff_root"
+              sequence="2"/>
+
+
     <menuitem id="menu_billing_staff_cash_book"
               name="Cash Book"
               parent="menu_billing_staff_root"

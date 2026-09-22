@@ -102,6 +102,7 @@ class ProductLabel(models.Model):
         compute="_compute_sale_making_charge",
         store=True
     )
+    sale_making_charge_fixed_amount = fields.Float(string="Sale Fixed Making Charge Amount")
 
     # =========================
     # PURCHASE JEWELLERY DETAILS
