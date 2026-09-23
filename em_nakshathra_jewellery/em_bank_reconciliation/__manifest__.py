@@ -3,7 +3,7 @@
     "version": "17.0.1.0.0",
     "category": "Accounting",
     "summary": "Add bank reference for reconciliation matching",
-    "depends": ["account", "om_account_accountant", "account_statement_base", "base_accounting_kit"],
+    "depends": ["account", "om_account_accountant", "account_statement_base", "base_accounting_kit", "multi_branch_base"],
     "data": [
         "views/account_bank_statement_line_views.xml",
     ],

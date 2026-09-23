@@ -27,5 +27,6 @@ class AccountBankStatementLine(models.Model):
         domain.append(('account_id.account_type', 'not in', ('asset_receivable', 'liability_payable')))
         if self.journal_id:
             domain.extend(['|', ('journal_id', '=', self.journal_id.id), ('journal_id.type', 'not in', ('bank', 'cash'))])
+            if self.journal_id.branch_id:
+                domain.extend(['|', ('branch_id', '=', self.journal_id.branch_id.id), ('branch_id', '=', False)])
         return domain
-
