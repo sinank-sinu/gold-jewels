@@ -1,6 +1,8 @@
 import re
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+import logging
+_logger = logging.getLogger(__name__)
 
 
 class AccountMove(models.Model):
@@ -274,3 +276,68 @@ class AccountMove(models.Model):
             raise UserError(_("Please click the 'Redeem Scheme' button to redeem scheme payments."))
 
         return super().js_assign_outstanding_line(line_id)
+
+    def _unredeem_customer_schemes(self):
+        for move in self:
+            if move.move_type == 'out_invoice':
+                for scheme in move.customer_schemes:
+                    scheme.sudo().write({'is_redeemed': False})
+                    if scheme.state == 'redeemed':
+                        expected_total = getattr(scheme, 'total_scheme_amount', 0.0) or (
+                                    scheme.duration * scheme.installment_amount)
+                        new_state = 'completed' if (
+                                    scheme.duration > 0 and scheme.total_paid >= expected_total and expected_total > 0) else 'running'
+                        scheme.sudo().write({'state': new_state})
+
+                sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id') | move.line_ids.mapped(
+                    'sale_line_ids.order_id')
+                if not sale_orders and move.invoice_origin:
+                    sale_orders = self.env['sale.order'].sudo().search([('name', '=', move.invoice_origin)])
+
+                if 'scheme.redemption' in self.env:
+                    domain = [('move_id', '=', move.id)]
+                    if sale_orders and move.customer_schemes:
+                        domain = ['|', ('move_id', '=', move.id), '&', ('sale_order_id', 'in', sale_orders.ids),
+                                  ('scheme_id', 'in', move.customer_schemes.ids)]
+                    redemptions = self.env['scheme.redemption'].sudo().search(domain)
+                    if redemptions:
+                        redemptions.unlink()
+
+                transfer_moves = self.env['account.move'].sudo().search([
+                    '|',
+                    ('invoice_origin', '=like', f"SchemeTransfer:{move.id}:%"),
+                    ('invoice_origin', '=like', f"SchemeTransferOut:{move.id}:%"),
+                    ('state', '!=', 'cancel'),
+                ])
+                for t in transfer_moves:
+                    try:
+                        t.line_ids.remove_move_reconcile()
+                        t.button_draft()
+                        t.button_cancel()
+                    except Exception as e:
+                        _logger.warning("Failed to cancel transfer move %s: %s", t.name, e)
+
+                move.is_scheme_redeemed = False
+
+                if sale_orders:
+                    for so in sale_orders:
+                        so_redemptions = self.env['scheme.redemption'].sudo().search([('sale_order_id', '=', so.id)])
+                        if not so_redemptions:
+                            so.with_context(skip_invoice_sync=True).sudo().write({
+                                'is_scheme_redeemed': False,
+                            })
+
+                if hasattr(move, '_compute_has_outstanding_scheme_payment'):
+                    move._compute_has_outstanding_scheme_payment()
+                if hasattr(move, '_compute_payments_widget_to_reconcile_info'):
+                    move._compute_payments_widget_to_reconcile_info()
+
+    def button_draft(self):
+        res = super().button_draft()
+        self._unredeem_customer_schemes()
+        return res
+
+    def button_cancel(self):
+        res = super().button_cancel()
+        self._unredeem_customer_schemes()
+        return res
