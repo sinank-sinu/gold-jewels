@@ -178,6 +178,8 @@ class SaleOrder(models.Model):
         vals.update({
             'amount_rounding': self.amount_rounding,
         })
+        if hasattr(self, 'customer_schemes') and self.customer_schemes:
+            vals['customer_schemes'] = [(6, 0, self.customer_schemes.ids)]
         return vals
 
 

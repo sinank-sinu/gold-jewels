@@ -4,18 +4,19 @@ from odoo.exceptions import UserError
 
 class SalaryAdjustment(models.Model):
     _name = 'salary.adjustment'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Salary Adjustment'
     _order = 'date_start desc, name desc'
 
-    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'))
-    date_start = fields.Date(string='Start Date', required=True, default=fields.Date.context_today)
-    date_end = fields.Date(string='End Date', required=True, default=fields.Date.context_today)
-    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company)
+    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'), tracking=True)
+    date_start = fields.Date(string='Start Date', required=True, default=fields.Date.context_today, tracking=True)
+    date_end = fields.Date(string='End Date', required=True, default=fields.Date.context_today, tracking=True)
+    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company, tracking=True)
     line_ids = fields.One2many('salary.adjustment.line', 'salary_adjustment_id', string='Adjustment Lines', copy=True)
     state = fields.Selection([
         ('draft', 'Draft'),
         ('done', 'Done')
-    ], string='Status', default='draft')
+    ], string='Status', default='draft', tracking=True)
     
     file_name = fields.Char(string='File Name', readonly=True)
     file_data = fields.Binary(string='File Data', readonly=True)

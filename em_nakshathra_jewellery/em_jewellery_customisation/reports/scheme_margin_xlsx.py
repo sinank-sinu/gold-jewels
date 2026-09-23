@@ -254,8 +254,9 @@ class SchemeRedeemMarginXlsx(models.AbstractModel):
 
             # ---- SALES ----
             sale_rate = 0.0
-            if order.date_order:
-                sale_date = order.date_order.date()
+            order_date = order.date_order.date() if order and order.date_order else (redemption.date or False)
+            if order_date:
+                sale_date = order_date
                 next_day = sale_date + timedelta(days=1)
                 start_dt = datetime.combine(next_day, time.min)
                 end_dt = datetime.combine(next_day, time.max)
@@ -270,7 +271,7 @@ class SchemeRedeemMarginXlsx(models.AbstractModel):
             
             sale_qty = redemption.amount / sale_rate if sale_rate else 0
 
-            sheet.write(row, 0, order.date_order.date(), date_format)
+            sheet.write(row, 0, order_date or '', date_format)
             sheet.write(row, 1, "Sales")
             sheet.write(row, 2, "22CT")
             sheet.write(row, 3, "MC 0%")
@@ -282,7 +283,7 @@ class SchemeRedeemMarginXlsx(models.AbstractModel):
 
             # ---- PURCHASE FINE ----
             purchase_qty = sale_qty * 0.95
-            sale_line = order.order_line.filtered(lambda l: not l.is_scheme_line)[:1]
+            sale_line = order.order_line.filtered(lambda l: not l.is_scheme_line)[:1] if order else False
             purchase_mc = 0.0
 
             if sale_line and sale_line.label_id:

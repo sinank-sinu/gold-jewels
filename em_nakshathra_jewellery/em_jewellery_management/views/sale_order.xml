@@ -243,9 +243,12 @@
             </xpath>
             <xpath expr="//field[@name='order_line']" position="after">
                 <field name="scheme_line_id" invisible="1"/>
+                <field name="is_scheme_redeemed" invisible="1"/>
                 <group>
-                    <field name="apply_scheme" widget="boolean_toggle"/>
-                    <field name="active_scheme_id" readonly="1" invisible="not apply_scheme"/>
+                    <field name="apply_scheme" widget="boolean_toggle" readonly="is_scheme_redeemed"/>
+                    <field name="customer_schemes" widget="many2many_tags" invisible="not apply_scheme" readonly="is_scheme_redeemed" domain="[('partner_id', 'child_of', partner_id), ('state', 'in', ('running', 'completed'))]"/>
+                    <field name="scheme_amount" string="Customer Paid" readonly="1" invisible="not apply_scheme"/>
+                    <field name="active_scheme_id" invisible="1"/>
 <!--                    <button-->
 <!--                        name="action_apply_scheme"-->
 <!--                        string="Apply Scheme"-->

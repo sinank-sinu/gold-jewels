@@ -133,8 +133,11 @@ class JewellerySchemeEnrollment(models.Model):
             rec.paid_count = len(paid_lines)
             rec.balance_amount = (rec.duration * rec.installment_amount) - total
 
-            if rec.state != 'redeemed':
-                if rec.paid_count >= rec.duration:
+            if rec.state not in ('redeemed', 'completed'):
+                if (rec.duration > 0 and rec.paid_count >= rec.duration) or (rec.duration > 0 and rec.total_paid >= (rec.duration * rec.installment_amount)):
                     rec.state = 'completed'
                 else:
                     rec.state = 'running'
+            elif rec.state == 'completed':
+                if getattr(rec, 'is_redeemed', False):
+                    rec.state = 'redeemed'

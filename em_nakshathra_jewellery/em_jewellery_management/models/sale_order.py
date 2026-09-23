@@ -80,8 +80,17 @@ class SaleOrder(models.Model):
             self = self.with_context(mail_notrack=True, tracking_disable=True, disable_so_chatter_track=True)
             res = super(SaleOrder, self).write(vals)
             self.env.flush_all()
-            return res
-        return super(SaleOrder, self).write(vals)
+        else:
+            res = super(SaleOrder, self).write(vals)
+
+        if 'customer_schemes' in vals and not self.env.context.get('skip_invoice_sync'):
+            for order in self:
+                draft_invoices = order.invoice_ids.filtered(lambda inv: inv.state == 'draft' and not getattr(inv, 'is_scheme_redeemed', False))
+                if draft_invoices:
+                    draft_invoices.with_context(skip_invoice_sync=True).sudo().write({
+                        'customer_schemes': [(6, 0, order.customer_schemes.ids)],
+                    })
+        return res
 
     def message_post_with_source(self, source, render_values=None, subtype_xmlid=None, **kwargs):
         if self.env.context.get('disable_so_chatter_track'):
@@ -124,11 +133,83 @@ class SaleOrder(models.Model):
         }
 
     phone = fields.Char(string="Phone Number", copy=False, tracking=True)
+    customer_schemes = fields.Many2many(
+        'jewellery.scheme.enrollment',
+        'sale_order_customer_schemes_rel',
+        'order_id',
+        'scheme_id',
+        string="Customer Scheme",
+    )
     active_scheme_id = fields.Many2one(
         'jewellery.scheme.enrollment',
         string="Customer Scheme",
         readonly=True
     )
+    is_scheme_redeemed = fields.Boolean(
+        string="Is Scheme Redeemed",
+        compute="_compute_is_scheme_redeemed",
+    )
+    scheme_amount = fields.Monetary(
+        string="Customer Paid",
+        compute="_compute_scheme_amount",
+        currency_field="currency_id",
+    )
+    customer_paid = fields.Monetary(
+        string="Customer Paid",
+        related="scheme_amount",
+    )
+
+    @api.depends('customer_schemes', 'customer_schemes.state', 'invoice_ids.payment_state', 'invoice_ids.state')
+    def _compute_is_scheme_redeemed(self):
+        for order in self:
+            has_redemption = False
+            if order.id and 'scheme.redemption' in self.env:
+                has_redemption = bool(self.env['scheme.redemption'].sudo().search_count([('sale_order_id', '=', order.id)]))
+            is_redeemed_in_schemes = bool(order.customer_schemes) and any(
+                getattr(s, 'is_redeemed', False) or s.state == 'redeemed' for s in order.customer_schemes
+            )
+            has_invoice_redeemed = bool(order.invoice_ids.filtered(lambda inv: getattr(inv, 'is_scheme_redeemed', False)))
+            order.is_scheme_redeemed = has_redemption or is_redeemed_in_schemes or has_invoice_redeemed
+
+    @api.depends('customer_schemes', 'customer_schemes.total_paid')
+    def _compute_scheme_amount(self):
+        for rec in self:
+            rec.scheme_amount = sum(rec.customer_schemes.mapped('total_paid'))
+
+    def _get_customer_default_schemes(self):
+        self.ensure_one()
+        if not self.partner_id:
+            return self.env['jewellery.scheme.enrollment']
+
+        partner_ids = list(set([p.id for p in (self.partner_id | getattr(self.partner_id, 'commercial_partner_id', self.partner_id)) if p]))
+        domain = [
+            ('partner_id', 'in', partner_ids),
+            ('state', 'in', ('running', 'completed')),
+        ]
+        if 'is_redeemed' in self.env['jewellery.scheme.enrollment']._fields:
+            domain.append(('is_redeemed', '=', False))
+        all_schemes = self.env['jewellery.scheme.enrollment'].sudo().with_context(active_test=False).search(domain, order='create_date asc')
+
+        if not all_schemes:
+            return self.env['jewellery.scheme.enrollment']
+
+        # 1st Priority: If customer has unredeemed completed scheme(s), only fill completed scheme(s)
+        completed_schemes = all_schemes.filtered(
+            lambda s: s.state == 'completed' or (s.duration > 0 and s.total_paid >= (s.duration * s.installment_amount)) or (s.duration > 0 and getattr(s, 'paid_count', 0) >= s.duration)
+        ).sorted(key=lambda s: (getattr(s, 'priority', 10), s.create_date or fields.Datetime.now()))
+
+        if completed_schemes:
+            return completed_schemes
+
+        # 2nd Priority: If completed schemes are redeemed or none exist, only fill running scheme(s)
+        running_schemes = all_schemes.filtered(
+            lambda s: s.state == 'running'
+        ).sorted(key=lambda s: (getattr(s, 'priority', 10), s.create_date or fields.Datetime.now()))
+
+        if running_schemes:
+            return running_schemes
+
+        return all_schemes
 
     @api.onchange('phone')
     def _onchange_phone_set_partner_and_scheme(self):
@@ -160,8 +241,10 @@ class SaleOrder(models.Model):
                 )[:1] or schemes[:1]
 
                 rec.partner_id = target_scheme.partner_id.id
-                rec.active_scheme_id = target_scheme.id
-                rec.apply_scheme = True
+                default_schemes = rec._get_customer_default_schemes() if rec.partner_id else schemes.filtered(lambda s: not s.is_redeemed)
+                rec.customer_schemes = [(6, 0, default_schemes.ids)] if default_schemes else [(6, 0, [])]
+                rec.active_scheme_id = default_schemes[:1].id if default_schemes else False
+                rec.apply_scheme = bool(default_schemes)
                 if target_scheme.phone:
                     rec.phone = target_scheme.phone
                 continue
@@ -179,15 +262,13 @@ class SaleOrder(models.Model):
             if partner_res:
                 partner = self.env['res.partner'].browse(partner_res[0])
                 rec.partner_id = partner.id
-                scheme = self.env['jewellery.scheme.enrollment'].search([
-                    ('partner_id', '=', partner.id),
-                    ('state', 'in', ('running', 'completed')),
-                    ('is_redeemed', '=', False),
-                ], order='active desc, id desc', limit=1)
-                if scheme:
-                    rec.active_scheme_id = scheme.id
+                schemes = rec._get_customer_default_schemes()
+                if schemes:
+                    rec.customer_schemes = [(6, 0, schemes.ids)]
+                    rec.active_scheme_id = schemes[0].id
                     rec.apply_scheme = True
                 else:
+                    rec.customer_schemes = [(6, 0, [])]
                     rec.active_scheme_id = False
                     rec.apply_scheme = False
             else:
@@ -203,24 +284,44 @@ class SaleOrder(models.Model):
         for rec in self:
             rec.apply_scheme = False
             rec.active_scheme_id = False
+            rec.customer_schemes = [(6, 0, [])]
 
             if not rec.partner_id:
                 rec.phone = False
                 continue
 
-            rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
+            if not rec.phone:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
 
-            scheme = self.env['jewellery.scheme.enrollment'].search([
-                ('partner_id', '=', rec.partner_id.id),
-                ('active', '=', True),
-                ('state', 'in', ('running', 'completed')),
-            ], limit=1)
+            schemes = rec._get_customer_default_schemes()
 
-            if scheme:
+            if schemes:
                 rec.apply_scheme = True
-                rec.active_scheme_id = scheme
-                if not rec.phone and scheme.phone:
-                    rec.phone = scheme.phone
+                rec.customer_schemes = [(6, 0, schemes.ids)]
+                rec.active_scheme_id = schemes[0].id
+                if not rec.phone and schemes[0].phone:
+                    rec.phone = schemes[0].phone
+
+    @api.onchange('apply_scheme')
+    def _onchange_apply_scheme(self):
+        for rec in self:
+            if rec.apply_scheme:
+                if not rec.customer_schemes and rec.partner_id:
+                    schemes = rec._get_customer_default_schemes()
+                    rec.customer_schemes = [(6, 0, schemes.ids)]
+                    rec.active_scheme_id = schemes[:1].id if schemes else False
+            else:
+                rec.customer_schemes = [(6, 0, [])]
+                rec.active_scheme_id = False
+
+    @api.onchange('customer_schemes')
+    def _onchange_customer_schemes(self):
+        for rec in self:
+            if rec.customer_schemes:
+                rec.apply_scheme = True
+                rec.active_scheme_id = rec.customer_schemes[:1].id
+            else:
+                rec.active_scheme_id = False
 
     def action_apply_old_gold(self):
         PurchaseOrder = self.env['purchase.order']

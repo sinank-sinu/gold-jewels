@@ -5,6 +5,7 @@
     'category': 'Human Resources',
     'author': 'Antigravity',
     'depends': [
+        'mail',
         'hr',
         'hr_payroll_community',
         'salesman_target_incentive',

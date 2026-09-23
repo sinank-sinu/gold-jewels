@@ -34,5 +34,6 @@
               name="Scheme Collection Report"
               parent="em_jewellery_management.menu_scheme_enrollment_category"
               action="action_scheme_collection_xlsx_wizard"
+              groups="em_jewellery_management.group_jewellery_manager"
               sequence="25"/>
 </odoo>

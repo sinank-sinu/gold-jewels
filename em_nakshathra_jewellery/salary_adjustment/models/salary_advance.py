@@ -2,21 +2,22 @@ from odoo import models, fields, api, _
 
 class SalaryAdvance(models.Model):
     _name = 'salary.advance'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Advance Salary Request'
     _order = 'date desc, name desc'
 
-    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'))
-    employee_id = fields.Many2one('hr.employee', string='Employee', required=True)
-    date = fields.Date(string='Request Date', required=True, default=fields.Date.context_today)
-    amount = fields.Float(string='Advance Amount', required=True)
+    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'), tracking=True)
+    employee_id = fields.Many2one('hr.employee', string='Employee', required=True, tracking=True)
+    date = fields.Date(string='Request Date', required=True, default=fields.Date.context_today, tracking=True)
+    amount = fields.Float(string='Advance Amount', required=True, tracking=True)
     reason = fields.Text(string='Reason')
-    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company)
+    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company, tracking=True)
     state = fields.Selection([
         ('draft', 'Draft'),
         ('requested', 'Requested'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected')
-    ], string='Status', default='draft')
+    ], string='Status', default='draft', tracking=True)
 
     @api.model_create_multi
     def create(self, vals_list):

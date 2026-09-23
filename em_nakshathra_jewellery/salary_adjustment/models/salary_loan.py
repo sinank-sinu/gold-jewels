@@ -2,24 +2,25 @@ from odoo import models, fields, api, _
 
 class SalaryLoan(models.Model):
     _name = 'salary.loan'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Loan Request'
     _order = 'date desc, name desc'
 
-    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'))
-    employee_id = fields.Many2one('hr.employee', string='Employee', required=True)
-    date = fields.Date(string='Request Date', required=True, default=fields.Date.context_today)
-    amount = fields.Float(string='Loan Amount', required=True)
-    tenure_months = fields.Integer(string='Tenure (Months)', default=1, required=True)
+    name = fields.Char(string='Reference', required=True, copy=False, readonly=True, default=lambda self: _('New'), tracking=True)
+    employee_id = fields.Many2one('hr.employee', string='Employee', required=True, tracking=True)
+    date = fields.Date(string='Request Date', required=True, default=fields.Date.context_today, tracking=True)
+    amount = fields.Float(string='Loan Amount', required=True, tracking=True)
+    tenure_months = fields.Integer(string='Tenure (Months)', default=1, required=True, tracking=True)
     monthly_installment = fields.Float(string='Monthly Installment', compute='_compute_monthly_installment', store=True)
     reason = fields.Text(string='Reason')
-    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company)
+    company_id = fields.Many2one('res.company', string='Company', required=True, default=lambda self: self.env.company, tracking=True)
     state = fields.Selection([
         ('draft', 'Draft'),
         ('requested', 'Requested'),
         ('approved', 'Approved'),
         ('closed', 'Closed'),
         ('rejected', 'Rejected')
-    ], string='Status', default='draft')
+    ], string='Status', default='draft', tracking=True)
 
     invoice_id = fields.Many2one('account.move', string='Vendor Bill', readonly=True, copy=False)
     line_ids = fields.One2many('salary.loan.line', 'loan_id', string='Installment Lines', copy=False)

@@ -1,6 +1,6 @@
 {
     'name': 'Sale Order Scheme Outstanding Credit',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.0.1',
     'category': 'Sales',
     'summary': 'Display customer scheme outstanding credits in Invoice Other Info tab',
     'description': """

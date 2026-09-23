@@ -64,6 +64,11 @@
                         </page>
                     </notebook>
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" groups="base.group_user"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
@@ -137,6 +142,11 @@
                         <field name="reason" nolabel="1" placeholder="Describe the reason for advance request..." readonly="state != 'draft'"/>
                     </group>
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" groups="base.group_user"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
@@ -226,6 +236,11 @@
                         <field name="reason" nolabel="1" placeholder="Describe the reason for loan request..." readonly="state != 'draft'"/>
                     </group>
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" groups="base.group_user"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
@@ -256,6 +271,12 @@
               sequence="90"/>
 
     <!-- Submenus -->
+    <menuitem id="menu_salary_adjustment_sheet"
+              name="Salary Adjustments"
+              parent="menu_salary_adjustment_root"
+              action="action_salary_adjustment"
+              sequence="10"/>
+
     <menuitem id="menu_salary_advance"
               name="Advance Salary"
               parent="menu_salary_adjustment_root"
