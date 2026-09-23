@@ -1,5 +1,6 @@
 from odoo import models, fields, api, _
 from odoo.tools.float_utils import float_compare
+from markupsafe import Markup
 
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
@@ -124,12 +125,12 @@ class StockMove(models.Model):
             try:
                 transfer_ref = move.picking_id.name if move.picking_id else (move.reference or move.name)
                 branch_name = branch.name if branch else (move.label_id.branch_id.name or _("N/A"))
-                msg = _(
+                msg = Markup(_(
                     "<b>Stock Transfer Completed</b> (%s)<br/>"
                     "• From: %s<br/>"
                     "• To: %s<br/>"
                     "• Branch: %s"
-                ) % (
+                )) % (
                     transfer_ref,
                     move.location_id.display_name,
                     move.location_dest_id.display_name,

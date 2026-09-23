@@ -9,6 +9,13 @@
                 <field name="branch_id"/>
                 <field name="allowed_branch_ids" invisible="1"/>
             </xpath>
+            <xpath expr="//sheet" position="after">
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" widget="mail_followers"/>
+                    <field name="activity_ids" widget="mail_activity"/>
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
+            </xpath>
         </field>
     </record>
 </odoo>

@@ -104,10 +104,10 @@
 
                                 <group string="Making Charge">
                                     <field name="sale_making_charge_type"/>
-                                    <field name="sale_making_charge_fixed_amount_max" invisible="sale_making_charge_type != 'amount'" required="sale_making_charge_type == 'amount'"/>
-                                    <field name="sale_making_charge_fixed_amount_min" invisible="sale_making_charge_type != 'amount'" required="sale_making_charge_type == 'amount'"/>
-                                    <field name="sale_making_charge_value" invisible="sale_making_charge_type == 'amount'"/>
-                                    <field name="sale_making_charge_min" readonly="is_stocked_in" invisible="sale_making_charge_type == 'amount'"/>
+                                    <field name="sale_making_charge_fixed_amount_max" invisible="sale_making_charge_type != 'amount'" required="sale_making_charge_type == 'amount'" readonly="active"/>
+                                    <field name="sale_making_charge_fixed_amount_min" invisible="sale_making_charge_type != 'amount'" required="sale_making_charge_type == 'amount'" readonly="active"/>
+                                    <field name="sale_making_charge_value" readonly="active" invisible="sale_making_charge_type == 'amount'"/>
+                                    <field name="sale_making_charge_min" readonly="active" invisible="sale_making_charge_type == 'amount'"/>
                                     <field name="sale_making_charge_amount" readonly="1" invisible="1"/>
                                 </group>
                             </group>
