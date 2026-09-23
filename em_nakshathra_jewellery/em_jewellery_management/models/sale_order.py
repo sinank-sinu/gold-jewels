@@ -208,8 +208,7 @@ class SaleOrder(models.Model):
                 rec.phone = False
                 continue
 
-            if not rec.phone:
-                rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
+            rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
 
             scheme = self.env['jewellery.scheme.enrollment'].search([
                 ('partner_id', '=', rec.partner_id.id),
@@ -772,14 +771,20 @@ class SaleOrder(models.Model):
 
         # Continue to HO transfer
 
-    # @api.model
-    # def create(self, vals):
-    #     sale = super().create(vals)
-    #
-    #     if sale.purchase_order_id and sale.state != 'draft':
-    #         sale.purchase_order_id.sale_id = sale.id
-    #
-    #     return
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('partner_id') and not vals.get('phone'):
+                partner = self.env['res.partner'].browse(vals['partner_id'])
+                vals['phone'] = partner.phone or partner.mobile or False
+                
+        sales = super().create(vals_list)
+        
+        for sale in sales:
+            if sale.purchase_order_id and sale.state != 'draft':
+                sale.purchase_order_id.sale_id = sale.id
+                
+        return sales
 
     def action_open_old_gold_bill(self):
         self.ensure_one()

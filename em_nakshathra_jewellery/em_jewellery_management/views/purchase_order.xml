@@ -33,6 +33,7 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="attributes">
                     <attribute name="string">Gross weight</attribute>
+                    <attribute name="sum">Total</attribute>
             </xpath>
 
             <xpath expr="//header" position="inside">

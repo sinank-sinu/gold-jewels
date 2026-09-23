@@ -8,6 +8,9 @@
             <xpath expr="//field[@name='company_id']" position="after">
                 <field name="branch_id"/>
             </xpath>
+            <xpath expr="//field[@name='requisition_lines']/tree//field[@name='quantity']" position="attributes">
+                <attribute name="sum">Total</attribute>
+            </xpath>
             <xpath expr="//field[@name='requisition_lines']/tree//field[@name='quantity']" position="after">
                 <field name="purity_id"/>
             </xpath>
