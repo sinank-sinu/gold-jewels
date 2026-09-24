@@ -2,6 +2,8 @@ from collections import defaultdict
 from math import ceil
 from odoo import models, api, fields, _, Command
 from odoo.exceptions import UserError
+import logging
+_logger = logging.getLogger(__name__)
 
 
 class AccountMove(models.Model):
