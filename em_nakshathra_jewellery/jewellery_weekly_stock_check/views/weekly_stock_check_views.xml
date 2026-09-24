@@ -157,26 +157,24 @@
                                            decoration-danger="is_qty_matched == False and manual_qty != 0"/>
                                     <field name="manual_weight"
                                            string="Counted Weight"
-                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0"/>
                                     <field name="is_weight_matched"
                                            widget="boolean_toggle"
                                            readonly="1"
                                            nolabel="1"
-                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0"/>
                                     <field name="manual_tag_weight"
                                         string="Counted Tag Weight"
-                                        column_invisible="1"
+                                        optional="hide"
                                         decoration-success="is_tag_weight_matched == True"
                                         decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
                                     <field name="is_tag_weight_matched"
                                         widget="boolean_toggle"
                                         readonly="1"
                                         nolabel="1"
-                                        column_invisible="1"
+                                        optional="hide"
                                         decoration-success="is_tag_weight_matched == True"
                                         decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
                                      <field name="manual_total_weight"
@@ -235,10 +233,9 @@
                                     <field name="is_qty_matched" column_invisible="1"/>
                                     
                                     <field name="manual_weight" string="Counted Weight"
-                                           column_invisible="1"
                                            decoration-success="is_weight_matched == True"
                                            decoration-danger="is_weight_matched == False and manual_weight != 0.0"/>
-                                    <field name="manual_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide" column_invisible="1"/>
+                                    <field name="manual_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide"/>
                                     <field name="manual_total_weight" string="Counted Total Wt"
                                            decoration-success="is_total_weight_matched == True"
                                            decoration-danger="is_total_weight_matched == False and manual_total_weight != 0.0"

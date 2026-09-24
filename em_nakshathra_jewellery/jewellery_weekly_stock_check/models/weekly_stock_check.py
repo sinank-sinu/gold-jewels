@@ -261,21 +261,31 @@ class JewelleryWeeklyStockCheck(models.Model):
             if already_scanned:
                 return {'error': _('Barcode "%s" (Label: %s) has already been scanned.') % (barcode, label.name)}
 
-            # Create new line for label (Surplus)
-            line = self.env['jewellery.weekly.stock.check.line'].create({
-                'stock_check_id': check.id,
-                'product_tmpl_id': label.product_id.product_tmpl_id.id,
-                'product_id': label.product_id.id,
-                'label_id': label.id,
-                'system_qty': 1.0,
-                'system_weight': label.sale_gross_weight,
-                'system_tag_weight':label.tag_weight,
-                'manual_qty': 1.0,
-                'manual_weight': label.sale_gross_weight,
-                'manual_tag_weight': label.tag_weight,
-                'branch_id': label.branch_id.id,
-                'location_id': label.branch_location_id.id,
-            })
+            # Find existing line loaded by 'Load Products'
+            existing_line = check.line_ids.filtered(lambda l: l.label_id == label)
+            if existing_line:
+                existing_line[0].write({
+                    'manual_qty': 1.0,
+                    'manual_weight': label.sale_gross_weight,
+                    'manual_tag_weight': label.tag_weight,
+                })
+                line = existing_line[0]
+            else:
+                # Create new line for label (Surplus)
+                line = self.env['jewellery.weekly.stock.check.line'].create({
+                    'stock_check_id': check.id,
+                    'product_tmpl_id': label.product_id.product_tmpl_id.id,
+                    'product_id': label.product_id.id,
+                    'label_id': label.id,
+                    'system_qty': 1.0,
+                    'system_weight': label.sale_gross_weight,
+                    'system_tag_weight':label.tag_weight,
+                    'manual_qty': 1.0,
+                    'manual_weight': label.sale_gross_weight,
+                    'manual_tag_weight': label.tag_weight,
+                    'branch_id': label.branch_id.id,
+                    'location_id': label.branch_location_id.id,
+                })
             return {
                 'success': True,
                 'product': f"{label.display_name} (Matched)" if line.system_qty > 0 else f"{label.display_name} (Surplus)",
@@ -486,6 +496,35 @@ class JewelleryWeeklyStockCheckLine(models.Model):
             # Overall match - based on qty and total weight
             rec.is_matched = qty_match and total_weight_match
 
+    def _sync_summary(self):
+        """Update the summary when line manual counts change."""
+        if self.env.context.get('skip_line_sync'):
+            return
+        
+        for line in self:
+            summary = line.stock_check_id.template_summary_ids.filtered(lambda s: s.product_tmpl_id == line.product_tmpl_id)
+            if summary:
+                lines = line.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == line.product_tmpl_id)
+                summary.with_context(skip_summary_distribution=True).write({
+                    'manual_qty': sum(lines.mapped('manual_qty')),
+                    'manual_weight': sum(lines.mapped('manual_weight')),
+                    'manual_tag_weight': sum(lines.mapped('manual_tag_weight')),
+                    'manual_total_weight': sum(lines.mapped('manual_total_weight'))
+                })
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        res = super().create(vals_list)
+        res._sync_summary()
+        return res
+
+    def write(self, vals):
+        res = super().write(vals)
+        manual_fields = ['manual_qty', 'manual_weight', 'manual_tag_weight', 'manual_total_weight']
+        if any(f in vals for f in manual_fields):
+            self._sync_summary()
+        return res
+
 
 class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
     _name = 'jewellery.weekly.stock.check.template.summary'
@@ -519,15 +558,11 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
 
     manual_qty = fields.Float(
         string='Counted Labels',
-        compute='_compute_manual_totals',
-        readonly=False,
         store=True,
         digits=(16, 0)
     )
     manual_weight = fields.Float(
         string='Counted Weight',
-        compute='_compute_manual_totals',
-        readonly=False,
         store=True,
         digits=(16, 3)
     )
@@ -569,7 +604,6 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
 
     manual_tag_weight = fields.Float(
         string='Counted Tag Weight',
-        compute='_compute_manual_totals',
         store=True,
         digits=(16, 3)
     )
@@ -596,8 +630,6 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
 
     manual_total_weight = fields.Float(
         string='Counted Total Wt',
-        compute='_compute_manual_totals',
-        readonly=False,
         digits=(16, 3),
         store=True
     )
@@ -623,14 +655,75 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.system_total_weight = sum(lines.mapped('system_total_weight'))
 
 
-    @api.depends('stock_check_id.line_ids.manual_qty', 'stock_check_id.line_ids.manual_weight', 'stock_check_id.line_ids.manual_tag_weight', 'stock_check_id.line_ids.manual_total_weight')
-    def _compute_manual_totals(self):
-        for summary in self:
-            lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
-            summary.manual_qty = sum(lines.mapped('manual_qty'))
-            summary.manual_weight = sum(lines.mapped('manual_weight'))
-            summary.manual_tag_weight = sum(lines.mapped('manual_tag_weight'))
-            summary.manual_total_weight = sum(lines.mapped('manual_total_weight'))
+    def write(self, vals):
+        res = super().write(vals)
+        # If manual totals were edited directly on the summary, distribute them to lines
+        manual_fields = ['manual_qty', 'manual_weight', 'manual_tag_weight', 'manual_total_weight']
+        if any(f in vals for f in manual_fields) and not self.env.context.get('skip_summary_distribution'):
+            for summary in self:
+                lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
+                if not lines:
+                    continue
+
+                current_qty = sum(lines.mapped('manual_qty'))
+                current_weight = sum(lines.mapped('manual_weight'))
+                current_tag = sum(lines.mapped('manual_tag_weight'))
+                current_total = sum(lines.mapped('manual_total_weight'))
+
+                diff_qty = abs(summary.manual_qty - current_qty) > 0.001
+                diff_weight = abs(summary.manual_weight - current_weight) > 0.001
+                diff_tag = abs(summary.manual_tag_weight - current_tag) > 0.001
+                diff_total = abs(summary.manual_total_weight - current_total) > 0.001
+
+                # Write to lines while skipping inverse loop
+                lines = lines.with_context(skip_line_sync=True)
+
+                if diff_qty:
+                    qty_to_distribute = int(summary.manual_qty)
+                    for line in lines:
+                        if qty_to_distribute > 0:
+                            line.manual_qty = 1.0
+                            qty_to_distribute -= 1
+                        else:
+                            line.manual_qty = 0.0
+
+                if diff_total:
+                    sys_total = sum(lines.mapped('system_total_weight'))
+                    distributed = 0.0
+                    for i, line in enumerate(lines):
+                        if i == len(lines) - 1:
+                            line.manual_total_weight = summary.manual_total_weight - distributed
+                        else:
+                            ratio = (line.system_total_weight / sys_total) if sys_total > 0 else (1.0 / len(lines))
+                            val = round(summary.manual_total_weight * ratio, 3)
+                            line.manual_total_weight = val
+                            distributed += val
+
+                if diff_weight:
+                    sys_wt = sum(lines.mapped('system_weight'))
+                    distributed_wt = 0.0
+                    for i, line in enumerate(lines):
+                        if i == len(lines) - 1:
+                            line.manual_weight = summary.manual_weight - distributed_wt
+                        else:
+                            ratio = (line.system_weight / sys_wt) if sys_wt > 0 else (1.0 / len(lines))
+                            val = round(summary.manual_weight * ratio, 3)
+                            line.manual_weight = val
+                            distributed_wt += val
+
+                if diff_tag:
+                    sys_tag = sum(lines.mapped('system_tag_weight'))
+                    distributed_tag = 0.0
+                    for i, line in enumerate(lines):
+                        if i == len(lines) - 1:
+                            line.manual_tag_weight = summary.manual_tag_weight - distributed_tag
+                        else:
+                            ratio = (line.system_tag_weight / sys_tag) if sys_tag > 0 else (1.0 / len(lines))
+                            val = round(summary.manual_tag_weight * ratio, 3)
+                            line.manual_tag_weight = val
+                            distributed_tag += val
+        return res
+
 
 
     @api.depends('manual_qty', 'manual_weight', 'manual_tag_weight', 'system_qty', 'system_weight', 'system_tag_weight', 'manual_total_weight', 'system_total_weight')
