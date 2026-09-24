@@ -14,6 +14,7 @@
                             class="btn btn-primary"
                             confirm="Are you sure you want to redeem the outstanding scheme payment(s) against this invoice?"/>
                 </div>
+                <field name="scheme_balance_to_pay_customer" invisible="1"/>
                 <div class="mt-2" invisible="scheme_balance_to_pay_customer &lt;= 0">
                     <strong>Scheme Balance to Pay Customer: </strong>
                     <field name="scheme_balance_to_pay_customer" readonly="1" class="oe_inline mr-2"/>

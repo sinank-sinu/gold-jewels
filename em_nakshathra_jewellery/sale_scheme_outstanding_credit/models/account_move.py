@@ -1,7 +1,8 @@
 import re
+import logging
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
-import logging
+
 _logger = logging.getLogger(__name__)
 
 
@@ -159,27 +160,25 @@ class AccountMove(models.Model):
 
     def _get_outstanding_scheme_payment_lines(self):
         self.ensure_one()
-        unredeemed_schemes = self.customer_schemes.filtered(
-            lambda s: not getattr(s, 'is_redeemed', False) and s.state != 'redeemed'
-        )
-        if not unredeemed_schemes:
+        if not self.customer_schemes:
             return self.env['account.move.line']
 
+        target_schemes = self.customer_schemes
         lines = super()._get_outstanding_scheme_payment_lines()
         filtered_lines = self.env['account.move.line']
-        selected_names = set(filter(None, [s.name for s in unredeemed_schemes if s.name != 'New']))
-        selected_tickets = set(filter(None, unredeemed_schemes.mapped('ticket_number')))
+        selected_names = set(filter(None, [s.name for s in target_schemes if s.name != 'New']))
+        selected_tickets = set(filter(None, target_schemes.mapped('ticket_number')))
 
         for line in lines:
             scheme = self._get_scheme_for_aml(line)
             if scheme:
-                if scheme in unredeemed_schemes and not getattr(scheme, 'is_redeemed', False) and scheme.state != 'redeemed':
+                if scheme in target_schemes:
                     filtered_lines |= line
                 continue
 
             installment = self.env['jewellery.scheme.installment'].sudo().search([('move_id', '=', line.move_id.id)], limit=1)
             if installment and installment.enrollment_id:
-                if installment.enrollment_id in unredeemed_schemes and not getattr(installment.enrollment_id, 'is_redeemed', False) and installment.enrollment_id.state != 'redeemed':
+                if installment.enrollment_id in target_schemes:
                     filtered_lines |= line
                 continue
 
@@ -203,21 +202,39 @@ class AccountMove(models.Model):
 
         return filtered_lines
 
-    @api.depends('customer_schemes')
+    @api.depends('customer_schemes', 'is_scheme_redeemed', 'payment_state', 'state')
     def _compute_has_outstanding_scheme_payment(self):
-        super()._compute_has_outstanding_scheme_payment()
+        for move in self:
+            if getattr(move, 'is_scheme_redeemed', False) or move.payment_state in ('paid', 'in_payment'):
+                move.has_outstanding_scheme_payment = False
+            else:
+                unredeemed = move.customer_schemes.filtered(
+                    lambda s: not getattr(s, 'is_redeemed', False) and s.state != 'redeemed'
+                )
+                if not unredeemed:
+                    move.has_outstanding_scheme_payment = False
+                else:
+                    super(AccountMove, move)._compute_has_outstanding_scheme_payment()
+
+    @api.depends('customer_schemes', 'is_scheme_redeemed')
+    def _compute_scheme_balance_to_pay_customer(self):
+        super()._compute_scheme_balance_to_pay_customer()
 
     @api.onchange('customer_schemes')
     def _onchange_customer_schemes(self):
         for rec in self:
             if hasattr(rec, '_compute_has_outstanding_scheme_payment'):
                 rec._compute_has_outstanding_scheme_payment()
+            if hasattr(rec, '_compute_scheme_balance_to_pay_customer'):
+                rec._compute_scheme_balance_to_pay_customer()
 
     def write(self, vals):
         res = super().write(vals)
         if 'customer_schemes' in vals:
             if hasattr(self, '_sync_cross_company_scheme_transfers'):
                 self._sync_cross_company_scheme_transfers()
+            if hasattr(self, '_compute_scheme_balance_to_pay_customer'):
+                self._compute_scheme_balance_to_pay_customer()
             if not self.env.context.get('skip_invoice_sync'):
                 for move in self:
                     sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id') | move.line_ids.mapped('sale_line_ids.order_id')
@@ -235,6 +252,8 @@ class AccountMove(models.Model):
         self.ensure_one()
         if not self.customer_schemes:
             raise UserError(_("No scheme selected in the 'Customer Schemes' field. Please select a scheme before redeeming."))
+        if getattr(self, 'is_scheme_redeemed', False):
+            raise UserError(_("The selected scheme(s) have already been redeemed on this invoice."))
         res = super().action_redeem_outstanding_schemes()
         self.is_scheme_redeemed = True
         sale_orders = self.invoice_line_ids.mapped('sale_line_ids.order_id') | self.line_ids.mapped('sale_line_ids.order_id')
@@ -246,6 +265,8 @@ class AccountMove(models.Model):
                 'active_scheme_id': self.customer_schemes[:1].id if self.customer_schemes else False,
                 'apply_scheme': bool(self.customer_schemes),
             })
+        if hasattr(self, '_compute_scheme_balance_to_pay_customer'):
+            self._compute_scheme_balance_to_pay_customer()
         return res
 
     def js_assign_outstanding_line(self, line_id):
@@ -283,22 +304,18 @@ class AccountMove(models.Model):
                 for scheme in move.customer_schemes:
                     scheme.sudo().write({'is_redeemed': False})
                     if scheme.state == 'redeemed':
-                        expected_total = getattr(scheme, 'total_scheme_amount', 0.0) or (
-                                    scheme.duration * scheme.installment_amount)
-                        new_state = 'completed' if (
-                                    scheme.duration > 0 and scheme.total_paid >= expected_total and expected_total > 0) else 'running'
+                        expected_total = getattr(scheme, 'total_scheme_amount', 0.0) or (scheme.duration * scheme.installment_amount)
+                        new_state = 'completed' if (scheme.duration > 0 and scheme.total_paid >= expected_total and expected_total > 0) else 'running'
                         scheme.sudo().write({'state': new_state})
 
-                sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id') | move.line_ids.mapped(
-                    'sale_line_ids.order_id')
+                sale_orders = move.invoice_line_ids.mapped('sale_line_ids.order_id') | move.line_ids.mapped('sale_line_ids.order_id')
                 if not sale_orders and move.invoice_origin:
                     sale_orders = self.env['sale.order'].sudo().search([('name', '=', move.invoice_origin)])
 
                 if 'scheme.redemption' in self.env:
                     domain = [('move_id', '=', move.id)]
                     if sale_orders and move.customer_schemes:
-                        domain = ['|', ('move_id', '=', move.id), '&', ('sale_order_id', 'in', sale_orders.ids),
-                                  ('scheme_id', 'in', move.customer_schemes.ids)]
+                        domain = ['|', ('move_id', '=', move.id), '&', ('sale_order_id', 'in', sale_orders.ids), ('scheme_id', 'in', move.customer_schemes.ids)]
                     redemptions = self.env['scheme.redemption'].sudo().search(domain)
                     if redemptions:
                         redemptions.unlink()

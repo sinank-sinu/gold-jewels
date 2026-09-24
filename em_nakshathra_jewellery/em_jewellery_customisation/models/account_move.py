@@ -3,10 +3,6 @@ from math import ceil
 from odoo import models, api, fields, _, Command
 from odoo.exceptions import UserError
 
-import logging
-_logger = logging.getLogger(__name__)
-
-
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
@@ -450,7 +446,9 @@ class AccountMove(models.Model):
     @api.depends('state', 'partner_id', 'payment_state', 'invoice_outstanding_credits_debits_widget')
     def _compute_scheme_balance_to_pay_customer(self):
         for move in self:
-            if move.state == 'posted' and move.move_type == 'out_invoice':
+            if move.state == 'posted' and move.move_type == 'out_invoice' and (
+                move.payment_state in ('paid', 'in_payment') or getattr(move, 'is_scheme_redeemed', False)
+            ):
                 scheme_lines = move._get_outstanding_scheme_payment_lines()
                 total = 0.0
                 for l in scheme_lines:
@@ -1095,6 +1093,8 @@ class AccountPayment(models.Model):
                 )
                 if scheme_lines and payment_line:
                     (scheme_lines + payment_line).reconcile()
+                if hasattr(payment.scheme_refund_invoice_id, '_compute_scheme_balance_to_pay_customer'):
+                    payment.scheme_refund_invoice_id._compute_scheme_balance_to_pay_customer()
         return res
 
 
