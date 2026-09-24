@@ -76,7 +76,7 @@ class OldGoldPurchase(models.Model):
             source_id = self.branch_location_id
             destination_id = self.ho_location_id
 
-
+        product = self.env.ref('em_jewellery_management.product_old_gold')
         uom = product.uom_id
         for rec in self:
             rec.branch_location_id = source_id.id

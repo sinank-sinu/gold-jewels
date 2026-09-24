@@ -164,10 +164,10 @@ class PurchaseOrder(models.Model):
 
     def button_confirm(self):
         res = super(PurchaseOrder, self).button_confirm()
-        if self.is_old_gold:
-            for order in self:
-                location = self.env.user.branch_id.old_gold_location_id
-
+        for order in self:
+            if order.is_old_gold or order.is_sale_return_shop:
+                dest_loc_id = order._get_destination_location()
+                location_id = dest_loc_id if dest_loc_id else self.env.user.branch_id.old_gold_location_id.id
 
             # ------------------------------------------------
             # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
@@ -175,7 +175,7 @@ class PurchaseOrder(models.Model):
                 self.env['old.gold.purchase'].with_context(skip_old_gold_amount_compute=True).create({
                     'partner_id': order.partner_id.id,
                     'date': fields.Date.today(),
-                    'branch_location_id': location.id,
+                    'branch_location_id': location_id,
                     'purchase_order_id': order.id,
                     'branch_id': self.env.user.branch_id.id,
                     'old_gold_line_ids': [
@@ -188,6 +188,7 @@ class PurchaseOrder(models.Model):
                         }) for l in order.order_line
                     ],
                 })
+        return res
     def _prepare_picking(self):
         vals = super()._prepare_picking()
         vals['branch_id'] = self.branch_id.id
