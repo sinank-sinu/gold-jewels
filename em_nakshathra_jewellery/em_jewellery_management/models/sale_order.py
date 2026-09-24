@@ -1402,7 +1402,6 @@ class SaleOrder(models.Model):
                 'branch_id': order.branch_id.id,
                 'old_gold_line_ids': [
                     (0, 0, {
-                        'product_id': l.product_id.id,
                         'purity_id': l.purity_id.id,
                         'gross_weight': l.gross_weight,
                         'stone_weight': l.sale_stone_weight or l.stone_weight or 0.0,
