@@ -37,17 +37,25 @@ class OldGoldSmithTransferWizard(models.TransientModel):
         if not self.line_ids.filtered(lambda l: l.transfer_weight > 0):
             raise ValidationError(_("Please enter weights to transfer."))
 
-        picking_type = self.env.ref('stock.picking_type_internal')
+        company_id = self.purchase_id.ho_location_id.company_id.id or self.env.company.id
+        picking_type = self.env['stock.picking.type'].sudo().search([
+            ('code', '=', 'internal'),
+            ('company_id', '=', company_id)
+        ], limit=1)
+        if not picking_type:
+            picking_type = self.env.ref('stock.picking_type_internal').sudo()
+            
         product = self.env.ref('em_jewellery_management.product_old_gold')
-        uom = self.env.ref('uom.product_uom_gram')
+        uom = product.uom_id
 
-        picking = self.env['stock.picking'].create({
+        picking = self.env['stock.picking'].sudo().create({
             'picking_type_id': picking_type.id,
             'location_id': self.purchase_id.ho_location_id.id,
             'location_dest_id': self.location_dest_id.id,
             'origin': self.purchase_id.name,
             'is_old_gold': True,
             'sale_old_id': self.purchase_id.sale_id.id,
+            'company_id': company_id,
         })
 
         for line in self.line_ids:
@@ -57,7 +65,7 @@ class OldGoldSmithTransferWizard(models.TransientModel):
             if line.transfer_weight > line.available_weight:
                 raise ValidationError(_("Transfer weight for %s exceeds available weight.") % line.purity_id.name)
 
-            self.env['stock.move'].create({
+            self.env['stock.move'].sudo().create({
                 'product_id': product.id,
                 'name': f'Old Gold Transfer to Smith ({line.purity_id.name})',
                 'purity_id': line.purity_id.id,
@@ -74,7 +82,7 @@ class OldGoldSmithTransferWizard(models.TransientModel):
             line.purchase_line_id.verified_gross_weight -= line.transfer_weight
 
         self.purchase_id.smith_transferred = True
-        picking.action_confirm()
+        picking.sudo().action_confirm()
         # Optional: picking.button_validate() if immediate transfer is desired. 
         # Usually, it's better to let the user validate the picking.
 

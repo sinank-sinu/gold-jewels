@@ -81,11 +81,17 @@ class OldGoldHOVerification(models.Model):
         StockMove = self.env['stock.move']
 
         refinery_location = self.env.ref('em_jewellery_management.loc_refinery')
-        picking_type = self.env.ref('stock.picking_type_internal')
         product = self.env.ref('em_jewellery_management.product_old_gold')
-        uom = self.env.ref('uom.product_uom_gram')
-
+        uom = product.uom_id
         for rec in self:
+            company_id = self.ho_location_id.company_id.id or self.env.company.id
+            picking_type = self.env['stock.picking.type'].sudo().search([
+                ('code', '=', 'internal'),
+                ('company_id', '=', company_id)
+            ], limit=1)
+            if not picking_type:
+                picking_type = self.env.ref('stock.picking_type_internal').sudo()
+
             if rec.state != 'verified':
                 raise ValidationError(
                     _("Only verified records can be sent to refinery.")
@@ -115,17 +121,18 @@ class OldGoldHOVerification(models.Model):
             })
 
             # 2️⃣ Create Stock Picking
-            picking = StockPicking.create({
+            picking = StockPicking.sudo().create({
                 'picking_type_id': picking_type.id,
                 'location_id': self.ho_location_id.id,
                 'location_dest_id': refinery_location.id,
                 'origin': issue.name,
                 'is_old_gold': True,
+                'company_id': company_id,
             })
 
             # 3️⃣ Create Stock Moves (Purity-wise)
             for line in self.line_ids:
-                self.env['stock.move'].create({
+                self.env['stock.move'].sudo().create({
                     'product_id': product.id,
                     'name': 'Old Gold to Refinery',
                     'purity_id': line.purity_id.id,
@@ -137,8 +144,8 @@ class OldGoldHOVerification(models.Model):
                 })
 
             # 4️⃣ Confirm & Validate Picking
-            picking.action_confirm()
-            picking.button_validate()
+            picking.sudo().action_confirm()
+            picking.sudo().button_validate()
 
             # 5️⃣ Link records
             issue.picking_id = picking.id

@@ -77,21 +77,30 @@ class OldGoldPurchase(models.Model):
             destination_id = self.ho_location_id
 
 
-        uom = self.env.ref('uom.product_uom_gram')
+        uom = product.uom_id
         for rec in self:
             rec.branch_location_id = source_id.id
             rec.ho_location_id = destination_id.id
-            picking = self.env['stock.picking'].create({
-                'picking_type_id': self.env.ref('stock.picking_type_internal').id,
+            company_id = source_id.company_id.id or self.env.company.id
+            picking_type = self.env['stock.picking.type'].sudo().search([
+                ('code', '=', 'internal'),
+                ('company_id', '=', company_id)
+            ], limit=1)
+            if not picking_type:
+                picking_type = self.env.ref('stock.picking_type_internal').sudo()
+
+            picking = self.env['stock.picking'].sudo().create({
+                'picking_type_id': picking_type.id,
                 'location_id': source_id.id,
                 'location_dest_id': destination_id.id,
                 'origin': rec.name,
                 'sale_old_id': rec.sale_id.id,
                 'is_old_gold': True,
+                'company_id': company_id,
             })
 
             for line in rec.old_gold_line_ids:
-                self.env['stock.move'].create({
+                self.env['stock.move'].sudo().create({
                     'product_id': self.env.ref('em_jewellery_management.product_old_gold').id,
                     'name': f'Old Gold ({line.purity_id.name})',
                     'purity_id': line.purity_id.id,
@@ -102,7 +111,7 @@ class OldGoldPurchase(models.Model):
                     'picking_id': picking.id,
                 })
 
-            picking.action_confirm()
+            picking.sudo().action_confirm()
             # picking.button_validate()
             rec.state = 'ho_transfer'
 
@@ -210,17 +219,29 @@ class OldGoldPurchase(models.Model):
             if record.add_less < 0:
                 source_location, dest_location = dest_location, source_location
 
+            # Determine source and destination location objects to get company
+            src_loc_obj = self.env['stock.location'].browse(source_location)
+            company_id = src_loc_obj.company_id.id or self.env.company.id
+            
+            picking_type = self.env['stock.picking.type'].sudo().search([
+                ('code', '=', 'internal'),
+                ('company_id', '=', company_id)
+            ], limit=1)
+            if not picking_type:
+                picking_type = self.env.ref('stock.picking_type_internal').sudo()
+
             # Create stock move using the fixed Add/Less product
-            picking = self.env['stock.picking'].create({
-                'picking_type_id': self.env.ref('stock.picking_type_internal').id,
+            picking = self.env['stock.picking'].sudo().create({
+                'picking_type_id': picking_type.id,
                 'location_id': source_location,
                 'location_dest_id': dest_location,
                 'origin':self.name,
                 'sale_old_id': self.sale_id.id,
                 'is_old_gold': True,
+                'company_id': company_id,
             })
 
-            self.env['stock.move'].create({
+            self.env['stock.move'].sudo().create({
                 'description_picking': f"Add/Less Transfer for {record.name}",
                 'name': f"Add/Less Transfer for {record.name}",
                 'product_id': product.id,

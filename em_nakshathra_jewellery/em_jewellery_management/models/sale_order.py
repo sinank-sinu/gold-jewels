@@ -834,11 +834,18 @@ class SaleOrder(models.Model):
 
     def _create_old_gold_stock(self, og):
         product = self.env.ref('em_jewellery_management.product_old_gold')
-        picking_type = self.env.ref('stock.picking_type_internal')
+        company_id = self.branch_location_id.company_id.id or self.env.company.id
+        picking_type = self.env['stock.picking.type'].sudo().search([
+            ('code', '=', 'internal'),
+            ('company_id', '=', company_id)
+        ], limit=1)
+        if not picking_type:
+            picking_type = self.env.ref('stock.picking_type_internal').sudo()
+            
         source_location = self.env.ref('em_jewellery_management.loc_branch_old_gold')
-        uom = self.env.ref('uom.product_uom_gram')
+        uom = product.uom_id
 
-        picking = self.env['stock.picking'].create({
+        picking = self.env['stock.picking'].sudo().create({
             'picking_type_id': picking_type.id,
             'location_id': source_location.id,
             'location_dest_id': self.branch_location_id.id,
@@ -846,9 +853,10 @@ class SaleOrder(models.Model):
             'is_old_gold': True,  # ✅ NEW
             'sale_old_id': self.id,
             'branch_id': self.branch_id.id,
+            'company_id': company_id,
         })
 
-        move = self.env['stock.move'].create({
+        move = self.env['stock.move'].sudo().create({
             'product_id': product.id,
             'name': f'Old Gold ({og.purity_id.name})',
             'quantity': og.net_weight,
