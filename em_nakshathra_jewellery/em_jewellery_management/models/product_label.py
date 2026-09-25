@@ -78,6 +78,13 @@ class ProductLabel(models.Model):
     sale_stone_weight_ct = fields.Float(string="Sale Stone Weight (ct)", digits=(12, 4))
     sale_diamond_weight = fields.Float(string="Sale Diamond Weight (g)", digits=(16, 3))
 
+    @api.constrains('sale_gross_weight')
+    def _check_sale_gross_weight(self):
+        for rec in self:
+            if rec.sale_gross_weight <= 0.0:
+                raise ValidationError(_("Sale Gross Weight must be greater than 0."))
+
+
     sale_net_weight = fields.Float(
         string="Sale Net Weight (g)",
         compute="_compute_sale_net_weight",
