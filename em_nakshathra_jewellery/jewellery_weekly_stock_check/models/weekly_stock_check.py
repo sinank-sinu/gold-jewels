@@ -47,6 +47,13 @@ class JewelleryWeeklyStockCheck(models.Model):
         string='Stock Check Lines'
     )
 
+    visible_line_ids = fields.One2many(
+        'jewellery.weekly.stock.check.line',
+        'stock_check_id',
+        string='Visible Stock Check Lines',
+        domain=[('is_vault_item', '=', False)]
+    )
+
     template_summary_ids = fields.One2many(
         'jewellery.weekly.stock.check.template.summary',
         'stock_check_id',
@@ -99,7 +106,7 @@ class JewelleryWeeklyStockCheck(models.Model):
         return super().create(vals)
 
     def action_load_products(self):
-        """Load products with label counts (branch) and stock weights (location)."""
+        """Load products with active label counts (branch) and vault stock."""
         self.ensure_one()
         if not self.location_ids:
             raise UserError(_("Please select at least one location."))
@@ -109,27 +116,28 @@ class JewelleryWeeklyStockCheck(models.Model):
             raise UserError(_("The selected location is not associated with any branch."))
 
         # Remove existing lines and summary
-        self.line_ids.unlink()
-        self.template_summary_ids.unlink()
+        self.line_ids.sudo().unlink()
+        self.template_summary_ids.sudo().unlink()
 
-        # 1. Get on-hand stock quants for this location with quantity > 0
-        quants = self.env['stock.quant'].search([
-            ('location_id', 'in', self.location_ids.ids),
-            ('quantity', '>', 0),
-        ])
-
-        # 2. Get active labels in the selected locations
+        # Get active labels in the selected locations
         labels = self.env['product.label'].search([
             ('branch_location_id', 'in', self.location_ids.ids),
             ('active', '=', True),
         ])
 
-        if not labels and not quants:
-            raise UserError(_("No active labels or stock found for this location/branch."))
+        # Get on-hand stock quants for vault items in the selected locations
+        vault_quants = self.env['stock.quant'].search([
+            ('location_id', 'in', self.location_ids.ids),
+            ('quantity', '>', 0),
+            ('product_id.product_tmpl_id.is_vault_item', '=', True)
+        ])
 
-        # Create lines per label and unlabelled quant lines for any remaining stock
+        if not labels and not vault_quants:
+            raise UserError(_("No active labels or vault stock found for this location/branch."))
+
+        # Create lines per active label
         lines = []
-        all_products = quants.mapped('product_id') | labels.mapped('product_id')
+        all_products = labels.mapped('product_id') | vault_quants.mapped('product_id')
 
         # Explicitly exclude "Old Gold" from stock checks
         all_products = all_products.filtered(
@@ -137,10 +145,9 @@ class JewelleryWeeklyStockCheck(models.Model):
         )
 
         for product in all_products:
+            # Handle Active Labels
             prod_labels = labels.filtered(lambda l: l.product_id == product)
-            prod_quants = quants.filtered(lambda q: q.product_id == product)
-            total_quant_qty = sum(prod_quants.mapped('quantity'))
-            total_label_wt = sum(prod_labels.mapped('sale_gross_weight'))
+            is_vault = getattr(product.product_tmpl_id, 'is_vault_item', False)
 
             for label in prod_labels:
                 lines.append({
@@ -156,27 +163,34 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'manual_tag_weight': 0.0,
                     'branch_id': label.branch_id.id,
                     'location_id': label.branch_location_id.id,
+                    'is_vault_item': is_vault,
                 })
 
-            # Add remaining un-labeled stock quant (or full quant if no labels)
-            remaining_weight = round(total_quant_qty - total_label_wt, 3)
-            if remaining_weight > 0.0001:
-                loc = prod_quants[0].location_id if prod_quants else self.location_ids[0]
-                branch_rec = loc.branch_id or self.branch_id
-                lines.append({
-                    'stock_check_id': self.id,
-                    'product_tmpl_id': product.product_tmpl_id.id,
-                    'product_id': product.id,
-                    'label_id': False,
-                    'system_qty': 0.0,
-                    'system_weight': remaining_weight,
-                    'system_tag_weight': 0.0,
-                    'manual_qty': 0.0,
-                    'manual_weight': 0.0,
-                    'manual_tag_weight': 0.0,
-                    'branch_id': branch_rec.id,
-                    'location_id': loc.id,
-                })
+            # Handle Vault Stock
+            if is_vault:
+                prod_quants = vault_quants.filtered(lambda q: q.product_id == product)
+                total_vault_qty = sum(prod_quants.mapped('quantity'))
+                total_label_wt = sum(prod_labels.mapped('sale_gross_weight'))
+                remaining_weight = round(total_vault_qty - total_label_wt, 3)
+
+                if remaining_weight > 0.0001:
+                    loc = prod_quants[0].location_id if prod_quants else self.location_ids[0]
+                    branch_rec = loc.branch_id or self.branch_id
+                    lines.append({
+                        'stock_check_id': self.id,
+                        'product_tmpl_id': product.product_tmpl_id.id,
+                        'product_id': product.id,
+                        'label_id': False,
+                        'system_qty': 0.0,
+                        'system_weight': remaining_weight,
+                        'system_tag_weight': 0.0,
+                        'manual_qty': 0.0,
+                        'manual_weight': 0.0,
+                        'manual_tag_weight': 0.0,
+                        'branch_id': branch_rec.id,
+                        'location_id': loc.id,
+                        'is_vault_item': True,
+                    })
 
         self.env['jewellery.weekly.stock.check.line'].with_context(skip_line_sync=True).create(lines)
 
@@ -328,6 +342,11 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         string='Product Variant',
         required=True,
         readonly=True
+    )
+
+    is_vault_item = fields.Boolean(
+        string='Vault Item',
+        default=False
     )
 
     purity_id = fields.Many2one(
