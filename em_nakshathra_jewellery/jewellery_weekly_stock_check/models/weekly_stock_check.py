@@ -67,10 +67,26 @@ class JewelleryWeeklyStockCheck(models.Model):
 
     @api.depends('template_summary_ids', 'template_summary_ids.is_matched', 'line_ids', 'line_ids.system_qty', 'line_ids.system_weight')
     def _compute_summary(self):
+        line_dict = {}
+        if self.ids:
+            line_data = self.env['jewellery.weekly.stock.check.line'].read_group(
+                [('stock_check_id', 'in', self.ids)],
+                ['stock_check_id', 'system_qty:sum', 'system_weight:sum'],
+                ['stock_check_id']
+            )
+            line_dict = {d['stock_check_id'][0]: d for d in line_data}
+
         for rec in self:
             rec.total_lines = len(rec.template_summary_ids)
-            rec.total_labels = sum(rec.line_ids.mapped('system_qty'))
-            rec.total_weight = sum(rec.line_ids.mapped('system_weight'))
+            
+            if not rec.id:
+                rec.total_labels = sum(rec.line_ids.mapped('system_qty'))
+                rec.total_weight = sum(rec.line_ids.mapped('system_weight'))
+            else:
+                ld = line_dict.get(rec.id, {})
+                rec.total_labels = ld.get('system_qty', 0.0)
+                rec.total_weight = ld.get('system_weight', 0.0)
+
             rec.matched_lines = len(rec.template_summary_ids.filtered('is_matched'))
             rec.mismatched_lines = rec.total_lines - rec.matched_lines
 
@@ -115,6 +131,11 @@ class JewelleryWeeklyStockCheck(models.Model):
         lines = []
         all_products = quants.mapped('product_id') | labels.mapped('product_id')
 
+        # Explicitly exclude "Old Gold" from stock checks
+        all_products = all_products.filtered(
+            lambda p: 'old gold' not in (p.name or '').lower() and not getattr(p, 'is_old_gold', False)
+        )
+
         for product in all_products:
             prod_labels = labels.filtered(lambda l: l.product_id == product)
             prod_quants = quants.filtered(lambda q: q.product_id == product)
@@ -157,7 +178,7 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'location_id': loc.id,
                 })
 
-        self.env['jewellery.weekly.stock.check.line'].create(lines)
+        self.env['jewellery.weekly.stock.check.line'].with_context(skip_line_sync=True).create(lines)
 
         # Create template summary lines
         templates = self.line_ids.mapped('product_tmpl_id')
@@ -264,11 +285,6 @@ class JewelleryWeeklyStockCheck(models.Model):
             # Find existing line loaded by 'Load Products'
             existing_line = check.line_ids.filtered(lambda l: l.label_id == label)
             if existing_line:
-                existing_line[0].write({
-                    'manual_qty': 1.0,
-                    'manual_weight': label.sale_gross_weight,
-                    'manual_tag_weight': label.tag_weight,
-                })
                 line = existing_line[0]
             else:
                 # Create new line for label (Surplus)
@@ -280,9 +296,6 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'system_qty': 1.0,
                     'system_weight': label.sale_gross_weight,
                     'system_tag_weight':label.tag_weight,
-                    'manual_qty': 1.0,
-                    'manual_weight': label.sale_gross_weight,
-                    'manual_tag_weight': label.tag_weight,
                     'branch_id': label.branch_id.id,
                     'location_id': label.branch_location_id.id,
                 })
@@ -448,18 +461,23 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         store=True
     )
 
+    @api.onchange('label_id')
+    def _onchange_label_id(self):
+        for rec in self:
+            if rec.label_id:
+                rec.product_id = rec.label_id.product_id
+                rec.product_tmpl_id = rec.label_id.product_id.product_tmpl_id
+                rec.branch_id = rec.label_id.branch_id
+                rec.location_id = rec.label_id.branch_location_id
+                # Removed auto-calculation of manual weights and quantities
+
     @api.onchange('manual_total_weight')
     def _onchange_manual_total_weight(self):
-        """Automatically match individual weights if total weight matches."""
-        for rec in self:
-            if rec.manual_total_weight > 0:
-                # Use same tolerance as matching logic (300mg)
-                if abs(rec.manual_total_weight - rec.system_total_weight) <= 0.300:
-                    rec.manual_weight = rec.system_weight
-                    rec.manual_tag_weight = rec.system_tag_weight
-                    # Also match qty if it's 0
-                    if rec.manual_qty == 0 and rec.system_qty > 0:
-                        rec.manual_qty = rec.system_qty
+        pass
+
+    @api.onchange('manual_weight', 'manual_tag_weight')
+    def _onchange_manual_weights(self):
+        pass
 
     @api.depends('system_weight', 'manual_weight', 'system_tag_weight', 'manual_tag_weight')
     def _compute_total_weights(self):
@@ -501,15 +519,57 @@ class JewelleryWeeklyStockCheckLine(models.Model):
         if self.env.context.get('skip_line_sync'):
             return
         
-        for line in self:
-            summary = line.stock_check_id.template_summary_ids.filtered(lambda s: s.product_tmpl_id == line.product_tmpl_id)
-            if summary:
-                lines = line.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == line.product_tmpl_id)
+        checks = self.mapped('stock_check_id')
+        for check in checks:
+            affected_tmpls = self.filtered(lambda l: l.stock_check_id == check).mapped('product_tmpl_id')
+            if not affected_tmpls:
+                continue
+                
+            summaries = check.template_summary_ids.filtered(lambda s: s.product_tmpl_id in affected_tmpls)
+            
+            # Auto-create missing summaries if they do not exist
+            existing_tmpls = summaries.mapped('product_tmpl_id')
+            missing_tmpls = affected_tmpls - existing_tmpls
+            if missing_tmpls and check.id:
+                new_summaries = self.env['jewellery.weekly.stock.check.template.summary'].create([
+                    {'stock_check_id': check.id, 'product_tmpl_id': tmpl.id} for tmpl in missing_tmpls
+                ])
+                summaries |= new_summaries
+                
+            if not summaries:
+                continue
+                
+            if not check.id:
+                lines_by_tmpl = {}
+                for line in check.line_ids:
+                    if line.product_tmpl_id in affected_tmpls:
+                        lines_by_tmpl.setdefault(line.product_tmpl_id, self.env['jewellery.weekly.stock.check.line'])
+                        lines_by_tmpl[line.product_tmpl_id] |= line
+                        
+                for summary in summaries:
+                    lines = lines_by_tmpl.get(summary.product_tmpl_id, self.env['jewellery.weekly.stock.check.line'])
+                    summary.with_context(skip_summary_distribution=True).write({
+                        'manual_qty': sum(lines.mapped('manual_qty')),
+                        'manual_weight': sum(lines.mapped('manual_weight')),
+                        'manual_tag_weight': sum(lines.mapped('manual_tag_weight')),
+                        'manual_total_weight': sum(lines.mapped('manual_total_weight'))
+                    })
+                continue
+
+            line_data = self.env['jewellery.weekly.stock.check.line'].read_group(
+                [('stock_check_id', '=', check.id), ('product_tmpl_id', 'in', affected_tmpls.ids)],
+                ['product_tmpl_id', 'manual_qty:sum', 'manual_weight:sum', 'manual_tag_weight:sum', 'manual_total_weight:sum'],
+                ['product_tmpl_id']
+            )
+            line_dict = {d['product_tmpl_id'][0]: d for d in line_data}
+            
+            for summary in summaries:
+                ld = line_dict.get(summary.product_tmpl_id.id, {})
                 summary.with_context(skip_summary_distribution=True).write({
-                    'manual_qty': sum(lines.mapped('manual_qty')),
-                    'manual_weight': sum(lines.mapped('manual_weight')),
-                    'manual_tag_weight': sum(lines.mapped('manual_tag_weight')),
-                    'manual_total_weight': sum(lines.mapped('manual_total_weight'))
+                    'manual_qty': ld.get('manual_qty', 0.0),
+                    'manual_weight': ld.get('manual_weight', 0.0),
+                    'manual_tag_weight': ld.get('manual_tag_weight', 0.0),
+                    'manual_total_weight': ld.get('manual_total_weight', 0.0)
                 })
 
     @api.model_create_multi
@@ -647,81 +707,41 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
 
     @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight', 'stock_check_id.line_ids.system_total_weight')
     def _compute_system_totals(self):
-        for summary in self:
-            lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
-            summary.system_qty = sum(lines.mapped('system_qty'))
-            summary.system_weight = sum(lines.mapped('system_weight'))
-            summary.system_tag_weight = sum(lines.mapped('system_tag_weight'))
-            summary.system_total_weight = sum(lines.mapped('system_total_weight'))
+        for check in self.mapped('stock_check_id'):
+            summaries = self.filtered(lambda s: s.stock_check_id == check)
+            
+            if not check.id:
+                lines_by_tmpl = {}
+                for line in check.line_ids:
+                    lines_by_tmpl.setdefault(line.product_tmpl_id, []).append(line)
+                for summary in summaries:
+                    lines = lines_by_tmpl.get(summary.product_tmpl_id, [])
+                    summary.system_qty = sum(l.system_qty for l in lines)
+                    summary.system_weight = sum(l.system_weight for l in lines)
+                    summary.system_tag_weight = sum(l.system_tag_weight for l in lines)
+                    summary.system_total_weight = sum(l.system_total_weight for l in lines)
+                continue
+                
+            tmpl_ids = summaries.mapped('product_tmpl_id').ids
+            line_data = self.env['jewellery.weekly.stock.check.line'].read_group(
+                [('stock_check_id', '=', check.id), ('product_tmpl_id', 'in', tmpl_ids)],
+                ['product_tmpl_id', 'system_qty:sum', 'system_weight:sum', 'system_tag_weight:sum', 'system_total_weight:sum'],
+                ['product_tmpl_id']
+            )
+            
+            line_dict = {d['product_tmpl_id'][0]: d for d in line_data}
+            
+            for summary in summaries:
+                ld = line_dict.get(summary.product_tmpl_id.id, {})
+                summary.system_qty = ld.get('system_qty', 0.0)
+                summary.system_weight = ld.get('system_weight', 0.0)
+                summary.system_tag_weight = ld.get('system_tag_weight', 0.0)
+                summary.system_total_weight = ld.get('system_total_weight', 0.0)
 
 
     def write(self, vals):
         res = super().write(vals)
-        # If manual totals were edited directly on the summary, distribute them to lines
-        manual_fields = ['manual_qty', 'manual_weight', 'manual_tag_weight', 'manual_total_weight']
-        if any(f in vals for f in manual_fields) and not self.env.context.get('skip_summary_distribution'):
-            for summary in self:
-                lines = summary.stock_check_id.line_ids.filtered(lambda l: l.product_tmpl_id == summary.product_tmpl_id)
-                if not lines:
-                    continue
-
-                current_qty = sum(lines.mapped('manual_qty'))
-                current_weight = sum(lines.mapped('manual_weight'))
-                current_tag = sum(lines.mapped('manual_tag_weight'))
-                current_total = sum(lines.mapped('manual_total_weight'))
-
-                diff_qty = abs(summary.manual_qty - current_qty) > 0.001
-                diff_weight = abs(summary.manual_weight - current_weight) > 0.001
-                diff_tag = abs(summary.manual_tag_weight - current_tag) > 0.001
-                diff_total = abs(summary.manual_total_weight - current_total) > 0.001
-
-                # Write to lines while skipping inverse loop
-                lines = lines.with_context(skip_line_sync=True)
-
-                if diff_qty:
-                    qty_to_distribute = int(summary.manual_qty)
-                    for line in lines:
-                        if qty_to_distribute > 0:
-                            line.manual_qty = 1.0
-                            qty_to_distribute -= 1
-                        else:
-                            line.manual_qty = 0.0
-
-                if diff_total:
-                    sys_total = sum(lines.mapped('system_total_weight'))
-                    distributed = 0.0
-                    for i, line in enumerate(lines):
-                        if i == len(lines) - 1:
-                            line.manual_total_weight = summary.manual_total_weight - distributed
-                        else:
-                            ratio = (line.system_total_weight / sys_total) if sys_total > 0 else (1.0 / len(lines))
-                            val = round(summary.manual_total_weight * ratio, 3)
-                            line.manual_total_weight = val
-                            distributed += val
-
-                if diff_weight:
-                    sys_wt = sum(lines.mapped('system_weight'))
-                    distributed_wt = 0.0
-                    for i, line in enumerate(lines):
-                        if i == len(lines) - 1:
-                            line.manual_weight = summary.manual_weight - distributed_wt
-                        else:
-                            ratio = (line.system_weight / sys_wt) if sys_wt > 0 else (1.0 / len(lines))
-                            val = round(summary.manual_weight * ratio, 3)
-                            line.manual_weight = val
-                            distributed_wt += val
-
-                if diff_tag:
-                    sys_tag = sum(lines.mapped('system_tag_weight'))
-                    distributed_tag = 0.0
-                    for i, line in enumerate(lines):
-                        if i == len(lines) - 1:
-                            line.manual_tag_weight = summary.manual_tag_weight - distributed_tag
-                        else:
-                            ratio = (line.system_tag_weight / sys_tag) if sys_tag > 0 else (1.0 / len(lines))
-                            val = round(summary.manual_tag_weight * ratio, 3)
-                            line.manual_tag_weight = val
-                            distributed_tag += val
+        # Removed auto-distribution of manual quantities and weights to lines
         return res
 
 

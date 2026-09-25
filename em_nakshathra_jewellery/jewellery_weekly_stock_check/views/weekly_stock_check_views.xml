@@ -120,15 +120,14 @@
                             <field name="line_ids"
                                    readonly="state in ('matched', 'cancel')">
                                 <tree editable="bottom"
-                                      create="false"
-                                      delete="false"
                                       decoration-success="is_matched == True"
                                       decoration-danger="is_matched == False and (manual_qty != 0 or manual_total_weight != 0)">
-                                    <field name="product_id" readonly="1"/>
-                                    <field name="purity_id" optional="show" readonly="1"/>
-                                    <field name="label_id" readonly="1"/>
-                                    <field name="branch_id" optional="show" readonly="1"/>
-                                    <field name="location_id" optional="show" readonly="1"/>
+                                    <field name="product_tmpl_id" column_invisible="1" force_save="1"/>
+                                    <field name="product_id" readonly="1" force_save="1"/>
+                                    <field name="purity_id" optional="show" readonly="1" force_save="1"/>
+                                    <field name="label_id" options="{'no_create': True}" widget="many2one_barcode"/>
+                                    <field name="branch_id" optional="show" readonly="1" force_save="1"/>
+                                    <field name="location_id" optional="show" readonly="1" force_save="1"/>
 
                                     <!-- System values: only visible to managers -->
                                     <field name="system_qty"
@@ -216,11 +215,14 @@
                             </field>
                         </page>
                         <page string="Product Template Summary" name="template_summary">
+                            <widget name="barcode_scanner"
+                                    model="jewellery.weekly.stock.check"
+                                    invisible="state not in ('in_progress','draft','mismatch')"/>
                             <field name="template_summary_ids" readonly="state in ('matched', 'cancel')">
-                                <tree editable="bottom" create="false" delete="false"
+                                <tree editable="bottom"
                                       decoration-success="is_matched == True"
                                       decoration-danger="is_matched == False and (manual_qty != 0 or manual_total_weight != 0.0)">
-                                    <field name="product_tmpl_id" readonly="1"/>
+                                    <field name="product_tmpl_id" readonly="0" options="{'no_create': True}"/>
                                     <field name="system_qty" string="Total Labels" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
                                     <field name="system_weight" string="Total Weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1"/>
                                     <field name="system_tag_weight" groups="jewellery_weekly_stock_check.group_jewellery_stock_manager" readonly="1" optional="hide"/>
