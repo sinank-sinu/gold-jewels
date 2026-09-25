@@ -62,6 +62,29 @@ class JewellerySchemeEnrollment(models.Model):
                     rec.state = 'running'
 
 
+class JewellerySchemeInstallment(models.Model):
+    _inherit = 'jewellery.scheme.installment'
+
+    def get_voucher_display_name(self):
+        self.ensure_one()
+        line = self.sudo()
+        try:
+            if line.move_id:
+                m_name = line.move_id.sudo().name
+                if m_name:
+                    return m_name
+        except Exception:
+            pass
+        try:
+            if line.suspense_move_id:
+                s_name = line.suspense_move_id.sudo().name
+                if s_name:
+                    return s_name
+        except Exception:
+            pass
+        return line.transaction_id or line.remark or ''
+
+
 # from odoo import models, fields, api
 
 

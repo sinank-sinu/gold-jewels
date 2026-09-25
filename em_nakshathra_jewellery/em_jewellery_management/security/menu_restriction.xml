@@ -57,7 +57,7 @@
     </record>
 
     <record id="sale.sale_menu_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('em_jewellery_management.group_jewellery_salesman'), ref('em_jewellery_management.group_jewellery_billing_staff'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('em_jewellery_management.group_jewellery_salesman'), ref('em_jewellery_management.group_jewellery_billing_staff'), ref('em_jewellery_management.group_jewellery_scheme_staff'), ref('base.group_system')])]"/>
     </record>
 
     <!-- Restrict Inventory -->

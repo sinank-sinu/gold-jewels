@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- Customer Payments Action for Jewellery / Schemes -->
+    <record id="action_jewellery_customer_payments" model="ir.actions.act_window">
+        <field name="name">Customer Payments</field>
+        <field name="res_model">account.payment</field>
+        <field name="view_mode">tree,form,kanban</field>
+        <field name="domain">[('partner_type', '=', 'customer'), ('payment_type', '=', 'inbound')]</field>
+        <field name="context">{
+            'default_payment_type': 'inbound',
+            'default_partner_type': 'customer',
+            'search_default_inbound_filter': 1,
+            'default_move_journal_types': ('bank', 'cash'),
+        }</field>
+        <field name="view_id" ref="account.view_account_payment_tree"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Register a customer payment
+            </p>
+            <p>
+                Payments are used to track customer payments. Click New to register a payment.
+            </p>
+        </field>
+    </record>
+
     <record id="view_account_payment_form_inherit_jewellery" model="ir.ui.view">
         <field name="name">account.payment.form.inherit.jewellery</field>
         <field name="model">account.payment</field>

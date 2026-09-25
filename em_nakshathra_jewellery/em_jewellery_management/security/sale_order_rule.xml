@@ -204,5 +204,73 @@
             <field name="perm_create" eval="True"/>
             <field name="perm_unlink" eval="False"/>
         </record>
+
+        <!-- Record Rule for Scheme Staff to see Branch Sales Orders -->
+        <record id="rule_sale_order_scheme_staff_all" model="ir.rule">
+            <field name="name">Jewellery Scheme Staff: Branch Orders</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="domain_force">['|', ('branch_id', '=', user.branch_id.id), ('branch_id', 'in', user.branch_ids.ids)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_scheme_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_sale_order_line_scheme_staff_all" model="ir.rule">
+            <field name="name">Jewellery Scheme Staff: Branch Order Lines</field>
+            <field name="model_id" ref="sale.model_sale_order_line"/>
+            <field name="domain_force">['|', ('order_id.branch_id', '=', user.branch_id.id), ('order_id.branch_id', 'in', user.branch_ids.ids)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_scheme_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_jewellery_scheme_scheme_staff_all" model="ir.rule">
+            <field name="name">Jewellery Scheme Staff: All Schemes</field>
+            <field name="model_id" ref="em_jewellery_management.model_jewellery_scheme_enrollment"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_scheme_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="rule_jewellery_scheme_installment_scheme_staff_all" model="ir.rule">
+            <field name="name">Jewellery Scheme Staff: All Scheme Installments</field>
+            <field name="model_id" ref="em_jewellery_management.model_jewellery_scheme_installment"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_scheme_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Record Rules for Customer Payments (account.payment) -->
+        <record id="rule_account_payment_scheme_staff_branch" model="ir.rule">
+            <field name="name">Jewellery Scheme Staff: Branch Payments Only</field>
+            <field name="model_id" ref="account.model_account_payment"/>
+            <field name="domain_force">[('branch_id', '=', user.branch_id.id)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_scheme_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_account_payment_billing_staff_branch" model="ir.rule">
+            <field name="name">Jewellery Billing Staff: Branch Payments Only</field>
+            <field name="model_id" ref="account.model_account_payment"/>
+            <field name="domain_force">[('branch_id', '=', user.branch_id.id)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
     </data>
 </odoo>

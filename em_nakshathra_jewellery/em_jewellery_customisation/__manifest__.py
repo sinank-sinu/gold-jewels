@@ -15,6 +15,7 @@
         'wizard/scheme_margin_list_wizard_views.xml',
         'reports/scheme_margin_report.xml',
         'reports/scheme_margin_list_report.xml',
+        'reports/scheme_receipt_report.xml',
         'views/product_label.xml',
         'views/fine_rate_master_view.xml',
         'views/stock_picking_views.xml',

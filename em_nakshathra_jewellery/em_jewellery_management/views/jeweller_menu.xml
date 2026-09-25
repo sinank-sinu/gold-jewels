@@ -22,7 +22,7 @@
         id="menu_jewellery_root"
         name="Jewellery"
         sequence="10"
-        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,base.group_system"/>
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_scheme_staff,base.group_system"/>
 
 <menuitem
         id="menu_jewellery_configuration_root"
@@ -31,19 +31,36 @@
         sequence="90"
         groups="em_jewellery_management.group_jewellery_manager"
     />
+
     <!-- Main Scheme Menu -->
     <menuitem id="menu_scheme_enrollment_category"
               name="Schemes"
               parent="menu_jewellery_root"
-              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_scheme_staff"
               sequence="10"/>
     <!--Submenu Scheme-->          
     <menuitem id="menu_scheme_enrollment_list_view"
               name="Schemes"
               parent="menu_scheme_enrollment_category"
               action="em_jewellery_management.action_scheme_enrollment"
-              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_salesman,em_jewellery_management.group_jewellery_scheme_staff"
               sequence="15"/>
+
+    <!-- Customer Payments Tab in Top Navbar (under Jewellery root) -->
+    <menuitem id="menu_jewellery_customer_payments"
+              name="Customer Payments"
+              parent="menu_jewellery_root"
+              action="action_jewellery_customer_payments"
+              groups="em_jewellery_management.group_jewellery_scheme_staff,em_jewellery_management.group_jewellery_manager"
+              sequence="11"/>
+
+    <!-- Customer Payments also available under Schemes menu dropdown -->
+    <menuitem id="menu_scheme_customer_payments"
+              name="Customer Payments"
+              parent="menu_scheme_enrollment_category"
+              action="action_jewellery_customer_payments"
+              groups="em_jewellery_management.group_jewellery_scheme_staff,em_jewellery_management.group_jewellery_manager"
+              sequence="20"/>
 
      <menuitem
         id="menu_job_work_root"

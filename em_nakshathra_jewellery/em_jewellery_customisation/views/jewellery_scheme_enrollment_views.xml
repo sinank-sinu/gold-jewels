@@ -16,6 +16,10 @@
                         type="object"
                         string="Print Individual Scheme"
                         class="btn-primary"/>
+                <button name="action_print_scheme_receipt"
+                        type="object"
+                        string="Print Receipt"
+                        class="btn-secondary"/>
             </xpath>
 
         </field>

@@ -316,7 +316,7 @@ class SchemeRedeemMarginXlsx(models.AbstractModel):
             row += 1
 
             # ---- VALUES ----
-            caret = "24CT"
+            caret = "22CT"
             market_price = 100
            
             qty = redemption.amount / market_price if market_price else 0.0

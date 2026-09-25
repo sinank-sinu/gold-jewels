@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="paperformat_scheme_receipt" model="report.paperformat">
+        <field name="name">Scheme Receipt A4</field>
+        <field name="default" eval="False"/>
+        <field name="format">A4</field>
+        <field name="page_height">0</field>
+        <field name="page_width">0</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">10</field>
+        <field name="margin_bottom">10</field>
+        <field name="margin_left">10</field>
+        <field name="margin_right">10</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+    </record>
+
+    <record id="action_report_scheme_receipt" model="ir.actions.report">
+        <field name="name">Scheme Receipt</field>
+        <field name="model">jewellery.scheme.enrollment</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_jewellery_customisation.report_scheme_receipt</field>
+        <field name="report_file">em_jewellery_customisation.report_scheme_receipt</field>
+        <field name="print_report_name">'Receipt - %s' % (object.ticket_number or object.name)</field>
+        <field name="paperformat_id" ref="paperformat_scheme_receipt"/>
+        <field name="binding_model_id" eval="False"/>
+    </record>
+
+    <template id="report_scheme_receipt">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <div class="article" t-att-data-oe-model="doc._name" t-att-data-oe-id="doc.id">
+                    <style>
+                        @page {
+                            size: A4 portrait;
+                            margin: 10mm;
+                        }
+                        html, body {
+                            width: 100%;
+                            margin: 0;
+                            padding: 0;
+                            font-family: Arial, "Helvetica Neue", sans-serif;
+                            font-size: 11px;
+                            color: #111;
+                            line-height: 1.4;
+                        }
+                        .page {
+                            width: 100%;
+                            page-break-after: always;
+                            box-sizing: border-box;
+                        }
+                        /* Reset borders for layout tables */
+                        table.header-table, table.header-table tr, table.header-table td,
+                        table.info-table, table.info-table tr, table.info-table td,
+                        table.stat-table, table.stat-table tr, table.stat-table td,
+                        table.sig-table, table.sig-table tr, table.sig-table td {
+                            border: none !important;
+                            outline: none !important;
+                            box-shadow: none !important;
+                        }
+                        /* Header Spacing for Letterhead */
+                        .top-header-spacer {
+                            width: 100%;
+                            height: 150px;
+                            min-height: 150px;
+                        }
+                        .voucher-title-banner {
+                            font-size: 12px;
+                            font-weight: bold;
+                            text-decoration: underline;
+                            margin-top: 10px;
+                            margin-bottom: 16px;
+                        }
+                        /* Customer Box */
+                        .cust-box {
+                            width: 100%;
+                            border: 1px solid #000;
+                            border-collapse: collapse;
+                            margin-bottom: 16px;
+                        }
+                        .cust-box td {
+                            vertical-align: top;
+                            padding: 10px 14px;
+                        }
+                        .cust-id-title {
+                            font-weight: bold;
+                            text-decoration: underline;
+                            margin-bottom: 6px;
+                            font-size: 11.5px;
+                        }
+                        .info-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .info-table td {
+                            padding: 3px 0;
+                            font-size: 10.5px;
+                        }
+                        .info-label {
+                            width: 110px;
+                            font-weight: bold;
+                            color: #000;
+                            padding-right: 8px;
+                        }
+                        .stat-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .stat-table td {
+                            padding: 3.5px 0;
+                            font-size: 10.5px;
+                        }
+                        .stat-label {
+                            font-weight: bold;
+                        }
+                        .stat-val {
+                            text-align: right;
+                            font-weight: normal;
+                            padding-right: 10px;
+                        }
+                        /* Installment Table */
+                        .inst-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 12px;
+                        }
+                        .inst-table th {
+                            border: 1px solid #000;
+                            padding: 6px 10px;
+                            font-size: 10.5px;
+                            font-weight: bold;
+                            background-color: #f4f6f7;
+                        }
+                        .inst-table td {
+                            border: 1px solid #000;
+                            padding: 5px 10px;
+                            font-size: 10px;
+                        }
+                        .inst-val-footer {
+                            font-weight: bold;
+                            text-decoration: underline;
+                            margin-top: 12px;
+                            margin-bottom: 20px;
+                            font-size: 11.5px;
+                        }
+                        .sig-section {
+                            margin-top: 140px;
+                            width: 100%;
+                        }
+                        .sig-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .sig-table td {
+                            vertical-align: top;
+                            font-size: 10px;
+                            padding: 0 10px;
+                        }
+                    </style>
+                    <div class="page">
+                        <t t-set="doc" t-value="doc.sudo()"/>
+                        <t t-set="company" t-value="doc.get_receipt_company()"/>
+                        <t t-set="display_lines" t-value="doc.get_receipt_display_lines()"/>
+                        <t t-set="as_on_date" t-value="doc.get_receipt_as_on_date()"/>
+
+                        <!-- Top Header Spacing for Pre-printed Letterhead -->
+                        <div class="top-header-spacer" style="height: 150px; min-height: 150px;"></div>
+
+                        <!-- Subscriber Voucher Header -->
+                        <div class="voucher-title-banner">Subscriber Voucher As On Date <t t-esc="as_on_date"/></div>
+
+                        <!-- Customer Details Box -->
+                        <table class="cust-box">
+                            <tr>
+                                <td style="width: 68%; border-right: 1px solid #000; padding: 10px 14px;">
+                                    <div class="cust-id-title">Customer ID : <t t-esc="doc.ticket_number or doc.name"/></div>
+                                    <table class="info-table">
+                                        <tr>
+                                            <td class="info-label">Party Name</td>
+                                            <td><t t-esc="doc.partner_id.name"/></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="info-label">Address</td>
+                                            <td>
+                                                <t t-esc="doc.get_receipt_formatted_address()"/>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="info-label">Mobile</td>
+                                            <td><t t-esc="doc.phone or doc.partner_id.phone or doc.partner_id.mobile or ''"/></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="info-label">State</td>
+                                            <td>
+                                                <t t-if="doc.partner_id.state_id">
+                                                    <t t-esc="doc.partner_id.state_id.name"/><t t-if="doc.partner_id.state_id.code"> (<t t-esc="doc.partner_id.state_id.code"/>)</t>
+                                                </t>
+                                                <t t-else="">Kerala (32)</t>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="info-label">Nominee Name</td>
+                                            <td><t t-esc="doc.nominee or ''"/></td>
+                                        </tr>
+                                    </table>
+                                </td>
+                                <td style="width: 32%; padding: 10px 14px;">
+                                    <table class="stat-table">
+                                        <tr>
+                                            <td class="stat-label">No. Of Inst. Paid</td>
+                                            <td class="stat-val"><t t-esc="doc.paid_count"/></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="stat-label">Pending Inst.</td>
+                                            <td class="stat-val"><t t-esc="max(0, doc.duration - doc.paid_count) if doc.duration else 0"/></td>
+                                        </tr>
+                                    </table>
+                                    <div style="border-bottom: 1px solid #000; margin-top: 22px;"></div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- Installment Breakdown Table -->
+                        <table class="inst-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 12%; text-align: center;">Inst. No.</th>
+                                    <th style="width: 38%; text-align: left;">Voucher No.</th>
+                                    <th style="width: 25%; text-align: center;">Voucher Date</th>
+                                    <th style="width: 25%; text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-set="total_amount" t-value="0.0"/>
+                                <t t-set="idx" t-value="1"/>
+                                <tr t-foreach="display_lines" t-as="line">
+                                    <td style="text-align: center;"><t t-esc="idx"/></td>
+                                    <td style="text-align: left;">
+                                        <t t-esc="doc.get_line_voucher_name(line)"/>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <t t-esc="line.date.strftime('%d/%m/%Y') if line.date else ''"/>
+                                    </td>
+                                    <td style="text-align: right;">
+                                        <t t-esc="'{:,.2f}'.format(line.amount)"/>
+                                    </td>
+                                    <t t-set="total_amount" t-value="total_amount + line.amount"/>
+                                    <t t-set="idx" t-value="idx + 1"/>
+                                </tr>
+                                <tr style="font-weight: bold; background-color: #fafbfc;">
+                                    <td style="text-align: left; font-weight: bold;">Total</td>
+                                    <td></td>
+                                    <td></td>
+                                    <td style="text-align: right; font-weight: bold;">
+                                        <t t-esc="'{:,.2f}'.format(doc.get_receipt_total_paid())"/>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <!-- Installment Value Footer -->
+                        <div class="inst-val-footer">Installment Value : <t t-esc="'{:,.2f}'.format(doc.installment_amount)"/></div>
+
+                        <!-- Signatures Section -->
+                        <div class="sig-section">
+                            <table class="sig-table" style="border: none !important;">
+                                <tr style="border: none !important;">
+                                    <td style="width: 32%; text-align: center; border: none !important;">
+                                        <div style="border-top: 1px solid #000; padding-top: 4px; font-weight: bold; width: 150px; margin: 0 auto;">Customer's Signature</div>
+                                    </td>
+                                    <td style="width: 36%; text-align: center; border: none !important;">
+                                        <div>Subject To Jurisdiction Only E. &amp; O.E</div>
+                                        <div style="font-weight: bold; margin-top: 5px;">
+                                            <t t-esc="doc.user_id.name or doc.env.user.name"/>
+                                        </div>
+                                    </td>
+                                    <td style="width: 32%; text-align: center; border: none !important;">
+                                        <div style="border-top: 1px solid #000; padding-top: 4px; font-weight: bold; width: 150px; margin: 0 auto;">Authorised Signature</div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>
