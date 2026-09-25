@@ -1392,23 +1392,7 @@ class SaleOrder(models.Model):
                 'is_sale_return_po': True,
             })
 
-            # Create old.gold.purchase record for sale return lines as well,
-            # so they appear in the Old Gold Purchase list.
-            self.env['old.gold.purchase'].create({
-                'partner_id': order.partner_id.id,
-                'date': fields.Date.today(),
-                'branch_location_id': order.sale_return_branch_location_id.id or order.branch_location_id.id,
-                'sale_id': order.id,
-                'branch_id': order.branch_id.id,
-                'old_gold_line_ids': [
-                    (0, 0, {
-                        'purity_id': l.purity_id.id,
-                        'gross_weight': l.gross_weight,
-                        'stone_weight': l.sale_stone_weight or l.stone_weight or 0.0,
-                        'rate': l.rate,
-                    }) for l in order.sale_return_line_ids
-                ]
-            })
+
 
             for line in order.sale_return_line_ids:
                 gross_wt = line.gross_weight or 1.0

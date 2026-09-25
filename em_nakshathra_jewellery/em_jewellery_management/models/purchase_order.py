@@ -165,7 +165,7 @@ class PurchaseOrder(models.Model):
     def button_confirm(self):
         res = super(PurchaseOrder, self).button_confirm()
         for order in self:
-            if order.is_old_gold or order.is_sale_return_shop:
+            if order.is_old_gold:
                 dest_loc_id = order._get_destination_location()
                 location_id = dest_loc_id if dest_loc_id else self.env.user.branch_id.old_gold_location_id.id
 
