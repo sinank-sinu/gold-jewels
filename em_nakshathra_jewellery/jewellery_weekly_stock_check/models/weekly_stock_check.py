@@ -53,11 +53,11 @@ class JewelleryWeeklyStockCheck(models.Model):
         string='Template Summary'
     )
 
-    total_lines = fields.Integer(string='Total Products', compute='_compute_summary', store=True)
-    total_labels = fields.Float(string='Total Labels', compute='_compute_summary', digits=(16, 0), store=True)
-    total_weight = fields.Float(string='Total Weight', compute='_compute_summary', digits=(16, 3), store=True)
-    matched_lines = fields.Integer(string='Matched', compute='_compute_summary', store=True)
-    mismatched_lines = fields.Integer(string='Mismatched', compute='_compute_summary', store=True)
+    total_lines = fields.Integer(string='Total Products', compute='_compute_summary')
+    total_labels = fields.Float(string='Total Labels', compute='_compute_summary', digits=(16, 0))
+    total_weight = fields.Float(string='Total Weight', compute='_compute_summary', digits=(16, 3))
+    matched_lines = fields.Integer(string='Matched', compute='_compute_summary')
+    mismatched_lines = fields.Integer(string='Mismatched', compute='_compute_summary')
 
     @api.onchange('branch_id')
     def _onchange_branch_id(self):
@@ -67,46 +67,12 @@ class JewelleryWeeklyStockCheck(models.Model):
 
     @api.depends('template_summary_ids', 'template_summary_ids.is_matched', 'line_ids', 'line_ids.system_qty', 'line_ids.system_weight')
     def _compute_summary(self):
-        saved_recs = self.filtered('id')
-        new_recs = self - saved_recs
-
-        for rec in new_recs:
+        for rec in self:
             rec.total_lines = len(rec.template_summary_ids)
             rec.total_labels = sum(rec.line_ids.mapped('system_qty'))
             rec.total_weight = sum(rec.line_ids.mapped('system_weight'))
             rec.matched_lines = len(rec.template_summary_ids.filtered('is_matched'))
             rec.mismatched_lines = rec.total_lines - rec.matched_lines
-
-        if saved_recs:
-            # Flush to ensure database has the latest values before querying
-            self.env.flush_all()
-            
-            # Use SQL for optimal performance to prevent OOM / timeouts on large stock checks
-            self.env.cr.execute("""
-                SELECT stock_check_id, sum(system_qty), sum(system_weight)
-                FROM jewellery_weekly_stock_check_line
-                WHERE stock_check_id IN %s
-                GROUP BY stock_check_id
-            """, (tuple(saved_recs.ids),))
-            lines_data = {row[0]: {'qty': row[1] or 0.0, 'weight': row[2] or 0.0} for row in self.env.cr.fetchall()}
-
-            self.env.cr.execute("""
-                SELECT stock_check_id, count(id), sum(case when is_matched then 1 else 0 end)
-                FROM jewellery_weekly_stock_check_template_summary
-                WHERE stock_check_id IN %s
-                GROUP BY stock_check_id
-            """, (tuple(saved_recs.ids),))
-            summary_data = {row[0]: {'total': row[1] or 0, 'matched': row[2] or 0} for row in self.env.cr.fetchall()}
-
-            for rec in saved_recs:
-                l_data = lines_data.get(rec.id, {'qty': 0.0, 'weight': 0.0})
-                s_data = summary_data.get(rec.id, {'total': 0, 'matched': 0})
-                
-                rec.total_labels = l_data['qty']
-                rec.total_weight = l_data['weight']
-                rec.total_lines = s_data['total']
-                rec.matched_lines = s_data['matched']
-                rec.mismatched_lines = rec.total_lines - rec.matched_lines
 
     @api.model
     def create(self, vals):

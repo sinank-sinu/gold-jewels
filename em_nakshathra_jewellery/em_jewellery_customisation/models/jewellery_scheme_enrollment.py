@@ -20,28 +20,6 @@ class JewellerySchemeEnrollment(models.Model):
             rec.total_scheme_amount = rec.duration * rec.installment_amount
 
 
-
-    def get_receipt_company(self):
-        self.ensure_one()
-        # 1. Use the currently logged-in / active company from the session
-        if self.env.company and self.env.company.name != 'My Company':
-            return self.env.company.sudo()
-
-        # 2. Check if branch has an associated company
-        rec = self.sudo()
-        if rec.branch_id and rec.branch_id.company_id and rec.branch_id.company_id.name != 'My Company':
-            return rec.branch_id.company_id.sudo()
-
-        # 3. Check if enrollment has a company_id
-        if hasattr(rec, 'company_id') and rec.company_id and rec.company_id.name != 'My Company':
-            return rec.company_id.sudo()
-
-        # 4. Check user's default company
-        if self.env.user.company_id and self.env.user.company_id.name != 'My Company':
-            return self.env.user.company_id.sudo()
-
-        return self.env.company.sudo() if self.env.company else self.env['res.company'].sudo().search([], limit=1)
-
     def get_receipt_paid_lines(self):
         self.ensure_one()
         return self.sudo().scheme_line_ids.filtered(lambda l: l.state == 'paid').sorted('date')
