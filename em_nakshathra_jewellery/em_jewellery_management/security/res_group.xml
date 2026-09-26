@@ -48,8 +48,7 @@
                                         (4, ref('purchase.group_purchase_manager')), 
                                         (4, ref('stock.group_stock_manager')), 
                                         (4, ref('mrp.group_mrp_manager')),
-                                        (4, ref('group_mc_approval_manager')),
-                                        (4, ref('group_jewellery_scheme_staff'))]"/>
+                                        (4, ref('group_mc_approval_manager'))]"/>
     </record>
 
 

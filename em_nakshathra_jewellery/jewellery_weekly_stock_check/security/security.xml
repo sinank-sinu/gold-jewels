@@ -16,4 +16,82 @@
         <field name="category_id" ref="module_category_jewellery_stock"/>
         <field name="implied_ids" eval="[(4, ref('group_jewellery_stock_counter'))]"/>
     </record>
+
+
+    <data noupdate="0">
+        <!-- ============================================================ -->
+        <!-- Record Rules: Weekly Stock Check                             -->
+        <!-- ============================================================ -->
+        <record id="rule_jewellery_weekly_stock_check_branch" model="ir.rule">
+            <field name="name">Weekly Stock Check: Branch Access</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check"/>
+            <field name="domain_force">['|', ('branch_id', '=', user.branch_id.id), ('branch_id', 'in', user.branch_ids.ids)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_counter')), (4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_jewellery_weekly_stock_check_manager" model="ir.rule">
+            <field name="name">Weekly Stock Check: Manager All</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_manager'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Record Rules: Weekly Stock Check Lines                       -->
+        <!-- ============================================================ -->
+        <record id="rule_jewellery_weekly_stock_check_line_branch" model="ir.rule">
+            <field name="name">Weekly Stock Check Line: Branch Access</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check_line"/>
+            <field name="domain_force">['|', ('branch_id', '=', user.branch_id.id), ('branch_id', 'in', user.branch_ids.ids)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_counter')), (4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_jewellery_weekly_stock_check_line_manager" model="ir.rule">
+            <field name="name">Weekly Stock Check Line: Manager All</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check_line"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_manager'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Record Rules: Weekly Stock Check Template Summary            -->
+        <!-- ============================================================ -->
+        <record id="rule_jewellery_weekly_stock_check_summary_branch" model="ir.rule">
+            <field name="name">Weekly Stock Check Summary: Branch Access</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check_template_summary"/>
+            <field name="domain_force">['|', ('stock_check_id.branch_id', '=', user.branch_id.id), ('stock_check_id.branch_id', 'in', user.branch_ids.ids)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_counter')), (4, ref('em_jewellery_management.group_jewellery_billing_staff'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_jewellery_weekly_stock_check_summary_manager" model="ir.rule">
+            <field name="name">Weekly Stock Check Summary: Manager All</field>
+            <field name="model_id" ref="model_jewellery_weekly_stock_check_template_summary"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_jewellery_stock_manager'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+    </data>
 </odoo>

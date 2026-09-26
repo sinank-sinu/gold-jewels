@@ -15,7 +15,8 @@ class JewelleryWeeklyStockCheck(models.Model):
         'res.branch',
         string='Branch',
         required=True,
-        tracking=True
+        tracking=True,
+        default=lambda self: self.env.user.branch_id.id,
     )
     location_ids = fields.Many2many(
         'stock.location',
