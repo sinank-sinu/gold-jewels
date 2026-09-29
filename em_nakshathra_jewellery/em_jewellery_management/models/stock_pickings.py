@@ -36,18 +36,22 @@ class StockPicking(models.Model):
                     continue
 
                 # 1. Strict Validation Guard: Verify label physically belongs to source location
-                if move.location_id.usage == 'internal' and move.label_id.branch_location_id != move.location_id:
-                    current_loc = move.label_id.branch_location_id.display_name if move.label_id.branch_location_id else _("Unknown")
+                # When a label is not yet stocked in (is_stocked_in == False), its physical stock is at source_location_id.
+                # Once stocked in (is_stocked_in == True), its current physical location is branch_location_id.
+                label_sudo = move.label_id.sudo()
+                expected_loc = label_sudo.branch_location_id if label_sudo.is_stocked_in else label_sudo.source_location_id
+                if move.location_id.usage == 'internal' and expected_loc and expected_loc != move.location_id:
+                    current_loc = expected_loc.display_name
                     raise UserError(_(
                         "Cannot validate: Label %s is currently located at %s, not %s."
                     ) % (
-                        move.label_id.display_name or move.label_id.name,
+                        label_sudo.display_name or label_sudo.name,
                         current_loc,
                         move.location_id.display_name
                     ))
 
                 # 2. Anti-Concurrency Guard: Verify label is not reserved in another active transfer
-                conflicting_move = self.env['stock.move'].search([
+                conflicting_move = self.env['stock.move'].sudo().search([
                     ('label_id', '=', move.label_id.id),
                     ('state', 'not in', ('done', 'cancel')),
                     ('id', '!=', move.id),
@@ -59,7 +63,7 @@ class StockPicking(models.Model):
                     raise UserError(_(
                         "Label %s is already reserved in active transfer %s. Please cancel or validate that transfer first."
                     ) % (
-                        move.label_id.display_name or move.label_id.name,
+                        label_sudo.display_name or label_sudo.name,
                         transfer_ref
                     ))
 
@@ -186,10 +190,9 @@ class StockMove(models.Model):
                 continue
 
             vals = {}
-            if move.location_dest_id.usage == 'internal':
+            if move.location_dest_id.usage in ('internal', 'transit'):
                 vals['branch_location_id'] = move.location_dest_id.id
-                if move.location_dest_id.usage == 'internal':
-                     vals['source_location_id'] = move.location_id.id
+                vals['source_location_id'] = move.location_id.id
                 branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
                 if branch:
                     vals['branch_id'] = branch.id

@@ -463,11 +463,27 @@ class ProductLabel(models.Model):
         if not self.source_location_id:
             raise ValidationError("Please select a Source Location before stocking in.")
 
-        # Find official internal picking type for the branch's company
-        picking_type = self.env['stock.picking.type'].search([
-            ('code', '=', 'internal'),
-            ('company_id', '=', self.branch_id.company_id.id or self.env.company.id)
-        ], limit=1)
+        # Find official internal picking type for the source location's warehouse or branch
+        picking_type = False
+        warehouse = self.source_location_id.warehouse_id or self.env['stock.warehouse'].search([('lot_stock_id', 'parent_of', self.source_location_id.id)], limit=1)
+        if not warehouse and self.source_location_id.location_id:
+            warehouse = self.env['stock.warehouse'].search([('lot_stock_id', 'parent_of', self.source_location_id.location_id.id)], limit=1)
+        if not warehouse and self.branch_id and hasattr(self.branch_id, 'warehouse_id') and self.branch_id.warehouse_id:
+            warehouse = self.branch_id.warehouse_id
+        if warehouse and warehouse.int_type_id:
+            picking_type = warehouse.int_type_id
+        elif warehouse:
+            picking_type = self.env['stock.picking.type'].search([
+                ('code', '=', 'internal'),
+                ('warehouse_id', '=', warehouse.id)
+            ], limit=1)
+
+        if not picking_type:
+            company_id = self.company_id.id or self.branch_id.company_id.id or self.env.company.id
+            picking_type = self.env['stock.picking.type'].search([
+                ('code', '=', 'internal'),
+                ('company_id', '=', company_id)
+            ], limit=1)
 
         if not picking_type:
             # Fallback to standard ref if search fails
@@ -476,12 +492,15 @@ class ProductLabel(models.Model):
             except ValueError:
                 raise ValidationError("Internal transfer picking type not found.")
 
+        picking_company_id = self.company_id.id or (picking_type.company_id.id if picking_type else self.env.company.id)
+
         picking = self.env['stock.picking'].with_context(skip_label_location_overwrite=True).create({
             'picking_type_id': picking_type.id,
             'location_id': self.source_location_id.id,
             'location_dest_id': self.branch_location_id.id,
             'origin': self.name,
             'branch_id': self.branch_id.id,
+            'company_id': picking_company_id,
         })
 
         self.env['stock.move'].with_context(skip_label_location_overwrite=True).create({
@@ -495,6 +514,7 @@ class ProductLabel(models.Model):
             'label_id': self.id,
             'purity_id': self.purity_id.id if self.purity_id else False,
             'branch_id': self.branch_id.id,
+            'company_id': picking_company_id,
         })
 
         # Process and validate the picking
