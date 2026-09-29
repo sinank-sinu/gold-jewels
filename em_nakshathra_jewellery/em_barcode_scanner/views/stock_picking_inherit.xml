@@ -12,6 +12,12 @@
                     invisible="picking_type_code != 'internal' or state in ('done', 'cancel')"
                 />
             </xpath>
+            <xpath expr="//button[@name='button_validate'][1]" position="attributes">
+                <attribute name="groups"></attribute>
+            </xpath>
+            <xpath expr="//button[@name='button_validate'][2]" position="attributes">
+                <attribute name="groups"></attribute>
+            </xpath>
         </field>
     </record>
 </odoo>
