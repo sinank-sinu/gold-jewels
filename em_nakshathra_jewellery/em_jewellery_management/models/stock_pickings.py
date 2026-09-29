@@ -1,6 +1,7 @@
 from odoo import models, fields, api, _
 from odoo.tools.float_utils import float_compare
 from markupsafe import Markup
+from odoo.exceptions import UserError, ValidationError
 
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
@@ -25,6 +26,53 @@ class StockPicking(models.Model):
         if not self.is_multiple_transfer and self.location_dest_id:
             for move in self.move_ids_without_package:
                 move.location_dest_id = self.location_dest_id.id
+
+    def button_validate(self):
+        for picking in self:
+            for move in picking.move_ids:
+                if move.state in ('done', 'cancel'):
+                    continue
+                if not move.label_id:
+                    continue
+
+                # 1. Strict Validation Guard: Verify label physically belongs to source location
+                if move.location_id.usage == 'internal' and move.label_id.branch_location_id != move.location_id:
+                    current_loc = move.label_id.branch_location_id.display_name if move.label_id.branch_location_id else _("Unknown")
+                    raise UserError(_(
+                        "Cannot validate: Label %s is currently located at %s, not %s."
+                    ) % (
+                        move.label_id.display_name or move.label_id.name,
+                        current_loc,
+                        move.location_id.display_name
+                    ))
+
+                # 2. Anti-Concurrency Guard: Verify label is not reserved in another active transfer
+                conflicting_move = self.env['stock.move'].search([
+                    ('label_id', '=', move.label_id.id),
+                    ('state', 'not in', ('done', 'cancel')),
+                    ('id', '!=', move.id),
+                    ('picking_id', '!=', picking.id),
+                ], limit=1)
+                if conflicting_move:
+                    other_picking = conflicting_move.picking_id
+                    transfer_ref = other_picking.name if other_picking else (conflicting_move.reference or _("another transfer"))
+                    raise UserError(_(
+                        "Label %s is already reserved in active transfer %s. Please cancel or validate that transfer first."
+                    ) % (
+                        move.label_id.display_name or move.label_id.name,
+                        transfer_ref
+                    ))
+
+        return super().button_validate()
+
+    def _create_backorder(self):
+        if not self.env.user.has_group('em_jewellery_management.group_allow_backorder_creation') and not self.env.is_superuser():
+            raise UserError(_(
+                "You are not authorized to create backorders. "
+                "Only authorized supervisors/managers can create backorders. "
+                "Please choose 'No Backorder' or contact your manager."
+            ))
+        return super()._create_backorder()
 
 
 class StockMove(models.Model):
@@ -72,6 +120,35 @@ class StockMove(models.Model):
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
             self.product_uom_qty = self.label_id.purchase_gross_weight
+
+    @api.constrains('label_id', 'state')
+    def _check_label_single_active_transfer(self):
+        active_moves = self.filtered(lambda m: m.label_id and m.state not in ('done', 'cancel'))
+        label_ids = active_moves.mapped('label_id.id')
+        if len(label_ids) != len(set(label_ids)):
+            for move in active_moves:
+                duplicates = active_moves.filtered(lambda m: m.label_id == move.label_id and m.id != move.id)
+                if duplicates:
+                    raise ValidationError(_(
+                        "Label %s cannot be added multiple times to the same transfer."
+                    ) % (move.label_id.display_name or move.label_id.name))
+
+        for move in active_moves:
+            domain = [
+                ('label_id', '=', move.label_id.id),
+                ('state', 'not in', ('done', 'cancel')),
+                ('id', '!=', move.id),
+            ]
+            conflicting_move = self.search(domain, limit=1)
+            if conflicting_move:
+                other_picking = conflicting_move.picking_id
+                transfer_ref = other_picking.name if other_picking else (conflicting_move.reference or _("another transfer"))
+                raise ValidationError(_(
+                    "Label %s is already reserved in active transfer %s. Please cancel or validate that transfer first."
+                ) % (
+                    move.label_id.display_name or move.label_id.name,
+                    transfer_ref
+                ))
 
     def _get_price_unit(self):
         price = super()._get_price_unit()

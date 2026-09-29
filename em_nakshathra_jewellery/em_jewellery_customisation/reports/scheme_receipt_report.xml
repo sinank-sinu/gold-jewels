@@ -147,15 +147,22 @@
                         .sig-section {
                             margin-top: 140px;
                             width: 100%;
+                            border: none !important;
+                            outline: none !important;
                         }
-                        .sig-table {
+                        .sig-table, table.sig-table {
                             width: 100%;
-                            border-collapse: collapse;
+                            border-collapse: separate !important;
+                            border-spacing: 0;
+                            border: none !important;
+                            outline: none !important;
                         }
-                        .sig-table td {
+                        .sig-table tr, .sig-table td {
                             vertical-align: top;
                             font-size: 10px;
                             padding: 0 10px;
+                            border: none !important;
+                            outline: none !important;
                         }
                     </style>
                     <div class="page">
@@ -263,19 +270,19 @@
                         <div class="inst-val-footer">Installment Value : <t t-esc="'{:,.2f}'.format(doc.installment_amount)"/></div>
 
                         <!-- Signatures Section -->
-                        <div class="sig-section">
-                            <table class="sig-table" style="border: none !important;">
-                                <tr style="border: none !important;">
-                                    <td style="width: 32%; text-align: center; border: none !important;">
+                        <div class="sig-section" style="border: none !important; outline: none !important;">
+                            <table class="sig-table" style="width: 100%; border: none !important; outline: none !important; border-collapse: separate !important; border-spacing: 0;">
+                                <tr style="border: none !important; outline: none !important;">
+                                    <td style="width: 32%; text-align: center; border: none !important; outline: none !important;">
                                         <div style="border-top: 1px solid #000; padding-top: 4px; font-weight: bold; width: 150px; margin: 0 auto;">Customer's Signature</div>
                                     </td>
-                                    <td style="width: 36%; text-align: center; border: none !important;">
+                                    <td style="width: 36%; text-align: center; border: none !important; outline: none !important;">
                                         <div>Subject To Jurisdiction Only E. &amp; O.E</div>
                                         <div style="font-weight: bold; margin-top: 5px;">
                                             <t t-esc="doc.user_id.name or doc.env.user.name"/>
                                         </div>
                                     </td>
-                                    <td style="width: 32%; text-align: center; border: none !important;">
+                                    <td style="width: 32%; text-align: center; border: none !important; outline: none !important;">
                                         <div style="border-top: 1px solid #000; padding-top: 4px; font-weight: bold; width: 150px; margin: 0 auto;">Authorised Signature</div>
                                     </td>
                                 </tr>

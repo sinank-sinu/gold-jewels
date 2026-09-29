@@ -19,6 +19,16 @@ class JewellerySchemeEnrollment(models.Model):
         for rec in self:
             rec.total_scheme_amount = rec.duration * rec.installment_amount
 
+    def get_receipt_company(self):
+        self.ensure_one()
+        rec = self.sudo()
+        if hasattr(rec, 'company_id') and rec.company_id:
+            return rec.company_id
+        if hasattr(rec, 'branch_id') and rec.branch_id and getattr(rec.branch_id, 'company_id', None):
+            return rec.branch_id.company_id
+        if hasattr(rec, 'user_id') and rec.user_id and getattr(rec.user_id, 'company_id', None):
+            return rec.user_id.company_id
+        return self.env.company
 
     def get_receipt_paid_lines(self):
         self.ensure_one()
