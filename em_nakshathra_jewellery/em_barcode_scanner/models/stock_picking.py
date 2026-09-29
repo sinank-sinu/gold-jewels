@@ -80,6 +80,6 @@ class StockMove(models.Model):
     @api.depends('state', 'picking_id.state', 'show_details_visible')
     def _compute_is_quantity_done_editable(self):
         super()._compute_is_quantity_done_editable()
-        if not self.env.user.has_group('stock.group_stock_manager') and not self.env.user.has_group('base.group_erp_manager'):
+        if not self.env.user.has_group('base.group_system') and not self.env.user.has_group('base.group_erp_manager'):
             for move in self:
                 move.is_quantity_done_editable = False
