@@ -21,14 +21,46 @@ class StockPicking(models.Model):
         help="Check this if you want to transfer to multiple locations in a single picking."
     )
 
-    @api.onchange('is_multiple_transfer', 'location_dest_id')
+    @api.onchange('is_multiple_transfer', 'location_id', 'location_dest_id')
     def _onchange_is_multiple_transfer(self):
-        if not self.is_multiple_transfer and self.location_dest_id:
-            for move in self.move_ids_without_package:
-                move.location_dest_id = self.location_dest_id.id
+        if not self.is_multiple_transfer:
+            if self.location_id:
+                for move in self.move_ids_without_package:
+                    move.location_id = self.location_id.id
+            if self.location_dest_id:
+                for move in self.move_ids_without_package:
+                    move.location_dest_id = self.location_dest_id.id
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'location_id' in vals or 'location_dest_id' in vals:
+            for picking in self:
+                if not picking.is_multiple_transfer:
+                    draft_ready_moves = picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
+                    if 'location_id' in vals and picking.location_id:
+                        draft_ready_moves.write({'location_id': picking.location_id.id})
+                        draft_ready_moves.move_line_ids.filtered(lambda ml: ml.state not in ('done', 'cancel')).write({'location_id': picking.location_id.id})
+                    if 'location_dest_id' in vals and picking.location_dest_id:
+                        draft_ready_moves.write({'location_dest_id': picking.location_dest_id.id})
+                        draft_ready_moves.move_line_ids.filtered(lambda ml: ml.state not in ('done', 'cancel')).write({'location_dest_id': picking.location_dest_id.id})
+        return res
 
     def button_validate(self):
         for picking in self:
+            # Sync move and move_line locations if not multiple_transfer
+            if not picking.is_multiple_transfer:
+                draft_ready_moves = picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
+                if picking.location_id:
+                    out_of_sync_src = draft_ready_moves.filtered(lambda m: m.location_id != picking.location_id)
+                    if out_of_sync_src:
+                        out_of_sync_src.write({'location_id': picking.location_id.id})
+                        out_of_sync_src.move_line_ids.filtered(lambda ml: ml.state not in ('done', 'cancel')).write({'location_id': picking.location_id.id})
+                if picking.location_dest_id:
+                    out_of_sync_dest = draft_ready_moves.filtered(lambda m: m.location_dest_id != picking.location_dest_id)
+                    if out_of_sync_dest:
+                        out_of_sync_dest.write({'location_dest_id': picking.location_dest_id.id})
+                        out_of_sync_dest.move_line_ids.filtered(lambda ml: ml.state not in ('done', 'cancel')).write({'location_dest_id': picking.location_dest_id.id})
+
             for move in picking.move_ids:
                 if move.state in ('done', 'cancel'):
                     continue
