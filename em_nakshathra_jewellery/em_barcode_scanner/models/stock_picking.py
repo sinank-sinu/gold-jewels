@@ -12,7 +12,20 @@ class StockPicking(models.Model):
         if not barcode:
             return {'error': _('Empty barcode received.')}
 
-        label = self.env['product.label'].search([('barcode', '=', barcode)], limit=1)
+        picking = self.browse(order_id)
+        if not picking.exists():
+            return {'error': _('Stock Picking not found.')}
+
+        company_id = picking.company_id.id if hasattr(picking, 'company_id') and picking.company_id else False
+
+        label = False
+        if company_id:
+            label = self.env['product.label'].search(
+                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+            )
+        if not label:
+            label = self.env['product.label'].search([('barcode', '=', barcode), ('active', '=', True)], limit=1)
+
         if label:
             product = label.product_id
             source_label = label.name
@@ -23,10 +36,6 @@ class StockPicking(models.Model):
                 return {'error': _('No product label or product found for barcode: %s') % barcode}
             source_label = product.display_name
             qty = 1.0
-
-        picking = self.browse(order_id)
-        if not picking.exists():
-            return {'error': _('Stock Picking not found.')}
 
         # Check if barcode / label has already been scanned in this picking
         if label:

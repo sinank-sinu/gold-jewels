@@ -17,9 +17,21 @@ class SaleOrder(models.Model):
             return {'error': _('Empty barcode received.')}
 
         # ── 1. Try product.label barcode first ──────────────────────────────
-        label = self.env['product.label'].search(
-            [('barcode', '=', barcode)], limit=1
-        )
+        order = self.browse(order_id)
+        if not order.exists():
+            return {'error': _('Sale Order not found.')}
+
+        company_id = order.company_id.id if hasattr(order, 'company_id') and order.company_id else False
+
+        label = False
+        if company_id:
+            label = self.env['product.label'].search(
+                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+            )
+        if not label:
+            label = self.env['product.label'].search(
+                [('barcode', '=', barcode), ('active', '=', True)], limit=1
+            )
 
         if label:
             product = label.product_id
@@ -39,10 +51,6 @@ class SaleOrder(models.Model):
 
         if not product:
             return {'error': _('Product not found for barcode: %s') % barcode}
-
-        order = self.browse(order_id)
-        if not order.exists():
-            return {'error': _('Sale Order not found.')}
 
         # Check if barcode / label has already been scanned in this order
         if label:
@@ -111,10 +119,22 @@ class SaleOrder(models.Model):
             return {'error': _('Empty barcode received.')}
 
         # ── 1. Try product.label search with active_test=False (supports non-active labels)
-        label = self.env['product.label'].with_context(active_test=False).search(
-            ['|', '|', ('barcode', '=', barcode), ('name', '=', barcode), ('label_number', '=', barcode)],
-            limit=1
-        )
+        order = self.browse(order_id)
+        if not order.exists():
+            return {'error': _('Sale Order not found.')}
+
+        company_id = order.company_id.id if hasattr(order, 'company_id') and order.company_id else False
+
+        label = False
+        domain = ['|', '|', ('barcode', '=', barcode), ('name', '=', barcode), ('label_number', '=', barcode)]
+        if company_id:
+            label = self.env['product.label'].with_context(active_test=False).search(
+                domain + [('company_id', '=', company_id)], limit=1
+            )
+        if not label:
+            label = self.env['product.label'].with_context(active_test=False).search(
+                domain, limit=1
+            )
 
         if label:
             product = label.product_id or (label.product_tmpl_id.product_variant_ids and label.product_tmpl_id.product_variant_ids[0])
@@ -134,10 +154,6 @@ class SaleOrder(models.Model):
 
         if not product:
             return {'error': _('Product not found for barcode: %s') % barcode}
-
-        order = self.browse(order_id)
-        if not order.exists():
-            return {'error': _('Sale Order not found.')}
 
         # Check if barcode / label has already been scanned in sale return
         if label:

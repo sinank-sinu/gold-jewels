@@ -17,9 +17,21 @@ class JewelleryIssueVoucher(models.Model):
             return {'error': _('Empty barcode received.')}
 
         # ── 1. Try product.label barcode first ──────────────────────────────
-        label = self.env['product.label'].search(
-            [('barcode', '=', barcode)], limit=1
-        )
+        voucher = self.browse(voucher_id)
+        if not voucher.exists():
+            return {'error': _('Issue Voucher not found.')}
+
+        company_id = voucher.company_id.id if hasattr(voucher, 'company_id') and voucher.company_id else False
+
+        label = False
+        if company_id:
+            label = self.env['product.label'].search(
+                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+            )
+        if not label:
+            label = self.env['product.label'].search(
+                [('barcode', '=', barcode), ('active', '=', True)], limit=1
+            )
 
         if label:
             product = label.product_id
@@ -49,10 +61,6 @@ class JewelleryIssueVoucher(models.Model):
 
         if not product:
             return {'error': _('Product not found for barcode: %s') % barcode}
-
-        voucher = self.browse(voucher_id)
-        if not voucher.exists():
-            return {'error': _('Issue Voucher not found.')}
 
         # Check if barcode / label has already been scanned in this issue voucher
         if label:
