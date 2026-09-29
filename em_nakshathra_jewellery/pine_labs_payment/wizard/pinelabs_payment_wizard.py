@@ -193,6 +193,10 @@ class PineLabsPaymentWizard(models.TransientModel):
             domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
 
         bank_journal = self.env['account.journal'].search(domain, limit=1)
+        
+        if self.scheme_installment_id and self.scheme_installment_id.journal_id:
+            bank_journal = self.scheme_installment_id.journal_id
+            
         if not bank_journal:
             if branch:
                 raise UserError(_('No bank journal found for branch %s. Please create a bank branch journal first.') % branch.name)
@@ -329,6 +333,10 @@ class PineLabsPaymentWizard(models.TransientModel):
             domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
 
         cash_journal = self.env['account.journal'].search(domain, limit=1)
+        
+        if self.scheme_installment_id and self.scheme_installment_id.journal_id:
+            cash_journal = self.scheme_installment_id.journal_id
+            
         if not cash_journal:
             if branch:
                 raise UserError(_('No cash journal found for branch %s. Please create a cash branch journal first to proceed with cash payment.') % branch.name)
@@ -679,7 +687,9 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.scheme_installment_id:
             rec = self.scheme_installment_id
             journal = False
-            if self.payment_method_type == 'card':
+            if rec.journal_id:
+                journal = rec.journal_id
+            elif self.payment_method_type == 'card':
                 journal = txn.pinelabs_terminal_id.card_journal_id
             elif self.payment_method_type == 'upi':
                 journal = txn.pinelabs_terminal_id.upi_journal_id
