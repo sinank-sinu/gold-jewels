@@ -22,6 +22,11 @@
                             <field name="national_id"/>
                             <field name="labor_card_no"/>
                         </group>
+                        <group string="India Statutory Identification">
+                            <field name="apply_esi"/>
+                            <field name="esi_no"/>
+                            <field name="pf_uan_no"/>
+                        </group>
                         <group string="Malaysia Statutory Identification">
                             <field name="epf_no"/>
                             <field name="socso_no"/>

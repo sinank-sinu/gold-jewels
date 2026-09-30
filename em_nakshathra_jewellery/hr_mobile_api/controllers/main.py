@@ -1146,3 +1146,71 @@ class HRMobileAPI(http.Controller):
             return self._get_recent_history_data()
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # HRMS API STATUS & HEALTH CHECK
+    # ─────────────────────────────────────────────
+    @http.route('/api/hr/status', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def api_status_json(self, **kwargs):
+        """Return operational status of the HRMS API (JSON-RPC)."""
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'hrms_api.is_enabled'")
+            row = request.env.cr.fetchone()
+            is_enabled_val = row[0] if row else 'True'
+        except Exception:
+            is_enabled_val = 'True'
+
+        is_enabled = str(is_enabled_val).strip().lower() not in ('false', '0', 'off', 'no')
+
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'hrms_api.disabled_message'")
+            msg_row = request.env.cr.fetchone()
+            disabled_msg = msg_row[0] if msg_row and msg_row[0] else 'HRMS API is currently disabled for maintenance. Please try again later.'
+        except Exception:
+            disabled_msg = 'HRMS API is currently disabled for maintenance. Please try again later.'
+
+        msg = "HRMS API is active and operational." if is_enabled else disabled_msg
+        return {
+            "status": "success",
+            "api_status": "online" if is_enabled else "offline",
+            "api_enabled": is_enabled,
+            "message": msg,
+        }
+
+    @http.route('/api/hr/status', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def api_status_http(self, **kwargs):
+        """Return operational status of the HRMS API (HTTP GET)."""
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'hrms_api.is_enabled'")
+            row = request.env.cr.fetchone()
+            is_enabled_val = row[0] if row else 'True'
+        except Exception:
+            is_enabled_val = 'True'
+
+        is_enabled = str(is_enabled_val).strip().lower() not in ('false', '0', 'off', 'no')
+
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'hrms_api.disabled_message'")
+            msg_row = request.env.cr.fetchone()
+            disabled_msg = msg_row[0] if msg_row and msg_row[0] else 'HRMS API is currently disabled for maintenance. Please try again later.'
+        except Exception:
+            disabled_msg = 'HRMS API is currently disabled for maintenance. Please try again later.'
+
+        msg = "HRMS API is active and operational." if is_enabled else disabled_msg
+        data = {
+            "status": "success",
+            "api_status": "online" if is_enabled else "offline",
+            "api_enabled": is_enabled,
+            "message": msg,
+        }
+        return Response(
+            json.dumps(data),
+            status=200 if is_enabled else 503,
+            headers={
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            }
+        )
+

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="loan_styling_css" model="ir.asset">
+            <field name="name">salary_adjustment.loan_styling_css</field>
+            <field name="bundle">web.assets_backend</field>
+            <field name="directive">append</field>
+            <field name="path">salary_adjustment/static/src/css/loan_styling.css</field>
+        </record>
+    </data>
+</odoo>

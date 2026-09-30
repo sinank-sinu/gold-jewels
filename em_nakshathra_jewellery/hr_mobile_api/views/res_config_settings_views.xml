@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Scheme API Settings under General Settings -->
+    <record id="res_config_settings_view_form_inherit_scheme_api" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.scheme.api</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@id='invite_users']//block[@name='users_setting_container']" position="after">
+                <block title="Gold Scheme API" name="scheme_api_setting_container">
+                    <setting id="scheme_api_enabled_setting" help="Turn ON to allow Gold Scheme API requests. Turn OFF to stop all external Scheme API traffic.">
+                        <field name="scheme_api_enabled" widget="boolean_toggle"/>
+                    </setting>
+                    <setting id="scheme_api_disabled_message_setting" help="Custom notice message returned to mobile app clients when Scheme API is disabled." invisible="scheme_api_enabled">
+                        <div class="content-group">
+                            <field name="scheme_api_disabled_message" class="w-100"/>
+                        </div>
+                    </setting>
+                </block>
+                <block title="Task Manager API" name="task_manager_api_setting_container">
+                    <setting id="task_manager_api_enabled_setting" help="Turn ON to allow Task Manager API requests. Turn OFF to stop all external Task Manager API traffic.">
+                        <field name="task_manager_api_enabled" widget="boolean_toggle"/>
+                    </setting>
+                    <setting id="task_manager_api_disabled_message_setting" help="Custom notice message returned to mobile app clients when Task Manager API is disabled." invisible="task_manager_api_enabled">
+                        <div class="content-group">
+                            <field name="task_manager_api_disabled_message" class="w-100"/>
+                        </div>
+                    </setting>
+                </block>
+                <block title="HRMS API" name="hrms_api_setting_container">
+                    <setting id="hrms_api_enabled_setting" help="Turn ON to allow HRMS API requests. Turn OFF to stop all external HRMS API traffic.">
+                        <field name="hrms_api_enabled" widget="boolean_toggle"/>
+                    </setting>
+                    <setting id="hrms_api_disabled_message_setting" help="Custom notice message returned to mobile app clients when HRMS API is disabled." invisible="hrms_api_enabled">
+                        <div class="content-group">
+                            <field name="hrms_api_disabled_message" class="w-100"/>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

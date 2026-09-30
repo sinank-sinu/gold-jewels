@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_contract_view_form_inherit_tds" model="ir.ui.view">
+        <field name="name">hr.contract.form.inherit.tds</field>
+        <field name="model">hr.contract</field>
+        <field name="inherit_id" ref="hr_contract.hr_contract_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='salary_info']" position="after">
+                <group string="Provident Fund (PF)" name="pf_info">
+                    <group>
+                        <field name="apply_pf"/>
+                        <field name="pf_enforce_ceiling" invisible="not apply_pf"/>
+                        <field name="pf_wage_ceiling" invisible="not apply_pf or not pf_enforce_ceiling"/>
+                    </group>
+                    <group>
+                        <field name="pf_employee_rate" invisible="not apply_pf"/>
+                        <field name="custom_monthly_pf" invisible="not apply_pf"/>
+                    </group>
+                </group>
+                <group string="Employees' State Insurance (ESI)" name="esi_info">
+                    <group>
+                        <field name="apply_esi"/>
+                        <field name="esi_wage_limit" invisible="not apply_esi"/>
+                        <field name="esi_employee_rate" invisible="not apply_esi"/>
+                    </group>
+                    <group>
+                        <field name="esi_contribution_start" invisible="not apply_esi"/>
+                        <field name="esi_contribution_end" invisible="not apply_esi"/>
+                        <field name="custom_monthly_esi" invisible="not apply_esi"/>
+                    </group>
+                </group>
+                <group string="Tax Deducted at Source (TDS - Budget 2025)" name="tds_info">
+                    <group>
+                        <field name="apply_tds"/>
+                        <field name="tds_include_cess" invisible="not apply_tds"/>
+                    </group>
+                    <group>
+                        <field name="custom_monthly_tds" invisible="not apply_tds"/>
+                        <field name="tds_standard_deduction" invisible="not apply_tds"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Default Scheme API Control Record -->
+        <record id="record_scheme_api_control" model="scheme.api.control">
+            <field name="name">Gold Scheme API Control</field>
+            <field name="is_enabled">True</field>
+            <field name="disabled_message">Gold Scheme API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+
+        <!-- Default Scheme API System Parameters -->
+        <record id="param_scheme_api_is_enabled" model="ir.config_parameter">
+            <field name="key">scheme_api.is_enabled</field>
+            <field name="value">True</field>
+        </record>
+
+        <record id="param_scheme_api_disabled_message" model="ir.config_parameter">
+            <field name="key">scheme_api.disabled_message</field>
+            <field name="value">Gold Scheme API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+
+        <!-- Default Task Manager API System Parameters -->
+        <record id="param_task_manager_api_is_enabled" model="ir.config_parameter">
+            <field name="key">task_manager_api.is_enabled</field>
+            <field name="value">True</field>
+        </record>
+
+        <record id="param_task_manager_api_disabled_message" model="ir.config_parameter">
+            <field name="key">task_manager_api.disabled_message</field>
+            <field name="value">Task Manager API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+
+        <!-- Default HRMS API System Parameters -->
+        <record id="param_hrms_api_is_enabled" model="ir.config_parameter">
+            <field name="key">hrms_api.is_enabled</field>
+            <field name="value">True</field>
+        </record>
+
+        <record id="param_hrms_api_disabled_message" model="ir.config_parameter">
+            <field name="key">hrms_api.disabled_message</field>
+            <field name="value">HRMS API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+    </data>
+</odoo>

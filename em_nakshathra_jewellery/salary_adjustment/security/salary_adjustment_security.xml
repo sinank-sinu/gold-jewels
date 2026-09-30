@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Salary Adjustment Module Category (Placed below Dashboard seq: 30) -->
+    <record id="module_category_salary_adjustment" model="ir.module.category">
+        <field name="name">Salary Adjustment</field>
+        <field name="description">User access levels for Salary Adjustment module</field>
+        <field name="sequence">35</field>
+    </record>
+
+    <!-- User Access Group -->
+    <record id="group_salary_adjustment_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="category_id" ref="module_category_salary_adjustment"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Manager Access Group -->
+    <record id="group_salary_adjustment_manager" model="res.groups">
+        <field name="name">Manager</field>
+        <field name="category_id" ref="module_category_salary_adjustment"/>
+        <field name="implied_ids" eval="[(4, ref('group_salary_adjustment_user'))]"/>
+    </record>
+
+    <!-- Administrator Access Group -->
+    <record id="group_salary_adjustment_admin" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="category_id" ref="module_category_salary_adjustment"/>
+        <field name="implied_ids" eval="[(4, ref('group_salary_adjustment_manager'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
+    <!-- System Admins automatically get Administrator access -->
+    <record id="base.group_system" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_salary_adjustment_admin'))]"/>
+    </record>
+
+    <data noupdate="0">
+        <!-- Multi-Company Record Rules -->
+        <record id="rule_salary_adjustment_multicompany" model="ir.rule">
+            <field name="name">Salary Adjustment Multi-Company</field>
+            <field name="model_id" ref="model_salary_adjustment"/>
+            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="rule_salary_adjustment_line_multicompany" model="ir.rule">
+            <field name="name">Salary Adjustment Line Multi-Company</field>
+            <field name="model_id" ref="model_salary_adjustment_line"/>
+            <field name="domain_force">['|', ('salary_adjustment_id.company_id', '=', False), ('salary_adjustment_id.company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="rule_salary_advance_multicompany" model="ir.rule">
+            <field name="name">Salary Advance Multi-Company</field>
+            <field name="model_id" ref="model_salary_advance"/>
+            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="rule_salary_loan_multicompany" model="ir.rule">
+            <field name="name">Salary Loan Multi-Company</field>
+            <field name="model_id" ref="model_salary_loan"/>
+            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="rule_salary_loan_line_multicompany" model="ir.rule">
+            <field name="name">Salary Loan Line Multi-Company</field>
+            <field name="model_id" ref="model_salary_loan_line"/>
+            <field name="domain_force">['|', ('loan_id.company_id', '=', False), ('loan_id.company_id', 'in', company_ids)]</field>
+        </record>
+
+        <!-- Salary Advance Record Rules: User (Own Requests Only) vs Manager (All Requests) -->
+        <record id="rule_salary_advance_user" model="ir.rule">
+            <field name="name">Salary Advance: Own Requests</field>
+            <field name="model_id" ref="model_salary_advance"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_user'))]"/>
+            <field name="domain_force">[('create_uid', '=', user.id)]</field>
+        </record>
+
+        <record id="rule_salary_advance_manager" model="ir.rule">
+            <field name="name">Salary Advance: Manager All Requests</field>
+            <field name="model_id" ref="model_salary_advance"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
+        <!-- Salary Loan Record Rules: User (Own Requests Only) vs Manager (All Requests) -->
+        <record id="rule_salary_loan_user" model="ir.rule">
+            <field name="name">Salary Loan: Own Requests</field>
+            <field name="model_id" ref="model_salary_loan"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_user'))]"/>
+            <field name="domain_force">[('create_uid', '=', user.id)]</field>
+        </record>
+
+        <record id="rule_salary_loan_manager" model="ir.rule">
+            <field name="name">Salary Loan: Manager All Requests</field>
+            <field name="model_id" ref="model_salary_loan"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
+        <!-- Salary Loan Line Record Rules: User (Own Requests Only) vs Manager (All Requests) -->
+        <record id="rule_salary_loan_line_user" model="ir.rule">
+            <field name="name">Salary Loan Line: Own Requests</field>
+            <field name="model_id" ref="model_salary_loan_line"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_user'))]"/>
+            <field name="domain_force">[('loan_id.create_uid', '=', user.id)]</field>
+        </record>
+
+        <record id="rule_salary_loan_line_manager" model="ir.rule">
+            <field name="name">Salary Loan Line: Manager All Requests</field>
+            <field name="model_id" ref="model_salary_loan_line"/>
+            <field name="groups" eval="[(4, ref('group_salary_adjustment_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+    </data>
+</odoo>

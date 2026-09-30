@@ -6,4 +6,5 @@ from . import salary_advance
 from . import salary_loan
 from . import hr_payslip
 from . import hr_payroll_structure
+from . import hr_contract
 

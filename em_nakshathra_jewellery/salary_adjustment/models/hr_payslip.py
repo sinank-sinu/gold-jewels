@@ -3,11 +3,22 @@ from odoo import models, api, fields
 class HrPayslip(models.Model):
     _inherit = 'hr.payslip'
 
+    advance_ids = fields.One2many(
+        'salary.advance', 'payslip_id',
+        string='Salary Advances',
+        readonly=True
+    )
+    loan_line_ids = fields.One2many(
+        'salary.loan.line', 'payslip_id',
+        string='Loan Installments',
+        readonly=True
+    )
+
     def get_inputs(self, contract_ids, date_from, date_to):
         if isinstance(contract_ids, list):
-            contracts = self.env['hr.contract'].browse(contract_ids)
+            contracts = self.env['hr.contract'].sudo().browse(contract_ids)
         else:
-            contracts = contract_ids
+            contracts = contract_ids.sudo()
 
         # 1. Resolve structure ids (fallback to payslip struct_id if contract has none)
         structure_ids = contracts.get_all_structures()
@@ -76,15 +87,13 @@ class HrPayslip(models.Model):
             # Check for custom salary.loan.line installment deductions
             loan_lines = self.env['salary.loan.line'].search([
                 ('employee_id', '=', employee.id),
+                ('loan_id.state', '=', 'approved'),
                 ('date', '>=', date_from),
                 ('date', '<=', date_to),
                 ('paid', '=', False),
                 ('payslip_id', 'in', payslip_ids)
             ])
-            active_loan_lines = loan_lines.filtered(
-                lambda l: not l.loan_id.invoice_id or l.loan_id.invoice_id.payment_state in ('paid', 'in_payment')
-            )
-            total_loan_amount = sum(active_loan_lines.mapped('amount'))
+            total_loan_amount = sum(loan_lines.mapped('amount'))
             if total_loan_amount > 0:
                 lo_found = False
                 for result in res:
@@ -162,15 +171,41 @@ class HrPayslip(models.Model):
 
     def action_compute_sheet(self):
         for payslip in self:
-            contract = payslip.contract_id
+            # Auto-link approved advances in this period that don't have a payslip linked yet
+            advances = self.env['salary.advance'].search([
+                ('employee_id', '=', payslip.employee_id.id),
+                ('state', '=', 'approved'),
+                ('date', '>=', payslip.date_from),
+                ('date', '<=', payslip.date_to),
+                ('payslip_id', 'in', [False, payslip.id]),
+                ('salary_adjustment_line_id', '=', False)
+            ])
+            adv_to_link = advances.filtered(lambda a: not a.payslip_id)
+            if adv_to_link:
+                adv_to_link.write({'payslip_id': payslip.id})
+
+            # Auto-link approved unpaid loan installment lines in this period
+            loan_lines = self.env['salary.loan.line'].search([
+                ('employee_id', '=', payslip.employee_id.id),
+                ('loan_id.state', '=', 'approved'),
+                ('date', '>=', payslip.date_from),
+                ('date', '<=', payslip.date_to),
+                ('paid', '=', False),
+                ('payslip_id', 'in', [False, payslip.id])
+            ])
+            loan_to_link = loan_lines.filtered(lambda l: not l.payslip_id)
+            if loan_to_link:
+                loan_to_link.write({'payslip_id': payslip.id})
+
+            contract = payslip.sudo().contract_id
             if contract:
                 # Compute current inputs
-                input_line_ids = payslip.get_inputs(contract, payslip.date_from, payslip.date_to)
+                input_line_ids = payslip.sudo().get_inputs(contract, payslip.date_from, payslip.date_to)
                 
                 # If there are no inputs currently, write them directly
                 if not payslip.input_line_ids:
                     input_lines = [(0, 0, r) for r in input_line_ids]
-                    payslip.write({'input_line_ids': input_lines})
+                    payslip.sudo().write({'input_line_ids': input_lines})
                 else:
                     # Update existing inputs or insert missing ones
                     existing_inputs = {line.code: line for line in payslip.input_line_ids}
@@ -178,16 +213,19 @@ class HrPayslip(models.Model):
                     for r in input_line_ids:
                         code = r.get('code')
                         if code in existing_inputs:
-                            write_vals = {'amount': r.get('amount')}
-                            if 'loan_line_id' in r:
-                                write_vals['loan_line_id'] = r.get('loan_line_id')
-                            existing_inputs[code].write(write_vals)
+                            if code in ('SAD', 'LO'):
+                                write_vals = {'amount': r.get('amount', 0.0)}
+                                if 'loan_line_id' in r:
+                                    write_vals['loan_line_id'] = r.get('loan_line_id')
+                                existing_inputs[code].sudo().write(write_vals)
+                            elif r.get('amount') is not None:
+                                existing_inputs[code].sudo().write({'amount': r.get('amount')})
                         else:
                             new_lines.append((0, 0, r))
                     if new_lines:
-                        payslip.write({'input_line_ids': new_lines})
+                        payslip.sudo().write({'input_line_ids': new_lines})
                         
-        return super(HrPayslip, self).action_compute_sheet()
+        return super(HrPayslip, self.sudo()).action_compute_sheet()
 
     def action_payslip_done(self):
         res = super(HrPayslip, self).action_payslip_done()
@@ -207,19 +245,21 @@ class HrPayslip(models.Model):
             # 2. Handle Custom Loan Lines
             loan_lines = self.env['salary.loan.line'].search([
                 ('employee_id', '=', payslip.employee_id.id),
+                ('loan_id.state', '=', 'approved'),
                 ('date', '>=', payslip.date_from),
                 ('date', '<=', payslip.date_to),
                 ('paid', '=', False),
                 ('payslip_id', 'in', [False, payslip.id])
             ])
-            active_loan_lines = loan_lines.filtered(
-                lambda l: not l.loan_id.invoice_id or l.loan_id.invoice_id.payment_state in ('paid', 'in_payment')
-            )
-            if active_loan_lines:
-                active_loan_lines.write({
+            if loan_lines:
+                loan_lines.write({
                     'paid': True,
                     'payslip_id': payslip.id
                 })
+                # If all installments of a loan are paid, close the loan
+                for loan in loan_lines.mapped('loan_id'):
+                    if all(line.paid for line in loan.line_ids):
+                        loan.write({'state': 'closed'})
 
         return res
 
@@ -242,6 +282,9 @@ class HrPayslip(models.Model):
                     'paid': False,
                     'payslip_id': False
                 })
+                for loan in loan_lines.mapped('loan_id'):
+                    if loan.state == 'closed':
+                        loan.write({'state': 'approved'})
 
         return res
 
@@ -264,5 +307,8 @@ class HrPayslip(models.Model):
                     'paid': False,
                     'payslip_id': False
                 })
+                for loan in loan_lines.mapped('loan_id'):
+                    if loan.state == 'closed':
+                        loan.write({'state': 'approved'})
 
         return res

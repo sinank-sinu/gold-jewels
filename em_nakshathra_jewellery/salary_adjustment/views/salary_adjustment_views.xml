@@ -26,10 +26,10 @@
         <field name="arch" type="xml">
             <form string="Salary Adjustment Sheet">
                 <header>
-                    <button name="action_generate_lines" string="Generate Lines" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_done" string="Validate" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="%(action_salary_adjustment_export)d" string="Export Salary File" type="action" class="btn-primary" invisible="state != 'done'"/>
-                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state != 'done'"/>
+                    <button name="action_generate_lines" string="Generate Lines" type="object" class="btn-primary" invisible="state != 'draft'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_done" string="Validate" type="object" class="btn-primary" invisible="state != 'draft'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="%(action_salary_adjustment_export)d" string="Export Salary File" type="action" class="btn-primary" invisible="state != 'done'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state != 'done'" groups="salary_adjustment.group_salary_adjustment_manager"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,done"/>
                 </header>
                 <sheet>
@@ -75,7 +75,7 @@
 
     <!-- Salary Adjustment Action -->
     <record id="action_salary_adjustment" model="ir.actions.act_window">
-        <field name="name">Salary Adjustments</field>
+        <field name="name">Adjustment Sheets</field>
         <field name="res_model">salary.adjustment</field>
         <field name="view_mode">tree,form</field>
         <field name="help" type="html">
@@ -116,9 +116,9 @@
             <form string="Advance Salary Request">
                 <header>
                     <button name="action_request" string="Request" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_approve" string="Approve" type="object" class="btn-primary" invisible="state != 'requested'" groups="hr.group_hr_user,hr.group_hr_manager,base.group_system"/>
-                    <button name="action_reject" string="Reject" type="object" class="btn-secondary" invisible="state != 'requested'"/>
-                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state == 'draft'"/>
+                    <button name="action_approve" string="Approve" type="object" class="btn-primary" invisible="state != 'requested'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_reject" string="Reject" type="object" class="btn-secondary" invisible="state != 'requested'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state == 'draft' or (not is_manager and state not in ('requested', 'rejected'))"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,requested,approved,rejected"/>
                 </header>
                 <sheet>
@@ -129,13 +129,15 @@
                     </div>
                     <group>
                         <group>
-                            <field name="employee_id" readonly="state != 'draft'"/>
+                            <field name="is_manager" invisible="1"/>
+                            <field name="employee_id" readonly="(state != 'draft') or (not is_manager and employee_id)" force_save="1"/>
                             <field name="amount" readonly="state != 'draft'"/>
                         </group>
                         <group>
                             <field name="date" readonly="state != 'draft'"/>
                             <field name="company_id" groups="base.group_multi_company" readonly="state != 'draft'"/>
                             <field name="payslip_id" invisible="not payslip_id"/>
+                            <field name="invoice_id" invisible="not invoice_id"/>
                         </group>
                     </group>
                     <group string="Reason / Description">
@@ -151,11 +153,37 @@
         </field>
     </record>
 
+    <!-- Advance Salary Search View -->
+    <record id="view_salary_advance_search" model="ir.ui.view">
+        <field name="name">salary.advance.search</field>
+        <field name="model">salary.advance</field>
+        <field name="arch" type="xml">
+            <search string="Search Advance Salary">
+                <field name="name" string="Reference"/>
+                <field name="employee_id"/>
+                <separator/>
+                <filter string="My Requests" name="my_requests" domain="[('create_uid', '=', uid)]"/>
+                <separator/>
+                <filter string="Draft" name="filter_draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Requested" name="filter_requested" domain="[('state', '=', 'requested')]"/>
+                <filter string="Approved" name="filter_approved" domain="[('state', '=', 'approved')]"/>
+                <filter string="Rejected" name="filter_rejected" domain="[('state', '=', 'rejected')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Employee" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="Status" name="group_status" context="{'group_by': 'state'}"/>
+                    <filter string="Request Date" name="group_date" context="{'group_by': 'date'}"/>
+                    <filter string="Company" name="group_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <!-- Advance Salary Action -->
     <record id="action_salary_advance" model="ir.actions.act_window">
         <field name="name">Advance Salary</field>
         <field name="res_model">salary.advance</field>
         <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_salary_advance_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create a new Advance Salary Request!
@@ -196,9 +224,10 @@
             <form string="Loan Request">
                 <header>
                     <button name="action_request" string="Request" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_approve" string="Approve" type="object" class="btn-primary" invisible="state != 'requested'" groups="hr.group_hr_user,hr.group_hr_manager,base.group_system"/>
-                    <button name="action_reject" string="Reject" type="object" class="btn-secondary" invisible="state != 'requested'"/>
-                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state == 'draft'"/>
+                    <button name="action_approve" string="Approve" type="object" class="btn-primary" invisible="state != 'requested'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_close" string="Close" type="object" class="btn-secondary" invisible="state != 'approved'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_reject" string="Reject" type="object" class="btn-secondary" invisible="state != 'requested'" groups="salary_adjustment.group_salary_adjustment_manager"/>
+                    <button name="action_draft" string="Reset to Draft" type="object" class="btn-secondary" invisible="state == 'draft' or (not is_manager and state not in ('requested', 'rejected'))"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,requested,approved,closed,rejected"/>
                 </header>
                 <sheet>
@@ -209,25 +238,29 @@
                     </div>
                     <group>
                         <group>
-                            <field name="employee_id" readonly="state != 'draft'"/>
+                            <field name="is_manager" invisible="1"/>
+                            <field name="employee_id" readonly="(state != 'draft') or (not is_manager and employee_id)" force_save="1"/>
                             <field name="amount" readonly="state != 'draft'"/>
                             <field name="tenure_months" readonly="state != 'draft'"/>
                         </group>
                         <group>
                             <field name="date" readonly="state != 'draft'"/>
-                            <field name="monthly_installment"/>
+                            <field name="monthly_installment" readonly="(not is_manager) or (state == 'closed')" force_save="1"/>
                             <field name="company_id" groups="base.group_multi_company" readonly="state != 'draft'"/>
+                            <field name="payslip_id" invisible="not payslip_id"/>
                             <field name="invoice_id" invisible="not invoice_id"/>
                         </group>
                     </group>
                     <notebook>
                         <page string="Installment Lines" name="installment_lines" invisible="state in ('draft', 'requested')">
-                            <field name="line_ids" readonly="1">
-                                <tree string="Installment Lines">
-                                    <field name="date"/>
-                                    <field name="amount" sum="Total Installments"/>
-                                    <field name="paid" widget="boolean_toggle"/>
-                                    <field name="payslip_id"/>
+                            <field name="line_ids" readonly="state in ('closed', 'rejected')">
+                                <tree string="Installment Lines" decoration-success="paid == True" editable="bottom" create="0" delete="0">
+                                    <field name="is_manager" column_invisible="1"/>
+                                    <field name="date" readonly="1"/>
+                                    <field name="amount" sum="Total Installments" readonly="(not is_manager) or (paid == True)"/>
+                                    <field name="paid" widget="boolean_toggle" readonly="not is_manager"/>
+                                    <field name="paid_status" widget="badge" decoration-success="paid_status == 'paid'" decoration-danger="paid_status == 'unpaid'"/>
+                                    <field name="payslip_id" readonly="1"/>
                                 </tree>
                             </field>
                         </page>
@@ -245,11 +278,38 @@
         </field>
     </record>
 
+    <!-- Loan Request Search View -->
+    <record id="view_salary_loan_search" model="ir.ui.view">
+        <field name="name">salary.loan.search</field>
+        <field name="model">salary.loan</field>
+        <field name="arch" type="xml">
+            <search string="Search Loan Requests">
+                <field name="name" string="Reference"/>
+                <field name="employee_id"/>
+                <separator/>
+                <filter string="My Requests" name="my_requests" domain="[('create_uid', '=', uid)]"/>
+                <separator/>
+                <filter string="Draft" name="filter_draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Requested" name="filter_requested" domain="[('state', '=', 'requested')]"/>
+                <filter string="Approved" name="filter_approved" domain="[('state', '=', 'approved')]"/>
+                <filter string="Closed" name="filter_closed" domain="[('state', '=', 'closed')]"/>
+                <filter string="Rejected" name="filter_rejected" domain="[('state', '=', 'rejected')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Employee" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="Status" name="group_status" context="{'group_by': 'state'}"/>
+                    <filter string="Request Date" name="group_date" context="{'group_by': 'date'}"/>
+                    <filter string="Company" name="group_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <!-- Loan Request Action -->
     <record id="action_salary_loan" model="ir.actions.act_window">
         <field name="name">Loan Requests</field>
         <field name="res_model">salary.loan</field>
         <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_salary_loan_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create a new Loan Request!
@@ -257,6 +317,39 @@
             <p>
                 Record and manage employee loans and repayments.
             </p>
+        </field>
+    </record>
+
+    <!-- Payslip View Inheritance: Loans and Advances -->
+    <record id="view_hr_payslip_form_inherit_salary_adjustment" model="ir.ui.view">
+        <field name="name">hr.payslip.view.form.inherit.salary.adjustment</field>
+        <field name="model">hr.payslip</field>
+        <field name="inherit_id" ref="hr_payroll_community.hr_payslip_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Loans &amp; Advances" name="salary_loans_and_advances">
+                    <group string="Loan Installment Deductions">
+                        <field name="loan_line_ids" nolabel="1" readonly="1">
+                            <tree string="Loan Installments">
+                                <field name="loan_id"/>
+                                <field name="date"/>
+                                <field name="amount" sum="Total Loan Deductions"/>
+                                <field name="paid" widget="boolean_toggle"/>
+                            </tree>
+                        </field>
+                    </group>
+                    <group string="Salary Advance Deductions">
+                        <field name="advance_ids" nolabel="1" readonly="1">
+                            <tree string="Salary Advances">
+                                <field name="name"/>
+                                <field name="date"/>
+                                <field name="amount" sum="Total Advance Deductions"/>
+                                <field name="state"/>
+                            </tree>
+                        </field>
+                    </group>
+                </page>
+            </xpath>
         </field>
     </record>
 
@@ -268,24 +361,28 @@
     <menuitem id="menu_salary_adjustment_root"
               name="Salary Adjustment"
               web_icon="salary_adjustment,static/description/icon.png"
+              groups="salary_adjustment.group_salary_adjustment_user"
               sequence="90"/>
 
     <!-- Submenus -->
     <menuitem id="menu_salary_adjustment_sheet"
-              name="Salary Adjustments"
+              name="Adjustment Sheets"
               parent="menu_salary_adjustment_root"
               action="action_salary_adjustment"
+              groups="salary_adjustment.group_salary_adjustment_manager"
               sequence="10"/>
 
     <menuitem id="menu_salary_advance"
               name="Advance Salary"
               parent="menu_salary_adjustment_root"
               action="action_salary_advance"
+              groups="salary_adjustment.group_salary_adjustment_user"
               sequence="20"/>
 
     <menuitem id="menu_salary_loan"
               name="Loan Requests"
               parent="menu_salary_adjustment_root"
               action="action_salary_loan"
+              groups="salary_adjustment.group_salary_adjustment_user"
               sequence="30"/>
 </odoo>

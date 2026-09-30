@@ -1,6 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Salary Rule for Advance Salary Deduction -->
+    <!-- ============================================================= -->
+    <!-- Salary Rule: Provident Fund (PF) Employee Deduction           -->
+    <!-- ============================================================= -->
+    <record id="hr_rule_pf" model="hr.salary.rule">
+        <field name="code">PF</field>
+        <field name="name">Provident Fund (PF)</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+if inputs.PF and inputs.PF.amount > 0:
+    result = - (inputs.PF.amount)
+elif contract.apply_pf:
+    custom_pf = contract.custom_monthly_pf or 0.0
+    if custom_pf > 0:
+        result = - round(custom_pf, 2)
+    else:
+        basic_wage = categories.BASIC if (categories.BASIC and categories.BASIC > 0) else contract.wage
+        ceiling = contract.pf_wage_ceiling or 15000.0
+        pf_base = min(basic_wage, ceiling) if contract.pf_enforce_ceiling else basic_wage
+        rate = (contract.pf_employee_rate or 12.0) / 100.0
+        pf_amount = round(pf_base * rate, 2)
+        result = - pf_amount if pf_amount > 0 else 0.0
+else:
+    result = 0.0
+]]></field>
+        <field name="appears_on_payslip" eval="True"/>
+        <field name="sequence" eval="190"/>
+    </record>
+
+    <!-- Rule Input for PF -->
+    <record id="hr_rule_input_pf" model="hr.rule.input">
+        <field name="code">PF</field>
+        <field name="name">Provident Fund (PF)</field>
+        <field name="input_id" ref="hr_rule_pf"/>
+    </record>
+
+    <!-- ============================================================= -->
+    <!-- Salary Rule: Employees' State Insurance (ESI) Employee Ded.   -->
+    <!-- ============================================================= -->
+    <record id="hr_rule_esi" model="hr.salary.rule">
+        <field name="code">ESI</field>
+        <field name="name">Employees' State Insurance (ESI)</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+if inputs.ESI and inputs.ESI.amount > 0:
+    result = - (inputs.ESI.amount)
+elif employee.apply_esi and contract.apply_esi:
+    custom_esi = contract.custom_monthly_esi or 0.0
+    if custom_esi > 0:
+        result = - round(custom_esi, 2)
+    else:
+        gross = categories.GROSS if (categories.GROSS and categories.GROSS > 0) else contract.wage
+        limit = contract.esi_wage_limit or 21000.0
+        rate = (contract.esi_employee_rate or 0.75) / 100.0
+
+        is_covered = False
+        if gross <= limit:
+            is_covered = True
+        elif contract.esi_contribution_end and payslip.date_to <= contract.esi_contribution_end:
+            if not contract.esi_contribution_start or payslip.date_from >= contract.esi_contribution_start:
+                is_covered = True
+
+        if is_covered:
+            esi_amount = round(gross * rate, 2)
+            result = - esi_amount if esi_amount > 0 else 0.0
+        else:
+            result = 0.0
+else:
+    result = 0.0
+]]></field>
+        <field name="appears_on_payslip" eval="True"/>
+        <field name="sequence" eval="191"/>
+    </record>
+
+    <!-- Rule Input for ESI -->
+    <record id="hr_rule_input_esi" model="hr.rule.input">
+        <field name="code">ESI</field>
+        <field name="name">Employees' State Insurance (ESI)</field>
+        <field name="input_id" ref="hr_rule_esi"/>
+    </record>
+
+    <!-- ============================================================= -->
+    <!-- Salary Rule: Advance Salary Deduction                         -->
+    <!-- ============================================================= -->
     <record id="hr_rule_salary_advance" model="hr.salary.rule">
         <field name="code">SAD</field>
         <field name="name">Salary Advance Deduction</field>
@@ -18,7 +102,9 @@
         <field name="input_id" ref="hr_rule_salary_advance"/>
     </record>
 
-    <!-- Salary Rule for Loan Deduction -->
+    <!-- ============================================================= -->
+    <!-- Salary Rule: Loan Deduction                                   -->
+    <!-- ============================================================= -->
     <record id="hr_rule_salary_loan" model="hr.salary.rule">
         <field name="code">LO</field>
         <field name="name">Loan Deduction</field>
@@ -36,13 +122,85 @@
         <field name="input_id" ref="hr_rule_salary_loan"/>
     </record>
 
-    <!-- Link rule to Base structure -->
-    <record id="hr_payroll_community.structure_base" model="hr.payroll.structure">
-        <field name="rule_ids" eval="[(4, ref('hr_rule_salary_advance')), (4, ref('hr_rule_salary_loan'))]"/>
+    <!-- ============================================================= -->
+    <!-- Salary Rule: TDS (Tax Deducted at Source - Budget 2025)       -->
+    <!-- ============================================================= -->
+    <record id="hr_rule_tds" model="hr.salary.rule">
+        <field name="code">TDS</field>
+        <field name="name">Tax Deducted at Source (TDS)</field>
+        <field name="category_id" ref="hr_payroll_community.DED"/>
+        <field name="amount_select">code</field>
+        <field name="amount_python_compute"><![CDATA[
+if inputs.TDS and inputs.TDS.amount > 0:
+    result = - (inputs.TDS.amount)
+elif contract.apply_tds:
+    custom_tds = contract.custom_monthly_tds or 0.0
+    if custom_tds > 0:
+        result = - round(custom_tds, 2)
+    else:
+        gross = categories.GROSS if (categories.GROSS and categories.GROSS > 0) else contract.wage
+        annual_gross = gross * 12.0
+        std_ded = contract.tds_standard_deduction or 0.0
+        taxable_income = max(0.0, annual_gross - std_ded)
+
+        # Union Budget 2025 New Tax Regime Slabs (FY 2025-26):
+        # Up to 4,00,000       : Nil (0%)
+        # 4,00,001 - 8,00,000   : 5%
+        # 8,00,001 - 12,00,000  : 10%
+        # 12,00,001 - 16,00,000 : 15%
+        # 16,00,001 - 20,00,000 : 20%
+        # 20,00,001 - 24,00,000 : 25%
+        # Above 24,00,000       : 30%
+        tax = 0.0
+        rem = taxable_income
+        if rem > 2400000:
+            tax += (rem - 2400000) * 0.30
+            rem = 2400000
+        if rem > 2000000:
+            tax += (rem - 2000000) * 0.25
+            rem = 2000000
+        if rem > 1600000:
+            tax += (rem - 1600000) * 0.20
+            rem = 1600000
+        if rem > 1200000:
+            tax += (rem - 1200000) * 0.15
+            rem = 1200000
+        if rem > 800000:
+            tax += (rem - 800000) * 0.10
+            rem = 800000
+        if rem > 400000:
+            tax += (rem - 400000) * 0.05
+
+        if contract.tds_include_cess:
+            tax = tax * 1.04
+
+        monthly_tds = round(tax / 12.0, 2)
+        result = - monthly_tds if monthly_tds > 0 else 0.0
+else:
+    result = 0.0
+]]></field>
+        <field name="appears_on_payslip" eval="True"/>
+        <field name="sequence" eval="197"/>
     </record>
 
-    <!-- Link rule to Salesman Target Incentive Structure -->
+    <!-- Rule Input for TDS -->
+    <record id="hr_rule_input_tds" model="hr.rule.input">
+        <field name="code">TDS</field>
+        <field name="name">Tax Deducted at Source (TDS)</field>
+        <field name="input_id" ref="hr_rule_tds"/>
+    </record>
+
+    <!-- ============================================================= -->
+    <!-- Link rules to Base structure                                  -->
+    <!-- ============================================================= -->
+    <record id="hr_payroll_community.structure_base" model="hr.payroll.structure">
+        <field name="rule_ids" eval="[(4, ref('hr_rule_pf')), (4, ref('hr_rule_esi')), (4, ref('hr_rule_salary_advance')), (4, ref('hr_rule_salary_loan')), (4, ref('hr_rule_tds'))]"/>
+    </record>
+
+    <!-- ============================================================= -->
+    <!-- Link rules to Salesman Target Incentive Structure             -->
+    <!-- ============================================================= -->
     <record id="salesman_target_incentive.hr_salary_structure_sales_incentive" model="hr.payroll.structure">
-        <field name="rule_ids" eval="[(4, ref('hr_rule_salary_advance')), (4, ref('hr_rule_salary_loan'))]"/>
+        <field name="rule_ids" eval="[(4, ref('hr_rule_pf')), (4, ref('hr_rule_esi')), (4, ref('hr_rule_salary_advance')), (4, ref('hr_rule_salary_loan')), (4, ref('hr_rule_tds'))]"/>
     </record>
 </odoo>

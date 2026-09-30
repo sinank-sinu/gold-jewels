@@ -1,0 +1,11 @@
+/* Green Paid Indicator & Toggle Styling */
+.o_field_boolean_toggle input.form-check-input:checked,
+.o_field_boolean_toggle .form-check-input:checked {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+}
+
+.badge.text-bg-success, .badge.bg-success {
+    background-color: #28a745 !important;
+    color: #ffffff !important;
+}

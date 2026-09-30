@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Gold Scheme API Control Form View -->
+    <record id="scheme_api_control_view_form" model="ir.ui.view">
+        <field name="name">scheme.api.control.form</field>
+        <field name="model">scheme.api.control</field>
+        <field name="arch" type="xml">
+            <form string="Gold Scheme API Control" create="false" delete="false">
+                <header>
+                    <button name="action_disable_api"
+                            type="object"
+                            string="Stop Scheme API"
+                            class="btn-danger"
+                            icon="fa-power-off"
+                            invisible="not is_enabled"
+                            confirm="Are you sure you want to stop the Gold Scheme API? All external requests will be rejected."/>
+                    <button name="action_enable_api"
+                            type="object"
+                            string="Start Scheme API"
+                            class="btn-success"
+                            icon="fa-play"
+                            invisible="is_enabled"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="SCHEME API ACTIVE" bg_color="text-bg-success" invisible="not is_enabled"/>
+                    <widget name="web_ribbon" title="SCHEME API STOPPED" bg_color="text-bg-danger" invisible="is_enabled"/>
+
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" invisible="1"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group string="API Operational Switch">
+                        <group>
+                            <field name="is_enabled" widget="boolean_toggle" string="Scheme API Switch (ON / OFF)"/>
+                        </group>
+                        <group>
+                            <field name="status_badge" widget="badge" decoration-success="is_enabled" decoration-danger="not is_enabled"/>
+                        </group>
+                    </group>
+
+                    <group string="Notice Message (Returned When Disabled)">
+                        <field name="disabled_message" placeholder="Message to return in API response when disabled..."/>
+                    </group>
+
+                    <group string="Audit Information">
+                        <group>
+                            <field name="last_toggled_by"/>
+                        </group>
+                        <group>
+                            <field name="last_toggled_date"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_scheme_api_control" model="ir.actions.act_window">
+        <field name="name">Scheme API Control</field>
+        <field name="res_model">scheme.api.control</field>
+        <field name="view_mode">form</field>
+        <field name="res_id" ref="hr_mobile_api.record_scheme_api_control"/>
+        <field name="target">current</field>
+    </record>
+</odoo>

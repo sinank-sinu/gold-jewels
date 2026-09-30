@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-inherit="web.WarningDialog" t-inherit-mode="extension" owl="1">
+        <xpath expr="//p[@t-esc='message']" position="replace">
+            <p t-out="message" class="text-prewrap"/>
+        </xpath>
+    </t>
+</templates>

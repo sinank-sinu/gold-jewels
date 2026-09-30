@@ -1,8 +1,9 @@
 from odoo import http, fields
-from odoo.http import request
+from odoo.http import request, Response
 import json
 import random
 import datetime
+from dateutil.relativedelta import relativedelta
 
 class SchemeMobileAPI(http.Controller):
     #LOGIN
@@ -498,7 +499,7 @@ class SchemeMobileAPI(http.Controller):
             return {"status": "error", "message": str(e)}
 
     # SCHEME DETAILS & INSTALLMENT TIMELINE API
-    @http.route('/api/scheme/details', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    @http.route(['/api/scheme/details', '/api/scheme/installments', '/api/scheme/installment-list'], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def get_scheme_details(self, **kwargs):
         try:
             user = request.env.user
@@ -510,70 +511,120 @@ class SchemeMobileAPI(http.Controller):
                     user = request.env['res.users'].sudo().search([('login', '=', 'admin')], limit=1)
 
             partner = user.partner_id if user else request.env['res.partner'].sudo().search([], limit=1)
-            enrollment_id = kwargs.get('enrollment_id')
+            enrollment_id = kwargs.get('enrollment_id') or kwargs.get('id')
+            ticket_number = kwargs.get('ticket_number') or kwargs.get('Ticket_Number') or kwargs.get('ticket_no')
+            phone_param = kwargs.get('phone') or kwargs.get('phone_number') or kwargs.get('mobile')
             
             Enrollment = request.env['jewellery.scheme.enrollment'].sudo()
             enrollment = False
             if enrollment_id:
-                enrollment = Enrollment.search([('id', '=', int(enrollment_id))], limit=1)
+                try:
+                    enrollment = Enrollment.search([('id', '=', int(enrollment_id))], limit=1)
+                except Exception:
+                    enrollment = False
+            if not enrollment and ticket_number:
+                enrollment = Enrollment.search([('ticket_number', '=', str(ticket_number).strip())], limit=1)
+            if not enrollment and phone_param:
+                enrollment = Enrollment.search(['|', ('phone', '=', str(phone_param).strip()), ('whatsapp_number', '=', str(phone_param).strip())], order='create_date desc', limit=1)
             if not enrollment:
                 enrollment = Enrollment.search([('partner_id', '=', partner.id)], order='create_date desc', limit=1)
             if not enrollment:
                 enrollment = Enrollment.search([], order='create_date desc', limit=1)
 
-            total_invested = enrollment.total_paid if enrollment and enrollment.total_paid > 0 else 70000.0
-            monthly_due = enrollment.installment_amount if enrollment and enrollment.installment_amount > 0 else 10000.0
-            paid_count = enrollment.paid_count if enrollment and enrollment.paid_count > 0 else 1
-            total_count = enrollment.duration if enrollment and enrollment.duration > 0 else 3
-            
-            timeline = [
-                {
-                    "period": "Jan - July",
-                    "date": "15 Jan '24",
-                    "status": "Paid",
-                    "status_tag": "Paid",
-                    "amount": round(total_invested, 2),
+            if not enrollment:
+                return {"status": "error", "message": "No scheme enrollment found."}
+
+            # If existing enrollment has no installment lines, generate them
+            if not enrollment.scheme_line_ids and (enrollment.duration or 0) > 0 and (enrollment.installment_amount or 0) > 0:
+                Installment = request.env['jewellery.scheme.installment'].sudo()
+                base_date = fields.Date.from_string(enrollment.date_of_joining) if isinstance(enrollment.date_of_joining, str) else (enrollment.date_of_joining or fields.Date.today())
+                inst_vals = []
+                for i in range(enrollment.duration):
+                    inst_date = base_date + relativedelta(months=i)
+                    inst_vals.append({
+                        'enrollment_id': enrollment.id,
+                        'date': inst_date,
+                        'amount': enrollment.installment_amount,
+                        'state': 'draft',
+                    })
+                if inst_vals:
+                    Installment.create(inst_vals)
+                enrollment.invalidate_recordset(['scheme_line_ids', 'total_paid', 'balance_amount', 'paid_count'])
+
+            total_invested = enrollment.total_paid
+            monthly_due = enrollment.installment_amount
+            paid_count = enrollment.paid_count
+            total_count = enrollment.duration if enrollment.duration else 11
+            balance_amount = enrollment.balance_amount
+            total_scheme_amount = round(enrollment.installment_amount * total_count, 2)
+
+            installments_data = []
+            sorted_lines = enrollment.scheme_line_ids.sorted(key=lambda l: (l.date or fields.Date.today(), l.id))
+            for idx, inst in enumerate(sorted_lines):
+                installments_data.append({
+                    "installment_id": inst.id,
+                    "installment_number": idx + 1,
+                    "date": str(inst.date) if inst.date else "",
+                    "formatted_date": inst.date.strftime("%d/%m/%Y") if inst.date else "",
+                    "amount": inst.amount,
+                    "state": inst.state,
+                    "state_display": dict(inst._fields['state'].selection).get(inst.state, inst.state.title() if inst.state else "Draft"),
+                    "journal_id": inst.journal_id.id if inst.journal_id else False,
+                    "journal": inst.journal_id.name or "",
+                    "customer_move": inst.move_id.name or "",
+                    "transaction_id": inst.transaction_id or "",
+                    "remark": inst.remark or "",
+                    "is_transferred": inst.is_transferred or False
+                })
+
+            next_due_inst = sorted_lines.filtered(lambda l: l.state == 'draft')[:1]
+            next_due_month = next_due_inst.date.strftime("%B") if next_due_inst and next_due_inst.date else "Completed"
+
+            timeline = []
+            for idx, inst in enumerate(sorted_lines):
+                is_paid = inst.state == 'paid'
+                is_next_due = bool(next_due_inst and inst.id == next_due_inst.id)
+                month_name = inst.date.strftime("%B %Y") if inst.date else f"Month {idx + 1}"
+                timeline.append({
+                    "period": month_name,
+                    "date": str(inst.date) if inst.date else "",
+                    "formatted_date": inst.date.strftime("%d %b '%y") if inst.date else "",
+                    "installment_number": idx + 1,
+                    "status": "Paid" if is_paid else ("Due" if is_next_due else "Upcoming"),
+                    "status_tag": "Paid" if is_paid else ("Not Paid" if is_next_due else "Upcoming"),
+                    "amount": round(inst.amount, 2),
                     "currency_symbol": "₹",
-                    "is_active_month": False,
-                    "can_pay": False
-                },
-                {
-                    "period": "August",
-                    "date": "Active month",
-                    "status": "Not Paid",
-                    "status_tag": "Not Paid",
-                    "amount": round(monthly_due, 2),
-                    "currency_symbol": "₹",
-                    "is_active_month": True,
-                    "can_pay": True,
-                    "action_label": "PAY NOW"
-                },
-                {
-                    "period": "Sep - Dec",
-                    "date": "Upcoming",
-                    "status": "Upcoming",
-                    "status_tag": "Upcoming",
-                    "amount": None,
-                    "currency_symbol": "₹",
-                    "is_active_month": False,
-                    "can_pay": False
-                }
-            ]
+                    "is_active_month": is_next_due,
+                    "can_pay": is_next_due or not is_paid,
+                    "action_label": "PAY NOW" if (is_next_due or not is_paid) else None,
+                    "journal": inst.journal_id.name or "",
+                    "transaction_id": inst.transaction_id or "",
+                    "customer_move": inst.move_id.name or "",
+                })
 
             return {
                 "status": "success",
                 "data": {
-                    "enrollment_id": enrollment.id if enrollment else 1,
-                    "plan_name": "11-Month Gold Savings Plan",
-                    "image_url": f"/web/image/jewellery.scheme.enrollment/{enrollment.id}/image_1920" if enrollment else "/web/image/product.template/1/image_1920",
+                    "enrollment_id": enrollment.id,
+                    "ticket_number": enrollment.ticket_number or "",
+                    "name": enrollment.name,
+                    "plan_name": enrollment.name,
+                    "partner_id": enrollment.partner_id.id,
+                    "partner_name": enrollment.partner_id.name,
+                    "image_url": f"/web/image/jewellery.scheme.enrollment/{enrollment.id}/image_1920",
                     "total_invested": total_invested,
+                    "total_paid": total_invested,
+                    "balance_amount": balance_amount,
+                    "total_scheme_amount": total_scheme_amount,
                     "installment_due": monthly_due,
-                    "next_due_month": "August",
+                    "next_due_month": next_due_month,
                     "paid_count": paid_count,
                     "total_count": total_count,
                     "progress_text": f"{paid_count} / {total_count} Paid",
                     "currency_symbol": "₹",
-                    "timeline": timeline
+                    "timeline": timeline,
+                    "installments": installments_data,
+                    "monthly_installment_pay_list": installments_data
                 }
             }
         except Exception as e:
@@ -583,20 +634,165 @@ class SchemeMobileAPI(http.Controller):
     @http.route('/api/scheme/join', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def join_scheme(self, **kwargs):
         try:
-            user = request.env.user
-            if not user or user._is_public():
-                user_id = kwargs.get('user_id')
-                if user_id:
-                    user = request.env['res.users'].sudo().browse(int(user_id))
+            # 1. Resolve phone
+            phone_input = kwargs.get('phone') or kwargs.get('phone_number') or kwargs.get('mobile')
+            phone = str(phone_input).strip() if phone_input is not None and str(phone_input).strip() else False
+
+            # 2. Resolve Partner
+            Partner = request.env['res.partner'].sudo()
+            partner = None
+
+            partner_input = (
+                kwargs.get('Partner')
+                or kwargs.get('partner')
+                or kwargs.get('partner_name')
+                or kwargs.get('partner_id')
+                or kwargs.get('customer')
+                or kwargs.get('customer_name')
+            )
+
+            if partner_input:
+                if isinstance(partner_input, int) or (isinstance(partner_input, str) and partner_input.isdigit()):
+                    p = Partner.browse(int(partner_input))
+                    if p.exists():
+                        partner = p
+                elif isinstance(partner_input, str) and partner_input.strip():
+                    p_name = partner_input.strip()
+                    matched = Partner.search([('name', '=ilike', p_name)], limit=1)
+                    if not matched and phone:
+                        matched = Partner.search(['|', ('mobile', '=', phone), ('phone', '=', phone)], limit=1)
+                    if matched:
+                        partner = matched
+                    else:
+                        create_vals = {
+                            'name': p_name,
+                            'customer_rank': 1,
+                        }
+                        if phone:
+                            create_vals['phone'] = phone
+                            create_vals['mobile'] = phone
+                        partner = Partner.create(create_vals)
+
+            if not partner and phone:
+                partner = Partner.search(['|', ('mobile', '=', phone), ('phone', '=', phone)], limit=1)
+
+            if partner and phone:
+                partner_update = {}
+                if not partner.phone:
+                    partner_update['phone'] = phone
+                if not partner.mobile:
+                    partner_update['mobile'] = phone
+                if partner_update:
+                    partner.write(partner_update)
+
+            # Fallback to user's partner if no partner was found
+            if not partner:
+                user = request.env.user
+                if not user or user._is_public():
+                    user_id = kwargs.get('user_id')
+                    if user_id:
+                        try:
+                            user = request.env['res.users'].sudo().browse(int(user_id))
+                        except Exception:
+                            user = None
+                    if not user or not user.exists() or user._is_public():
+                        user = request.env['res.users'].sudo().search([('login', '=', 'admin')], limit=1)
+                partner = user.partner_id if user and user.partner_id else Partner.search([], limit=1)
+
+            # 3. Resolve Salesperson (user_id)
+            salesperson_id = False
+            salesperson_param = kwargs.get('salesperson_id') or kwargs.get('salesperson')
+            if salesperson_param:
+                if isinstance(salesperson_param, int) or (isinstance(salesperson_param, str) and str(salesperson_param).isdigit()):
+                    sp = request.env['res.users'].sudo().browse(int(salesperson_param))
+                    if sp.exists() and not sp._is_public():
+                        salesperson_id = sp.id
+                elif isinstance(salesperson_param, str) and salesperson_param.strip():
+                    sp = request.env['res.users'].sudo().search([('name', '=ilike', salesperson_param.strip()), ('share', '=', False)], limit=1)
+                    if sp:
+                        salesperson_id = sp.id
+
+            if not salesperson_id:
+                uid_param = kwargs.get('user_id')
+                if uid_param:
+                    try:
+                        u = request.env['res.users'].sudo().browse(int(uid_param))
+                        if u.exists() and not u._is_public():
+                            salesperson_id = u.id
+                    except Exception:
+                        pass
+
+            if not salesperson_id:
+                cur_user = request.env.user
+                if cur_user and not cur_user._is_public():
+                    salesperson_id = cur_user.id
                 else:
-                    user = request.env['res.users'].sudo().search([('login', '=', 'admin')], limit=1)
+                    admin_u = request.env['res.users'].sudo().search([('login', '=', 'admin')], limit=1)
+                    if admin_u:
+                        salesperson_id = admin_u.id
 
-            partner = user.partner_id if user else request.env['res.partner'].sudo().search([], limit=1)
+            # 4. Resolve Branch
+            branch_id = False
+            branch_param = kwargs.get('branch_id') or kwargs.get('branch')
+            if branch_param:
+                if isinstance(branch_param, int) or (isinstance(branch_param, str) and str(branch_param).isdigit()):
+                    branch_id = int(branch_param)
+                elif isinstance(branch_param, str) and branch_param.strip() and 'res.branch' in request.env:
+                    b = request.env['res.branch'].sudo().search([('name', '=ilike', branch_param.strip())], limit=1)
+                    if b:
+                        branch_id = b.id
 
+            if not branch_id and salesperson_id:
+                sp_user = request.env['res.users'].sudo().browse(salesperson_id)
+                if sp_user.exists() and hasattr(sp_user, 'branch_id') and sp_user.branch_id:
+                    branch_id = sp_user.branch_id.id
+
+            if not branch_id and partner and hasattr(partner, 'branch_id') and partner.branch_id:
+                branch_id = partner.branch_id.id
+
+            if not branch_id and 'res.branch' in request.env:
+                def_branch = request.env['res.branch'].sudo().search([], limit=1)
+                if def_branch:
+                    branch_id = def_branch.id
+
+            # 5. Extract Scheme Fields
             scheme_type = kwargs.get('scheme_type', 'fixed_weight')
             monthly_installment = float(kwargs.get('monthly_installment', 5000.0))
             duration = int(kwargs.get('duration', 11))
             nominee = kwargs.get('nominee', '')
+            nominee_phone = kwargs.get('nominee_phone') or kwargs.get('nominee_phone_number') or False
+            date_of_joining = kwargs.get('date_of_joining') or fields.Date.today()
+
+            # Name: use passed name or fallback
+            scheme_name = (
+                kwargs.get('name')
+                or kwargs.get('scheme_name')
+                or f"{scheme_type.replace('_', ' ').title()} ({duration} Months)"
+            )
+
+            # Ticket Number
+            ticket_number = kwargs.get('ticket_number') or kwargs.get('ticket_no') or kwargs.get('Ticket_Number') or kwargs.get('Ticket_no')
+            ticket_number_str = str(ticket_number).strip() if ticket_number is not None and str(ticket_number).strip() else False
+
+            # Phone, WhatsApp, Address
+            enrollment_phone = phone or (partner.phone if partner else False) or (partner.mobile if partner else False) or False
+            whatsapp_number = (
+                kwargs.get('whatsapp_number')
+                or kwargs.get('whatsapp')
+                or (partner.mobile if partner else False)
+                or enrollment_phone
+                or False
+            )
+
+            address = kwargs.get('address')
+            if not address and partner:
+                address = "\n".join(filter(None, [
+                    partner.street,
+                    partner.street2,
+                    f"{partner.city or ''} - {partner.zip or ''}" if partner.city or partner.zip else '',
+                    partner.state_id.name if partner.state_id else '',
+                    partner.country_id.name if partner.country_id else '',
+                ])) or False
 
             RateMaster = request.env['gold.rate.master'].sudo()
             latest_rate = RateMaster.search([('active', '=', True)], order='date desc', limit=1)
@@ -607,27 +803,88 @@ class SchemeMobileAPI(http.Controller):
             estimated_gold_per_month = round(monthly_installment / rate_per_gram, 3)
 
             Enrollment = request.env['jewellery.scheme.enrollment'].sudo()
-            enrollment = Enrollment.create({
+            create_vals = {
                 'partner_id': partner.id,
-                'name': f"{scheme_type.replace('_', ' ').title()} ({duration} Months)",
+                'name': scheme_name,
                 'installment_amount': monthly_installment,
                 'duration': duration,
                 'nominee': nominee,
                 'active': True,
-            })
+                'phone': enrollment_phone,
+                'whatsapp_number': whatsapp_number,
+                'address': address,
+                'date_of_joining': date_of_joining,
+            }
+            if ticket_number_str:
+                create_vals['ticket_number'] = ticket_number_str
+            if nominee_phone:
+                create_vals['nominee_phone'] = str(nominee_phone).strip()
+            if salesperson_id:
+                create_vals['user_id'] = salesperson_id
+            if branch_id:
+                create_vals['branch_id'] = branch_id
+
+            enrollment = Enrollment.create(create_vals)
+
+            # Generate Monthly Installment Pay List (duration monthly installment lines)
+            Installment = request.env['jewellery.scheme.installment'].sudo()
+            base_date = fields.Date.from_string(enrollment.date_of_joining) if isinstance(enrollment.date_of_joining, str) else (enrollment.date_of_joining or fields.Date.today())
+            inst_vals = []
+            for i in range(duration):
+                inst_date = base_date + relativedelta(months=i)
+                inst_vals.append({
+                    'enrollment_id': enrollment.id,
+                    'date': inst_date,
+                    'amount': monthly_installment,
+                    'state': 'draft',
+                })
+            if inst_vals:
+                Installment.create(inst_vals)
+            enrollment.invalidate_recordset(['scheme_line_ids', 'total_paid', 'balance_amount', 'paid_count'])
+
+            installments_data = []
+            for idx, inst in enumerate(enrollment.scheme_line_ids.sorted(key=lambda l: (l.date or fields.Date.today(), l.id))):
+                installments_data.append({
+                    "installment_id": inst.id,
+                    "installment_number": idx + 1,
+                    "date": str(inst.date) if inst.date else "",
+                    "formatted_date": inst.date.strftime("%d/%m/%Y") if inst.date else "",
+                    "amount": inst.amount,
+                    "state": inst.state,
+                    "state_display": dict(inst._fields['state'].selection).get(inst.state, inst.state.title() if inst.state else "Draft"),
+                    "journal": inst.journal_id.name or "",
+                    "customer_move": inst.move_id.name or "",
+                    "transaction_id": inst.transaction_id or "",
+                    "remark": inst.remark or "",
+                    "is_transferred": inst.is_transferred or False
+                })
+
+            total_scheme_amount = round(monthly_installment * duration, 2)
 
             return {
                 "status": "success",
                 "message": "Scheme enrollment created successfully.",
                 "data": {
                     "enrollment_id": enrollment.id,
+                    "name": enrollment.name,
+                    "ticket_number": enrollment.ticket_number or "",
+                    "partner_id": partner.id,
+                    "partner_name": partner.name,
+                    "phone": enrollment.phone or "",
+                    "whatsapp_number": enrollment.whatsapp_number or "",
+                    "nominee": enrollment.nominee or "",
+                    "nominee_phone": enrollment.nominee_phone or "",
                     "scheme_type": scheme_type,
                     "monthly_installment": monthly_installment,
                     "duration": duration,
-                    "nominee": nominee,
+                    "total_scheme_amount": total_scheme_amount,
+                    "total_paid": enrollment.total_paid,
+                    "balance_amount": enrollment.balance_amount,
                     "estimated_gold_per_month": f"~{estimated_gold_per_month} grams / month",
                     "first_installment_amount": monthly_installment,
-                    "currency_symbol": "₹"
+                    "currency_symbol": "₹",
+                    "installments": installments_data,
+                    "monthly_installment_pay_list": installments_data
                 }
             }
         except Exception as e:
@@ -1006,3 +1263,68 @@ class SchemeMobileAPI(http.Controller):
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # ─────────────────────────────────────────────
+    # SCHEME API STATUS & HEALTH CHECK
+    # ─────────────────────────────────────────────
+    @http.route('/api/scheme/status', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
+    def api_status_json(self, **kwargs):
+        """Return operational status of the Gold Scheme API (JSON-RPC)."""
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'scheme_api.is_enabled'")
+            row = request.env.cr.fetchone()
+            is_enabled_val = row[0] if row else 'True'
+        except Exception:
+            is_enabled_val = 'True'
+
+        is_enabled = str(is_enabled_val).strip().lower() not in ('false', '0', 'off', 'no')
+
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'scheme_api.disabled_message'")
+            msg_row = request.env.cr.fetchone()
+            disabled_msg = msg_row[0] if msg_row and msg_row[0] else 'Gold Scheme API is currently disabled for maintenance. Please try again later.'
+        except Exception:
+            disabled_msg = 'Gold Scheme API is currently disabled for maintenance. Please try again later.'
+
+        msg = "Gold Scheme API is active and operational." if is_enabled else disabled_msg
+        return {
+            "status": "success",
+            "api_status": "online" if is_enabled else "offline",
+            "api_enabled": is_enabled,
+            "message": msg,
+        }
+
+    @http.route('/api/scheme/status', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)
+    def api_status_http(self, **kwargs):
+        """Return operational status of the Gold Scheme API (HTTP GET)."""
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'scheme_api.is_enabled'")
+            row = request.env.cr.fetchone()
+            is_enabled_val = row[0] if row else 'True'
+        except Exception:
+            is_enabled_val = 'True'
+
+        is_enabled = str(is_enabled_val).strip().lower() not in ('false', '0', 'off', 'no')
+
+        try:
+            request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'scheme_api.disabled_message'")
+            msg_row = request.env.cr.fetchone()
+            disabled_msg = msg_row[0] if msg_row and msg_row[0] else 'Gold Scheme API is currently disabled for maintenance. Please try again later.'
+        except Exception:
+            disabled_msg = 'Gold Scheme API is currently disabled for maintenance. Please try again later.'
+
+        msg = "Gold Scheme API is active and operational." if is_enabled else disabled_msg
+        data = {
+            "status": "success",
+            "api_status": "online" if is_enabled else "offline",
+            "api_enabled": is_enabled,
+            "message": msg,
+        }
+        return Response(
+            json.dumps(data),
+            status=200 if is_enabled else 503,
+            headers={
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+            }
+        )
