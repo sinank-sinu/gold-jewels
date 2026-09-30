@@ -40,7 +40,7 @@
                                     </span>
                                     <input type="text"
                                            class="form-control border-start-0"
-                                           placeholder="Search Partner Name..."
+                                           placeholder="Search Name or Phone..."
                                            t-att-value="state.search_partner_term || ''"
                                            t-on-input="onSearchPartner"
                                            t-on-keydown="onSearchPartnerKeydown"

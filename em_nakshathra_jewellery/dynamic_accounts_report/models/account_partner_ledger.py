@@ -22,6 +22,7 @@
 import io
 import json
 import math
+import re
 from dateutil.relativedelta import relativedelta
 import xlsxwriter
 from odoo import api, fields, models
@@ -135,8 +136,9 @@ class AccountPartnerLedger(models.TransientModel):
                 params.append(p_list)
 
         if search_term and str(search_term).strip():
-            where_clauses.append("rp.name ILIKE %s")
-            params.append(f"%{str(search_term).strip()}%")
+            term = str(search_term).strip()
+            where_clauses.append("(rp.name ILIKE %s OR rp.phone ILIKE %s OR rp.mobile ILIKE %s OR CAST(rp.id AS TEXT) = %s)")
+            params.extend([f"%{term}%", f"%{term}%", f"%{term}%", term])
 
         if end_date:
             where_clauses.append("aml.date <= %s")
@@ -170,13 +172,13 @@ class AccountPartnerLedger(models.TransientModel):
         if total_partners > 0:
             # 2. Fetch page partners
             page_sql = f"""
-                SELECT aml.partner_id, rp.name
+                SELECT aml.partner_id, rp.name, rp.phone, rp.mobile
                 FROM account_move_line aml
                 JOIN account_account aa ON aml.account_id = aa.id
                 JOIN res_partner rp ON aml.partner_id = rp.id
                 WHERE {where_sql}
-                GROUP BY aml.partner_id, rp.name
-                ORDER BY rp.name ASC
+                GROUP BY aml.partner_id, rp.name, rp.phone, rp.mobile
+                ORDER BY rp.name ASC, aml.partner_id ASC
                 LIMIT %s OFFSET %s
             """
             cr.execute(page_sql, tuple(params + [page_size, offset]))
@@ -222,8 +224,28 @@ class AccountPartnerLedger(models.TransientModel):
                     init_by_partner.setdefault(line.partner_id.id, []).append(line)
 
                 # Build dictionary for each partner on this page
-                for pid, pname in page_partners:
+                for row in page_partners:
+                    pid = row[0]
+                    pname = row[1]
+                    phone = row[2]
+                    mobile = row[3]
                     p_name = pname or 'Unknown Partner'
+                    p_contact = (mobile or phone or '').strip()
+                    if p_contact:
+                        clean_name_digits = re.sub(r'\D', '', p_name)
+                        clean_contact_digits = re.sub(r'\D', '', p_contact)
+                        if clean_name_digits and len(clean_name_digits) >= 7 and (
+                            clean_contact_digits.endswith(clean_name_digits) or clean_name_digits.endswith(clean_contact_digits)
+                        ):
+                            partner_key = p_contact
+                        else:
+                            partner_key = f"{p_name} ({p_contact})"
+                    else:
+                        partner_key = p_name
+
+                    if partner_key in partner_dict:
+                        partner_key = f"{partner_key} ({pid})"
+
                     p_lines = period_by_partner.get(pid, [])
                     p_init_lines = init_by_partner.get(pid, [])
 
@@ -256,8 +278,8 @@ class AccountPartnerLedger(models.TransientModel):
                     tot_debit = sum(l.debit for l in p_lines)
                     tot_credit = sum(l.credit for l in p_lines)
 
-                    partner_dict[p_name] = move_line_list
-                    partner_totals[p_name] = {
+                    partner_dict[partner_key] = move_line_list
+                    partner_totals[partner_key] = {
                         'total_debit': round(tot_debit, 2),
                         'total_credit': round(tot_credit, 2),
                         'currency_id': currency_id,

@@ -90,6 +90,22 @@ class SaleOrder(models.Model):
                     draft_invoices.with_context(skip_invoice_sync=True).sudo().write({
                         'customer_schemes': [(6, 0, order.customer_schemes.ids)],
                     })
+
+        if 'phone' in vals or 'partner_id' in vals:
+            for order in self:
+                if order.partner_id and order.phone:
+                    partner = order.partner_id
+                    vals_to_write = {}
+                    if not partner.phone:
+                        vals_to_write['phone'] = order.phone
+                    if not partner.mobile:
+                        vals_to_write['mobile'] = order.phone
+                    if vals_to_write:
+                        try:
+                            partner.sudo().write(vals_to_write)
+                        except Exception:
+                            pass
+
         return res
 
     def message_post_with_source(self, source, render_values=None, subtype_xmlid=None, **kwargs):
@@ -271,13 +287,18 @@ class SaleOrder(models.Model):
                     rec.customer_schemes = [(6, 0, [])]
                     rec.active_scheme_id = False
                     rec.apply_scheme = False
+                if partner.phone:
+                    rec.phone = partner.phone
+                elif partner.mobile:
+                    rec.phone = partner.mobile
             else:
-                return {
-                    'warning': {
-                        'title': _("No Match Found"),
-                        'message': _("No customer or scheme enrollment found matching phone number: %s") % rec.phone
+                if not rec.partner_id:
+                    return {
+                        'warning': {
+                            'title': _("New Customer"),
+                            'message': _("No existing customer found with phone number: %s. Please enter or select the customer in the Customer field.") % rec.phone
+                        }
                     }
-                }
 
     @api.onchange('partner_id')
     def _onchange_partner_set_scheme(self):
@@ -290,8 +311,8 @@ class SaleOrder(models.Model):
                 rec.phone = False
                 continue
 
-            if not rec.phone:
-                rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
+            if rec.partner_id.phone or rec.partner_id.mobile:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile
 
             schemes = rec._get_customer_default_schemes()
 
@@ -890,6 +911,19 @@ class SaleOrder(models.Model):
         sales = super().create(vals_list)
         
         for sale in sales:
+            if sale.partner_id and sale.phone:
+                partner = sale.partner_id
+                vals_to_write = {}
+                if not partner.phone:
+                    vals_to_write['phone'] = sale.phone
+                if not partner.mobile:
+                    vals_to_write['mobile'] = sale.phone
+                if vals_to_write:
+                    try:
+                        partner.sudo().write(vals_to_write)
+                    except Exception:
+                        pass
+
             if sale.purchase_order_id and sale.state != 'draft':
                 sale.purchase_order_id.sale_id = sale.id
                 
