@@ -1,4 +1,5 @@
 from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
 from odoo.tools.float_utils import float_is_zero
 from markupsafe import Markup
 
@@ -39,13 +40,30 @@ class JewellerySchemeEnrollment(models.Model):
                                 default=lambda self: self.env.user.branch_id.id,
                                 tracking=True)
 
+    @api.onchange('phone')
+    def _onchange_phone(self):
+        for rec in self:
+            if rec.phone:
+                partner = self.env['res.partner'].search([('phone', '=', rec.phone)], limit=1)
+                if partner:
+                    if rec.partner_id and rec.partner_id.id != partner.id:
+                        raise ValidationError(_("This phone number is already associated with another partner: %s") % partner.name)
+                    else:
+                        rec.partner_id = partner.id
+                elif rec.partner_id:
+                    rec.partner_id.phone = rec.phone
+
     @api.onchange('partner_id')
     def _onchange_partner(self):
         for rec in self:
             if rec.partner_id:
                 partner = rec.partner_id
 
-                rec.phone = partner.phone
+                if partner.phone:
+                    rec.phone = partner.phone
+                elif rec.phone:
+                    partner.phone = rec.phone
+
                 rec.whatsapp_number = partner.mobile
 
                 rec.address = "\n".join(filter(None, [
@@ -72,11 +90,21 @@ class JewellerySchemeEnrollment(models.Model):
                 if matching:
                     rec.nominee_phone = matching.phone or matching.mobile
 
+    @api.constrains('phone', 'partner_id')
+    def _check_phone_unique_partner(self):
+        for rec in self:
+            if rec.phone and rec.partner_id:
+                partner = self.env['res.partner'].search([('phone', '=', rec.phone)], limit=1)
+                if partner and partner.id != rec.partner_id.id:
+                    raise ValidationError(_("This phone number is already associated with another partner: %s") % partner.name)
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('partner_id'):
                 partner = self.env['res.partner'].browse(vals['partner_id'])
+                if vals.get('phone') and not partner.phone:
+                    partner.phone = vals['phone']
                 if not vals.get('nominee'):
                     nominee_contact = partner.child_ids.filtered(lambda c: c.type == 'other')[:1] or partner.child_ids[:1]
                     if nominee_contact:
@@ -90,6 +118,14 @@ class JewellerySchemeEnrollment(models.Model):
                     if matching:
                         vals['nominee_phone'] = matching.phone or matching.mobile
         return super().create(vals_list)
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'phone' in vals or 'partner_id' in vals:
+            for rec in self:
+                if rec.partner_id and rec.phone and not rec.partner_id.phone:
+                    rec.partner_id.phone = rec.phone
+        return res
 
     start_date = fields.Date(default=fields.Date.today, tracking=True)
     duration = fields.Integer(required=True, default=11, tracking=True, readonly=True)
