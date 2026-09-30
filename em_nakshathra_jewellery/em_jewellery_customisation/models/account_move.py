@@ -410,6 +410,8 @@ class AccountMove(models.Model):
         lines = self.env['account.move.line'].search(domain)
         scheme_lines = self.env['account.move.line']
         for line in lines:
+            if line.move_id.move_type in ('out_refund', 'in_refund'):
+                continue
             # Check if this line is linked to a scheme installment
             installment = self.env['jewellery.scheme.installment'].search([('move_id', '=', line.move_id.id)], limit=1)
             if installment:
@@ -441,7 +443,7 @@ class AccountMove(models.Model):
                 move.has_outstanding_scheme_payment = False
 
     scheme_balance_to_pay_customer = fields.Float(
-        string="Scheme Balance to Pay", 
+        string="Scheme Balance to Pay",
         compute="_compute_scheme_balance_to_pay_customer"
     )
 
@@ -701,52 +703,22 @@ class AccountMove(models.Model):
 
                 journal = self.env['account.journal'].search([
                     ('company_id', '=', move.company_id.id),
-                    ('type', 'in', ('bank', 'cash'))
+                    ('type', '=', 'general'),
+                    '|', ('code', '=', 'MISC'), ('name', 'ilike', 'misc'),
                 ], limit=1)
                 if not journal:
                     journal = self.env['account.journal'].search([
                         ('company_id', '=', move.company_id.id),
-                        '|', ('name', 'ilike', 'suspense'), ('name', 'ilike', 'suspence')
+                        ('type', '=', 'general'),
+                        ('code', 'not in', ('STJ', 'OPN', 'OPPO')),
                     ], limit=1)
                 if not journal:
                     journal = self.env['account.journal'].search([
                         ('company_id', '=', move.company_id.id),
-                        ('type', '=', 'general')
+                        ('type', '=', 'general'),
                     ], limit=1)
                 if not journal:
-                    raise UserError(_("No journal found in the current company."))
-
-                outstanding_receipts_account = self.env['account.account'].search([
-                    ('company_id', '=', move.company_id.id),
-                    ('code', '=', '100203')
-                ], limit=1)
-                if not outstanding_receipts_account:
-                    outstanding_receipts_account = self.env['account.account'].search([
-                        ('company_id', '=', move.company_id.id),
-                        '|', ('name', 'ilike', 'Outstanding Receipt'), ('name', 'ilike', 'Outstanding Reciept')
-                    ], limit=1)
-                if not outstanding_receipts_account and journal:
-                    pay_method_lines = journal.inbound_payment_method_line_ids.filtered(lambda l: l.payment_account_id)
-                    if pay_method_lines:
-                        outstanding_receipts_account = pay_method_lines[0].payment_account_id
-                if not outstanding_receipts_account and journal:
-                    outstanding_receipts_account = journal.suspense_account_id or journal.default_account_id
-                if not outstanding_receipts_account:
-                    outstanding_receipts_account = self.env['account.account'].search([
-                        ('company_id', '=', move.company_id.id),
-                        ('code', '=', '100202')
-                    ], limit=1)
-                if not outstanding_receipts_account:
-                    outstanding_receipts_account = self.env['account.account'].search([
-                        ('company_id', '=', move.company_id.id),
-                        ('name', 'ilike', 'Bank Suspense Account')
-                    ], limit=1)
-                if not outstanding_receipts_account:
-                    outstanding_receipts_account = self.env['account.account'].search([
-                        ('company_id', '=', move.company_id.id)
-                    ], limit=1)
-                if not outstanding_receipts_account:
-                    raise UserError(_("Outstanding Receipts account not found in the current company."))
+                    raise UserError(_("Miscellaneous Journal not found for company %s.", move.company_id.name))
 
                 debtors_account = self.env['account.account'].search([
                     ('company_id', '=', move.company_id.id),
@@ -780,38 +752,44 @@ class AccountMove(models.Model):
                     label = f"Scheme Payment: {ticket} ({move_ref_name})"
                     inst_amount = inst.amount
 
-                    cust_origin = f"SchemeTransfer:{move.id}:{inst.id}:cust"
-                    comp_origin = f"SchemeTransfer:{move.id}:{inst.id}:comp"
+                    transfer_origin = f"SchemeTransfer:{move.id}:{inst.id}"
 
-                    # 1. Customer transfer move: credit Debtors for partner, debit Outstanding Receipts
-                    existing_cust = self.env['account.move'].sudo().search([
-                        ('invoice_origin', '=', cust_origin),
+                    # 1. Redeeming company entry (Miscellaneous Journal):
+                    # Debit: Debtors (Partner: Origin Company)
+                    # Credit: Debtors (Partner: Customer)
+                    existing_transfer = self.env['account.move'].sudo().search([
+                        ('invoice_origin', '=', transfer_origin),
                         ('company_id', '=', move.company_id.id),
                         ('state', '=', 'posted'),
                     ], limit=1)
-                    if not existing_cust:
-                        cancelled_cust = self.env['account.move'].sudo().search([
-                            ('invoice_origin', '=', cust_origin),
+                    if not existing_transfer:
+                        cancelled_transfer = self.env['account.move'].sudo().search([
+                            ('invoice_origin', '=', transfer_origin),
                             ('company_id', '=', move.company_id.id),
                             ('state', '=', 'cancel'),
                         ])
-                        if cancelled_cust:
-                            cancelled_cust.button_draft()
-                            cancelled_cust.action_post()
+                        if cancelled_transfer:
+                            cancelled_transfer.button_draft()
+                            cancelled_transfer.action_post()
                         else:
-                            cust_move_vals = {
+                            if comp.id not in partner_cache:
+                                other_partner = comp.partner_id or self.env['res.partner'].sudo().search([('name', '=', comp.name)], limit=1)
+                                partner_cache[comp.id] = other_partner
+                            other_partner = partner_cache[comp.id]
+
+                            transfer_move_vals = {
                                 'journal_id': journal.id,
                                 'date': entry_date,
                                 'ref': label,
-                                'invoice_origin': cust_origin,
+                                'invoice_origin': transfer_origin,
                                 'company_id': move.company_id.id,
                                 'partner_id': move.partner_id.id,
                                 'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
                                 'line_ids': [
                                     (0, 0, {
-                                        'account_id': outstanding_receipts_account.id,
-                                        'partner_id': move.partner_id.id,
-                                        'name': label,
+                                        'account_id': debtors_account.id,
+                                        'partner_id': other_partner.id if other_partner else False,
+                                        'name': f"Scheme Transfer: {ticket} - {other_partner.name if other_partner else comp.name}",
                                         'debit': inst_amount,
                                         'credit': 0.0,
                                     }),
@@ -824,68 +802,15 @@ class AccountMove(models.Model):
                                     })
                                 ]
                             }
-                            new_cust_move = self.env['account.move'].with_context(
+                            new_transfer_move = self.env['account.move'].with_context(
                                 default_move_type='entry',
                                 default_journal_id=journal.id,
-                            ).create(cust_move_vals)
-                            new_cust_move.action_post()
+                            ).create(transfer_move_vals)
+                            new_transfer_move.action_post()
 
-                    # 2. Company clearing move: debit Debtors for other company, credit Outstanding Receipts
-                    existing_comp = self.env['account.move'].sudo().search([
-                        ('invoice_origin', '=', comp_origin),
-                        ('company_id', '=', move.company_id.id),
-                        ('state', '=', 'posted'),
-                    ], limit=1)
-                    if not existing_comp:
-                        cancelled_comp = self.env['account.move'].sudo().search([
-                            ('invoice_origin', '=', comp_origin),
-                            ('company_id', '=', move.company_id.id),
-                            ('state', '=', 'cancel'),
-                        ])
-                        if cancelled_comp:
-                            cancelled_comp.button_draft()
-                            cancelled_comp.action_post()
-                        else:
-                            if comp.id not in partner_cache:
-                                scheme_country_name = comp.country_id.name or ''
-                                other_partner = self.env['res.partner'].sudo().search([('name', '=', scheme_country_name)], limit=1)
-                                if not other_partner:
-                                    other_partner = self.env['res.partner'].sudo().search([('name', '=', comp.name)], limit=1) or comp.partner_id
-                                partner_cache[comp.id] = other_partner
-                            other_partner = partner_cache[comp.id]
-
-                            comp_move_vals = {
-                                'journal_id': journal.id,
-                                'date': entry_date,
-                                'ref': label,
-                                'invoice_origin': comp_origin,
-                                'company_id': move.company_id.id,
-                                'partner_id': other_partner.id if other_partner else False,
-                                'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
-                                'line_ids': [
-                                    (0, 0, {
-                                        'account_id': debtors_account.id,
-                                        'partner_id': other_partner.id if other_partner else False,
-                                        'name': label,
-                                        'debit': inst_amount,
-                                        'credit': 0.0,
-                                    }),
-                                    (0, 0, {
-                                        'account_id': outstanding_receipts_account.id,
-                                        'partner_id': other_partner.id if other_partner else False,
-                                        'name': label,
-                                        'debit': 0.0,
-                                        'credit': inst_amount,
-                                    })
-                                ]
-                            }
-                            new_comp_move = self.env['account.move'].with_context(
-                                default_move_type='entry',
-                                default_journal_id=journal.id,
-                            ).create(comp_move_vals)
-                            new_comp_move.action_post()
-
-                    # 3. Origin company clearing move: debit Debtors for customer, credit Clearing/Outstanding Receipts for redeeming company
+                    # 2. Origin company entry (Miscellaneous Journal):
+                    # Debit: Debtors (Partner: Customer)
+                    # Credit: Debtors (Partner: Redeeming Company)
                     out_origin = f"SchemeTransferOut:{move.id}:{inst.id}"
                     existing_out = self.env['account.move'].sudo().search([
                         ('invoice_origin', '=', out_origin),
@@ -904,8 +829,23 @@ class AccountMove(models.Model):
                         else:
                             comp_journal = self.env['account.journal'].sudo().search([
                                 ('company_id', '=', comp.id),
-                                ('type', 'in', ('general', 'bank', 'cash'))
+                                ('type', '=', 'general'),
+                                '|', ('code', '=', 'MISC'), ('name', 'ilike', 'misc'),
                             ], limit=1)
+                            if not comp_journal:
+                                comp_journal = self.env['account.journal'].sudo().search([
+                                    ('company_id', '=', comp.id),
+                                    ('type', '=', 'general'),
+                                    ('code', 'not in', ('STJ', 'OPN', 'OPPO')),
+                                ], limit=1)
+                            if not comp_journal:
+                                comp_journal = self.env['account.journal'].sudo().search([
+                                    ('company_id', '=', comp.id),
+                                    ('type', '=', 'general'),
+                                ], limit=1)
+                            if not comp_journal:
+                                raise UserError(_("Miscellaneous Journal not found for company %s.", comp.name))
+
                             comp_debtors = False
                             orig_payment_aml = self.env['account.move.line']
                             if inst_move and inst_move.company_id.id == comp.id:
@@ -917,25 +857,19 @@ class AccountMove(models.Model):
                             if not comp_debtors:
                                 comp_debtors = self.env['account.account'].sudo().search([
                                     ('company_id', '=', comp.id),
-                                    ('account_type', '=', 'asset_receivable')
+                                    ('code', 'in', ('100401', '100400')),
+                                ], limit=1)
+                            if not comp_debtors:
+                                comp_debtors = self.env['account.account'].sudo().search([
+                                    ('company_id', '=', comp.id),
+                                    ('account_type', '=', 'asset_receivable'),
                                 ], limit=1)
                             if not comp_debtors:
                                 comp_debtors = move.partner_id.with_company(comp).property_account_receivable_id
+                            if not comp_debtors:
+                                raise UserError(_("Debtors/Receivable account not found in company %s.", comp.name))
 
-                            comp_clearing_acc = self.env['account.account'].sudo().search([
-                                ('company_id', '=', comp.id),
-                                ('code', 'in', ('100203', '100202'))
-                            ], limit=1)
-                            if not comp_clearing_acc and comp_journal:
-                                pay_method_lines = comp_journal.inbound_payment_method_line_ids.filtered(lambda l: l.payment_account_id)
-                                if pay_method_lines:
-                                    comp_clearing_acc = pay_method_lines[0].payment_account_id
-                                if not comp_clearing_acc:
-                                    comp_clearing_acc = comp_journal.suspense_account_id or comp_journal.default_account_id
-                            if not comp_clearing_acc:
-                                comp_clearing_acc = comp_debtors
-
-                            redeeming_partner = self.env['res.partner'].sudo().search([('name', '=', move.company_id.name)], limit=1) or move.company_id.partner_id
+                            redeeming_partner = move.company_id.partner_id or self.env['res.partner'].sudo().search([('name', '=', move.company_id.name)], limit=1)
 
                             out_move_vals = {
                                 'journal_id': comp_journal.id,
@@ -954,7 +888,7 @@ class AccountMove(models.Model):
                                         'credit': 0.0,
                                     }),
                                     (0, 0, {
-                                        'account_id': comp_clearing_acc.id,
+                                        'account_id': comp_debtors.id,
                                         'partner_id': redeeming_partner.id if redeeming_partner else False,
                                         'name': f"Scheme Transfer Out: {ticket} to {move.company_id.name}",
                                         'debit': 0.0,
@@ -976,7 +910,7 @@ class AccountMove(models.Model):
                                     ('reconciled', '=', False),
                                     ('credit', '>=', inst_amount),
                                 ], limit=1)
-                            dr_line = new_out_move.line_ids.filtered(lambda l: l.account_id == comp_debtors and l.debit > 0)
+                            dr_line = new_out_move.line_ids.filtered(lambda l: l.account_id == comp_debtors and l.debit > 0 and l.partner_id == move.partner_id)
                             if dr_line and orig_payment_aml:
                                 try:
                                     (dr_line + orig_payment_aml).reconcile()

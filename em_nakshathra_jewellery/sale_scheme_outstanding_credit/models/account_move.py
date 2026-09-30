@@ -126,6 +126,9 @@ class AccountMove(models.Model):
     def _get_scheme_for_aml(self, line):
         self.ensure_one()
         line = line.sudo()
+        if line.move_id.move_type in ('out_refund', 'in_refund'):
+            return False
+
         # 1. Direct installment check
         installment = self.env['jewellery.scheme.installment'].sudo().search([('move_id', '=', line.move_id.id)], limit=1)
         if installment and installment.enrollment_id:
@@ -170,6 +173,9 @@ class AccountMove(models.Model):
         selected_tickets = set(filter(None, target_schemes.mapped('ticket_number')))
 
         for line in lines:
+            if line.move_id.move_type in ('out_refund', 'in_refund'):
+                continue
+
             scheme = self._get_scheme_for_aml(line)
             if scheme:
                 if scheme in target_schemes:
@@ -272,6 +278,9 @@ class AccountMove(models.Model):
     def js_assign_outstanding_line(self, line_id):
         self.ensure_one()
         line = self.env['account.move.line'].browse(line_id)
+        if line.move_id.move_type in ('out_refund', 'in_refund'):
+            return super().js_assign_outstanding_line(line_id)
+
         scheme = self._get_scheme_for_aml(line) if hasattr(self, '_get_scheme_for_aml') else False
         if not scheme:
             installment = self.env['jewellery.scheme.installment'].sudo().search([('move_id', '=', line.move_id.id)], limit=1)
@@ -285,13 +294,8 @@ class AccountMove(models.Model):
             text = f"{ref} {name} {move_name}"
             if any(t in text for t in ['Scheme Payment', 'Scheme Transfer', 'Scheme Installment', 'Scheme Redemption']):
                 scheme = True
-            else:
-                partner_ids = list(set([p.id for p in (self.partner_id | self.commercial_partner_id) if p]))
-                all_schemes = self.env['jewellery.scheme.enrollment'].sudo().with_context(active_test=False).search([('partner_id', 'in', partner_ids)])
-                for s in all_schemes:
-                    if (s.name and s.name != 'New' and s.name in text) or (s.ticket_number and s.ticket_number in text):
-                        scheme = s
-                        break
+            elif line.move_id.invoice_origin and line.move_id.invoice_origin.startswith('SchemeTransfer:'):
+                scheme = True
 
         if scheme:
             raise UserError(_("Please click the 'Redeem Scheme' button to redeem scheme payments."))
