@@ -520,9 +520,9 @@ class ProductLabel(models.Model):
         # Process and validate the picking
         picking.action_confirm()
         picking.action_assign()
-        for move_line in picking.move_line_ids:
-            # Reverting to Odoo 17 standard 'quantity' field
-            move_line.quantity = move_line.move_id.product_uom_qty
+        # for move_line in picking.move_line_ids:
+        #     # Reverting to Odoo 17 standard 'quantity' field
+        #     move_line.quantity = move_line.move_id.product_uom_qty
         
         picking.button_validate()
 

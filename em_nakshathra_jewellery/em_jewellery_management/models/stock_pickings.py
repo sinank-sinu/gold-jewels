@@ -169,22 +169,22 @@ class StockMove(models.Model):
                         "Label %s cannot be added multiple times to the same transfer."
                     ) % (move.label_id.display_name or move.label_id.name))
 
-        for move in active_moves:
-            domain = [
-                ('label_id', '=', move.label_id.id),
-                ('state', 'not in', ('done', 'cancel')),
-                ('id', '!=', move.id),
-            ]
-            conflicting_move = self.search(domain, limit=1)
-            if conflicting_move:
-                other_picking = conflicting_move.picking_id
-                transfer_ref = other_picking.name if other_picking else (conflicting_move.reference or _("another transfer"))
-                raise ValidationError(_(
-                    "Label %s is already reserved in active transfer %s. Please cancel or validate that transfer first."
-                ) % (
-                    move.label_id.display_name or move.label_id.name,
-                    transfer_ref
-                ))
+        # for move in active_moves:
+        #     domain = [
+        #         ('label_id', '=', move.label_id.id),
+        #         ('state', 'not in', ('done', 'cancel')),
+        #         ('id', '!=', move.id),
+        #     ]
+        #     conflicting_move = self.search(domain, limit=1)
+        #     if conflicting_move:
+        #         other_picking = conflicting_move.picking_id
+        #         transfer_ref = other_picking.name if other_picking else (conflicting_move.reference or _("another transfer"))
+        #         raise ValidationError(_(
+        #             "Label %s is already reserved in active transfer %s. Please cancel or validate that transfer first."
+        #         ) % (
+        #             move.label_id.display_name or move.label_id.name,
+        #             transfer_ref
+        #         ))
 
     def _get_price_unit(self):
         price = super()._get_price_unit()

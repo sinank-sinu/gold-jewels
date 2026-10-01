@@ -43,10 +43,6 @@ class SaleOrder(models.Model):
         'stock.warehouse', string='Warehouse', required=True,
         compute='_compute_warehouse_id', store=True,
         readonly=False, precompute=True,
-        states={
-            'sale': [('readonly', True)],
-            'done': [('readonly', False)],
-            'cancel': [('readonly', False)]},
         check_company=True)
     allowed_branch_ids = fields.Many2many('res.branch', store=True,
                                           string="Allowed Branches",
@@ -187,5 +183,5 @@ class SaleOrderLine(models.Model):
     """inherited purchase order line"""
     _inherit = 'sale.order.line'
 
-    branch_id = fields.Many2one(related='order_id.branch_id',default=lambda self: self.env.user.branch_id.id,
+    branch_id = fields.Many2one(related='order_id.branch_id',
                                 string='Branch', store=True)
