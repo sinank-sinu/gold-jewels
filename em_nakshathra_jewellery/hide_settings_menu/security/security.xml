@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <!-- New group to explicitly control Settings menu visibility -->
+        <record id="group_show_settings_menu" model="res.groups">
+            <field name="name">Show Settings Menu</field>
+            <field name="category_id" ref="base.module_category_hidden"/>
+        </record>
+        
+        <!-- Overwrite the groups on the Settings menu to only include the new group -->
+        <record id="base.menu_administration" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('hide_settings_menu.group_show_settings_menu')])]"/>
+        </record>
+    </data>
+</odoo>

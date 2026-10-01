@@ -9,4 +9,6 @@ from . import ecommerce_referral
 from . import ecommerce_notification
 from . import ecommerce_card
 from . import ecommerce_upi
-
+from . import ecommerce_api_control
+from . import res_config_settings
+from . import ir_http

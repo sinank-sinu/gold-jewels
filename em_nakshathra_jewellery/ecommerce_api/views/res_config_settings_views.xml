@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- eCommerce API Settings under General Settings -->
+    <record id="res_config_settings_view_form_inherit_ecommerce_api" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.ecommerce.api</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@id='invite_users']//block[@name='users_setting_container']" position="after">
+                <block title="eCommerce API" name="ecommerce_api_setting_container">
+                    <setting id="ecommerce_api_enabled_setting" help="Turn ON to allow eCommerce API requests. Turn OFF to stop all external eCommerce API traffic.">
+                        <field name="ecommerce_api_enabled" widget="boolean_toggle"/>
+                    </setting>
+                    <setting id="ecommerce_api_disabled_message_setting" help="Custom notice message returned to clients when API is disabled." invisible="ecommerce_api_enabled">
+                        <div class="content-group">
+                            <field name="ecommerce_api_disabled_message" class="w-100"/>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Submenu under eCommerce API: Settings -->
+    <record id="action_ecommerce_api_settings" model="ir.actions.act_window">
+        <field name="name">Settings</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">inline</field>
+        <field name="context">{'module': 'ecommerce_api'}</field>
+    </record>
+
+    <menuitem id="menu_ecommerce_api_settings"
+              name="Settings"
+              parent="menu_ecommerce_api_root"
+              action="action_ecommerce_api_settings"
+              sequence="90"/>
+</odoo>

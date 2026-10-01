@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Default Control Record -->
+        <record id="record_ecommerce_api_control" model="ecommerce.api.control">
+            <field name="name">eCommerce API Control</field>
+            <field name="is_enabled">True</field>
+            <field name="disabled_message">eCommerce API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+
+        <!-- Default System Parameters -->
+        <record id="param_ecommerce_api_is_enabled" model="ir.config_parameter">
+            <field name="key">ecommerce_api.is_enabled</field>
+            <field name="value">True</field>
+        </record>
+
+        <record id="param_ecommerce_api_disabled_message" model="ir.config_parameter">
+            <field name="key">ecommerce_api.disabled_message</field>
+            <field name="value">eCommerce API is currently disabled for maintenance. Please try again later.</field>
+        </record>
+    </data>
+</odoo>

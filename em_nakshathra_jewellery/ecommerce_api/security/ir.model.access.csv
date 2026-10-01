@@ -17,3 +17,5 @@ access_ecommerce_card_user,ecommerce.card user,model_ecommerce_card,base.group_u
 access_ecommerce_card_public,ecommerce.card public,model_ecommerce_card,base.group_public,1,1,1,1
 access_ecommerce_upi_user,ecommerce.upi user,model_ecommerce_upi,base.group_user,1,1,1,1
 access_ecommerce_upi_public,ecommerce.upi public,model_ecommerce_upi,base.group_public,1,1,1,1
+access_ecommerce_api_control_user,ecommerce.api.control user,model_ecommerce_api_control,base.group_user,1,1,1,1
+access_ecommerce_api_control_public,ecommerce.api.control public,model_ecommerce_api_control,base.group_public,0,0,0,0
