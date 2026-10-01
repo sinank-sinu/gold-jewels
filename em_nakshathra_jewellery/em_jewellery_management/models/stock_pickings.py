@@ -66,7 +66,8 @@ class StockPicking(models.Model):
                     continue
                 if not move.label_id:
                     continue
-
+                # Auto-allocate available stock if physically in source location
+                picking._auto_allocate_available_stock()
                 # 1. Strict Validation Guard: Verify label physically belongs to source location
                 # When a label is not yet stocked in (is_stocked_in == False), its physical stock is at source_location_id.
                 # Once stocked in (is_stocked_in == True), its current physical location is branch_location_id.
@@ -100,6 +101,39 @@ class StockPicking(models.Model):
                     ))
 
         return super().button_validate()
+
+    def _auto_allocate_available_stock(self):
+        """
+        If physical/unreserved stock exists in move.location_id,
+        automatically allocate the missing quantity into the move line,
+        ensuring the full required quantity/weight is fulfilled.
+        """
+        for picking in self:
+            for move in picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
+                rounding = move.product_uom.rounding if move.product_uom else 0.001
+                need = move.product_uom_qty - move.quantity
+                if float_compare(need, 0, precision_rounding=rounding) > 0:
+                    avail = self.env['stock.quant']._get_available_quantity(move.product_id, move.location_id)
+                    if float_compare(avail, 0, precision_rounding=rounding) > 0:
+                        qty_to_assign = min(need, avail)
+                        move._update_reserved_quantity(qty_to_assign, move.location_id, strict=False)
+                        move.picked = True
+                        for ml in move.move_line_ids:
+                            ml.picked = True
+
+    def action_assign(self):
+        res = super().action_assign()
+        self._auto_allocate_available_stock()
+        return res
+
+    @api.depends('state', 'move_ids.product_uom_qty', 'move_ids.quantity')
+    def _compute_show_check_availability(self):
+        super()._compute_show_check_availability()
+        for picking in self:
+            if picking.state in ('confirmed', 'waiting', 'assigned'):
+                if any(float_compare(m.product_uom_qty, m.quantity,
+                                     precision_rounding=m.product_uom.rounding or 0.001) > 0 for m in picking.move_ids):
+                    picking.show_check_availability = True
 
     def _create_backorder(self):
         # if not self.env.user.has_group('em_jewellery_management.group_allow_backorder_creation') and not self.env.is_superuser():

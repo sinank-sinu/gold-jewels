@@ -711,24 +711,26 @@ class ProductLabel(models.Model):
             else:
                 rec.product_id = False
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
         """Function to add EAN13 Standard barcode at the time
         create new product"""
-        if vals.get('name', "New") == "New":
-            vals['name'] = self.env['ir.sequence'].next_by_code('product.label') or "New"
-        res = super(ProductLabel, self).create(vals)
-        ean = generate_ean(str(res.id))
-        res.barcode = '21' + ean[2:]
-
-        if res.purchase_id:
-            res.purchase_id.sudo()._compute_total_labelled()
-            res.purchase_id.sudo()._compute_unlabelled_totals()
-        if res.job_work_id:
-            res.purchase_id.sudo()._compute_total_labelled()
-            res.purchase_id.sudo()._compute_unlabelled_totals()
-
-        return res
+        for vals in vals_list:
+            if vals.get('name', "New") == "New":
+                vals['name'] = self.env['ir.sequence'].next_by_code('product.label') or "New"
+        res_list = super(ProductLabel, self).create(vals_list)
+        for res in res_list:
+            ean = generate_ean(str(res.id))
+            res.barcode = '21' + ean[2:]
+    
+            if res.purchase_id:
+                res.purchase_id.sudo()._compute_total_labelled()
+                res.purchase_id.sudo()._compute_unlabelled_totals()
+            if res.job_work_id:
+                res.purchase_id.sudo()._compute_total_labelled()
+                res.purchase_id.sudo()._compute_unlabelled_totals()
+    
+        return res_list
 
     @api.depends('purchase_price_per_gram', 'purchase_fine_weight')
     def _compute_purchase_metal_rate(self):

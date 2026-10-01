@@ -29,8 +29,8 @@ class SaleOrderLine(models.Model):
     gold_rate =fields.Float(string="Gold Rate(g)")
 
     mc_percent = fields.Float(string="Max mc")
-    mc_amount = fields.Float(string="MC Amt", compute="_compute_mc_amount", store=True, readonly=False)
-    metal_amount = fields.Float(string="Metal Amt", compute="_compute_metal_amounts",store=True)
+    mc_amount = fields.Float(string="MC Amt", compute="_compute_mc_amount", store=True, readonly=False, precompute=True)
+    metal_amount = fields.Float(string="Metal Amt", compute="_compute_metal_amounts",store=True, precompute=True)
 
     fine_weight = fields.Float(string="Fine Weight  (g)",digits=(16, 3))
     tag_weight = fields.Float(string="Tag Weight (g)")
@@ -40,16 +40,16 @@ class SaleOrderLine(models.Model):
     product_uom_qty = fields.Float(
         compute='_compute_product_uom_qty',
         digits='Product Unit of Measure',
-        readonly=False, store=True,
+        readonly=False, store=True, precompute=True,
     )
     sale_gross_weight = fields.Float(string="Gross Weight (g)", digits=(16, 3))
     price_unit = fields.Float(
         string='Unit Price', required=True, digits='Product Price',
-        compute="_compute_price_unit", readonly=False, store=True)
+        compute="_compute_price_unit", readonly=False, store=True, precompute=True)
     price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True, precompute=True)
     price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True, precompute=True)
     mc_percent_actual = fields.Float(string="MC%",readonly=False)
-    mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual", inverse="_inverse_mc_amount_actual", store=True, readonly=False)
+    mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual", inverse="_inverse_mc_amount_actual", store=True, readonly=False, precompute=True)
     mc_discount = fields.Float(string="Discount", compute="_compute_mc_discount")
     sale_making_charge_min = fields.Float(string="Sale Making Charge Min")
     sale_making_charge_fixed_amount_min = fields.Float(string="Sale Fixed Making Charge Min")

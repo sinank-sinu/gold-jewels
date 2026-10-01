@@ -33,7 +33,6 @@ class AccountPaymentRegister(models.TransientModel):
                                  domain="[('company_id', '=', company_id), "
                                         "('type', 'in', ('bank', 'cash')), ('branch_id', '=', branch_id)]")
 
-    @api.depends('company_id', 'source_currency_id')
     def _compute_journal_id(self):
         """methode to compute journal id based on current branch"""
         self.ensure_one()
