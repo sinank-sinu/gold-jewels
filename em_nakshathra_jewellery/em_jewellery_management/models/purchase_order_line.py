@@ -46,7 +46,7 @@ class PurchaseOrderLine(models.Model):
     mc_fine = fields.Float(string="MC Fine Wt", compute="_compute_purchase_mc_fine",digits=(16, 3))
     gold_rate =fields.Float(string="Rate(g)")
     mc_percent = fields.Float(string="MC%")
-    net_weight = fields.Float(string="Net Weight (g)",compute="_compute_product_qty",digits=(16, 3))
+    net_weight = fields.Float(string="Net Weight (g)",compute="_compute_net_weight",digits=(16, 3))
     stone_weight = fields.Float(string="Stone Weight (g)",digits=(16, 3))
     diamond_weight_gm = fields.Float(
         string="Diamond Weight (g)",
@@ -99,7 +99,7 @@ class PurchaseOrderLine(models.Model):
         'stone_weight',
         'diamond_weight_gm',
     )
-    def _compute_product_qty(self):
+    def _compute_net_weight(self):
         for rec in self:
             rec.net_weight = (
                     rec.product_qty

@@ -46,8 +46,8 @@ class SaleOrderLine(models.Model):
     price_unit = fields.Float(
         string='Unit Price', required=True, digits='Product Price',
         compute="_compute_price_unit", readonly=False, store=True)
-    price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True)
-    price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True)
+    price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True, precompute=True)
+    price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True, precompute=True)
     mc_percent_actual = fields.Float(string="MC%",readonly=False)
     mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual", inverse="_inverse_mc_amount_actual", store=True, readonly=False)
     mc_discount = fields.Float(string="Discount", compute="_compute_mc_discount")

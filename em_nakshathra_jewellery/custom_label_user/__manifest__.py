@@ -15,5 +15,6 @@
         "views/hr_employee_views.xml",
     ],
     "installable": True,
-    "auto_install": False
+    "auto_install": False,
+    "license": "LGPL-3"
 }
