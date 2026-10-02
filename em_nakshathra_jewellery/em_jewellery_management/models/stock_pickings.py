@@ -154,6 +154,11 @@ class StockMove(models.Model):
             'product.label',
             string="Label",
         )
+    def _update_reserved_quantity(self, need, location_id, quant_ids=None, lot_id=None, package_id=None, owner_id=None, strict=True):
+        if self.picking_type_id.code == 'internal':
+            strict = True
+        return super()._update_reserved_quantity(need, location_id, quant_ids=quant_ids, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=strict)
+
     receive_voucher_line_id = fields.Many2one('jewellery.receive.voucher.line', string="Receive Voucher Line")
 
     branch_id = fields.Many2one(

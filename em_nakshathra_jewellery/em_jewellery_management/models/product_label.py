@@ -520,6 +520,10 @@ class ProductLabel(models.Model):
         # Process and validate the picking
         picking.action_confirm()
         picking.action_assign()
+        for move in picking.move_ids:
+            if round(move.quantity, 3) < round(move.product_uom_qty, 3):
+                raise ValidationError(f"Not enough stock available in '{self.source_location_id.display_name}'. Requested: {move.product_uom_qty}, Available: {move.quantity}")
+        #
         # for move_line in picking.move_line_ids:
         #     # Reverting to Odoo 17 standard 'quantity' field
         #     move_line.quantity = move_line.move_id.product_uom_qty
