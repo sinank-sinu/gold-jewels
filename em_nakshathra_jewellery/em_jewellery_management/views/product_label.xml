@@ -50,7 +50,7 @@
                         <field name="source_location_id" required="1" readonly="is_stocked_in"/>
                         <field name="branch_location_id" required="1" readonly="is_stocked_in"/>
                         <field name="tag_weight" readonly="is_stocked_in"/>
-                        <field name="purity_id" readonly="is_stocked_in"/>
+                        <field name="purity_id" readonly="active"/>
 
                     </group>
 

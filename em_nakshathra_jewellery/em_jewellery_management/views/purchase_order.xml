@@ -69,7 +69,7 @@
                 <field name="stone_rate" optional="hide"/>
                 <field name="diamond_rate" optional="hide"/>
                 <field name="price_subtotal"/>
-                <field name="total_fine"/>
+                <field name="total_fine" sum="Total Fine"/>
 
             </xpath>
             <xpath expr="//form" position="attributes">
