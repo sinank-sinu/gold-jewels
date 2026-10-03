@@ -2802,12 +2802,20 @@ class EcommerceBranchAPI(http.Controller):
         except Exception:
             disabled_msg = 'eCommerce API is currently disabled for maintenance. Please try again later.'
 
-        msg = "eCommerce API is active and operational." if is_enabled else disabled_msg
+        if not is_enabled:
+            return {
+                "status": "error",
+                "code": "API_DISABLED",
+                "api_status": "offline",
+                "api_enabled": False,
+                "message": disabled_msg,
+            }
+
         return {
             "status": "success",
-            "api_status": "online" if is_enabled else "offline",
-            "api_enabled": is_enabled,
-            "message": msg,
+            "api_status": "online",
+            "api_enabled": True,
+            "message": "eCommerce API is active and operational.",
         }
 
     @http.route('/api/ecommerce/status', type='http', auth='public', methods=['GET', 'OPTIONS'], cors='*', csrf=False)

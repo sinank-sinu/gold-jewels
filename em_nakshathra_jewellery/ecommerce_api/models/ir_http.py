@@ -13,12 +13,16 @@ class IrHttp(models.AbstractModel):
     @classmethod
     def _dispatch(cls, endpoint):
         path = request.httprequest.path
-        if path.startswith('/api/ecommerce') and not path.startswith('/api/ecommerce/status'):
+        if path.startswith('/api/ecommerce'):
             try:
-                # Query directly from DB to guarantee real-time sync across multi-workers and processes
                 request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'ecommerce_api.is_enabled'")
                 row = request.env.cr.fetchone()
-                is_enabled_val = row[0] if row else 'True'
+                if row and row[0] is not None:
+                    is_enabled_val = row[0]
+                else:
+                    request.env.cr.execute("SELECT is_enabled FROM ecommerce_api_control LIMIT 1")
+                    ctrl_row = request.env.cr.fetchone()
+                    is_enabled_val = str(ctrl_row[0]) if ctrl_row and ctrl_row[0] is not None else 'True'
             except Exception as e:
                 _logger.warning("Error checking eCommerce API status parameter: %s", e)
                 is_enabled_val = 'True'

@@ -8,10 +8,9 @@
     'data': [
         'security/ir.model.access.csv',
         'data/ecommerce_api_control_data.xml',
-        'views/ecommerce_api_control_views.xml',
         'views/res_config_settings_views.xml',
     ],
     'installable': True,
-    'application': True,
+    'application': False,
     'auto_install': False,
 }

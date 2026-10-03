@@ -20,20 +20,4 @@
             </xpath>
         </field>
     </record>
-
-    <!-- Submenu under eCommerce API: Settings -->
-    <record id="action_ecommerce_api_settings" model="ir.actions.act_window">
-        <field name="name">Settings</field>
-        <field name="type">ir.actions.act_window</field>
-        <field name="res_model">res.config.settings</field>
-        <field name="view_mode">form</field>
-        <field name="target">inline</field>
-        <field name="context">{'module': 'ecommerce_api'}</field>
-    </record>
-
-    <menuitem id="menu_ecommerce_api_settings"
-              name="Settings"
-              parent="menu_ecommerce_api_root"
-              action="action_ecommerce_api_settings"
-              sequence="90"/>
 </odoo>

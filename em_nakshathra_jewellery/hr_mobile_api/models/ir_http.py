@@ -13,12 +13,16 @@ class IrHttp(models.AbstractModel):
     @classmethod
     def _dispatch(cls, endpoint):
         path = request.httprequest.path
-        if path.startswith('/api/scheme') and not path.startswith('/api/scheme/status'):
+        if path.startswith('/api/scheme'):
             try:
-                # Direct DB query to ensure real-time synchronization across all workers
                 request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'scheme_api.is_enabled'")
                 row = request.env.cr.fetchone()
-                is_enabled_val = row[0] if row else 'True'
+                if row and row[0] is not None:
+                    is_enabled_val = row[0]
+                else:
+                    request.env.cr.execute("SELECT is_enabled FROM scheme_api_control LIMIT 1")
+                    ctrl_row = request.env.cr.fetchone()
+                    is_enabled_val = str(ctrl_row[0]) if ctrl_row and ctrl_row[0] is not None else 'True'
             except Exception as e:
                 _logger.warning("Error checking Scheme API status parameter: %s", e)
                 is_enabled_val = 'True'
@@ -58,12 +62,11 @@ class IrHttp(models.AbstractModel):
                         },
                     )
 
-        elif path.startswith('/api/task_manager') and not path.startswith('/api/task_manager/status'):
+        elif path.startswith('/api/task_manager'):
             try:
-                # Direct DB query to ensure real-time synchronization across all workers
                 request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'task_manager_api.is_enabled'")
                 row = request.env.cr.fetchone()
-                is_enabled_val = row[0] if row else 'True'
+                is_enabled_val = row[0] if row and row[0] is not None else 'True'
             except Exception as e:
                 _logger.warning("Error checking Task Manager API status parameter: %s", e)
                 is_enabled_val = 'True'
@@ -103,12 +106,11 @@ class IrHttp(models.AbstractModel):
                         },
                     )
 
-        elif path.startswith('/api/hr') and not path.startswith('/api/hr/status'):
+        elif path.startswith('/api/hr'):
             try:
-                # Direct DB query to ensure real-time synchronization across all workers
                 request.env.cr.execute("SELECT value FROM ir_config_parameter WHERE key = 'hrms_api.is_enabled'")
                 row = request.env.cr.fetchone()
-                is_enabled_val = row[0] if row else 'True'
+                is_enabled_val = row[0] if row and row[0] is not None else 'True'
             except Exception as e:
                 _logger.warning("Error checking HRMS API status parameter: %s", e)
                 is_enabled_val = 'True'
