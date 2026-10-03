@@ -12,12 +12,21 @@
 
     <!-- Restrict Calendar -->
     <record id="calendar.mail_menu_calendar" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr.group_hr_user'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- Restrict Contacts -->
     <record id="contacts.menu_contacts" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr.group_hr_user'),
+            ref('base.group_partner_manager'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- Restrict CRM -->
@@ -32,12 +41,21 @@
 
     <!-- Restrict Discuss -->
     <record id="mail.menu_root_discuss" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr.group_hr_user'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- Restrict Employees -->
     <record id="hr.menu_hr_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr.group_hr_user'),
+            ref('hr.group_hr_manager'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- Restrict Website -->
@@ -87,7 +105,13 @@
 
       <!-- Restrict Leaves -->
     <record id="hr_holidays.menu_hr_holidays_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr_holidays.group_hr_holidays_user'),
+            ref('hr_holidays.group_hr_holidays_manager'),
+            ref('hr.group_hr_user'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- ============================================================
@@ -103,7 +127,14 @@
          Completely hide "Expenses" app from Billing Staff
     ============================================================ -->
     <record id="hr_expense.menu_hr_expense_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr_expense.group_hr_expense_team_approver'),
+            ref('hr_expense.group_hr_expense_user'),
+            ref('hr_expense.group_hr_expense_manager'),
+            ref('hr.group_hr_user'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- ============================================================
@@ -145,7 +176,13 @@
 
     <!-- Restrict Attendances -->
     <record id="hr_attendance.menu_hr_attendance_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('em_jewellery_management.group_jewellery_manager'), ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr_attendance.group_hr_attendance_officer'),
+            ref('hr_attendance.group_hr_attendance_manager'),
+            ref('hr.group_hr_user'),
+            ref('em_jewellery_management.group_jewellery_manager'),
+            ref('base.group_system')
+        ])]"/>
     </record>
 
     <!-- Restrict Events -->

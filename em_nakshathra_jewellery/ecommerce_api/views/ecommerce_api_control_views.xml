@@ -71,7 +71,8 @@
     <menuitem id="menu_ecommerce_api_root"
               name="eCommerce API"
               web_icon="ecommerce_api,static/description/icon.png"
-              sequence="85"/>
+              sequence="85"
+              groups="base.group_system"/>
 
     <!-- Sub-Menu: API Switch / Control -->
     <menuitem id="menu_ecommerce_api_control"
