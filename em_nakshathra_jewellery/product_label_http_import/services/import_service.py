@@ -28,7 +28,7 @@ class ProductLabelImportService:
 
         qty = label.purchase_gross_weight or 1.0
 
-        picking = self.env['stock.picking'].create({
+        picking = self.env['stock.picking'].with_context(skip_label_location_overwrite=True).create({
             'company_id': company.id,
             'picking_type_id': picking_type.id,
             'location_id': label.source_location_id.id,
@@ -37,7 +37,7 @@ class ProductLabelImportService:
             'branch_id': label.branch_id.id,
         })
 
-        move = self.env['stock.move'].create({
+        move = self.env['stock.move'].with_context(skip_label_location_overwrite=True).create({
             'name': label.name,
             'company_id': company.id,
             'product_id': label.product_id.id,
@@ -58,7 +58,7 @@ class ProductLabelImportService:
         move_line = move.move_line_ids[:1]
 
         if not move_line:
-            move_line = self.env['stock.move.line'].create({
+            move_line = self.env['stock.move.line'].with_context(skip_label_location_overwrite=True).create({
                 'company_id': company.id,
                 'move_id': move.id,
                 'picking_id': picking.id,
