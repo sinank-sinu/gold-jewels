@@ -332,6 +332,16 @@ class StockMoveLine(models.Model):
         related='move_id.label_id',
         store=True,
     )
+    is_quantity_done_editable = fields.Boolean(
+        string="Is quantity done editable",
+        compute='_compute_is_quantity_done_editable'
+    )
+
+    def _compute_is_quantity_done_editable(self):
+        is_manager = self.env.user.has_group('base.group_system') or \
+                     self.env.user.has_group('base.group_erp_manager')
+        for line in self:
+            line.is_quantity_done_editable = is_manager
 
 
 class StockValuationLayer(models.Model):
