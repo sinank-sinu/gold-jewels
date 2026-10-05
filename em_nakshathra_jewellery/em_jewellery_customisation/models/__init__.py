@@ -12,3 +12,4 @@ from . import purchase_order
 from . import account_move
 from . import fine_rate_history
 from . import product_attribute_value
+from . import account_journal
