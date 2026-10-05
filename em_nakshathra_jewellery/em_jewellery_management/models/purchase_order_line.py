@@ -36,32 +36,34 @@ class PurchaseOrderLine(models.Model):
     product_uom_qty = fields.Float(
         related='product_qty',
         string="Product Quantity",
-        readonly=False
+        readonly=False,
+        digits=(16, 3),
     )
 
     sale_return_line_id = fields.Many2one('sale.return.line', string="Sale Return Line", ondelete='set null')
     purity_id = fields.Many2one('gold.purity', string="Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
-    metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount")
+    metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount", digits=(16, 3))
     mc_fine = fields.Float(string="MC Fine Wt", compute="_compute_purchase_mc_fine",digits=(16, 3))
-    gold_rate =fields.Float(string="Rate(g)")
-    mc_percent = fields.Float(string="MC%")
+    gold_rate =fields.Float(string="Rate(g)", digits=(16, 3))
+    mc_percent = fields.Float(string="MC%", digits=(16, 3))
     net_weight = fields.Float(string="Net Weight (g)",compute="_compute_net_weight",digits=(16, 3))
     stone_weight = fields.Float(string="Stone Weight (g)",digits=(16, 3))
     diamond_weight_gm = fields.Float(
         string="Diamond Weight (g)",
-        digits=(12, 4)
+        digits=(16, 3)
     )
     mc_amount = fields.Float(
         string="MC Amount",
         compute="_compute_purchase_mc_amount",
+        digits=(16, 3),
         store=True
     )
-    stone_rate = fields.Float(string="Stone Amount")
-    diamond_rate = fields.Float(string="Diamond Amount")
+    stone_rate = fields.Float(string="Stone Amount", digits=(16, 3))
+    diamond_rate = fields.Float(string="Diamond Amount", digits=(16, 3))
     gross_weight = fields.Float(string="Gross Weight (g)",digits=(16, 3))
     price_unit = fields.Float(
-        string='Unit Price', required=True, digits=(16, 4),
+        string='Unit Price', required=True, digits=(16, 3),
         compute="_compute_price_unit", readonly=False, store=True)
     price_subtotal = fields.Monetary(compute='_compute_subtotal', string='Subtotal', store=True)
 
@@ -78,8 +80,9 @@ class PurchaseOrderLine(models.Model):
     purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram",digits=(16, 3))
     purchase_making_charge_amount = fields.Float(
         string="MC Amount",
+        digits=(16, 3)
     )
-    purchase_making_charge_value = fields.Float(string="Amount(mc)")
+    purchase_making_charge_value = fields.Float(string="Amount(mc)", digits=(16, 3))
 
     purchase_making_charge_type = fields.Selection([
         ('percent', 'Percentage'),
@@ -89,7 +92,7 @@ class PurchaseOrderLine(models.Model):
     ], string="MC Type", default='percent')
     total_fine = fields.Float(string="Total Fine", compute="_compute_total_fine",digits=(16, 3))
 
-    rate_value = fields.Float(string="Rate Value")
+    rate_value = fields.Float(string="Rate Value", digits=(16, 3))
 
 
 

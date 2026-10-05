@@ -30,12 +30,14 @@ class PurchaseOrder(models.Model):
     total_weight = fields.Float(
         string="Total Weight",
         compute="_compute_totals",
+        digits=(16, 3),
         store=True
     )
 
     total_labelled = fields.Float(
         string="Total Labelled",
         compute="_compute_total_labelled",
+        digits=(16, 3),
         store=True,
         compute_sudo=True,
     )
@@ -43,6 +45,7 @@ class PurchaseOrder(models.Model):
     total_unlabelled = fields.Float(
         string="Total Unlabelled",
         compute="_compute_unlabelled_totals",
+        digits=(16, 3),
         store=True,
         compute_sudo=True,
     )
