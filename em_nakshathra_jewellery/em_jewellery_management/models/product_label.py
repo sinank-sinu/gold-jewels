@@ -451,6 +451,8 @@ class ProductLabel(models.Model):
 
     def action_set_active(self):
         self.ensure_one()
+        if not self.is_stocked_in:
+            raise ValidationError("You must Transfer the product before setting it to Active.")
         self.active = True
 
     def action_stock_in(self):
