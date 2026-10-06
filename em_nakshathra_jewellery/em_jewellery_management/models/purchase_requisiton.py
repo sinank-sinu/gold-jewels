@@ -105,20 +105,20 @@ class MaterialPurchaseRequisitionLine(models.Model):
 
     purity_id = fields.Many2one('gold.purity', string="Purity")
     purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram",digits=(16, 3))
-    purchase_making_charge_value = fields.Float(string="Purchase Making Charge")
-    # purchase_price_per_gram = fields.Float(string="Purchase fine Rate / gram")
-
+    purchase_making_charge_value = fields.Float(string="Purchase Making Charge", digits=(16, 3))
     purchase_making_charge_amount = fields.Float(
         string="Purchase Making Charge Amount",
         compute="_compute_purchase_making_charge",
+        digits=(16, 3),
         store=True
     )
     net_weight = fields.Float(
-        string="Net Weight (g)",digits=(16, 3)
-
+        string="Net Weight (g)", digits=(16, 3)
     )
-    mc_fine = fields.Float(string="MC Fine", compute="_compute_purchase_mc_fine",digits=(16, 3))
-    fine_weight = fields.Float(string="Fine Weight  (g)",digits=(16, 3))
+    mc_fine = fields.Float(string="MC Fine", compute="_compute_purchase_mc_fine", digits=(16, 3))
+    fine_weight = fields.Float(string="Fine Weight  (g)", digits=(16, 3))
+    gram = fields.Float(string="Gram", digits=(16, 3))
+    quantity = fields.Float(string="Quantity", compute="_compute_quantity", store=True, digits=(16, 3))
 
     @api.depends(
         'purchase_making_charge_value',

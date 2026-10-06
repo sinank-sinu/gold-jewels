@@ -10,8 +10,8 @@
         <field name="arch" type="xml">
             <tree>
                 <field name="name"/>
-                <field name="from_gram"/>
-                <field name="to_gram"/>
+                <field name="from_gram" digits="[16, 3]"/>
+                <field name="to_gram" digits="[16, 3]"/>
                 <field name="active"/>
             </tree>
         </field>
@@ -27,8 +27,8 @@
             <form>
                 <sheet>
                     <group>
-                        <field name="from_gram"/>
-                        <field name="to_gram"/>
+                        <field name="from_gram" digits="[16, 3]"/>
+                        <field name="to_gram" digits="[16, 3]"/>
                         <field name="active"/>
                     </group>
                 </sheet>

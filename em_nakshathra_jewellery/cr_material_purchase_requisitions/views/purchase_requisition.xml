@@ -105,8 +105,8 @@
                                         <field name="product_template_id" readonly="False"/>
                                         <field name="product_id" string="Variant" widget="sol_product_many2one"/>
                                         <field name="no_of_pieces"/>
-                                        <field name="gram"/>
-                                        <field name="quantity" string="Gross Weight"/>
+                                        <field name="gram" digits="[16, 3]"/>
+                                        <field name="quantity" string="Gross Weight" digits="[16, 3]"/>
                                         <field name="unit_of_measure"/>
                                         <field name="vendor_ids" widget="many2many_tags" column_invisible="parent.state in 'new'"/>
                                     </tree>

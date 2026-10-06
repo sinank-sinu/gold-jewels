@@ -272,9 +272,9 @@ class MaterialPurchaseRequisitionLine(models.Model):
         string="Gram Range"
     )
     gram = fields.Float(
-        string="Gram" )
+        string="Gram", digits=(16, 3))
     description = fields.Char(string="Description", related="product_id.name")
-    quantity = fields.Float(string="Quantity", compute="_compute_quantity",store=True)
+    quantity = fields.Float(string="Quantity", compute="_compute_quantity", store=True, digits=(16, 3))
     unit_of_measure = fields.Many2one(
         "uom.uom", string="Unit of Measure", related="product_id.uom_id"
     )

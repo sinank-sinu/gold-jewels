@@ -39,6 +39,7 @@ class PurchaseOrderLine(models.Model):
         readonly=False,
         digits=(16, 3),
     )
+    product_qty = fields.Float(digits=(16, 3))
 
     sale_return_line_id = fields.Many2one('sale.return.line', string="Sale Return Line", ondelete='set null')
     purity_id = fields.Many2one('gold.purity', string="Purity")
