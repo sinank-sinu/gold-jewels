@@ -101,6 +101,7 @@ class LabelSummaryWizard(models.TransientModel):
 
             WHERE
     po.state IN ('purchase','done')
+    AND pt.type IN ('product', 'consu')
     AND EXISTS (
         SELECT 1
         FROM product_label pl
@@ -155,6 +156,7 @@ class LabelSummaryWizard(models.TransientModel):
 
             WHERE
                 jw.state = 'done'
+                AND pt.type IN ('product', 'consu')
                 AND EXISTS (
                     SELECT 1
                     FROM product_label pl
@@ -183,6 +185,10 @@ class LabelSummaryWizard(models.TransientModel):
         self.env.cr.execute(sql, params)
         summary_rows = self.env.cr.dictfetchall()
 
+        product_ids = list(set([row["product_id"] for row in summary_rows if row.get("product_id")]))
+        products = self.env["product.product"].browse(product_ids)
+        product_map = {p.id: p.display_name for p in products}
+
         for row in summary_rows:
             if isinstance(row.get("product_name"), dict):
                 row["product_name"] = (
@@ -191,6 +197,7 @@ class LabelSummaryWizard(models.TransientModel):
                         or next(iter(row["product_name"].values()), "")
                 )
 
+            row["variety"] = product_map.get(row["product_id"], "")
             row["labelled_qty"] = 0.0
             row["unlabelled_qty"] = row["total_qty"] or 0.0
             row["labels"] = []
@@ -209,12 +216,8 @@ class LabelSummaryWizard(models.TransientModel):
                 pl.purchase_id AS document_id,
                 pl.product_id,
                 pl.name AS label_number,
-                pl.tag_weight,
-                COALESCE(po.total_unlabelled, 0.0) AS unlabelled_weight,
-                0.0 AS unlabelled_weight_jw
+                pl.sale_gross_weight AS tag_weight
             FROM product_label pl
-            LEFT JOIN purchase_order po
-                ON po.id = pl.purchase_id
             WHERE
                 pl.active = TRUE
                 AND pl.purchase_id IS NOT NULL
@@ -226,12 +229,8 @@ class LabelSummaryWizard(models.TransientModel):
                 pl.job_work_id AS document_id,
                 pl.product_id,
                 pl.name AS label_number,
-                pl.tag_weight,
-                0.0 AS unlabelled_weight,
-                COALESCE(jw.total_unlabelled, 0.0) AS unlabelled_weight_jw
+                pl.sale_gross_weight AS tag_weight
             FROM product_label pl
-            LEFT JOIN jewellery_job_work jw
-                ON jw.id = pl.job_work_id
             WHERE
                 pl.active = TRUE
                 AND pl.job_work_id IS NOT NULL
@@ -245,12 +244,6 @@ class LabelSummaryWizard(models.TransientModel):
 
         self.env.cr.execute(label_sql)
         label_rows = self.env.cr.dictfetchall()
-        labels = self.env["product.label"].search([
-            ("active", "=", True)
-        ])
-
-        label_map = {x.name: x for x in labels}
-
         for label in label_rows:
 
             key = (
@@ -264,21 +257,12 @@ class LabelSummaryWizard(models.TransientModel):
             if not summary:
                 continue
 
-            label_rec = label_map.get(label["label_number"])
-
             summary["labels"].append({
                 "label_number": label["label_number"],
                 "tag_weight": label["tag_weight"] or 0.0,
-                "unlabelled_weight": label_rec.unlabelled_weight if label_rec else 0.0,
-                "unlabelled_weight_jw": label_rec.unlabelled_weight_jw if label_rec else 0.0,
             })
 
             summary["labelled_qty"] += label["tag_weight"] or 0.0
-
-            # if label["source"] == "Purchase":
-            #     summary["unlabelled_qty"] = label.get("unlabelled_weight") or 0.0
-            # else:
-            #     summary["unlabelled_qty"] = label.get("unlabelled_weight_jw") or 0.0
 
         for row in summary_rows:
             row["unlabelled_qty"] = max(
@@ -310,6 +294,7 @@ class LabelSummaryWizard(models.TransientModel):
             documents[doc_key]["products"].append({
                 "product_id": row["product_id"],
                 "product_name": row["product_name"],
+                "variety": row["variety"],
                 "purity": row["purity"],
                 "total_qty": row["total_qty"] or 0.0,
                 "labelled_qty": row["labelled_qty"] or 0.0,
@@ -348,8 +333,9 @@ class LabelSummaryWizard(models.TransientModel):
         worksheet.set_column("C:C", 18)
         worksheet.set_column("D:D", 30)
         worksheet.set_column("E:E", 30)
-        worksheet.set_column("F:F", 25)
-        worksheet.set_column("G:J", 15)
+        worksheet.set_column("F:F", 60)
+        worksheet.set_column("G:G", 25)
+        worksheet.set_column("H:K", 15)
         title_fmt = workbook.add_format({
             "bold": True,
             "font_size": 16,
@@ -387,7 +373,7 @@ class LabelSummaryWizard(models.TransientModel):
         })
 
         worksheet.merge_range(
-            "A1:I1",
+            "A1:J1",
             "Purchase / Job Work Label Summary",
             title_fmt,
         )
@@ -408,6 +394,7 @@ class LabelSummaryWizard(models.TransientModel):
             "Document No",
             "Party",
             "Product",
+            "Variety",
             "Label No",
             "Purity",
             "Total Qty",
@@ -427,6 +414,9 @@ class LabelSummaryWizard(models.TransientModel):
 
         for document in report_data:
             first_product = True
+            doc_total_qty = 0.0
+            doc_labelled_qty = 0.0
+            doc_unlabelled_qty = 0.0
 
             for product in document["products"]:
 
@@ -458,12 +448,13 @@ class LabelSummaryWizard(models.TransientModel):
                     summary_fmt,
                 )
                 worksheet.write(row, 4, product["product_name"], summary_fmt)
-                worksheet.write(row, 5, "", summary_fmt)
-                worksheet.write(row, 6, product["purity"], summary_fmt)
+                worksheet.write(row, 5, product["variety"], summary_fmt)
+                worksheet.write(row, 6, "", summary_fmt)
+                worksheet.write(row, 7, product["purity"], summary_fmt)
 
-                worksheet.write_number(row, 7, product["total_qty"], qty_summary_fmt)
-                worksheet.write_number(row, 8, product["labelled_qty"], qty_summary_fmt)
-                worksheet.write_number(row, 9, product["unlabelled_qty"], qty_summary_fmt)
+                worksheet.write_number(row, 8, product["total_qty"], qty_summary_fmt)
+                worksheet.write_number(row, 9, product["labelled_qty"], qty_summary_fmt)
+                worksheet.write_number(row, 10, product["unlabelled_qty"], qty_summary_fmt)
                 grand_total_qty += product["total_qty"]
                 grand_labelled_qty += product["labelled_qty"]
                 grand_unlabelled_qty += product["unlabelled_qty"]
@@ -478,38 +469,44 @@ class LabelSummaryWizard(models.TransientModel):
                         "",
                         detail_fmt,
                     )
-
+                    
                     worksheet.write(
                         row,
                         5,
-                        label["label_number"] or "",
+                        "",
                         detail_fmt,
                     )
 
                     worksheet.write(
                         row,
                         6,
+                        label["label_number"] or "",
+                        detail_fmt,
+                    )
+
+                    worksheet.write(
+                        row,
+                        7,
                         "",
                         detail_fmt,
                     )
 
-                    worksheet.write_blank(row, 7, None, detail_fmt)
-                    worksheet.write_number(row, 8, label["tag_weight"], qty_fmt)
-                    if document["source"] == "Purchase":
-                        worksheet.write_number(
-                            row,
-                            9,
-                            label.get("unlabelled_weight", 0.0),
-                            qty_fmt,
-                        )
-                    else:
-                        worksheet.write_number(
-                            row,
-                            9,
-                            label.get("unlabelled_weight_jw", 0.0),
-                            qty_fmt,
-                        )
+                    worksheet.write_blank(row, 8, None, detail_fmt)
+                    worksheet.write_number(row, 9, label["tag_weight"], qty_fmt)
+                    worksheet.write_blank(row, 10, None, detail_fmt)
                     row += 1
+
+                doc_total_qty += product["total_qty"]
+                doc_labelled_qty += product["labelled_qty"]
+                doc_unlabelled_qty += product["unlabelled_qty"]
+
+            worksheet.write(row, 4, f"TOTAL FOR {document['document_no']}", summary_fmt)
+            worksheet.write_blank(row, 5, None, summary_fmt)
+            worksheet.write_blank(row, 6, None, summary_fmt)
+            worksheet.write_blank(row, 7, None, summary_fmt)
+            worksheet.write_number(row, 8, doc_total_qty, qty_summary_fmt)
+            worksheet.write_number(row, 9, doc_labelled_qty, qty_summary_fmt)
+            worksheet.write_number(row, 10, doc_unlabelled_qty, qty_summary_fmt)
 
             row += 1
         total_fmt = workbook.add_format({
@@ -531,10 +528,11 @@ class LabelSummaryWizard(models.TransientModel):
         worksheet.write_blank(row, 4, None, total_text_fmt)
         worksheet.write_blank(row, 5, None, total_text_fmt)
         worksheet.write_blank(row, 6, None, total_text_fmt)
+        worksheet.write_blank(row, 7, None, total_text_fmt)
 
-        worksheet.write_number(row, 7, grand_total_qty, total_fmt)
-        worksheet.write_number(row, 8, grand_labelled_qty, total_fmt)
-        worksheet.write_number(row, 9, grand_unlabelled_qty, total_fmt)
+        worksheet.write_number(row, 8, grand_total_qty, total_fmt)
+        worksheet.write_number(row, 9, grand_labelled_qty, total_fmt)
+        worksheet.write_number(row, 10, grand_unlabelled_qty, total_fmt)
 
         # Close workbook after all writing is complete
         workbook.close()

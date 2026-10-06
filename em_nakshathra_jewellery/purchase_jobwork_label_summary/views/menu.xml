@@ -7,6 +7,7 @@
         name="Purchase / Job Work Label Summary"
         parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
         action="action_label_summary_wizard"
+        groups="custom_label_user.group_product_label_user,"
         sequence="50"/>
 
 </odoo>

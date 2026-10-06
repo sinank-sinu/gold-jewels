@@ -21,6 +21,7 @@ class OldGoldPurchase(models.Model):
     is_smith_transfer = fields.Boolean(string="Smith Transfer Required")
     smith_transferred = fields.Boolean(string="Smith Transferred", default=False)
 
+    total_gross_weight = fields.Float(string="Total Gross Weight", compute="_compute_totals", store=True)
     total_net_weight = fields.Float(string="Total Weight Verified", compute="_compute_totals", store=True)
     total_verified_net_weight = fields.Float(string="Total Weight", compute="_compute_totals", store=True)
     add_less = fields.Float(string="Add / Less", compute="_compute_add_less", store=True)
@@ -50,6 +51,7 @@ class OldGoldPurchase(models.Model):
                  'old_gold_line_ids.amount')
     def _compute_totals(self):
         for record in self:
+            record.total_gross_weight = sum(record.old_gold_line_ids.mapped('gross_weight'))
             record.total_net_weight = sum(record.old_gold_line_ids.mapped('net_weight'))
             record.total_verified_net_weight = sum(record.old_gold_line_ids.mapped('verified_net_weight'))
             record.total_amount = sum(record.old_gold_line_ids.mapped('amount'))
