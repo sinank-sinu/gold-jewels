@@ -9,36 +9,36 @@
         </record>
 
         <!-- Default Scheme API System Parameters -->
-        <record id="param_scheme_api_is_enabled" model="ir.config_parameter">
-            <field name="key">scheme_api.is_enabled</field>
-            <field name="value">True</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>scheme_api.is_enabled</value>
+            <value>True</value>
+        </function>
 
-        <record id="param_scheme_api_disabled_message" model="ir.config_parameter">
-            <field name="key">scheme_api.disabled_message</field>
-            <field name="value">Gold Scheme API is currently disabled for maintenance. Please try again later.</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>scheme_api.disabled_message</value>
+            <value>Gold Scheme API is currently disabled for maintenance. Please try again later.</value>
+        </function>
 
         <!-- Default Task Manager API System Parameters -->
-        <record id="param_task_manager_api_is_enabled" model="ir.config_parameter">
-            <field name="key">task_manager_api.is_enabled</field>
-            <field name="value">True</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>task_manager_api.is_enabled</value>
+            <value>True</value>
+        </function>
 
-        <record id="param_task_manager_api_disabled_message" model="ir.config_parameter">
-            <field name="key">task_manager_api.disabled_message</field>
-            <field name="value">Task Manager API is currently disabled for maintenance. Please try again later.</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>task_manager_api.disabled_message</value>
+            <value>Task Manager API is currently disabled for maintenance. Please try again later.</value>
+        </function>
 
         <!-- Default HRMS API System Parameters -->
-        <record id="param_hrms_api_is_enabled" model="ir.config_parameter">
-            <field name="key">hrms_api.is_enabled</field>
-            <field name="value">True</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>hrms_api.is_enabled</value>
+            <value>True</value>
+        </function>
 
-        <record id="param_hrms_api_disabled_message" model="ir.config_parameter">
-            <field name="key">hrms_api.disabled_message</field>
-            <field name="value">HRMS API is currently disabled for maintenance. Please try again later.</field>
-        </record>
+        <function model="ir.config_parameter" name="set_param">
+            <value>hrms_api.disabled_message</value>
+            <value>HRMS API is currently disabled for maintenance. Please try again later.</value>
+        </function>
     </data>
 </odoo>

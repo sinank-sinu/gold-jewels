@@ -337,12 +337,13 @@ class StockMoveLine(models.Model):
         compute='_compute_is_quantity_done_editable'
     )
 
+    @api.depends('product_id')
+    @api.depends_context('uid')
     def _compute_is_quantity_done_editable(self):
         is_manager = self.env.user.has_group('base.group_system') or \
                      self.env.user.has_group('base.group_erp_manager')
         for line in self:
             line.is_quantity_done_editable = is_manager
-
 
 class StockValuationLayer(models.Model):
     _inherit = 'stock.valuation.layer'
