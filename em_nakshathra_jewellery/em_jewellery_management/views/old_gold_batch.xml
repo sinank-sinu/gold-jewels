@@ -47,6 +47,7 @@
         <field name="name">Old Gold Batches</field>
         <field name="res_model">old.gold.batch</field>
         <field name="view_mode">tree,form</field>
+        <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
 

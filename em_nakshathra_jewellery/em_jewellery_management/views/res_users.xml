@@ -8,6 +8,7 @@
             <xpath expr="//page[@name='access_rights']" position="inside">
                 <group string="Jewellery Management Permissions">
                     <field name="allow_backorder_creation" widget="boolean_toggle"/>
+                    <field name="old_gold_department" widget="boolean_toggle"/>
                 </group>
             </xpath>
         </field>
