@@ -128,7 +128,7 @@ class JewellerySchemeEnrollment(models.Model):
         return res
 
     start_date = fields.Date(default=fields.Date.today, tracking=True)
-    duration = fields.Integer(required=True, default=11, tracking=True, readonly=True)
+    duration = fields.Integer(required=True, default=11, tracking=True)
     installment_amount = fields.Float(required=True, tracking=True)
     active = fields.Boolean(
         string='Active',
@@ -160,7 +160,7 @@ class JewellerySchemeEnrollment(models.Model):
             subtype_xmlid='mail.mt_note'
         )
 
-    @api.depends('scheme_line_ids.amount', 'scheme_line_ids.state')
+    @api.depends('scheme_line_ids.amount', 'scheme_line_ids.state', 'duration', 'installment_amount')
     def _compute_totals(self):
         for rec in self:
             paid_lines = rec.scheme_line_ids.filtered(lambda l: l.state == 'paid')

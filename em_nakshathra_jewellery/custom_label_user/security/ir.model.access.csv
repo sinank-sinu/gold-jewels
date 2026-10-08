@@ -1,5 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_product_label_user,product.label.user,model_product_label,base.group_user,1,0,0,0
 access_product_label_admin,product.label.admin,model_product_label,base.group_system,1,1,1,1
-access_product_label_user,product.label.user,model_product_label,custom_label_user.group_product_label_user,1,1,1,1
+access_product_label_label_user,product.label.user,model_product_label,custom_label_user.group_product_label_user,1,1,1,1
 access_location_wise_stock,location.wise.stock,model_location_wise_stock,base.group_user,1,1,1,1

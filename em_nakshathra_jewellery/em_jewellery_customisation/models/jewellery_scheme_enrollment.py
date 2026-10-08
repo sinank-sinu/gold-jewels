@@ -101,7 +101,7 @@ class JewellerySchemeEnrollment(models.Model):
             'context': {'active_ids': self.ids},  # Sends selected IDs down to the wizard
         }
         
-    @api.depends('scheme_line_ids.amount', 'scheme_line_ids.state')
+    @api.depends('scheme_line_ids.amount', 'scheme_line_ids.state', 'duration', 'installment_amount', 'total_scheme_amount')
     def _compute_totals(self):
         for rec in self:
             paid_lines = rec.scheme_line_ids.filtered(lambda l: l.state == 'paid')

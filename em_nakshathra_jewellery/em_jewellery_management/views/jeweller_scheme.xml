@@ -44,7 +44,7 @@
                         <group>
                             <field name="user_id"/>
                             <field name="date_of_joining" readonly="active"/>
-                            <field name="duration" readonly="1"/>
+                            <field name="duration" readonly="active"/>
                             <field name="branch_id"/>
                             <field name="installment_amount" readonly="active"/>
                             <field name="total_paid" readonly="1"/>

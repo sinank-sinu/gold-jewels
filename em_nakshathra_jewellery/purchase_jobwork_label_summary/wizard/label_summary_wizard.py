@@ -76,6 +76,7 @@ class LabelSummaryWizard(models.TransientModel):
                 pt.name AS product_name,
 
                 gp.name AS purity,
+                COALESCE(gp.percentage, 0.0) AS purity_percentage,
 
                 pol.product_qty AS total_qty
 
@@ -91,7 +92,7 @@ class LabelSummaryWizard(models.TransientModel):
                 ON pt.id = pp.product_tmpl_id
 
             LEFT JOIN gold_purity gp
-                ON gp.id = pp.purity_id
+                ON gp.id = COALESCE(pol.purity_id, pp.purity_id)
 
             LEFT JOIN res_partner rp
                 ON rp.id = po.partner_id
@@ -131,6 +132,7 @@ class LabelSummaryWizard(models.TransientModel):
                 pt.name AS product_name,
 
                 gp.name AS purity,
+                COALESCE(gp.percentage, 0.0) AS purity_percentage,
 
                 jwl.quantity AS total_qty
 
@@ -146,7 +148,7 @@ class LabelSummaryWizard(models.TransientModel):
                 ON pt.id = pp.product_tmpl_id
 
             LEFT JOIN gold_purity gp
-                ON gp.id = pp.purity_id
+                ON gp.id = COALESCE(jwl.purity_id, pp.purity_id)
 
             LEFT JOIN res_partner rp
                 ON rp.id = jw.job_worker_id
@@ -197,9 +199,12 @@ class LabelSummaryWizard(models.TransientModel):
                         or next(iter(row["product_name"].values()), "")
                 )
 
+            purity_pct = row.get("purity_percentage") or 0.0
+            total_qty = row["total_qty"] or 0.0
             row["variety"] = product_map.get(row["product_id"], "")
+            row["fine_weight"] = round(total_qty * (purity_pct / 100.0), 3)
             row["labelled_qty"] = 0.0
-            row["unlabelled_qty"] = row["total_qty"] or 0.0
+            row["unlabelled_qty"] = total_qty
             row["labels"] = []
 
         summary_map = {
@@ -257,12 +262,17 @@ class LabelSummaryWizard(models.TransientModel):
             if not summary:
                 continue
 
+            tag_weight = label["tag_weight"] or 0.0
+            purity_pct = summary.get("purity_percentage") or 0.0
+            fine_weight = round(tag_weight * (purity_pct / 100.0), 3)
+
             summary["labels"].append({
                 "label_number": label["label_number"],
-                "tag_weight": label["tag_weight"] or 0.0,
+                "tag_weight": tag_weight,
+                "fine_weight": fine_weight,
             })
 
-            summary["labelled_qty"] += label["tag_weight"] or 0.0
+            summary["labelled_qty"] += tag_weight
 
         for row in summary_rows:
             row["unlabelled_qty"] = max(
@@ -297,6 +307,7 @@ class LabelSummaryWizard(models.TransientModel):
                 "variety": row["variety"],
                 "purity": row["purity"],
                 "total_qty": row["total_qty"] or 0.0,
+                "fine_weight": row["fine_weight"] or 0.0,
                 "labelled_qty": row["labelled_qty"] or 0.0,
                 "unlabelled_qty": row["unlabelled_qty"] or 0.0,
                 "labels": sorted(
@@ -335,7 +346,7 @@ class LabelSummaryWizard(models.TransientModel):
         worksheet.set_column("E:E", 30)
         worksheet.set_column("F:F", 60)
         worksheet.set_column("G:G", 25)
-        worksheet.set_column("H:K", 15)
+        worksheet.set_column("H:L", 15)
         title_fmt = workbook.add_format({
             "bold": True,
             "font_size": 16,
@@ -372,8 +383,14 @@ class LabelSummaryWizard(models.TransientModel):
             "num_format": "#,##0.000",
         })
 
+        count_summary_fmt = workbook.add_format({
+            "border": 1,
+            "bold": True,
+            "align": "center",
+        })
+
         worksheet.merge_range(
-            "A1:J1",
+            "A1:L1",
             "Purchase / Job Work Label Summary",
             title_fmt,
         )
@@ -398,6 +415,7 @@ class LabelSummaryWizard(models.TransientModel):
             "Label No",
             "Purity",
             "Total Qty",
+            "Fine Weight",
             "Labelled Qty",
             "Unlabelled Qty",
         ]
@@ -409,16 +427,23 @@ class LabelSummaryWizard(models.TransientModel):
 
         row += 1
         grand_total_qty = 0.0
+        grand_fine_weight = 0.0
         grand_labelled_qty = 0.0
         grand_unlabelled_qty = 0.0
+        grand_label_count = 0
 
         for document in report_data:
             first_product = True
             doc_total_qty = 0.0
+            doc_fine_weight = 0.0
             doc_labelled_qty = 0.0
             doc_unlabelled_qty = 0.0
+            doc_label_count = 0
 
             for product in document["products"]:
+                label_count = len(product["labels"])
+                doc_label_count += label_count
+                grand_label_count += label_count
 
                 worksheet.write(
                     row,
@@ -449,13 +474,15 @@ class LabelSummaryWizard(models.TransientModel):
                 )
                 worksheet.write(row, 4, product["product_name"], summary_fmt)
                 worksheet.write(row, 5, product["variety"], summary_fmt)
-                worksheet.write(row, 6, "", summary_fmt)
+                worksheet.write_number(row, 6, label_count, count_summary_fmt)
                 worksheet.write(row, 7, product["purity"], summary_fmt)
 
                 worksheet.write_number(row, 8, product["total_qty"], qty_summary_fmt)
-                worksheet.write_number(row, 9, product["labelled_qty"], qty_summary_fmt)
-                worksheet.write_number(row, 10, product["unlabelled_qty"], qty_summary_fmt)
+                worksheet.write_number(row, 9, product["fine_weight"], qty_summary_fmt)
+                worksheet.write_number(row, 10, product["labelled_qty"], qty_summary_fmt)
+                worksheet.write_number(row, 11, product["unlabelled_qty"], qty_summary_fmt)
                 grand_total_qty += product["total_qty"]
+                grand_fine_weight += product["fine_weight"]
                 grand_labelled_qty += product["labelled_qty"]
                 grand_unlabelled_qty += product["unlabelled_qty"]
 
@@ -492,21 +519,24 @@ class LabelSummaryWizard(models.TransientModel):
                     )
 
                     worksheet.write_blank(row, 8, None, detail_fmt)
-                    worksheet.write_number(row, 9, label["tag_weight"], qty_fmt)
-                    worksheet.write_blank(row, 10, None, detail_fmt)
+                    worksheet.write_number(row, 9, label["fine_weight"], qty_fmt)
+                    worksheet.write_number(row, 10, label["tag_weight"], qty_fmt)
+                    worksheet.write_blank(row, 11, None, detail_fmt)
                     row += 1
 
                 doc_total_qty += product["total_qty"]
+                doc_fine_weight += product["fine_weight"]
                 doc_labelled_qty += product["labelled_qty"]
                 doc_unlabelled_qty += product["unlabelled_qty"]
 
             worksheet.write(row, 4, f"TOTAL FOR {document['document_no']}", summary_fmt)
             worksheet.write_blank(row, 5, None, summary_fmt)
-            worksheet.write_blank(row, 6, None, summary_fmt)
+            worksheet.write_number(row, 6, doc_label_count, count_summary_fmt)
             worksheet.write_blank(row, 7, None, summary_fmt)
             worksheet.write_number(row, 8, doc_total_qty, qty_summary_fmt)
-            worksheet.write_number(row, 9, doc_labelled_qty, qty_summary_fmt)
-            worksheet.write_number(row, 10, doc_unlabelled_qty, qty_summary_fmt)
+            worksheet.write_number(row, 9, doc_fine_weight, qty_summary_fmt)
+            worksheet.write_number(row, 10, doc_labelled_qty, qty_summary_fmt)
+            worksheet.write_number(row, 11, doc_unlabelled_qty, qty_summary_fmt)
 
             row += 1
         total_fmt = workbook.add_format({
@@ -527,12 +557,13 @@ class LabelSummaryWizard(models.TransientModel):
         worksheet.write_blank(row, 3, None, total_text_fmt)
         worksheet.write_blank(row, 4, None, total_text_fmt)
         worksheet.write_blank(row, 5, None, total_text_fmt)
-        worksheet.write_blank(row, 6, None, total_text_fmt)
+        worksheet.write_number(row, 6, grand_label_count, count_summary_fmt)
         worksheet.write_blank(row, 7, None, total_text_fmt)
 
         worksheet.write_number(row, 8, grand_total_qty, total_fmt)
-        worksheet.write_number(row, 9, grand_labelled_qty, total_fmt)
-        worksheet.write_number(row, 10, grand_unlabelled_qty, total_fmt)
+        worksheet.write_number(row, 9, grand_fine_weight, total_fmt)
+        worksheet.write_number(row, 10, grand_labelled_qty, total_fmt)
+        worksheet.write_number(row, 11, grand_unlabelled_qty, total_fmt)
 
         # Close workbook after all writing is complete
         workbook.close()

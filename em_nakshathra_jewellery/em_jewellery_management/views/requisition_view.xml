@@ -10,6 +10,10 @@
             </xpath>
             <xpath expr="//field[@name='requisition_lines']/tree//field[@name='quantity']" position="attributes">
                 <attribute name="sum">Total</attribute>
+                <attribute name="digits">[16, 3]</attribute>
+            </xpath>
+            <xpath expr="//field[@name='requisition_lines']/tree//field[@name='gram']" position="attributes">
+                <attribute name="digits">[16, 3]</attribute>
             </xpath>
             <xpath expr="//field[@name='requisition_lines']/tree//field[@name='quantity']" position="after">
                 <field name="purity_id"/>

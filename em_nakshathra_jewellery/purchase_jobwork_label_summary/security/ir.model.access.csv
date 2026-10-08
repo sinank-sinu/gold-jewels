@@ -1,2 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_label_summary_wizard,label.summary.wizard,model_label_summary_wizard,custom_label_user.group_product_label_user,1,1,1,1
+access_label_summary_wizard_label_user,label.summary.wizard,model_label_summary_wizard,custom_label_user.group_product_label_user,1,1,1,1
+access_label_summary_wizard_manager,label.summary.wizard,model_label_summary_wizard,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_label_summary_wizard_system,label.summary.wizard,model_label_summary_wizard,base.group_system,1,1,1,1

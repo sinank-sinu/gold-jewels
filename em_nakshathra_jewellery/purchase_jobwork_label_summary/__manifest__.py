@@ -10,7 +10,9 @@
         "product",
         "purchase",
         "em_jewellery_management",
-        "old_gold_xlsx_report"
+        "old_gold_xlsx_report",
+        "custom_label_user",
+        "ornament_label"
     ],
     "data": [
         "security/ir.model.access.csv",
