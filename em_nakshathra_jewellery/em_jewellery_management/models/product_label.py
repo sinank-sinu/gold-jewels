@@ -815,6 +815,13 @@ class ProductLabel(models.Model):
 
         return res
 
+    @api.returns('self', lambda value: value.id)
+    def copy(self, default=None):
+        for rec in self:
+            if rec.is_stocked_in or rec.stock_move_count > 0:
+                raise UserError(_("You cannot duplicate a product label that has already been transferred."))
+        return super(ProductLabel, self).copy(default=default)
+
     @api.onchange('purchase_id')
     def _onchange_purchase_product(self):
         if self.purchase_id and self.product_id:
