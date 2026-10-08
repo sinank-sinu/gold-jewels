@@ -30,12 +30,12 @@ def safe_float(value):
     except (TypeError, ValueError):
         return 0.0
 
-def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100):
+def process_import_chunk(db_name, uid, file_path, start_row, chunk_size=100, context=None):
     try:
         registry = http.request.env.registry
         with registry.cursor() as cr:
             import odoo
-            env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
+            env = odoo.api.Environment(cr, uid, context or {})
             
             workbook = openpyxl.load_workbook(file_path, data_only=True)
             sheet = workbook.active
@@ -291,7 +291,7 @@ class SchemeImportController(http.Controller):
         db_name = request.env.cr.dbname
         uid = request.env.uid
 
-        end_row, max_row = process_import_chunk(db_name, uid, file_path, start_row, chunk_size=40)
+        end_row, max_row = process_import_chunk(db_name, uid, file_path, start_row, chunk_size=40, context=dict(request.env.context))
         
         if end_row == -1:
             return request.make_response("<h1>Import Failed</h1><p>Check terminal logs for errors.</p>", headers=[('Content-Type', 'text/html')])
