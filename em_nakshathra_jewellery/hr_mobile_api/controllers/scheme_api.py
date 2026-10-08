@@ -9,6 +9,7 @@ import time
 import requests
 from dateutil.relativedelta import relativedelta
 from markupsafe import Markup
+import re
 
 RAZORPAY_KEY_ID = "rzp_test_TZTOVDHOQcGeUv"
 RAZORPAY_KEY_SECRET = "mAROO5PBwVt2rmPyjLBSZN5l"
@@ -83,11 +84,10 @@ class SchemeMobileAPI(http.Controller):
     @http.route(['/api/scheme/register', '/api/scheme/signup'], type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def register(self, **kwargs):
         """
-        Register / Login with Phone & OTP for the Gold Scheme App.
-        - No password required.
-        - User simply enters phone number (and optional name/city/email).
-        - If phone is already registered: no error, no password asked, sends OTP, message: 'OTP sent successfully'.
-        - If phone is a new number: creates customer account, sends OTP, message: 'This is a new number'.
+        Register / Signup for the Gold Scheme App.
+        - Enforces: Already registered number is only allowed to register once.
+        - If phone is already registered: returns error with message 'Phone number is already registered. Please login.'
+        - If phone is a new number: creates customer account, sends OTP, returns message 'This is a new number'.
         """
         try:
             phone = (kwargs.get('phone') or kwargs.get('mobile') or '').strip()
@@ -120,105 +120,125 @@ class SchemeMobileAPI(http.Controller):
                 User = env['res.users']
                 Partner = env['res.partner']
 
-                # Search if phone already exists
-                existing_user = User.search([
-                    '|', ('partner_id.mobile', '=', phone), ('partner_id.phone', '=', phone)
-                ], limit=1)
-                if not existing_user:
-                    existing_user = User.search([('login', '=', phone)], limit=1)
+                # Normalize phone
+                raw_phone = phone
+                clean_phone = re.sub(r'\D', '', phone)
+                last_10 = clean_phone[-10:] if len(clean_phone) >= 10 else clean_phone
+
+                # 1. Search existing user by login
+                user_logins = [raw_phone]
+                if clean_phone and clean_phone not in user_logins:
+                    user_logins.append(clean_phone)
+                if last_10 and last_10 not in user_logins:
+                    user_logins.append(last_10)
+
+                existing_user = User.search([('login', 'in', user_logins)], limit=1)
+
+                # 2. Search existing user by partner mobile/phone
+                if not existing_user and last_10:
+                    partner_domain = [
+                        '|', '|', '|',
+                        ('phone', '=', raw_phone),
+                        ('mobile', '=', raw_phone),
+                        ('phone', 'ilike', f'%{last_10}'),
+                        ('mobile', 'ilike', f'%{last_10}')
+                    ]
+                    matching_partners = Partner.search(partner_domain)
+                    if matching_partners:
+                        existing_user = User.search([('partner_id', 'in', matching_partners.ids)], limit=1)
+
+                # 3. Search existing user by email
                 if not existing_user and email:
                     existing_user = User.search(['|', ('login', '=', email), ('email', '=', email)], limit=1)
 
+                # Reject if already registered!
+                # Test Case: "Verify already registered number only allowed to register once."
+                if existing_user:
+                    return {
+                        "status": "error",
+                        "message": "Phone number is already registered. Please login.",
+                        "is_already_registered": True,
+                        "is_new_user": False,
+                        "phone": raw_phone
+                    }
+
+                # New phone number: create customer account and send OTP
                 otp_code = f"{random.randint(100000, 999999)}"
                 expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
-                if existing_user:
-                    # Existing customer: no need to ask password or extra details, simply send OTP
-                    existing_user.write({
-                        'login_otp': otp_code,
-                        'login_otp_expiry': expiry
-                    })
+                login = raw_phone
+                user_name = name or (f"Customer {raw_phone[-4:]}" if len(raw_phone) >= 4 else "Customer")
+                auto_password = kwargs.get('password') or f"Naksha@{random.randint(100000, 999999)}"
 
-                    if hasattr(existing_user, '_send_login_otp_sms'):
-                        try:
-                            existing_user._send_login_otp_sms(otp_code)
-                        except Exception:
-                            pass
+                portal_group = env.ref('base.group_portal', raise_if_not_found=False)
 
-                    target_user = existing_user
-                    is_new = False
-                    resp_message = "OTP sent successfully"
+                user_vals = {
+                    'name': user_name,
+                    'login': login,
+                    'email': email or False,
+                    'password': auto_password,
+                }
+                if portal_group:
+                    user_vals['groups_id'] = [(6, 0, [portal_group.id])]
 
-                else:
-                    # New phone number: create customer account and send OTP
-                    login = phone
-                    user_name = name or (f"Customer {phone[-4:]}" if len(phone) >= 4 else "Customer")
-                    auto_password = kwargs.get('password') or f"Naksha@{random.randint(100000, 999999)}"
+                existing_partner = False
+                if last_10:
+                    partner_domain = [
+                        '|', '|', '|',
+                        ('phone', '=', raw_phone),
+                        ('mobile', '=', raw_phone),
+                        ('phone', 'ilike', f'%{last_10}'),
+                        ('mobile', 'ilike', f'%{last_10}')
+                    ]
+                    existing_partner = Partner.search(partner_domain, limit=1)
+                if existing_partner:
+                    user_vals['partner_id'] = existing_partner.id
 
-                    portal_group = env.ref('base.group_portal', raise_if_not_found=False)
+                new_user = User.create(user_vals)
 
-                    user_vals = {
-                        'name': user_name,
-                        'login': login,
-                        'email': email or False,
-                        'password': auto_password,
-                    }
-                    if portal_group:
-                        user_vals['groups_id'] = [(6, 0, [portal_group.id])]
+                if new_user.partner_id:
+                    partner_vals = {'phone': raw_phone, 'mobile': raw_phone}
+                    if city:
+                        partner_city_field = Partner._fields.get('city')
+                        if getattr(partner_city_field, 'type', None) == 'selection':
+                            valid_keys = [k for k, _ in (partner_city_field.selection or [])]
+                            matched_key = next((k for k in valid_keys if k.lower() == city.lower()), None)
+                            if matched_key:
+                                partner_vals['city'] = matched_key
+                            elif 'Other' in valid_keys:
+                                partner_vals['city'] = 'Other'
+                        else:
+                            partner_vals['city'] = city
+                    new_user.partner_id.write(partner_vals)
 
-                    existing_partner = Partner.search(['|', ('phone', '=', phone), ('mobile', '=', phone)], limit=1)
-                    if existing_partner:
-                        user_vals['partner_id'] = existing_partner.id
+                new_user.write({
+                    'login_otp': otp_code,
+                    'login_otp_expiry': expiry
+                })
 
-                    new_user = User.create(user_vals)
+                if hasattr(new_user, '_send_login_otp_sms'):
+                    try:
+                        new_user._send_login_otp_sms(otp_code)
+                    except Exception:
+                        pass
 
-                    if new_user.partner_id:
-                        partner_vals = {'phone': phone, 'mobile': phone}
-                        if city:
-                            partner_city_field = Partner._fields.get('city')
-                            if getattr(partner_city_field, 'type', None) == 'selection':
-                                valid_keys = [k for k, _ in (partner_city_field.selection or [])]
-                                matched_key = next((k for k in valid_keys if k.lower() == city.lower()), None)
-                                if matched_key:
-                                    partner_vals['city'] = matched_key
-                                elif 'Other' in valid_keys:
-                                    partner_vals['city'] = 'Other'
-                            else:
-                                partner_vals['city'] = city
-                        new_user.partner_id.write(partner_vals)
-
-                    new_user.write({
-                        'login_otp': otp_code,
-                        'login_otp_expiry': expiry
-                    })
-
-                    if hasattr(new_user, '_send_login_otp_sms'):
-                        try:
-                            new_user._send_login_otp_sms(otp_code)
-                        except Exception:
-                            pass
-
-                    target_user = new_user
-                    is_new = True
-                    resp_message = "This is a new number"
-
-                user_id = target_user.id
-                partner_id = target_user.partner_id.id if target_user.partner_id else None
-                user_name = target_user.name
-                user_email = target_user.email or target_user.login or ""
+                user_id = new_user.id
+                partner_id = new_user.partner_id.id if new_user.partner_id else None
+                user_name = new_user.name
+                user_email = new_user.email or new_user.login or ""
                 cr.commit()
 
             return {
                 "status": "success",
-                "message": resp_message,
-                "is_new_user": is_new,
+                "message": "This is a new number",
+                "is_new_user": True,
                 "user_id": user_id,
-                "phone": phone,
+                "phone": raw_phone,
                 "otp": otp_code,
                 "data": {
                     "user_id": user_id,
                     "name": user_name,
-                    "phone": phone,
+                    "phone": raw_phone,
                     "email": user_email,
                     "partner_id": partner_id,
                     "city": city or ""
@@ -255,13 +275,28 @@ class SchemeMobileAPI(http.Controller):
             resp_message = "OTP sent successfully"
 
             if phone:
-                user = User.search(['|', ('partner_id.mobile', '=', phone), ('partner_id.phone', '=', phone)], limit=1)
-                if not user:
-                    user = User.search([('login', '=', phone)], limit=1)
-                if not user:
-                    partner = Partner.search(['|', ('phone', '=', phone), ('mobile', '=', phone)], limit=1)
-                    if partner:
-                        user = User.search([('partner_id', '=', partner.id)], limit=1)
+                raw_phone = phone
+                clean_phone = re.sub(r'\D', '', phone)
+                last_10 = clean_phone[-10:] if len(clean_phone) >= 10 else clean_phone
+
+                user_logins = [raw_phone]
+                if clean_phone and clean_phone not in user_logins:
+                    user_logins.append(clean_phone)
+                if last_10 and last_10 not in user_logins:
+                    user_logins.append(last_10)
+
+                user = User.search([('login', 'in', user_logins)], limit=1)
+                if not user and last_10:
+                    partner_domain = [
+                        '|', '|', '|',
+                        ('phone', '=', raw_phone),
+                        ('mobile', '=', raw_phone),
+                        ('phone', 'ilike', f'%{last_10}'),
+                        ('mobile', 'ilike', f'%{last_10}')
+                    ]
+                    matching_partners = Partner.search(partner_domain)
+                    if matching_partners:
+                        user = User.search([('partner_id', 'in', matching_partners.ids)], limit=1)
             elif username:
                 user = User.search([('login', '=', username)], limit=1)
 
@@ -281,7 +316,16 @@ class SchemeMobileAPI(http.Controller):
                 if portal_group:
                     user_vals['groups_id'] = [(6, 0, [portal_group.id])]
 
-                existing_partner = Partner.search(['|', ('phone', '=', phone), ('mobile', '=', phone)], limit=1)
+                existing_partner = False
+                if last_10:
+                    partner_domain = [
+                        '|', '|', '|',
+                        ('phone', '=', raw_phone),
+                        ('mobile', '=', raw_phone),
+                        ('phone', 'ilike', f'%{last_10}'),
+                        ('mobile', 'ilike', f'%{last_10}')
+                    ]
+                    existing_partner = Partner.search(partner_domain, limit=1)
                 if existing_partner:
                     user_vals['partner_id'] = existing_partner.id
 
@@ -335,9 +379,15 @@ class SchemeMobileAPI(http.Controller):
     def scheme_otp_verify(self, **kwargs):
         """
         Verify OTP and authenticate Gold Scheme user.
+        - TC_NAK_53 / TC__NG17: Verify OTP with unregistered number returns appropriate error message.
+        - If phone is provided and unregistered: returns error 'Phone number is not registered. Please register first.'
+        - If user_id is provided and unregistered: returns error 'User is not registered. Please register first.'
+        - If user has no active OTP: returns error 'No OTP requested for this user. Please request an OTP first.'
+        - If OTP has expired: returns error 'OTP has expired. Please request a new OTP.'
+        - If OTP is incorrect: returns error 'Invalid OTP code'
         """
         try:
-            phone = (kwargs.get('phone') or '').strip()
+            raw_phone = (kwargs.get('phone') or kwargs.get('mobile') or '').strip()
             username = (kwargs.get('username') or kwargs.get('email') or '').strip()
             user_id = kwargs.get('user_id')
             otp_entered = str(kwargs.get('otp') or kwargs.get('otp_code') or '').strip()
@@ -346,59 +396,104 @@ class SchemeMobileAPI(http.Controller):
                 return {"status": "error", "message": "OTP code is required"}
 
             User = request.env['res.users'].sudo()
+            Partner = request.env['res.partner'].sudo()
             user = False
 
-            # 1. Try finding user by explicit user_id if valid for this OTP
-            if user_id:
+            # Case A: User identified by phone / mobile
+            if raw_phone:
+                clean_phone = re.sub(r'\D', '', raw_phone)
+                last_10 = clean_phone[-10:] if len(clean_phone) >= 10 else clean_phone
+
+                user_logins = [raw_phone]
+                if clean_phone and clean_phone not in user_logins:
+                    user_logins.append(clean_phone)
+                if last_10 and last_10 not in user_logins:
+                    user_logins.append(last_10)
+
+                # Search by login
+                user = User.search([('login', 'in', user_logins)], limit=1)
+
+                # Search by partner phone / mobile
+                if not user and last_10:
+                    partner_domain = [
+                        '|', '|', '|',
+                        ('phone', '=', raw_phone),
+                        ('mobile', '=', raw_phone),
+                        ('phone', 'ilike', f'%{last_10}'),
+                        ('mobile', 'ilike', f'%{last_10}')
+                    ]
+                    matching_partners = Partner.search(partner_domain)
+                    if matching_partners:
+                        user = User.search([('partner_id', 'in', matching_partners.ids)], limit=1)
+
+                # Appropriate error message for unregistered phone number
+                if not user:
+                    return {
+                        "status": "error",
+                        "message": "Phone number is not registered. Please register first.",
+                        "is_registered": False,
+                        "phone": raw_phone
+                    }
+
+            # Case B: User identified by user_id
+            elif user_id:
                 try:
                     candidate = User.browse(int(user_id))
-                    if candidate.exists() and candidate.login_otp and str(candidate.login_otp).strip() == otp_entered:
-                        user = candidate
+                    if not candidate.exists():
+                        return {
+                            "status": "error",
+                            "message": "User is not registered. Please register first.",
+                            "is_registered": False,
+                            "user_id": user_id
+                        }
+                    user = candidate
                 except (ValueError, TypeError):
-                    pass
+                    return {
+                        "status": "error",
+                        "message": "Invalid user ID provided",
+                        "is_registered": False
+                    }
 
-            # 2. Try finding user by phone
-            if not user and phone:
-                user = User.search(['|', ('partner_id.mobile', '=', phone), ('partner_id.phone', '=', phone)], limit=1)
+            # Case C: User identified by username / email
+            elif username:
+                user = User.search(['|', ('login', '=', username), ('email', '=', username)], limit=1)
                 if not user:
-                    user = User.search([('login', '=', phone)], limit=1)
-                if not user:
-                    partner = request.env['res.partner'].sudo().search(['|', ('phone', '=', phone), ('mobile', '=', phone)], limit=1)
-                    if partner:
-                        user = User.search([('partner_id', '=', partner.id)], limit=1)
+                    return {
+                        "status": "error",
+                        "message": "User is not registered. Please register first.",
+                        "is_registered": False,
+                        "username": username
+                    }
 
-            # 3. Try finding user by username / email
-            if not user and username:
-                user = User.search([('login', '=', username)], limit=1)
+            else:
+                return {
+                    "status": "error",
+                    "message": "Phone number or user ID is required"
+                }
 
-            # 4. Fallback: Find any active user with this exact active OTP
-            if not user or not user.exists() or (user.login_otp and str(user.login_otp).strip() != otp_entered):
-                otp_match_user = User.search([
-                    ('login_otp', '=', otp_entered),
-                    ('login_otp_expiry', '>=', fields.Datetime.now())
-                ], limit=1)
-                if otp_match_user:
-                    user = otp_match_user
+            # Validate OTP on the resolved user
+            if not user.login_otp:
+                return {
+                    "status": "error",
+                    "message": "No OTP requested for this user. Please request an OTP first.",
+                    "is_registered": True
+                }
 
-            # 5. Fallback: Browse user_id if passed
-            if not user and user_id:
-                try:
-                    user = User.browse(int(user_id))
-                except (ValueError, TypeError):
-                    pass
-
-            if not user or not user.exists():
-                user = User.search([('login', '=', 'admin')], limit=1)
-
-            if not user:
-                return {"status": "error", "message": "User not found"}
-
-            if not user.login_otp or str(user.login_otp).strip() != otp_entered:
-                return {"status": "error", "message": "Invalid OTP code"}
+            if str(user.login_otp).strip() != otp_entered:
+                return {
+                    "status": "error",
+                    "message": "Invalid OTP code",
+                    "is_registered": True
+                }
 
             if user.login_otp_expiry and user.login_otp_expiry < fields.Datetime.now():
-                return {"status": "error", "message": "OTP has expired. Please request a new OTP."}
+                return {
+                    "status": "error",
+                    "message": "OTP has expired. Please request a new OTP.",
+                    "is_registered": True
+                }
 
+            # OTP is correct and active -> consume OTP and complete login
             user.write({
                 'login_otp': False,
                 'login_otp_expiry': False
@@ -408,6 +503,8 @@ class SchemeMobileAPI(http.Controller):
                 ('user_id', '=', user.id)
             ], limit=1)
 
+            target_phone = user.partner_id.phone or user.partner_id.mobile or raw_phone or ""
+
             return {
                 "status": "success",
                 "message": "OTP verified successfully. Login successful.",
@@ -416,7 +513,7 @@ class SchemeMobileAPI(http.Controller):
                     "user_id": user.id,
                     "name": user.name,
                     "email": user.login,
-                    "phone": user.partner_id.phone or user.partner_id.mobile or phone,
+                    "phone": target_phone,
                     "employee_id": employee.id if employee else None,
                     "employee_name": employee.name if employee else None,
                     "job_position": employee.job_id.name if employee and employee.job_id else None

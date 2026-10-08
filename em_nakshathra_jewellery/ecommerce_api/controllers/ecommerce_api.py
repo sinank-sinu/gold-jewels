@@ -1,3 +1,4 @@
+import re
 import json
 import random
 import datetime
@@ -32,8 +33,12 @@ class EcommerceBranchAPI(http.Controller):
         if not customer or not customer.exists():
             token = None
             auth_header = request.httprequest.headers.get('Authorization', '')
-            if auth_header.startswith('Token '):
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:].strip()
+            elif auth_header.startswith('Token '):
                 token = auth_header[6:].strip()
+            elif auth_header:
+                token = auth_header.strip()
             if not token:
                 token = kwargs.get('auth_token')
             if token:
@@ -70,6 +75,26 @@ class EcommerceBranchAPI(http.Controller):
             request.session['branch_id'] = branch.id
 
         return branch
+
+    def _normalize_phone(self, phone):
+        if not phone:
+            return '', ''
+        clean = re.sub(r'\D', '', str(phone))
+        last_10 = clean[-10:] if len(clean) >= 10 else clean
+        return clean, last_10
+
+    def _find_customer_by_phone(self, phone):
+        if not phone:
+            return request.env['ecommerce.customer'].sudo().browse()
+        Customer = request.env['ecommerce.customer'].sudo()
+        clean, last_10 = self._normalize_phone(phone)
+        domain = [
+            '|', '|',
+            ('phone', '=', str(phone).strip()),
+            ('phone', '=', clean),
+            ('phone', 'ilike', f'%{last_10}')
+        ] if last_10 else [('phone', '=', str(phone).strip())]
+        return Customer.search(domain, order='id desc', limit=1)
 
     # ─────────────────────────────────────────────
     # BRANCH PRODUCTS
@@ -496,6 +521,15 @@ class EcommerceBranchAPI(http.Controller):
             if Customer.search([('email', '=', email)], limit=1):
                 return {"status": "error", "message": "An account with this email already exists"}
 
+            # ── Check duplicate phone (DEF_EC_02 & DEF_EC_10) ────
+            if phone:
+                existing_phone_customer = self._find_customer_by_phone(phone)
+                if existing_phone_customer:
+                    return {
+                        "status": "error",
+                        "message": "An account with this mobile number already exists. Please log in."
+                    }
+
             # ── Hash password ──────────────────────────────
             dummy = Customer.new({})
             password_hash, salt = dummy._hash_password(password)
@@ -723,13 +757,12 @@ class EcommerceBranchAPI(http.Controller):
                 return {"status": "error", "message": "phone or email is required"}
 
             Customer = request.env['ecommerce.customer'].sudo()
-            domain = []
+            customer = False
             if phone:
-                domain.append(('phone', '=', phone))
+                customer = self._find_customer_by_phone(phone)
             elif email:
-                domain.append(('email', '=', email))
+                customer = Customer.search([('email', '=', email)], limit=1)
 
-            customer = Customer.search(domain, limit=1)
             branch = self._resolve_branch(kwargs, customer=customer)
 
             otp_code = f"{random.randint(100000, 999999)}"
@@ -787,13 +820,12 @@ class EcommerceBranchAPI(http.Controller):
                 return {"status": "error", "message": "otp is required"}
 
             Customer = request.env['ecommerce.customer'].sudo()
-            domain = []
+            customer = False
             if phone:
-                domain.append(('phone', '=', phone))
+                customer = self._find_customer_by_phone(phone)
             elif email:
-                domain.append(('email', '=', email))
+                customer = Customer.search([('email', '=', email)], limit=1)
 
-            customer = Customer.search(domain, limit=1)
             if not customer:
                 return {"status": "error", "message": "Customer not found"}
 
@@ -811,6 +843,12 @@ class EcommerceBranchAPI(http.Controller):
                 'login_otp': False,
                 'login_otp_expiry': False
             })
+
+            # DEF_EC_02 FIX: Ensure request session is bound to the logged-in customer
+            if request.session:
+                request.session['customer_id'] = customer.id
+                if customer.branch_id:
+                    request.session['branch_id'] = customer.branch_id.id
 
             return {
                 "status": "success",
@@ -1518,108 +1556,134 @@ class EcommerceBranchAPI(http.Controller):
     # ─────────────────────────────────────────────
     def _get_customer_profile_data(self, **kwargs):
         customer_id = kwargs.get('customer_id')
+        email = (kwargs.get('email') or kwargs.get('email_id') or '').strip().lower()
+        phone = (kwargs.get('phone') or kwargs.get('mobile') or '').strip()
+        Customer = request.env['ecommerce.customer'].sudo()
+
+        # 1. First priority: Authorization header or auth_token parameter (Token authentication)
         if not customer_id:
-            # Fallback to session or Authorization token if provided
+            token = None
+            if request.httprequest and request.httprequest.headers.get('Authorization'):
+                auth_header = request.httprequest.headers.get('Authorization', '').strip()
+                if auth_header.startswith('Bearer '):
+                    token = auth_header[7:].strip()
+                elif auth_header.startswith('Token '):
+                    token = auth_header[6:].strip()
+                else:
+                    token = auth_header
+            elif kwargs.get('auth_token'):
+                token = str(kwargs.get('auth_token')).strip()
+
+            if token:
+                cust = Customer.search([('auth_token', '=', token)], limit=1)
+                if cust and cust._verify_token(token):
+                    customer_id = cust.id
+
+        # 2. Lookup by phone if given
+        if not customer_id and phone:
+            cust = self._find_customer_by_phone(phone)
+            if cust:
+                customer_id = cust.id
+
+        # 3. Lookup by email if customer_id not given
+        if not customer_id and email:
+            cust = Customer.search([('email', '=', email)], limit=1)
+            if cust:
+                customer_id = cust.id
+
+        # 4. Fallback to active session only if customer_id not yet resolved
+        if not customer_id:
             if request.session and request.session.get('customer_id'):
                 customer_id = request.session.get('customer_id')
-            elif request.httprequest and request.httprequest.headers.get('Authorization'):
-                token = request.httprequest.headers.get('Authorization', '').replace('Bearer ', '').strip()
-                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+
+        # 5. Fallback to query arguments from httprequest
+        if not customer_id and request.httprequest and request.httprequest.args:
+            if request.httprequest.args.get('customer_id'):
+                customer_id = request.httprequest.args.get('customer_id')
+            elif request.httprequest.args.get('phone'):
+                cust = self._find_customer_by_phone(request.httprequest.args.get('phone'))
+                if cust:
+                    customer_id = cust.id
+            elif request.httprequest.args.get('email'):
+                query_email = request.httprequest.args.get('email', '').strip().lower()
+                cust = Customer.search([('email', '=', query_email)], limit=1)
+                if cust:
+                    customer_id = cust.id
+            elif request.httprequest.args.get('email_id'):
+                query_email = request.httprequest.args.get('email_id', '').strip().lower()
+                cust = Customer.search([('email', '=', query_email)], limit=1)
                 if cust:
                     customer_id = cust.id
 
         if not customer_id:
-            return {"status": "error", "message": "customer_id is required"}
+            return {"status": "error", "message": "customer_id, phone, email, or auth_token is required"}
 
         try:
-            customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
+            customer = Customer.browse(int(customer_id))
         except (ValueError, TypeError):
             return {"status": "error", "message": "Invalid customer_id format"}
 
         if not customer.exists():
             return {"status": "error", "message": "Customer not found"}
 
-        orders_count = request.env['ecommerce.order'].sudo().search_count([('customer_id', '=', customer.id)])
-        wishlist_count = request.env['ecommerce.wishlist'].sudo().search_count([('customer_id', '=', customer.id)])
-        reviews_count = request.env['ecommerce.product.review'].sudo().search_count([('customer_id', '=', customer.id)])
-
-        saved_addresses_count = len(customer.address_ids)
-        saved_cards_count = len(customer.card_ids)
-        saved_upi_count = len(customer.upi_ids)
-        payment_methods_count = saved_cards_count + saved_upi_count
-
-        membership = "Gold Member"
-        if orders_count >= 10:
-            membership = "Gold Member"
-        elif orders_count >= 5:
-            membership = "Silver Member"
-        else:
-            membership = "Gold Member" if customer.id == 1 else "Bronze Member"
-
         resolved_branch = customer.branch_id
-
-        my_account = [
-            {
-                "key": "orders",
-                "title": "My Orders",
-                "subtitle": "Track, return or buy again",
-                "count": orders_count,
-                "icon": "orders"
-            },
-            {
-                "key": "addresses",
-                "title": "Saved Addresses",
-                "subtitle": "Manage delivery addresses",
-                "count": saved_addresses_count,
-                "icon": "addresses"
-            },
-            {
-                "key": "payment_methods",
-                "title": "Payment Methods",
-                "subtitle": "Cards, UPI, net banking",
-                "count": payment_methods_count,
-                "icon": "payment_methods"
+        branch_details = None
+        if resolved_branch and resolved_branch.exists():
+            branch_details = {
+                "id": resolved_branch.id,
+                "name": resolved_branch.name,
+                "branch_code": resolved_branch.branch_code or "",
+                "city": resolved_branch.city or "",
+                "phone": resolved_branch.phone or "",
+                "email": resolved_branch.email or "",
+                "street": resolved_branch.street or "",
             }
-        ]
+
+        username = customer.name or f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+        first_name = customer.first_name or ""
+        last_name = customer.last_name or ""
+        email_val = customer.email or ""
+        branch_name = resolved_branch.name if resolved_branch else "All Branches"
+        branch_id = resolved_branch.id if resolved_branch else None
+
+        user_data = {
+            "id": customer.id,
+            "customer_id": customer.id,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "name": username,
+            "email": email_val,
+            "email_id": email_val,
+            "phone": customer.phone or "",
+            "city": customer.city or "",
+            "branch_id": branch_id,
+            "branch_name": branch_name,
+            "branch_details": branch_details or {
+                "id": None,
+                "name": "All Branches",
+                "branch_code": "",
+                "city": "",
+                "phone": "",
+                "email": "",
+                "street": "",
+            },
+        }
 
         return {
             "status": "success",
-            "customer": {
-                "id": customer.id,
-                "name": customer.name,
-                "first_name": customer.first_name,
-                "last_name": customer.last_name,
-                "email": customer.email,
-                "phone": customer.phone or "",
-                "city": customer.city or "",
-                "branch_id": resolved_branch.id if resolved_branch else None,
-                "branch_name": resolved_branch.name if resolved_branch else None,
-                "membership": membership,
-                "member_tier": membership,
-                "badge": membership,
-                "orders_count": orders_count,
-                "wishlist_count": wishlist_count,
-                "reviews_count": reviews_count,
-                "push_notifications": customer.push_notifications,
-                "order_updates": customer.order_updates,
-                "offer_alerts": customer.offer_alerts,
-                "email_newsletter": customer.email_newsletter
-            },
-            "stats": {
-                "orders": orders_count,
-                "wishlist": wishlist_count,
-                "reviews": reviews_count
-            },
-            "orders_count": orders_count,
-            "wishlist_count": wishlist_count,
-            "reviews_count": reviews_count,
-            "orders": orders_count,
-            "wishlist": wishlist_count,
-            "reviews": reviews_count,
-            "membership": membership,
-            "member_tier": membership,
-            "badge": membership,
-            "my_account": my_account
+            "message": "Customer profile retrieved successfully",
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email_id": email_val,
+            "email": email_val,
+            "branch_id": branch_id,
+            "branch_name": branch_name,
+            "branch_details": user_data["branch_details"],
+            "data": user_data,
+            "user": user_data,
+            "customer": user_data,
         }
 
     @http.route([
@@ -1650,8 +1714,9 @@ class EcommerceBranchAPI(http.Controller):
                             params.update(data)
                 except Exception:
                     pass
-            if 'customer_id' not in params and request.httprequest.args.get('customer_id'):
-                params['customer_id'] = request.httprequest.args.get('customer_id')
+            for arg_key in ['customer_id', 'email', 'email_id']:
+                if arg_key not in params and request.httprequest.args.get(arg_key):
+                    params[arg_key] = request.httprequest.args.get(arg_key)
             data = self._get_customer_profile_data(**params)
             status_code = 200 if data.get('status') == 'success' else 400
             return self._json_response(data, status=status_code)
@@ -1666,7 +1731,28 @@ class EcommerceBranchAPI(http.Controller):
         try:
             customer_id = kwargs.get('customer_id')
             if not customer_id:
-                return {"status": "error", "message": "customer_id is required"}
+                token = None
+                if request.httprequest and request.httprequest.headers.get('Authorization'):
+                    auth_header = request.httprequest.headers.get('Authorization', '').strip()
+                    if auth_header.startswith('Bearer '):
+                        token = auth_header[7:].strip()
+                    elif auth_header.startswith('Token '):
+                        token = auth_header[6:].strip()
+                    else:
+                        token = auth_header
+                elif kwargs.get('auth_token'):
+                    token = str(kwargs.get('auth_token')).strip()
+
+                if token:
+                    cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
+                    if cust and cust._verify_token(token):
+                        customer_id = cust.id
+
+                if not customer_id and request.session and request.session.get('customer_id'):
+                    customer_id = request.session.get('customer_id')
+
+            if not customer_id:
+                return {"status": "error", "message": "customer_id or auth_token is required"}
 
             customer = request.env['ecommerce.customer'].sudo().browse(int(customer_id))
             if not customer.exists():
@@ -1689,7 +1775,12 @@ class EcommerceBranchAPI(http.Controller):
                     vals['last_name'] = name_parts[1]
 
             if 'phone' in kwargs:
-                vals['phone'] = kwargs['phone']
+                new_phone = (kwargs['phone'] or '').strip()
+                if new_phone and new_phone != customer.phone:
+                    existing_phone_cust = self._find_customer_by_phone(new_phone)
+                    if existing_phone_cust and existing_phone_cust.id != customer.id:
+                        return {"status": "error", "message": "An account with this mobile number already exists"}
+                    vals['phone'] = new_phone
             if 'email' in kwargs:
                 email = (kwargs['email'] or '').strip().lower()
                 if email and email != customer.email:
@@ -1811,17 +1902,19 @@ class EcommerceBranchAPI(http.Controller):
     def _resolve_customer_for_notifications(self, **kwargs):
         customer_id = kwargs.get('customer_id')
         if not customer_id:
-            if request.session and request.session.get('customer_id'):
-                customer_id = request.session.get('customer_id')
-            elif hasattr(request, 'httprequest') and request.httprequest.headers.get('Authorization'):
+            token = None
+            if hasattr(request, 'httprequest') and request.httprequest.headers.get('Authorization'):
                 token = request.httprequest.headers.get('Authorization', '').replace('Bearer ', '').replace('Token ', '').strip()
+            elif kwargs.get('auth_token'):
+                token = str(kwargs.get('auth_token')).strip()
+
+            if token:
                 cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', token)], limit=1)
                 if cust:
                     customer_id = cust.id
-            elif kwargs.get('auth_token'):
-                cust = request.env['ecommerce.customer'].sudo().search([('auth_token', '=', kwargs.get('auth_token'))], limit=1)
-                if cust:
-                    customer_id = cust.id
+
+            if not customer_id and request.session and request.session.get('customer_id'):
+                customer_id = request.session.get('customer_id')
 
         if not customer_id:
             return None, {"status": "error", "message": "customer_id is required"}
