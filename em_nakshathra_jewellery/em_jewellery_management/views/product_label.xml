@@ -98,8 +98,8 @@
 
                                 <group string="Rates">
                                     <!--                                    <field name="sale_metal_rate"/>-->
-                                    <field name="sale_stone_rate" readonly="is_stocked_in"/>
-                                    <field name="sale_diamond_rate" readonly="is_stocked_in"/>
+                                    <field name="sale_stone_rate" readonly="active"/>
+                                    <field name="sale_diamond_rate" readonly="active"/>
                                 </group>
 
                                 <group string="Making Charge">
