@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Custom Tree View for Branch Cutpiece Location Stock -->
+    <record id="view_stock_quant_tree_branch_transfer" model="ir.ui.view">
+        <field name="name">stock.quant.tree.branch.transfer</field>
+        <field name="model">stock.quant</field>
+        <field name="arch" type="xml">
+            <tree string="Cutpiece Location Stock" create="false" edit="false">
+                <field name="location_id"/>
+                <field name="product_id"/>
+                <field name="quantity" string="On Hand Quantity"/>
+                <field name="product_uom_id" groups="uom.group_uom"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Custom Form View for Branch Cutpiece Location Stock -->
+    <record id="view_stock_quant_form_branch_transfer" model="ir.ui.view">
+        <field name="name">stock.quant.form.branch.transfer</field>
+        <field name="model">stock.quant</field>
+        <field name="arch" type="xml">
+            <form string="Cutpiece Location Stock" create="false" edit="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="product_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="location_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="lot_id" groups="stock.group_production_lot" invisible="not lot_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="package_id" groups="stock.group_tracking_lot" invisible="not package_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="owner_id" groups="stock.group_tracking_owner" invisible="not owner_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="company_id" groups="base.group_multi_company" options="{'no_open': True, 'no_create': True}"/>
+                        </group>
+                        <group>
+                            <field name="quantity" string="On Hand Quantity"/>
+                            <field name="available_quantity"/>
+                            <field name="reserved_quantity"/>
+                            <field name="product_uom_id" groups="uom.group_uom" options="{'no_open': True}"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_branch_transfer_location_stock" model="ir.actions.server">
+        <field name="name">Cutpiece Location Stock</field>
+        <field name="model_id" ref="stock.model_stock_quant"/>
+        <field name="state">code</field>
+        <field name="code">
+allowed_branches = env.user.branch_ids if env.user.branch_ids else env['res.branch'].search([])
+cutpiece_location_ids = allowed_branches.mapped('cutpiece_location_id').ids
+
+if cutpiece_location_ids:
+    domain = [('location_id', 'child_of', cutpiece_location_ids), ('quantity', '!=', 0)]
+else:
+    domain = [('id', '=', False)]
+
+action = {
+    'name': 'Cutpiece Location Stock',
+    'type': 'ir.actions.act_window',
+    'res_model': 'stock.quant',
+    'view_mode': 'tree,form',
+    'views': [(env.ref('em_jewellery_transfer_custom.view_stock_quant_tree_branch_transfer').id, 'tree'), (env.ref('em_jewellery_transfer_custom.view_stock_quant_form_branch_transfer').id, 'form')],
+    'domain': domain,
+    'context': {'create': False, 'edit': False},
+}
+        </field>
+    </record>
+
+    <!-- Adding this menu under the Jewellery root menu -->
+    <menuitem id="menu_branch_transfer_location_stock"
+              name="Cutpiece Location Stock"
+              parent="em_jewellery_management.menu_jewellery_root"
+              action="action_branch_transfer_location_stock"
+              groups="em_jewellery_management.group_jewellery_salesman"
+              sequence="99"/>
+</odoo>

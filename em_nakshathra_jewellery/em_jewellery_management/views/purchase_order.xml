@@ -53,8 +53,8 @@
             </xpath>
 
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="after">
-                <field name="stone_weight" column_invisible="parent.is_old_gold" optional="hide"/>
-                <field name="diamond_weight_gm" column_invisible="parent.is_old_gold" optional="hide"/>
+                <field name="stone_weight" optional="hide"/>
+                <field name="diamond_weight_gm" optional="hide"/>
                 <field name="net_weight" optional="hide"/>
                 <field name="fine_weight" optional="hide"/>
                 <field name="gold_rate" column_invisible="parent.is_old_gold"/>

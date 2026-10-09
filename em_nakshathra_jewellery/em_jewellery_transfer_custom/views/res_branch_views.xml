@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_branch_form_inherit_transfer_custom" model="ir.ui.view">
+        <field name="name">res.branch.form.inherit.transfer.custom</field>
+        <field name="model">res.branch</field>
+        <field name="inherit_id" ref="multi_branch_base.view_branch_form"/>
+        <field name="arch" type="xml">
+            <field name="old_gold_location_id" position="after">
+                <field name="cutpiece_location_id"/>
+            </field>
+        </field>
+    </record>
+</odoo>
