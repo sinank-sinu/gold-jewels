@@ -244,22 +244,24 @@
             parent="em_jewellery_management.menu_jewellery_root"
             action="em_jewellery_management.action_gold_purity"
             sequence="10"
-            groups="em_jewellery_management.group_jewellery_manager"/>
+            groups="em_jewellery_management.group_jewellery_gold_purity,em_jewellery_management.group_jewellery_manager,base.group_system"/>
     <menuitem
             id="menu_gold_purity"
             name="Purity"
             parent="em_jewellery_management.menu_gold_main"
             action="em_jewellery_management.action_gold_purity"
-            sequence="10"/>
+            sequence="10"
+            groups="em_jewellery_management.group_jewellery_gold_purity,em_jewellery_management.group_jewellery_manager,base.group_system"/>
     <menuitem
         id="menu_gold_rate_master"
         name="Gold Rate"
         parent="em_jewellery_management.menu_gold_main"
         action="em_jewellery_management.action_gold_rate_master"
-    />
+        groups="em_jewellery_management.group_jewellery_manager,base.group_system"/>
     <menuitem id="menu_gold_rate_update_log"
           name="Gold Rate Updates"
-        parent="em_jewellery_management.menu_gold_main"
-          action="em_jewellery_management.action_gold_rate_update_log"/>
+          parent="em_jewellery_management.menu_gold_main"
+          action="em_jewellery_management.action_gold_rate_update_log"
+          groups="em_jewellery_management.group_jewellery_manager,base.group_system"/>
 
 </odoo>
