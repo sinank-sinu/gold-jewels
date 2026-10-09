@@ -19,7 +19,7 @@ class ImportLabelService:
         _logger.info("Starting Purchase Label Bulk Import...")
         try:
             file_content = base64.b64decode(file_base64)
-            wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+            wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True, read_only=True)
             sheet = wb.active
             
             # Read Headers
