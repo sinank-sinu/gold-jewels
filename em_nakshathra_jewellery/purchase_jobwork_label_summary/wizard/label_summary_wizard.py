@@ -185,7 +185,17 @@ class LabelSummaryWizard(models.TransientModel):
         """
 
         self.env.cr.execute(sql, params)
-        summary_rows = self.env.cr.dictfetchall()
+        raw_summary_rows = self.env.cr.dictfetchall()
+
+        grouped_rows = {}
+        for row in raw_summary_rows:
+            key = (row["source"], row["document_id"], row["product_id"])
+            if key not in grouped_rows:
+                grouped_rows[key] = row
+            else:
+                grouped_rows[key]["total_qty"] = (grouped_rows[key].get("total_qty") or 0.0) + (row.get("total_qty") or 0.0)
+                
+        summary_rows = list(grouped_rows.values())
 
         product_ids = list(set([row["product_id"] for row in summary_rows if row.get("product_id")]))
         products = self.env["product.product"].browse(product_ids)

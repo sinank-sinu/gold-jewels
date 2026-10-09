@@ -243,11 +243,10 @@ class SaleOrder(models.Model):
             # 1. Search in jewellery.scheme.enrollment by normalized phone
             self.env.cr.execute("""
                 SELECT id FROM jewellery_scheme_enrollment 
-                WHERE (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
-                    OR regexp_replace(COALESCE(whatsapp_number, ''), '[^0-9]', '', 'g') LIKE %s)
+                WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
                 ORDER BY (state IN ('running', 'completed') AND NOT is_redeemed) DESC, active DESC, id DESC
                 LIMIT 10
-            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            """, (f"%{search_digits}%",))
             matched_ids = [r[0] for r in self.env.cr.fetchall()]
 
             if matched_ids:
@@ -261,8 +260,6 @@ class SaleOrder(models.Model):
                 rec.customer_schemes = [(6, 0, default_schemes.ids)] if default_schemes else [(6, 0, [])]
                 rec.active_scheme_id = default_schemes[:1].id if default_schemes else False
                 rec.apply_scheme = bool(default_schemes)
-                if target_scheme.phone:
-                    rec.phone = target_scheme.phone
                 continue
 
             # 2. Fallback: Search res.partner if no scheme matched
@@ -287,10 +284,6 @@ class SaleOrder(models.Model):
                     rec.customer_schemes = [(6, 0, [])]
                     rec.active_scheme_id = False
                     rec.apply_scheme = False
-                if partner.phone:
-                    rec.phone = partner.phone
-                elif partner.mobile:
-                    rec.phone = partner.mobile
             else:
                 if not rec.partner_id:
                     return {
@@ -311,10 +304,22 @@ class SaleOrder(models.Model):
                 rec.phone = False
                 continue
 
-            if rec.partner_id.phone or rec.partner_id.mobile:
-                rec.phone = rec.partner_id.phone or rec.partner_id.mobile
-
+            current_phone = ''.join(filter(str.isdigit, rec.phone or ''))[-10:] if rec.phone else ''
+            
+            valid_phones = []
+            if rec.partner_id.phone:
+                valid_phones.append(''.join(filter(str.isdigit, rec.partner_id.phone))[-10:])
+            if rec.partner_id.mobile:
+                valid_phones.append(''.join(filter(str.isdigit, rec.partner_id.mobile))[-10:])
+                
             schemes = rec._get_customer_default_schemes()
+            for s in schemes:
+                if s.phone:
+                    valid_phones.append(''.join(filter(str.isdigit, s.phone))[-10:])
+            valid_phones = [p for p in valid_phones if p]
+
+            if not current_phone or current_phone not in valid_phones:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile
 
             if schemes:
                 rec.apply_scheme = True
