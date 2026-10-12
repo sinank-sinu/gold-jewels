@@ -6,11 +6,13 @@
         <!-- We can inherit from the base sale.order view -->
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
+            <xpath expr="//field[@name='has_gold_bullion']" position="after">
+                <field name="is_transfer_remaining" widget="boolean_toggle"/>
+            </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="Transfer Remaining">
                     <group>
                         <group>
-                            <field name="is_transfer_remaining" widget="boolean_toggle"/>
                             <field name="available_transfer_label_ids" invisible="1"/>
                             <field name="transfer_label_id" invisible="not is_transfer_remaining" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', available_transfer_label_ids)]"/>
                         </group>
