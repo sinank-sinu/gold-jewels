@@ -86,6 +86,13 @@ class PineLabsPaymentWizard(models.TransientModel):
     txn_id = fields.Many2one('pinelabs.transaction', string='Transaction Record', readonly=True)
     scheme_installment_id = fields.Many2one('jewellery.scheme.installment', string='Scheme Installment Row')
 
+    # ── Auto-polling tracking fields ───────────────────────────────────
+    poll_count = fields.Integer(string='Poll Attempts', default=0, readonly=True)
+    max_polls = fields.Integer(string='Max Poll Attempts', default=24)   # 24 × 5s = 2 min
+    poll_interval = fields.Integer(string='Poll Interval (seconds)', default=5)
+    cancel_attempts = fields.Integer(string='Cancel Attempts', default=0, readonly=True)
+    cancel_message = fields.Char(string='Cancel Status Message', readonly=True)
+
     def _get_branch_terminals(self):
         """Return pinelabs.terminal records for the current invoice/document branch."""
         branch = None
@@ -132,6 +139,7 @@ class PineLabsPaymentWizard(models.TransientModel):
             'res_model': 'pinelabs.payment.wizard',
             'res_id': self.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
         }
 
@@ -300,6 +308,7 @@ class PineLabsPaymentWizard(models.TransientModel):
             'res_model': 'account.payment.register',
             'res_id': wizard.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
             'context': {
                 'active_model': 'account.move',
@@ -528,20 +537,42 @@ class PineLabsPaymentWizard(models.TransientModel):
             raise UserError(_('Pine Labs Error: %s') % response['error'])
 
         ref_id = (
-                response.get('PlutusTransactionReferenceID') or
-                response.get('plutusTransactionReferenceID')
+            response.get('PlutusTransactionReferenceID') or
+            response.get('plutusTransactionReferenceID')
         )
-        if not ref_id:
+        try:
+            ref_int = int(ref_id) if ref_id is not None else 0
+        except (ValueError, TypeError):
+            ref_int = 0
+
+        resp_code = response.get('ResponseCode')
+        resp_msg = response.get('ResponseMessage') or ''
+
+        if (resp_code is not None and str(resp_code) != '0') or ref_int <= 0:
             txn.state = 'failed'
             self.state = 'failed'
+            if 'OPEN TXN' in resp_msg.upper() or 'APPROVE' in resp_msg.upper():
+                cancel_err = response.get('TerminalCancelError')
+                existing_ref = response.get('ExistingReferenceId')
+                extra = f" ({cancel_err})" if cancel_err else ""
+                ref_txt = f" #{existing_ref}" if existing_ref else ""
+                raise UserError(
+                    _('The Pine Labs terminal has an active transaction in progress%s%s.\n\n'
+                      'How to clear it:\n'
+                      '• On the physical Pine Labs machine: press the RED key (Cancel / ✕) on the keypad.\n'
+                      '• If a card is inserted or tapped, remove the card first.\n'
+                      '• Once the terminal returns to its home/idle screen, click "Send to Terminal" again.') % (ref_txt, extra)
+                )
             raise UserError(
-                _('Pine Labs did not return a transaction reference. Response: %s') % response
+                _('Pine Labs Terminal Error: %s (Code: %s)') % (resp_msg or _('Declined'), resp_code or 'N/A')
             )
 
         self.write({
             'state': 'waiting',
-            'pinelabs_transaction_ref': str(ref_id),
+            'pinelabs_transaction_ref': str(ref_int),
             'txn_id': txn.id,
+            'poll_count': 0,
+            'cancel_attempts': 0,
         })
 
         return {
@@ -549,6 +580,7 @@ class PineLabsPaymentWizard(models.TransientModel):
             'res_model': 'pinelabs.payment.wizard',
             'res_id': self.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
         }
 
@@ -560,65 +592,184 @@ class PineLabsPaymentWizard(models.TransientModel):
     # Status check & cancel (Pine Labs only)
     # ─────────────────────────────────────────────────────────────────
 
-    def action_check_status(self):
-        """Poll Pine Labs for the current transaction status."""
-        self.ensure_one()
-        if not self.txn_id or not self.pinelabs_transaction_ref:
-            raise UserError(_('No transaction in progress.'))
-
-        result = self.txn_id.pinelabs_check_status()
+    def _process_check_result(self, result):
+        """
+        Shared helper: parse a pinelabs_check_status() result dict and apply
+        wizard state changes.  Returns a simple status string:
+        'success' | 'failed' | 'pending'
+        """
         status = result.get('status', 'pending')
 
         if status == 'success':
-            # result['data'] is the flat Tag/Value dict (Tag→Value) from _process_status_response
             data = result.get('data', {})
 
             def _d(*keys):
-                """Return first non-empty value from the flat tag dict."""
                 for k in keys:
                     v = data.get(k, '')
                     if v:
                         return str(v)
                 return ''
 
-            # PaymentMode: 'UPISALE' for UPI, 'CARD' for card, 'POINTS REDEMPTION' for points
-            payment_mode_val = _d('PaymentMode', 'Payment Mode')
-            # Card Type: 'CREDIT'/'DEBIT' for card, 'REWARD' for points, absent for UPI
-            card_type_val = _d('CardType', 'Card Type')
-            # Approval code (common to all modes)
+            payment_mode_val  = _d('PaymentMode', 'Payment Mode')
+            card_type_val     = _d('CardType', 'Card Type')
             approval_code_val = _d('ApprovalCode')
-            # UPI: Customer VPA
-            customer_vpa_val = _d('CustomerVPA', 'Customer VPA')
-            # Points/Card: Cardholder name
-            card_holder_val = _d('Card Holder Name', 'CardHolderName')
-            # Points: Reward Txn ID
-            reward_txn_val = _d('Reward Txn ID', 'RewardTxnId')
+            customer_vpa_val  = _d('CustomerVPA', 'Customer VPA')
 
             wizard_vals = {
                 'state': 'success',
                 'approval_code': approval_code_val,
                 'payment_mode': payment_mode_val,
             }
-
-            # card_type field: show Card Type for card/points, VPA for UPI
             if card_type_val:
                 wizard_vals['card_type'] = card_type_val
             elif customer_vpa_val:
-                # UPI: display VPA in card_type for convenience
                 wizard_vals['card_type'] = customer_vpa_val
 
             self.write(wizard_vals)
             self._post_payment_success()
+
         elif status == 'failed':
-            self.state = 'failed'
-            raise UserError(_('Pine Labs payment failed: %s') % result.get('message', 'Unknown error'))
+            self.write({'state': 'failed'})
+
+        return status
+
+    def action_check_status(self):
+        """Manual poll — user clicked Check Status button."""
+        self.ensure_one()
+        if not self.txn_id or not self.pinelabs_transaction_ref:
+            raise UserError(_('No transaction in progress.'))
+
+        result = self.txn_id.pinelabs_check_status()
+        self.poll_count += 1
+        status = self._process_check_result(result)
+
+        if status == 'success':
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Payment Successful!'),
+                    'message': _('Pine Labs transaction confirmed and invoice reconciled.'),
+                    'type': 'success',
+                    'sticky': False,
+                    'next': {'type': 'ir.actions.act_window_close'},
+                }
+            }
+        elif status == 'failed':
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Payment Failed'),
+                    'message': result.get('message', _('Payment declined or cancelled on terminal.')),
+                    'type': 'danger',
+                    'sticky': True,
+                }
+            }
+
+        # If reached maximum attempts during manual check, auto-cancel
+        if self.poll_count >= self.max_polls:
+            try:
+                self.txn_id.pinelabs_cancel_payment()
+            except Exception as e:
+                _logger.warning('Failed to cancel Pine Labs txn on manual timeout: %s', e)
+
+            cancel_msg = _('Payment automatically cancelled after %d attempts (timed out).') % self.poll_count
+            self.write({
+                'state': 'failed',
+                'cancel_message': cancel_msg,
+            })
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Transaction Cancelled (Timeout)'),
+                    'message': cancel_msg,
+                    'type': 'warning',
+                    'sticky': True,
+                }
+            }
+
+        # Pending
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Payment Pending'),
+                'message': _('Waiting for customer to complete transaction on the Pine Labs terminal (Checked %d times).') % self.poll_count,
+                'type': 'warning',
+                'sticky': False,
+            }
+        }
+
+    def action_auto_check_status(self):
+        """
+        Called by the JS auto-poller (every poll_interval seconds).
+        Returns a plain dict — NOT an ir.actions window — so the JS
+        can decide what to do without the dialog re-opening.
+
+        Return dict keys:
+          status   : 'success' | 'failed' | 'pending' | 'timeout' | 'error'
+          poll_count: current attempt number
+          max_polls : configured maximum
+          message  : human-readable detail (on failure/timeout)
+        """
+        self.ensure_one()
+        if self.state in ('success', 'failed'):
+            # Already resolved — nothing to poll
+            return {
+                'status': self.state,
+                'poll_count': self.poll_count,
+                'max_polls': self.max_polls,
+                'message': self.cancel_message or '',
+            }
+
+        if not self.txn_id or not self.pinelabs_transaction_ref:
+            return {'status': 'error', 'poll_count': self.poll_count,
+                    'max_polls': self.max_polls,
+                    'message': _('No active transaction found.')}
+
+        # Increment attempt counter
+        new_count = self.poll_count + 1
+        self.poll_count = new_count
+
+        # Automatically cancel if maximum attempts (24) reached
+        if new_count >= self.max_polls:
+            _logger.info('Auto-check reached %d/%d attempts for txn %s. Automatically cancelling...',
+                         new_count, self.max_polls, self.pinelabs_transaction_ref)
+            try:
+                self.txn_id.pinelabs_cancel_payment()
+            except Exception as e:
+                _logger.warning('Failed to cancel Pine Labs txn on timeout: %s', e)
+
+            cancel_msg = _('Payment automatically cancelled after %d attempts (timed out).') % self.max_polls
+            self.write({
+                'state': 'failed',
+                'cancel_message': cancel_msg,
+            })
+            return {
+                'status': 'failed',
+                'poll_count': new_count,
+                'max_polls': self.max_polls,
+                'message': cancel_msg,
+            }
+
+        try:
+            result = self.txn_id.pinelabs_check_status()
+        except Exception as e:
+            return {'status': 'error', 'poll_count': new_count,
+                    'max_polls': self.max_polls, 'message': str(e)}
+
+        status = self._process_check_result(result)
+        msg = ''
+        if status == 'failed':
+            msg = result.get('message', _('Payment declined by terminal.'))
 
         return {
-            'type': 'ir.actions.act_window',
-            'res_model': 'pinelabs.payment.wizard',
-            'res_id': self.id,
-            'view_mode': 'form',
-            'target': 'new',
+            'status': status,
+            'poll_count': new_count,
+            'max_polls': self.max_polls,
+            'message': msg,
         }
 
     def _post_payment_success(self):
@@ -650,6 +801,8 @@ class PineLabsPaymentWizard(models.TransientModel):
 
             if journal:
                 is_outbound = self.invoice_id.move_type in ('in_invoice', 'out_refund')
+                # Use Pine Labs PlutusTransactionReferenceID as the bank reference when available
+                pinelabs_ref = txn.pinelabs_transaction_id or txn.name
                 payment = self.env['account.payment'].create({
                     'payment_type': 'outbound' if is_outbound else 'inbound',
                     'partner_type': 'supplier' if is_outbound else 'customer',
@@ -658,7 +811,7 @@ class PineLabsPaymentWizard(models.TransientModel):
                     'currency_id': self.currency_id.id,
                     'journal_id': journal.id,
                     'payment_method_line_id': journal.inbound_payment_method_line_ids[:1].id,
-                    'ref': txn.name,
+                    'ref': pinelabs_ref,
                     'pinelabs_transaction_id': txn.id,
                 })
                 payment.action_post()
@@ -671,7 +824,10 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.payment_id and self.payment_id.state == 'draft':
             self.payment_id.amount = self.amount
             self.payment_id.pinelabs_transaction_id = txn.id
-            
+            # Set Bank Reference to Pine Labs PlutusTransactionReferenceID when available
+            if txn.pinelabs_transaction_id:
+                self.payment_id.ref = txn.pinelabs_transaction_id
+
             # Update the journal if using Card/UPI for advance payments
             journal = False
             if self.payment_method_type == 'card':
@@ -757,9 +913,104 @@ class PineLabsPaymentWizard(models.TransientModel):
             })
 
     def action_cancel_payment(self):
-        """Cancel the current Pine Labs terminal transaction."""
+        """
+        Cancel the current Pine Labs terminal transaction.
+        If Pine Labs reports CANNOT CANCEL (e.g. transaction in progress),
+        we DO NOT close or fail the wizard — we display the exact response,
+        increment the cancel attempt count, and keep the dialog open.
+        If Pine Labs successfully cancels the transaction, we mark it failed/cancelled
+        and notify the user.
+        """
+        self.ensure_one()
+        self.cancel_attempts += 1
+
+        if not self.txn_id:
+            self.write({
+                'state': 'failed',
+                'cancel_message': _('No transaction in progress.'),
+            })
+            return {'type': 'ir.actions.act_window_close'}
+
+        response = self.txn_id.pinelabs_cancel_payment()
+        resp_code = response.get('ResponseCode')
+        resp_msg = response.get('ResponseMessage') or response.get('error') or ''
+
+        if response.get('success'):
+            # Terminal cancelled successfully
+            success_msg = _('Transaction cancelled on terminal: %s') % (resp_msg or 'APPROVED')
+            self.write({
+                'state': 'failed',
+                'cancel_message': success_msg,
+            })
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Transaction Cancelled'),
+                    'message': _('Pine Labs transaction #%s was successfully cancelled.') % (self.pinelabs_transaction_ref or ''),
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
+        else:
+            # Terminal did NOT cancel the transaction (e.g., "CANNOT CANCEL AS TRANSACTION IS IN PROGRESS")
+            if 'IN PROGRESS' in (resp_msg or '').upper() or 'CANNOT CANCEL' in (resp_msg or '').upper():
+                err_text = _('Transaction is in progress on the terminal. Press the Red Cancel (X) button on the Pine Labs terminal machine, wait a moment and retry, or click "Force Cancel (Unlock)".')
+            else:
+                err_text = resp_msg or _('Cannot cancel transaction (Code: %s)') % resp_code
+            self.write({
+                'cancel_message': err_text,
+            })
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Cancel Request Failed (Attempt %d)') % self.cancel_attempts,
+                    'message': err_text,
+                    'type': 'danger',
+                    'sticky': True,
+                }
+            }
+
+    def action_force_cancel(self):
+        """
+        Force cancel the transaction in Odoo when the terminal is unresponsive or stuck in progress.
+        Marks the transaction as failed/cancelled and allows the cashier to proceed.
+        """
         self.ensure_one()
         if self.txn_id:
-            self.txn_id.pinelabs_cancel_payment()
-        self.state = 'failed'
-        return {'type': 'ir.actions.act_window_close'}
+            self.txn_id.write({'state': 'cancelled'})
+        self.write({
+            'state': 'failed',
+            'cancel_message': _('Transaction was force-cancelled in Odoo.'),
+        })
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Transaction Force Cancelled'),
+                'message': _('The Pine Labs transaction was cancelled in Odoo.'),
+                'type': 'warning',
+                'sticky': False,
+            }
+        }
+
+    def action_reset_draft(self):
+        """Reset wizard to draft state so the user can start over or choose another payment method."""
+        self.ensure_one()
+        self.write({
+            'state': 'draft',
+            'txn_id': False,
+            'pinelabs_transaction_ref': False,
+            'poll_count': 0,
+            'cancel_attempts': 0,
+            'cancel_message': False,
+        })
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'pinelabs.payment.wizard',
+            'res_id': self.id,
+            'view_mode': 'form',
+            'views': [(False, 'form')],
+            'target': 'new',
+        }

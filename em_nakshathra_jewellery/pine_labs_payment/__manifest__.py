@@ -36,6 +36,9 @@
         'wizard/pinelabs_payment_wizard_views.xml',
     ],
     'assets': {
+        'web.assets_backend': [
+            'pine_labs_payment/static/src/js/pinelabs_auto_poll.js',
+        ],
         'point_of_sale._assets_pos': [
             'pine_labs_payment/static/src/js/payment_pinelabs.js',
             'pine_labs_payment/static/src/js/pos_pinelabs.js',

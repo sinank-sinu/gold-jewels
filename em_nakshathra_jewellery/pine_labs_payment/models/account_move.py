@@ -55,6 +55,7 @@ class AccountMove(models.Model):
                 'res_model': 'sale.order',
                 'res_id': self.sale_order_id.id,
                 'view_mode': 'form',
+                'views': [(False, 'form')],
                 'target': 'current',
             }
 
@@ -83,6 +84,7 @@ class AccountMove(models.Model):
             'res_model': 'sale.order',
             'res_id': sale_order.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'current',
         }
 
@@ -102,6 +104,7 @@ class AccountMove(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'pinelabs.payment.wizard',
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
             'context': {
                 'default_amount': amount,
