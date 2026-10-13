@@ -38,7 +38,12 @@
                                         <t t-esc="o.name"/> / Max MC:<t t-esc="o.sale_making_charge_value"/>
                                     </div>
 
-                                    <t t-if="o.barcode">
+                                    <!-- Show second barcode if available, otherwise show primary barcode -->
+                                    <t t-if="o.barcode2">
+                                        <img t-att-src="'/report/barcode/?barcode_type=%s&amp;value=%s&amp;width=%s&amp;height=%s&amp;quiet=0' % ('Code128', o.barcode2, 300, 100)"
+                                             style="max-width: 100%; height: 10mm; display: block; margin: 0 auto; image-rendering: crisp-edges;"/>
+                                    </t>
+                                    <t t-elif="o.barcode">
                                         <img t-att-src="'/report/barcode/?barcode_type=%s&amp;value=%s&amp;width=%s&amp;height=%s&amp;quiet=0' % ('Code128', o.barcode, 300, 100)"
                                              style="max-width: 100%; height: 10mm; display: block; margin: 0 auto; image-rendering: crisp-edges;"/>
                                     </t>

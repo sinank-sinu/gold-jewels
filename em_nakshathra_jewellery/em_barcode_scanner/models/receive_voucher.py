@@ -24,13 +24,14 @@ class JewelleryReceiveVoucher(models.Model):
         company_id = voucher.company_id.id if hasattr(voucher, 'company_id') and voucher.company_id else False
 
         label = False
+        barcode_domain = ['|', ('barcode', '=', barcode), ('barcode2', '=', barcode)]
         if company_id:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+                barcode_domain + [('company_id', '=', company_id), ('active', '=', True)], limit=1
             )
         if not label:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('active', '=', True)], limit=1
+                barcode_domain + [('active', '=', True)], limit=1
             )
 
         if label:
@@ -67,7 +68,7 @@ class JewelleryReceiveVoucher(models.Model):
         # Check if barcode / label has already been scanned in this receive voucher
         if label:
             already_scanned = voucher.line_ids.filtered(
-                lambda l: (hasattr(l, 'label_id') and l.label_id == label) or (l.product_id and l.product_id.barcode == barcode)
+                lambda l: (hasattr(l, 'label_id') and l.label_id == label) or (l.product_id and (l.product_id.barcode == barcode))
             )
         else:
             already_scanned = voucher.line_ids.filtered(

@@ -24,13 +24,14 @@ class JewelleryIssueVoucher(models.Model):
         company_id = voucher.company_id.id if hasattr(voucher, 'company_id') and voucher.company_id else False
 
         label = False
+        barcode_domain = ['|', ('barcode', '=', barcode), ('barcode2', '=', barcode)]
         if company_id:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+                barcode_domain + [('company_id', '=', company_id), ('active', '=', True)], limit=1
             )
         if not label:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('active', '=', True)], limit=1
+                barcode_domain + [('active', '=', True)], limit=1
             )
 
         if label:

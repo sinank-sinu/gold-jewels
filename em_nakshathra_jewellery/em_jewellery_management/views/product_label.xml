@@ -58,6 +58,7 @@
                         <page name="Details">
                             <group string="Barcode">
                                 <field name="barcode" readonly="active" />
+                                <field name="barcode2" readonly="1" />
                             </group>
                             <group>
                                 <field name="job_work_id"
@@ -170,6 +171,8 @@
                 <field name="product_tmpl_id"/>
                 <field name="branch_id" optional="show"/>
                 <field name="branch_location_id" optional="show"/>
+                <field name="barcode" optional="show"/>
+                <field name="barcode2" optional="hide"/>
                 <field name="active" optional="hide"/>
             </tree>
         </field>
@@ -182,6 +185,7 @@
             <search>
                 <field name="name" string="Label Reference"/>
                 <field name="barcode"/>
+                <field name="barcode2" string="Second Barcode"/>
                 <field name="product_tmpl_id"/>
                 <separator/>
                 <filter string="Sold / Archived" name="inactive" domain="[('active', '=', False)]"/>
