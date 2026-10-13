@@ -198,18 +198,26 @@
                                 <t t-if="line.display_type == 'product' or not line.display_type">
                                     <!-- Robust discount and MRP calculation for both old and new records -->
                                     <t t-set="line_discount" t-value="0.0"/>
-                                    <t t-if="sale_line and sale_line.mc_amount and sale_line.mc_amount_actual">
+                                    <t t-set="line_mrp" t-value="0.0"/>
+                                    <t t-if="sale_line and sale_line.price_subtotal_actual">
+                                        <t t-set="line_mrp" t-value="sale_line.price_subtotal_actual"/>
+                                        <t t-set="line_discount" t-value="sale_line.mc_discount if sale_line.mc_discount else (sale_line.price_subtotal_actual - sale_line.price_subtotal)"/>
+                                    </t>
+                                    <t t-elif="sale_line and sale_line.mc_amount and sale_line.mc_amount_actual">
                                         <t t-set="line_discount" t-value="sale_line.mc_amount - sale_line.mc_amount_actual"/>
+                                        <t t-set="line_mrp" t-value="line.price_subtotal + line_discount"/>
                                     </t>
                                     <t t-elif="line.discount">
                                         <t t-set="line_discount" t-value="((line.price_unit * line.quantity) * (line.discount / 100.0))"/>
+                                        <t t-set="line_mrp" t-value="line.price_subtotal + line_discount"/>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-set="line_mrp" t-value="line.price_subtotal"/>
                                     </t>
                                     
                                     <t t-if="line_discount &gt; 0">
                                         <t t-set="total_discount" t-value="total_discount + line_discount"/>
                                     </t>
-                                    
-                                    <t t-set="line_mrp" t-value="line.price_total + line_discount"/>
                                     
                                     <tr>
                                         <td class="text-left">
@@ -315,7 +323,7 @@
                                             <t t-else="">-</t>
                                         </td>
                                         <td>
-                                            <span t-field="line.price_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            <span t-field="line.price_subtotal" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                         </td>
                                     </tr>
                                 </t>
@@ -339,7 +347,12 @@
                             <tr>
                                 <td class="totals-label">Subtotal:</td>
                                 <td class="totals-value">
-                                    <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    <t t-if="o.tax_totals and o.tax_totals.get('amount_untaxed') is not None">
+                                        <span t-esc="o.tax_totals.get('amount_untaxed')" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </t>
+                                    <t t-else="">
+                                        <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </t>
                                 </td>
                             </tr>
                             
