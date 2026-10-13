@@ -239,9 +239,10 @@ class StockSummaryReportController(http.Controller):
                 COALESCE(l.product_template_id, pp.product_tmpl_id) as actual_tmpl_id
             FROM stock_summary_report_line l
             LEFT JOIN product_product pp ON l.product_id = pp.id
-            LEFT JOIN product_template pt ON (l.product_template_id = pt.id OR pp.product_tmpl_id = pt.id)
+            LEFT JOIN product_template pt ON pt.id = COALESCE(l.product_template_id, pp.product_tmpl_id)
             LEFT JOIN gold_purity gp ON l.purity_id = gp.id
             WHERE l.create_uid = %s
+              AND (pt.is_vault_item IS NULL OR pt.is_vault_item = FALSE)
             ORDER BY l.id ASC
         """
         request.env.cr.execute(query, (request.env.user.id,))
