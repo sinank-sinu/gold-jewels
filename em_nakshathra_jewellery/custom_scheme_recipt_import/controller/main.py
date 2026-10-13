@@ -2,6 +2,7 @@ import openpyxl
 import logging
 import os
 import threading
+import gc
 import odoo
 from datetime import datetime, date, timedelta
 from odoo import http, fields
@@ -54,7 +55,12 @@ def _find_or_create_partner(env, name, phone):
         return False
     partner = env['res.partner'].search([('name', '=', name)], limit=1)
     if not partner:
-        partner = env['res.partner'].create({
+        partner = env['res.partner'].with_context(
+            tracking_disable=True,
+            mail_create_nosubscribe=True,
+            mail_create_nolog=True,
+            mail_notrack=True,
+        ).create({
             'name': name,
             'phone': str(phone) if phone else False,
             'customer_rank': 1,
@@ -68,240 +74,274 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
     registry = odoo.registry(db_name)
     with registry.cursor() as cr:
         env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
+        workbook = None
         
         try:
-                workbook = openpyxl.load_workbook(file_path, data_only=True)
-                sheet = workbook.active
+            workbook = openpyxl.load_workbook(file_path, data_only=True)
+            sheet = workbook.active
 
-                h_map = {str(sheet.cell(row=1, column=i).value).strip(): i
-                         for i in range(1, sheet.max_column + 1)
-                         if sheet.cell(row=1, column=i).value}
+            h_map = {str(sheet.cell(row=1, column=i).value).strip(): i
+                     for i in range(1, sheet.max_column + 1)
+                     if sheet.cell(row=1, column=i).value}
 
-                last_valid_ticket = False
-                scheme_tracker = {}
-                count_scheme = 0
-                count_lines = 0
-                _account_cache = {}
-                
-                # Initialize Progress Tracking
-                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', '0')
-                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', str(sheet.max_row))
+            last_valid_ticket = False
+            scheme_tracker = {}
+            count_scheme = 0
+            count_lines = 0
+            _account_cache = {}
+            
+            total_rows = sheet.max_row
+            # Initialize Progress Tracking
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', '0')
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', str(total_rows))
+            cr.commit()
 
-                for row_idx in range(2, sheet.max_row + 1):
-                    # Periodically update progress
-                    if row_idx % 100 == 0:
-                        env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', str(row_idx))
-                        
-                    # Periodically commit and clear cache to free memory!
-                    if row_idx % 500 == 0:
-                        env.cr.commit()
-                        env.clear()
-                        _logger.info("Committed up to row %s. Memory cleared.", row_idx)
+            bulk_ctx = {
+                'tracking_disable': True,
+                'mail_create_nosubscribe': True,
+                'mail_create_nolog': True,
+                'mail_notrack': True,
+                'mail_auto_subscribe_no_notify': True,
+            }
 
-                    def get_v(col_name, _row=row_idx):
-                        idx = h_map.get(col_name)
-                        return sheet.cell(row=_row, column=idx).value if idx else False
+            consecutive_empty = 0
 
-                    try:
-                        with env.cr.savepoint():
-                            current_ticket_raw = get_v('Ticket Number')
-                            if current_ticket_raw:
-                                last_valid_ticket = str(current_ticket_raw).strip().upper()
+            for row_idx in range(2, total_rows + 1):
+                # Periodically update progress in DB and commit so polling receives it
+                if row_idx % 100 == 0:
+                    env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', str(row_idx))
+                    env.cr.commit()
 
-                            if not last_valid_ticket:
-                                continue
+                # Periodically commit and clear cache + run garbage collection!
+                if row_idx % 250 == 0:
+                    env.cr.commit()
+                    env.clear()
+                    gc.collect()
+                    _logger.info("Committed up to row %s. Memory cleared.", row_idx)
 
-                            # 1. Enrollment Logic
-                            scheme_id = scheme_tracker.get(last_valid_ticket)
-                            if not scheme_id:
-                                existing_scheme = env['jewellery.scheme.enrollment'].search([
-                                    ('ticket_number', '=', last_valid_ticket)
-                                ], limit=1)
+                # Pre-fetch all cell values for current row in a dict
+                row_vals = {col: sheet.cell(row=row_idx, column=c_idx).value for col, c_idx in h_map.items()}
 
-                                if existing_scheme:
-                                    scheme_id = existing_scheme.id
-                                else:
-                                    partner_name = str(get_v('Partner') or get_v('Customer')).strip() if (get_v('Partner') or get_v('Customer')) else False
-                                    if partner_name:
-                                        partner = _find_or_create_partner(env, partner_name, get_v('Phone'))
-                                        if not partner:
-                                            raise ValueError(f"Could not find/create partner '{partner_name}'")
+                # Stop if blank trailing rows are detected
+                if not any(v not in (None, False, '') for v in row_vals.values()):
+                    consecutive_empty += 1
+                    if consecutive_empty >= 25:
+                        _logger.info("Encountered %s consecutive empty rows. Ending import at row %s.", consecutive_empty, row_idx)
+                        break
+                    continue
+                consecutive_empty = 0
 
-                                        active_raw = get_v('Active')
-                                        is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
+                def get_v(col_name):
+                    return row_vals.get(col_name)
 
-                                        journal_name = get_v('Scheme Line/Journal')
-                                        journal = False
-                                        if journal_name:
-                                            journal_name = str(journal_name).strip()
-                                            journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                try:
+                    with env.cr.savepoint():
+                        current_ticket_raw = get_v('Ticket Number')
+                        if current_ticket_raw:
+                            last_valid_ticket = str(current_ticket_raw).strip().upper()
+
+                        if not last_valid_ticket:
+                            continue
+
+                        # 1. Enrollment Logic
+                        scheme_id = scheme_tracker.get(last_valid_ticket)
+                        if not scheme_id:
+                            existing_scheme = env['jewellery.scheme.enrollment'].search([
+                                ('ticket_number', '=', last_valid_ticket)
+                            ], limit=1)
+
+                            if existing_scheme:
+                                scheme_id = existing_scheme.id
+                            else:
+                                partner_name = str(get_v('Partner') or get_v('Customer')).strip() if (get_v('Partner') or get_v('Customer')) else False
+                                if partner_name:
+                                    partner = _find_or_create_partner(env, partner_name, get_v('Phone'))
+                                    if not partner:
+                                        raise ValueError(f"Could not find/create partner '{partner_name}'")
+
+                                    active_raw = get_v('Active')
+                                    is_active = str(active_raw).lower() in ['true', '1', 'yes'] if active_raw else False
+
+                                    journal_name = get_v('Scheme Line/Journal')
+                                    journal = False
+                                    if journal_name:
+                                        journal_name = str(journal_name).strip()
+                                        journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                                        if not journal:
+                                            journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
+                                        
+                                        if not journal and 'Vyt' in journal_name:
+                                            alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
+                                            journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
                                             if not journal:
-                                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
-                                            
-                                            if not journal and 'Vyt' in journal_name:
-                                                alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
-                                                journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
-                                                if not journal:
-                                                    journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
+                                                journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
 
-                                        scheme_vals = {
-                                            'name': get_v('Name'),
-                                            'ticket_number': last_valid_ticket,
-                                            'partner_id': partner.id,
-                                            'phone': get_v('Phone'),
-                                            'whatsapp_number': get_v('Whatsapp Number'),
-                                            'address': get_v('Address'),
-                                            'duration': get_v('Duration'),
-                                            'installment_amount': safe_float(get_v('Installment Amount')),
-                                            'total_paid': safe_float(get_v('Total Paid')),
-                                            'balance_amount': safe_float(get_v('Balance Amount')),
-                                            'state': str(get_v('State')).lower() if get_v('State') else 'draft',
-                                            'active': is_active,
-                                            'nominee': get_v('Nominee'),
-                                        }
-                                        if journal and hasattr(journal, 'branch_id') and journal.branch_id:
-                                            scheme_vals['branch_id'] = journal.branch_id.id
-                                            
-                                        scheme_id = env['jewellery.scheme.enrollment'].create(scheme_vals).id
-                                        count_scheme += 1
+                                    scheme_vals = {
+                                        'name': get_v('Name'),
+                                        'ticket_number': last_valid_ticket,
+                                        'partner_id': partner.id,
+                                        'phone': get_v('Phone'),
+                                        'whatsapp_number': get_v('Whatsapp Number'),
+                                        'address': get_v('Address'),
+                                        'duration': get_v('Duration'),
+                                        'installment_amount': safe_float(get_v('Installment Amount')),
+                                        'total_paid': safe_float(get_v('Total Paid')),
+                                        'balance_amount': safe_float(get_v('Balance Amount')),
+                                        'state': str(get_v('State')).lower() if get_v('State') else 'draft',
+                                        'active': is_active,
+                                        'nominee': get_v('Nominee'),
+                                    }
+                                    if journal and hasattr(journal, 'branch_id') and journal.branch_id:
+                                        scheme_vals['branch_id'] = journal.branch_id.id
+                                        
+                                    scheme_id = env['jewellery.scheme.enrollment'].with_context(**bulk_ctx).create(scheme_vals).id
+                                    count_scheme += 1
 
-                                if scheme_id:
-                                    scheme_tracker[last_valid_ticket] = scheme_id
+                            if scheme_id:
+                                scheme_tracker[last_valid_ticket] = scheme_id
 
-                            # 2. Installment + Journal Entry Logic
-                            line_date_raw = get_v('Scheme Line/Date') or get_v('Date') or get_v('Payment date') or get_v('Payment Date')
-                            line_amount   = get_v('Scheme Line/Amount') or get_v('Amount') or get_v('Installment Amount')
-                            line_date     = parse_date(line_date_raw)
-                            line_amount_f = safe_float(line_amount)
+                        # 2. Installment + Journal Entry Logic
+                        line_date_raw = get_v('Scheme Line/Date') or get_v('Date') or get_v('Payment date') or get_v('Payment Date')
+                        line_amount   = get_v('Scheme Line/Amount') or get_v('Amount') or get_v('Amount ') or get_v('Installment Amount')
+                        line_date     = parse_date(line_date_raw)
+                        line_amount_f = safe_float(line_amount)
 
-                            if not scheme_id or not (line_date or line_amount_f):
-                                if row_idx < 5:
-                                    _logger.warning("Row %s silently skipped! scheme_id: %s, date: %s, amount: %s", row_idx, scheme_id, line_date, line_amount_f)
-                                continue
+                        if not scheme_id or not (line_date or line_amount_f):
+                            if row_idx < 5:
+                                _logger.warning("Row %s silently skipped! scheme_id: %s, date: %s, amount: %s", row_idx, scheme_id, line_date, line_amount_f)
+                            continue
 
-                            # Duplicate protection
-                            t_id = get_v('Scheme Line/Transaction ID')
-                            dup_domain = [
-                                ('enrollment_id', '=', scheme_id),
-                                ('date', '=', line_date),
-                                ('amount', '=', line_amount_f)
-                            ]
-                            if t_id:
-                                dup_domain.append(('transaction_id', '=', str(t_id)))
+                        # Duplicate protection
+                        t_id = get_v('Scheme Line/Transaction ID')
+                        dup_domain = [
+                            ('enrollment_id', '=', scheme_id),
+                            ('date', '=', line_date),
+                            ('amount', '=', line_amount_f)
+                        ]
+                        if t_id:
+                            dup_domain.append(('transaction_id', '=', str(t_id)))
+                        
+                        existing_installment = env['jewellery.scheme.installment'].search(dup_domain, limit=1)
+                        if existing_installment:
+                            continue
+
+                        journal_name = get_v('Scheme Line/Journal')
+                        journal = False
+                        if journal_name:
+                            journal_name = str(journal_name).strip()
+                            journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                            if not journal:
+                                journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
                             
-                            existing_installment = env['jewellery.scheme.installment'].search(dup_domain, limit=1)
-                            if existing_installment:
-                                continue
-
-                            journal_name = get_v('Scheme Line/Journal')
-                            journal = False
-                            if journal_name:
-                                journal_name = str(journal_name).strip()
-                                journal = env['account.journal'].search([('name', '=', journal_name), ('company_id', '=', 5)], limit=1)
+                            if not journal and 'Vyt' in journal_name:
+                                alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
+                                journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
                                 if not journal:
-                                    journal = env['account.journal'].search([('name', '=', journal_name)], limit=1)
-                                
-                                if not journal and 'Vyt' in journal_name:
-                                    alt_name = journal_name.replace('Vyttila', 'Vytila') if 'Vyttila' in journal_name else journal_name.replace('Vytila', 'Vyttila')
-                                    journal = env['account.journal'].search([('name', '=', alt_name), ('company_id', '=', 5)], limit=1)
-                                    if not journal:
-                                        journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
-                                
-                            excel_move_name = get_v('Scheme Line/Move')
-                            excel_move_id = False
-                            if excel_move_name:
-                                excel_move_id = env['account.move'].search([('name', '=', str(excel_move_name).strip())], limit=1)
-                                
-                            generated_move_id = False
+                                    journal = env['account.journal'].search([('name', '=', alt_name)], limit=1)
+                            
+                        excel_move_name = get_v('Scheme Line/Move')
+                        excel_move_id = False
+                        if excel_move_name:
+                            excel_move_id = env['account.move'].search([('name', '=', str(excel_move_name).strip())], limit=1)
+                            
+                        generated_move_id = False
 
-                            if not excel_move_id and journal and line_amount_f:
-                                if journal.id not in _account_cache:
+                        if not excel_move_id and journal and line_amount_f:
+                            if journal.id not in _account_cache:
+                                ob_acc = env['account.account'].search([
+                                    ('company_id', '=', journal.company_id.id),
+                                    ('name', 'ilike', 'Outstanding Rec')
+                                ], limit=1)
+                                if not ob_acc:
+                                    ob_acc = journal.default_account_id
+                                if not ob_acc:
                                     ob_acc = env['account.account'].search([
                                         ('company_id', '=', journal.company_id.id),
-                                        ('name', 'ilike', 'Outstanding Rec')
+                                        '|',
+                                        ('name', 'ilike', 'opening balance'),
+                                        ('account_type', '=', 'current_assets'),
                                     ], limit=1)
-                                    if not ob_acc:
-                                        ob_acc = journal.default_account_id
-                                    if not ob_acc:
-                                        ob_acc = env['account.account'].search([
-                                            ('company_id', '=', journal.company_id.id),
-                                            '|',
-                                            ('name', 'ilike', 'opening balance'),
-                                            ('account_type', '=', 'current_assets'),
-                                        ], limit=1)
-                                        
+                                    
+                                dr_acc = env['account.account'].search([
+                                    ('company_id', '=', journal.company_id.id),
+                                    ('name', 'ilike', 'Debtor')
+                                ], limit=1)
+                                if not dr_acc:
                                     dr_acc = env['account.account'].search([
                                         ('company_id', '=', journal.company_id.id),
-                                        ('name', 'ilike', 'Debtor')
+                                        ('account_type', '=', 'asset_receivable'),
                                     ], limit=1)
-                                    if not dr_acc:
-                                        dr_acc = env['account.account'].search([
-                                            ('company_id', '=', journal.company_id.id),
-                                            ('account_type', '=', 'asset_receivable'),
-                                        ], limit=1)
-                                    _account_cache[journal.id] = (ob_acc, dr_acc)
+                                _account_cache[journal.id] = (ob_acc, dr_acc)
 
-                                opening_balance_account, debtors_account = _account_cache[journal.id]
+                            opening_balance_account, debtors_account = _account_cache[journal.id]
 
-                                if opening_balance_account and debtors_account:
-                                    scheme_record = env['jewellery.scheme.enrollment'].browse(scheme_id)
-                                    line_partner_id = scheme_record.partner_id.id if scheme_record else False
+                            if opening_balance_account and debtors_account:
+                                scheme_record = env['jewellery.scheme.enrollment'].browse(scheme_id)
+                                line_partner_id = scheme_record.partner_id.id if scheme_record else False
 
-                                    move_vals = {
-                                        'journal_id': journal.id,
-                                        'date': line_date or fields.Date.today(),
-                                        'ref': f"Scheme Payment: {last_valid_ticket}",
-                                        'move_type': 'entry',
-                                        'company_id': journal.company_id.id,
-                                    }
-                                    if hasattr(journal, 'branch_id') and journal.branch_id:
-                                        move_vals['branch_id'] = journal.branch_id.id
-                                        
-                                    move_vals['line_ids'] = [
-                                            (0, 0, {
-                                                'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
-                                                'account_id': opening_balance_account.id,
-                                                'debit': line_amount_f,
-                                                'credit': 0.0,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                            (0, 0, {
-                                                'name': f'Scheme Payment - {last_valid_ticket}',
-                                                'account_id': debtors_account.id,
-                                                'debit': 0.0,
-                                                'credit': line_amount_f,
-                                                'partner_id': line_partner_id,
-                                            }),
-                                        ]
-                                    new_move = env['account.move'].create(move_vals)
-                                    new_move.action_post()
-                                    generated_move_id = new_move.id
-                                    _logger.info("Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f", row_idx, generated_move_id, last_valid_ticket, line_amount_f)
+                                move_vals = {
+                                    'journal_id': journal.id,
+                                    'date': line_date or fields.Date.today(),
+                                    'ref': f"Scheme Payment: {last_valid_ticket}",
+                                    'move_type': 'entry',
+                                    'company_id': journal.company_id.id,
+                                }
+                                if hasattr(journal, 'branch_id') and journal.branch_id:
+                                    move_vals['branch_id'] = journal.branch_id.id
+                                    
+                                move_vals['line_ids'] = [
+                                        (0, 0, {
+                                            'name': f'Scheme Liability (Opening) - {last_valid_ticket}',
+                                            'account_id': opening_balance_account.id,
+                                            'debit': line_amount_f,
+                                            'credit': 0.0,
+                                            'partner_id': line_partner_id,
+                                        }),
+                                        (0, 0, {
+                                            'name': f'Scheme Payment - {last_valid_ticket}',
+                                            'account_id': debtors_account.id,
+                                            'debit': 0.0,
+                                            'credit': line_amount_f,
+                                            'partner_id': line_partner_id,
+                                        }),
+                                    ]
+                                new_move = env['account.move'].with_context(**bulk_ctx).create(move_vals)
+                                new_move.with_context(**bulk_ctx).action_post()
+                                generated_move_id = new_move.id
+                                _logger.info("Row %s: Journal entry created (id=%s) ticket=%s amount=%.2f", row_idx, generated_move_id, last_valid_ticket, line_amount_f)
 
-                            env['jewellery.scheme.installment'].create({
-                                'enrollment_id':  scheme_id,
-                                'date':           line_date or fields.Date.today(),
-                                'amount':         line_amount_f,
-                                'journal_id':     journal.id if journal else False,
-                                'state':          str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'paid',
-                                'move_id':        excel_move_id.id if excel_move_id else generated_move_id,
-                                'transaction_id': get_v('Scheme Line/Transaction ID'),
-                            })
-                            count_lines += 1
+                        env['jewellery.scheme.installment'].with_context(**bulk_ctx).create({
+                            'enrollment_id':  scheme_id,
+                            'date':           line_date or fields.Date.today(),
+                            'amount':         line_amount_f,
+                            'journal_id':     journal.id if journal else False,
+                            'state':          str(get_v('Scheme Line/State')).lower() if get_v('Scheme Line/State') else 'paid',
+                            'move_id':        excel_move_id.id if excel_move_id else generated_move_id,
+                            'transaction_id': get_v('Scheme Line/Transaction ID'),
+                        })
+                        count_lines += 1
 
-                    except Exception as row_err:
-                        _logger.error("Row %s skipped - %s", row_idx, str(row_err))
-                        continue
+                except Exception as row_err:
+                    _logger.error("Row %s skipped - %s", row_idx, str(row_err))
+                    continue
 
-                env.cr.commit()
-                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'DONE')
-                _logger.info("Background Import Complete. Enrollments: %s, Installments: %s", count_scheme, count_lines)
+            env.cr.commit()
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'DONE')
+            _logger.info("Background Import Complete. Enrollments: %s, Installments: %s", count_scheme, count_lines)
 
         except Exception as e:
             env.cr.rollback()
-            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'ERROR: ' + str(e))
-            _logger.error("Background Import Failure: %s", str(e))
+            err_msg = str(e) or type(e).__name__
+            if isinstance(e, MemoryError):
+                err_msg = "Server ran out of memory (MemoryError). Memory limit reached."
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'ERROR: ' + err_msg)
+            _logger.exception("Background Import Failure: %s", err_msg)
         finally:
+            if workbook:
+                try:
+                    workbook.close()
+                except Exception:
+                    pass
             if is_temp and os.path.exists(file_path):
                 try:
                     os.remove(file_path)
@@ -362,6 +402,11 @@ class SchemeImportController(http.Controller):
         db_name = request.env.cr.dbname
         uid = request.env.uid
 
+        # Reset progress parameter immediately so frontend doesn't show stale error
+        request.env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'Starting...')
+        request.env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', '...')
+        request.env.cr.commit()
+
         # Launch background thread
         thread = threading.Thread(target=run_import_in_background, args=(db_name, uid, file_path, is_temp))
         thread.start()
@@ -384,14 +429,14 @@ class SchemeImportController(http.Controller):
             <body>
                 <div class="container">
                     <h1>Importing Scheme Receipts</h1>
-                    <p class="msg">The 16,000+ rows are being processed in the background.</p>
+                    <p class="msg">The rows are being processed in the background.</p>
                     
                     <div class="progress-wrapper">
                         <div class="progress-bar" id="progressBar"></div>
                         <div class="progress-text" id="progressText">0%</div>
                     </div>
                     
-                    <div class="status" id="statusText">Initializing...</div>
+                    <div class="status" id="statusText">Starting import...</div>
                     <div class="success-msg" id="successMsg">🎉 Import Completed Successfully!</div>
                 </div>
 
@@ -409,6 +454,9 @@ class SchemeImportController(http.Controller):
                                     document.getElementById('statusText').innerText = data.progress;
                                     document.getElementById('statusText').style.color = '#dc3545';
                                     document.getElementById('progressBar').style.background = '#dc3545';
+                                } else if (data.progress === 'Starting...') {
+                                    document.getElementById('statusText').innerText = 'Initializing and loading file...';
+                                    setTimeout(fetchProgress, 2000);
                                 } else {
                                     let current = parseInt(data.progress) || 0;
                                     let total = parseInt(data.total) || 1;
@@ -453,6 +501,7 @@ class SchemeImportController(http.Controller):
         if not file_path or not os.path.exists(file_path):
             return f"<h1>Error</h1><p>File not found at {file_path}</p>"
         
+        workbook = None
         try:
             import openpyxl
             workbook = openpyxl.load_workbook(file_path, data_only=True)
@@ -497,3 +546,9 @@ class SchemeImportController(http.Controller):
             return f"<h1>Undo Complete</h1><p>Successfully deleted {enr_count} enrollments, {inst_count} installments, and {moves_count} journal entries matching the tickets in the Excel file.</p>"
         except Exception as e:
             return f"<h1>Error during Undo</h1><p>{str(e)}</p>"
+        finally:
+            if workbook:
+                try:
+                    workbook.close()
+                except Exception:
+                    pass
