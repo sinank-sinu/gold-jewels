@@ -165,7 +165,7 @@
                        readonly="old_gold_bill_id != False and not is_editing_old_gold">
                     <tree editable="bottom">
                         <field name="purity_id"/>
-                        <field name="is_diamond_og" string="Diamond OG" readonly="1" optional="show" widget="boolean_toggle"/>
+                        <field name="is_diamond_og" string="Diamond OG" optional="show" widget="boolean_toggle"/>
                         <field name="location_id" string="Location" readonly="1" options="{'no_open': True}"/>
                         <field name="gross_weight"/>
                         <field name="stone_weight"/>

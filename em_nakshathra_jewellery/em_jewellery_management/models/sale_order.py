@@ -29,13 +29,34 @@ class SaleOrder(models.Model):
         store=True,
     )
 
-    @api.depends('branch_id', 'old_gold_line_ids.purity_id', 'old_gold_line_ids.is_diamond_og')
+    def _get_diamond_og_location(self, branch=None):
+        self.ensure_one()
+        branch = branch or self.branch_id or self.env.user.branch_id
+        if branch and branch.diamond_og_location_id:
+            return branch.diamond_og_location_id
+        return (branch and branch.old_gold_location_id) or self.branch_location_id
+
+    def _get_regular_og_location(self, branch=None):
+        self.ensure_one()
+        branch = branch or self.branch_id or self.env.user.branch_id
+        if branch and branch.old_gold_location_id:
+            return branch.old_gold_location_id
+        return self.branch_location_id
+
+    @api.depends('branch_id', 'old_gold_line_ids.purity_id', 'old_gold_line_ids.is_diamond_og', 'old_gold_line_ids.diamond_amount')
     def _compute_og_locations(self):
         for order in self:
             branch = order.branch_id or self.env.user.branch_id
-            order.diamond_og_location_id = branch.diamond_og_location_id.id if branch else False
-            order.has_diamond_og = any(l.is_diamond_og for l in order.old_gold_line_ids)
-            order.has_regular_og = any(not l.is_diamond_og for l in order.old_gold_line_ids)
+            dmd_loc = order._get_diamond_og_location(branch)
+            order.diamond_og_location_id = dmd_loc.id if dmd_loc else False
+            order.has_diamond_og = any(
+                l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+                for l in order.old_gold_line_ids
+            )
+            order.has_regular_og = any(
+                not (l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og))
+                for l in order.old_gold_line_ids
+            )
     # old_gold_po_ids = fields.One2many(
     #     'purchase.order',
     #     'sale_id',
@@ -63,12 +84,67 @@ class SaleOrder(models.Model):
         readonly=True,
         copy=False,
     )
+    old_gold_bill_ids = fields.Many2many(
+        'account.move',
+        string='Old Gold Vendor Bills',
+        compute='_compute_old_gold_bills',
+    )
+    old_gold_po_ids = fields.Many2many(
+        'purchase.order',
+        string='Old Gold Purchase Orders',
+        compute='_compute_old_gold_pos',
+    )
     old_gold_bill_amount = fields.Monetary(
-        related='old_gold_bill_id.amount_total',
-        currency_field='currency_id',
         string='Bill Amount',
+        compute='_compute_old_gold_bill_amount',
+        currency_field='currency_id',
         readonly=True,
     )
+
+    def _get_old_gold_bills(self):
+        self.ensure_one()
+        bills = self.env['account.move']
+        if self.id:
+            bills = self.env['account.move'].search([
+                ('is_old_gold_bill', '=', True),
+                ('line_ids.purchase_line_id.order_id.sale_id', '=', self.id)
+            ])
+        if not bills and self.old_gold_bill_id:
+            bills = self.old_gold_bill_id
+        return bills
+
+    def _get_old_gold_pos(self):
+        self.ensure_one()
+        pos = self.env['purchase.order']
+        if self.id:
+            pos = self.env['purchase.order'].search([
+                ('sale_id', '=', self.id),
+                '|', ('is_old_gold', '=', True), ('is_diamond_og', '=', True)
+            ])
+        if not pos and self.purchase_order_id:
+            pos = self.purchase_order_id
+        return pos
+
+    def _compute_old_gold_bills(self):
+        for order in self:
+            order.old_gold_bill_ids = order._get_old_gold_bills()
+
+    def _compute_old_gold_pos(self):
+        for order in self:
+            order.old_gold_po_ids = order._get_old_gold_pos()
+
+    @api.depends('old_gold_line_ids.amount')
+    def _compute_old_gold_bill_amount(self):
+        for order in self:
+            bills = order._get_old_gold_bills()
+            if bills:
+                order.old_gold_bill_amount = sum(bills.mapped('amount_total'))
+            elif order.old_gold_line_ids:
+                order.old_gold_bill_amount = sum(order.old_gold_line_ids.mapped('amount'))
+            elif order.old_gold_bill_id:
+                order.old_gold_bill_amount = order.old_gold_bill_id.amount_total
+            else:
+                order.old_gold_bill_amount = 0.0
     old_gold_entry_id = fields.Many2one(
         'account.move',
         string='Old Gold Journal Entry',
@@ -449,15 +525,24 @@ class SaleOrder(models.Model):
                 ], limit=1) or regular_product
 
             # Group lines into Regular OG and Diamond OG
-            diamond_lines = order.old_gold_line_ids.filtered(lambda l: l.purity_id.is_diamond_og)
-            regular_lines = order.old_gold_line_ids.filtered(lambda l: not l.purity_id.is_diamond_og)
+            diamond_lines = order.old_gold_line_ids.filtered(
+                lambda l: l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+            )
+            regular_lines = order.old_gold_line_ids.filtered(
+                lambda l: not (l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og))
+            )
+
+            dmd_loc = order._get_diamond_og_location(order.branch_id)
+            reg_loc = order._get_regular_og_location(order.branch_id) or order.branch_location_id
+            dmd_loc_id = dmd_loc.id if dmd_loc else order.branch_location_id.id
+            reg_loc_id = reg_loc.id if reg_loc else order.branch_location_id.id
 
             # ------------------------------------------------
             # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
             # ------------------------------------------------
             for grp_lines, grp_loc in [
-                (regular_lines, order.branch_id.old_gold_location_id.id or order.branch_location_id.id),
-                (diamond_lines, order.branch_id.diamond_og_location_id.id or order.branch_location_id.id),
+                (regular_lines, reg_loc_id),
+                (diamond_lines, dmd_loc_id),
             ]:
                 if not grp_lines:
                     continue
@@ -486,7 +571,7 @@ class SaleOrder(models.Model):
                     'is_old_gold': True,
                     'lines': regular_lines,
                     'product': regular_product,
-                    'dest_loc_id': order.branch_id.old_gold_location_id.id or order.branch_location_id.id,
+                    'dest_loc_id': reg_loc_id,
                 })
             if diamond_lines:
                 if not diamond_product:
@@ -496,7 +581,7 @@ class SaleOrder(models.Model):
                     'is_old_gold': False,
                     'lines': diamond_lines,
                     'product': diamond_product,
-                    'dest_loc_id': order.branch_id.diamond_og_location_id.id or order.branch_location_id.id,
+                    'dest_loc_id': dmd_loc_id,
                 })
 
             created_pos = []
@@ -1042,13 +1127,23 @@ class SaleOrder(models.Model):
 
     def action_open_old_gold_bill(self):
         self.ensure_one()
-
+        bills = self._get_old_gold_bills()
+        if len(bills) > 1:
+            return {
+                'type': 'ir.actions.act_window',
+                'name': _('Old Gold Vendor Bills'),
+                'res_model': 'account.move',
+                'view_mode': 'tree,form',
+                'domain': [('id', 'in', bills.ids)],
+                'context': {'create': False, 'hide_payment_button': True},
+            }
+        bill = bills[:1] or self.old_gold_bill_id
         return {
             'type': 'ir.actions.act_window',
             'name': _('Old Gold Vendor Bill'),
             'res_model': 'account.move',
             'view_mode': 'form',
-            'res_id': self.old_gold_bill_id.id,
+            'res_id': bill.id,
             'context': {'create': False, 'hide_payment_button': True},
         }
 
@@ -1121,7 +1216,10 @@ class SaleOrder(models.Model):
             purity_map[purity]['weight'] += line.net_weight
             purity_map[purity]['amount'] += line.amount
 
-        is_dog = bool(po and po.is_diamond_og) or (purity_map and all(p.is_diamond_og for p in purity_map))
+        is_dog = bool(po and po.is_diamond_og) or any(
+            l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+            for l in self.old_gold_line_ids
+        )
         if is_dog:
             comp_id = self.branch_id.company_id.id or self.company_id.id or self.env.company.id
             product = self.env['product.product'].sudo().search([
@@ -1183,7 +1281,9 @@ class SaleOrder(models.Model):
             po._create_picking()
             
             # For any pickings that are still waiting (newly created), validate them
-            dest_loc_id = (self.branch_id.diamond_og_location_id.id if is_dog else self.branch_id.old_gold_location_id.id) or self.branch_location_id.id
+            dmd_loc = self._get_diamond_og_location(self.branch_id)
+            reg_loc = self._get_regular_og_location(self.branch_id) or self.branch_location_id
+            dest_loc_id = dmd_loc.id if (is_dog and dmd_loc) else (reg_loc.id if reg_loc else self.branch_location_id.id)
             for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
                 picking.write({
                     'is_old_gold': True,
@@ -1257,7 +1357,8 @@ class SaleOrder(models.Model):
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
             bill.action_post()
-            self._create_or_update_old_gold_journal_entry(bill)
+            all_bills = self._get_old_gold_bills() or bill
+            self._create_or_update_old_gold_journal_entry(all_bills)
 
     # ────────────────────────────────────────────────────────────────────────────
     # EDIT / SAVE – Main Order buttons
@@ -1426,17 +1527,19 @@ class SaleOrder(models.Model):
             # Trigger PO to create new pickings for any NEW lines
             po._create_picking()
             
+            dest_loc = self.sale_return_branch_location_id
+
             # Confirm and validate the newly created pickings
             for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-                if self.sale_return_branch_location_id:
+                if dest_loc:
                     picking.write({
                         'is_old_gold': True,
                         'sale_old_id': self.id,
                         'branch_id': self.branch_id.id,
-                        'location_dest_id': self.sale_return_branch_location_id.id,
+                        'location_dest_id': dest_loc.id,
                     })
                     for move in picking.move_ids:
-                        move.location_dest_id = self.sale_return_branch_location_id.id
+                        move.location_dest_id = dest_loc.id
                 
                 picking.action_confirm()
                 picking.action_assign()
@@ -1517,9 +1620,10 @@ class SaleOrder(models.Model):
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
-        vals['old_gold_price'] = self.old_gold_bill_amount
+        og_amt = self.old_gold_bill_amount or sum(self.old_gold_line_ids.mapped('amount'))
+        vals['old_gold_price'] = og_amt
         vals['unfix'] = self.unfix
-        vals['sale_return_price'] = self.sale_return_bill_amount
+        vals['sale_return_price'] = self.sale_return_bill_amount or sum(self.sale_return_line_ids.mapped('amount'))
         vals['is_sale_return'] = self.is_sale_return
         return vals
 
@@ -1593,16 +1697,18 @@ class SaleOrder(models.Model):
             for line in po.order_line:
                 line.qty_received = line.product_qty
 
+            dest_loc = order.sale_return_branch_location_id
+
             for picking in po.picking_ids:
-                if order.sale_return_branch_location_id:
+                if dest_loc:
                     picking.write({
                         'is_old_gold': True,
                         'sale_old_id': order.id,
                         'branch_id': order.branch_id.id,
-                        'location_dest_id': order.sale_return_branch_location_id.id,
+                        'location_dest_id': dest_loc.id,
                     })
                     for move in picking.move_ids:
-                        move.location_dest_id = order.sale_return_branch_location_id.id
+                        move.location_dest_id = dest_loc.id
 
                 picking.action_confirm()
                 picking.action_assign()

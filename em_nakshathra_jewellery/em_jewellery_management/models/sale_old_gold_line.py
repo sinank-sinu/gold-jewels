@@ -267,7 +267,12 @@ class SaleOldGoldLine(models.Model):
 
 
     purity_id = fields.Many2one('gold.purity', required=True)
-    is_diamond_og = fields.Boolean(related='purity_id.is_diamond_og', string="Is Diamond OG", store=True)
+    is_diamond_og = fields.Boolean(
+        string="Is Diamond OG",
+        compute='_compute_is_diamond_og',
+        store=True,
+        readonly=False,
+    )
     location_id = fields.Many2one(
         'stock.location',
         string="Destination Location",
@@ -275,26 +280,47 @@ class SaleOldGoldLine(models.Model):
         store=True,
     )
 
-    @api.depends('is_diamond_og', 'sale_id.branch_id', 'branch_id', 'old_gold_purchase_id.branch_id')
+    @api.depends('purity_id', 'purity_id.is_diamond_og', 'diamond_amount')
+    def _compute_is_diamond_og(self):
+        for line in self:
+            if line.purity_id and line.purity_id.is_diamond_og:
+                line.is_diamond_og = True
+            elif line.diamond_amount and line.diamond_amount > 0:
+                line.is_diamond_og = True
+            elif not line.is_diamond_og:
+                line.is_diamond_og = False
+
+    def _resolve_dest_location(self, is_dmd, branch):
+        if is_dmd:
+            if self.sale_id and hasattr(self.sale_id, '_get_diamond_og_location'):
+                return self.sale_id._get_diamond_og_location(branch)
+            if branch and branch.diamond_og_location_id:
+                return branch.diamond_og_location_id
+            return (branch and branch.old_gold_location_id) or False
+        else:
+            if self.sale_id and hasattr(self.sale_id, '_get_regular_og_location'):
+                return self.sale_id._get_regular_og_location(branch) or self.sale_id.branch_location_id
+            if branch and branch.old_gold_location_id:
+                return branch.old_gold_location_id
+            return False
+
+    @api.depends('is_diamond_og', 'sale_id.branch_id', 'branch_id', 'old_gold_purchase_id.branch_id', 'diamond_amount', 'purity_id')
     def _compute_location_id(self):
         for line in self:
             branch = line.sale_id.branch_id or line.branch_id or (line.old_gold_purchase_id and line.old_gold_purchase_id.branch_id) or self.env.user.branch_id
-            if line.is_diamond_og:
-                line.location_id = branch.diamond_og_location_id.id if (branch and branch.diamond_og_location_id) else False
-            else:
-                line.location_id = branch.old_gold_location_id.id if (branch and branch.old_gold_location_id) else False
+            is_dmd = line.is_diamond_og or (line.diamond_amount and line.diamond_amount > 0) or (line.purity_id and line.purity_id.is_diamond_og)
+            loc = line._resolve_dest_location(is_dmd, branch)
+            line.location_id = loc.id if loc else False
 
-    @api.onchange('purity_id')
+    @api.onchange('purity_id', 'diamond_amount', 'is_diamond_og')
     def _onchange_purity_id_set_location(self):
         for line in self:
-            if line.purity_id:
-                branch = line.sale_id.branch_id or line.branch_id or self.env.user.branch_id
-                if line.purity_id.is_diamond_og:
-                    line.is_diamond_og = True
-                    line.location_id = branch.diamond_og_location_id.id if (branch and branch.diamond_og_location_id) else False
-                else:
-                    line.is_diamond_og = False
-                    line.location_id = branch.old_gold_location_id.id if (branch and branch.old_gold_location_id) else False
+            branch = line.sale_id.branch_id or line.branch_id or self.env.user.branch_id
+            is_dmd = line.is_diamond_og or (line.diamond_amount and line.diamond_amount > 0) or (line.purity_id and line.purity_id.is_diamond_og)
+            if is_dmd:
+                line.is_diamond_og = True
+            loc = line._resolve_dest_location(is_dmd, branch)
+            line.location_id = loc.id if loc else False
 
     gross_weight = fields.Float(required=True,digits=(16, 3))
     stone_weight = fields.Float(digits=(16, 3))
