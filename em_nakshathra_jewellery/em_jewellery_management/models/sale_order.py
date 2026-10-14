@@ -1140,8 +1140,9 @@ class SaleOrder(models.Model):
 
         # ─ 2. Update PO lines in-place via write() ─────────────────────────────────
         if po:
-            # Enable silent SQL update mode for the PO
-            po.is_editing_main_po = True
+            # Enable silent SQL update mode for the PO if em_purchase_edit is installed
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = True
             
             existing_po_lines = list(po.order_line)
             purity_list = list(purity_map.items())
@@ -1177,7 +1178,8 @@ class SaleOrder(models.Model):
 
             # ─ 3. Create fresh pickings for any NEW PO lines ─────────
             # Temporarily disable edit mode so _create_picking functions normally
-            po.is_editing_main_po = False
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = False
             po._create_picking()
             
             # For any pickings that are still waiting (newly created), validate them
