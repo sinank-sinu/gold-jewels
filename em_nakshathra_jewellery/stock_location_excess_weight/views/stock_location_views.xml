@@ -148,11 +148,11 @@
         <field name="inherit_id" ref="stock.view_location_tree2"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='usage']" position="after">
-                <field name="system_weight" optional="show"/>
-                <field name="physical_weight" optional="show"/>
-                <field name="excess_weight" optional="show" class="fw-bold text-danger"/>
+                <field name="system_weight" optional="hide"/>
+                <field name="physical_weight" optional="hide"/>
+                <field name="excess_weight" optional="hide" class="fw-bold text-danger"/>
                 <field name="shortage_weight" optional="hide" class="fw-bold text-warning"/>
-                <field name="weight_status" optional="show" widget="badge"
+                <field name="weight_status" optional="hide" widget="badge"
                        decoration-success="weight_status == 'balanced'"
                        decoration-danger="weight_status == 'excess'"
                        decoration-warning="weight_status == 'shortage'"
