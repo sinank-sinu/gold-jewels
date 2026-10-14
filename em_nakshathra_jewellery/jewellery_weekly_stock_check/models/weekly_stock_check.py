@@ -309,6 +309,7 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'product_id': label.product_id.id,
                     'label_id': label.id,
                     'system_qty': 1.0,
+                    'manual_qty': 1.0,
                     'system_weight': label.sale_gross_weight,
                     'system_tag_weight':label.tag_weight,
                     'branch_id': label.branch_id.id,
