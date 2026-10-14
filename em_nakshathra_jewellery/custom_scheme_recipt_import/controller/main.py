@@ -77,23 +77,64 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
         workbook = None
         
         try:
-            workbook = openpyxl.load_workbook(file_path, data_only=True)
+            workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             sheet = workbook.active
 
-            h_map = {str(sheet.cell(row=1, column=i).value).strip(): i
-                     for i in range(1, sheet.max_column + 1)
-                     if sheet.cell(row=1, column=i).value}
+            rows_iter = sheet.iter_rows(values_only=True)
+            header_row = next(rows_iter, None)
 
+            if not header_row:
+                _logger.warning("Empty Excel sheet found in %s", file_path)
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'DONE')
+                return
+
+            h_map = {
+                str(col_name).strip(): idx
+                for idx, col_name in enumerate(header_row)
+                if col_name is not None and str(col_name).strip()
+            }
+
+            # Pre-filter all valid data rows up to consecutive empty rows
+            # This completely avoids ghost rows (e.g. 1,048,576 formatted empty rows)
+            data_rows = []
+            consecutive_empty = 0
+            for row in rows_iter:
+                has_data = any(
+                    c_idx < len(row) and row[c_idx] not in (None, False, '') and str(row[c_idx]).strip() != ''
+                    for c_idx in h_map.values()
+                )
+                if not has_data:
+                    consecutive_empty += 1
+                    if consecutive_empty >= 25:
+                        break
+                    continue
+                consecutive_empty = 0
+                data_rows.append(row)
+
+            # Close workbook immediately since all data is now loaded in memory
+            try:
+                workbook.close()
+                workbook = None
+            except Exception:
+                pass
+
+            total_data_rows = len(data_rows)
+            if not total_data_rows:
+                _logger.warning("No data rows found in %s", file_path)
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', 'DONE')
+                env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', '0')
+                return
+
+            total_excel_lines = total_data_rows + 1  # Including header line
             last_valid_ticket = False
             scheme_tracker = {}
             count_scheme = 0
             count_lines = 0
             _account_cache = {}
-            
-            total_rows = sheet.max_row
-            # Initialize Progress Tracking
-            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', '0')
-            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', str(total_rows))
+
+            # Initialize Progress Tracking with exact line count
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', '1')
+            env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_total', str(total_excel_lines))
             cr.commit()
 
             bulk_ctx = {
@@ -104,11 +145,10 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
                 'mail_auto_subscribe_no_notify': True,
             }
 
-            consecutive_empty = 0
-
-            for row_idx in range(2, total_rows + 1):
-                # Periodically update progress in DB and commit so polling receives it
-                if row_idx % 100 == 0:
+            for row_idx, row in enumerate(data_rows, start=2):
+                # Update progress periodically so frontend receives it
+                update_step = 10 if total_excel_lines <= 500 else (50 if total_excel_lines <= 5000 else 100)
+                if row_idx % update_step == 0 or row_idx == total_excel_lines:
                     env['ir.config_parameter'].sudo().set_param('scheme_receipt_import_progress', str(row_idx))
                     env.cr.commit()
 
@@ -117,22 +157,15 @@ def run_import_in_background(db_name, uid, file_path, is_temp=False):
                     env.cr.commit()
                     env.clear()
                     gc.collect()
-                    _logger.info("Committed up to row %s. Memory cleared.", row_idx)
+                    _logger.info("Committed up to line %s/%s. Memory cleared.", row_idx, total_excel_lines)
 
                 # Pre-fetch all cell values for current row in a dict
-                row_vals = {col: sheet.cell(row=row_idx, column=c_idx).value for col, c_idx in h_map.items()}
+                row_vals = {
+                    col: row[c_idx] if c_idx < len(row) else None
+                    for col, c_idx in h_map.items()
+                }
 
-                # Stop if blank trailing rows are detected
-                if not any(v not in (None, False, '') for v in row_vals.values()):
-                    consecutive_empty += 1
-                    if consecutive_empty >= 25:
-                        _logger.info("Encountered %s consecutive empty rows. Ending import at row %s.", consecutive_empty, row_idx)
-                        break
-                    continue
-                consecutive_empty = 0
-
-                def get_v(col_name):
-                    return row_vals.get(col_name)
+                get_v = row_vals.get
 
                 try:
                     with env.cr.savepoint():
@@ -459,12 +492,17 @@ class SchemeImportController(http.Controller):
                                     setTimeout(fetchProgress, 2000);
                                 } else {
                                     let current = parseInt(data.progress) || 0;
-                                    let total = parseInt(data.total) || 1;
-                                    let percent = Math.min(100, Math.round((current / total) * 100));
-                                    
-                                    document.getElementById('progressBar').style.width = percent + '%';
-                                    document.getElementById('progressText').innerText = percent + '%';
-                                    document.getElementById('statusText').innerText = 'Processing row ' + current + ' of ' + total;
+                                    let total = parseInt(data.total);
+                                    if (isNaN(total) || total <= 0 || total > 500000) {
+                                        document.getElementById('progressBar').style.width = '100%';
+                                        document.getElementById('progressText').innerText = '';
+                                        document.getElementById('statusText').innerText = 'Processing row ' + current + '...';
+                                    } else {
+                                        let percent = Math.min(100, Math.round((current / total) * 100));
+                                        document.getElementById('progressBar').style.width = percent + '%';
+                                        document.getElementById('progressText').innerText = percent + '%';
+                                        document.getElementById('statusText').innerText = 'Processing row ' + current + ' of ' + total;
+                                    }
                                     
                                     // Poll again in 2 seconds
                                     setTimeout(fetchProgress, 2000);
@@ -504,16 +542,28 @@ class SchemeImportController(http.Controller):
         workbook = None
         try:
             import openpyxl
-            workbook = openpyxl.load_workbook(file_path, data_only=True)
+            workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             sheet = workbook.active
-            h_map = {str(sheet.cell(row=1, column=i).value).strip(): i for i in range(1, sheet.max_column + 1) if sheet.cell(row=1, column=i).value}
+            rows_iter = sheet.iter_rows(values_only=True)
+            header_row = next(rows_iter, None)
+            if not header_row:
+                return "<h1>No tickets found in the excel file to undo.</h1>"
+
+            h_map = {str(col_name).strip(): idx for idx, col_name in enumerate(header_row) if col_name is not None and str(col_name).strip()}
             
             tickets = set()
-            for row_idx in range(2, sheet.max_row + 1):
-                idx = h_map.get('Ticket Number')
-                val = sheet.cell(row=row_idx, column=idx).value if idx else False
-                if val:
-                    tickets.add(str(val).strip().upper())
+            t_idx = h_map.get('Ticket Number')
+            if t_idx is not None:
+                consecutive_empty = 0
+                for row in rows_iter:
+                    val = row[t_idx] if t_idx < len(row) else None
+                    if val:
+                        tickets.add(str(val).strip().upper())
+                        consecutive_empty = 0
+                    else:
+                        consecutive_empty += 1
+                        if consecutive_empty >= 25:
+                            break
                     
             if not tickets:
                 return "<h1>No tickets found in the excel file to undo.</h1>"
