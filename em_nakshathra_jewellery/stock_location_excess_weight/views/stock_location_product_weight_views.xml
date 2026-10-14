@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View for Location Product Excess Weight -->
+    <record id="view_stock_location_product_excess_weight_tree" model="ir.ui.view">
+        <field name="name">stock.location.product.excess.weight.tree</field>
+        <field name="model">stock.location.product.excess.weight</field>
+        <field name="arch" type="xml">
+            <tree string="Product Variant Excess Weight" 
+                  editable="bottom"
+                  multi_edit="1"
+                  decoration-danger="weight_status == 'excess'" 
+                  decoration-warning="weight_status == 'shortage'" 
+                  decoration-success="weight_status == 'balanced'" 
+                  decoration-muted="weight_status == 'unverified'">
+                <header>
+                    <button name="action_auto_fill_physical_weight" 
+                            type="object" 
+                            string="Auto-Fill Physical Weight" 
+                            class="btn-info" 
+                            icon="fa-clone"/>
+                    <button name="%(stock_location_excess_weight.action_stock_location_product_load_wizard)d" 
+                            type="action" 
+                            string="Load / Scan Products" 
+                            class="btn-primary" 
+                            icon="fa-cubes"/>
+                    <button name="%(stock_location_excess_weight.action_location_excess_weight_export_wizard)d" 
+                            type="action" 
+                            string="Export Excel" 
+                            class="btn-secondary" 
+                            icon="fa-file-excel-o"/>
+                    <button name="%(stock_location_excess_weight.action_server_transfer_excess_weight)d" 
+                            type="action" 
+                            string="Transfer Excess" 
+                            class="btn-danger" 
+                            icon="fa-arrow-circle-right"/>
+                    <button name="%(stock_location_excess_weight.action_server_fulfill_shortage_weight)d" 
+                            type="action" 
+                            string="Fulfill Shortage" 
+                            class="btn-warning" 
+                            icon="fa-arrow-circle-left"/>
+                </header>
+                <field name="location_id" readonly="1" string="Location"/>
+                <field name="branch_id" readonly="1" optional="show"/>
+                <field name="product_id" readonly="1" string="Product Variant"/>
+                <field name="default_code" readonly="1" optional="hide"/>
+                <field name="categ_id" readonly="1" optional="hide"/>
+                <field name="system_weight_basis" optional="hide"/>
+                <field name="system_label_count" readonly="1" optional="show" string="Labels Qty"/>
+                <field name="system_label_weight" readonly="1" optional="show" string="Labels Wt (g)"/>
+                <field name="system_quant_weight" readonly="1" optional="show" string="Quant Wt (g)"/>
+                <field name="system_weight" readonly="1" class="fw-bold text-primary" string="System Wt (g)"/>
+                <field name="physical_weight" class="fw-bold text-dark" string="Physical Wt (g)"/>
+                <field name="weight_tolerance" optional="hide" string="Tolerance (±g)"/>
+                <field name="difference_weight" readonly="1" optional="hide" string="Diff Wt (g)"/>
+                <field name="excess_weight" readonly="1" class="fw-bold text-danger" string="Excess Wt (g)"/>
+                <field name="shortage_weight" readonly="1" class="fw-bold text-warning" string="Shortage Wt (g)" optional="show"/>
+                <field name="weight_status" readonly="1" widget="badge" 
+                       decoration-success="weight_status == 'balanced'" 
+                       decoration-danger="weight_status == 'excess'" 
+                       decoration-warning="weight_status == 'shortage'" 
+                       decoration-info="weight_status == 'unverified'"/>
+                <field name="last_weight_check_date" readonly="1" optional="show"/>
+                <field name="notes" optional="hide" placeholder="Tray / Note"/>
+                <button name="action_auto_fill_physical_weight" 
+                        type="object" 
+                        icon="fa-clone" 
+                        title="Auto-fill Physical Weight from System Weight"/>
+                <button name="action_view_labels" 
+                        type="object" 
+                        icon="fa-tags" 
+                        title="View Active Labels for this Product in Location"/>
+                <button name="action_open_transfer_wizard" 
+                        type="object" 
+                        icon="fa-arrow-circle-right" 
+                        title="Transfer Excess Weight Out to Another Location"
+                        class="text-danger"
+                        invisible="excess_weight &lt;= 0"/>
+                <button name="action_open_shortage_wizard" 
+                        type="object" 
+                        icon="fa-arrow-circle-left" 
+                        title="Transfer Weight In from Another Location to Fulfill Shortage"
+                        class="text-warning"
+                        invisible="shortage_weight &lt;= 0"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Server Action: Auto-Fill Physical Weight for selected product variants -->
+    <record id="action_server_product_auto_fill_weight" model="ir.actions.server">
+        <field name="name">Auto-Fill Physical Weight (= System Weight)</field>
+        <field name="model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            records.action_auto_fill_physical_weight()
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_stock_location_product_excess_weight_search" model="ir.ui.view">
+        <field name="name">stock.location.product.excess.weight.search</field>
+        <field name="model">stock.location.product.excess.weight</field>
+        <field name="arch" type="xml">
+            <search string="Search Product Variant Weights">
+                <field name="product_id" string="Product Variant"/>
+                <field name="location_id" string="Stock Location"/>
+                <field name="branch_id" string="Branch"/>
+                <field name="categ_id" string="Category"/>
+                <separator/>
+                <filter string="Excess Weight (Surplus)" name="filter_excess" domain="[('excess_weight', '&gt;', 0)]"/>
+                <filter string="Shortage Weight (Deficit)" name="filter_shortage" domain="[('shortage_weight', '&gt;', 0)]"/>
+                <filter string="Mismatched Products" name="filter_mismatch" domain="[('weight_status', 'in', ['excess', 'shortage'])]"/>
+                <filter string="Balanced / Matched" name="filter_balanced" domain="[('weight_status', '=', 'balanced')]"/>
+                <filter string="Unverified" name="filter_unverified" domain="[('weight_status', '=', 'unverified')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Location" name="group_location" domain="[]" context="{'group_by': 'location_id'}"/>
+                    <filter string="Branch" name="group_branch" domain="[]" context="{'group_by': 'branch_id'}"/>
+                    <filter string="Product Variant" name="group_product" domain="[]" context="{'group_by': 'product_id'}"/>
+                    <filter string="Weight Status" name="group_status" domain="[]" context="{'group_by': 'weight_status'}"/>
+                    <filter string="Product Category" name="group_category" domain="[]" context="{'group_by': 'categ_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_stock_location_product_excess_weight" model="ir.actions.act_window">
+        <field name="name">Excess Weight by Product Variant</field>
+        <field name="res_model">stock.location.product.excess.weight</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_stock_location_product_excess_weight_search"/>
+        <field name="context">{
+            'search_default_group_location': 1
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No product variant weight records found.
+            </p>
+            <p>
+                Click <b>"Load / Scan Products"</b> in the top menu or button below to scan active barcode labels and ledger stock across locations.
+            </p>
+            <p>
+                <a type="action" name="%(stock_location_excess_weight.action_stock_location_product_load_wizard)d" class="btn btn-primary text-white">
+                    <i class="fa fa-cubes me-1"/> Load / Scan Products Now
+                </a>
+            </p>
+        </field>
+    </record>
+</odoo>

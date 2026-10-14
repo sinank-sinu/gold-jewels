@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_stock_location_weight_wizard_form" model="ir.ui.view">
+        <field name="name">stock.location.weight.wizard.form</field>
+        <field name="model">stock.location.weight.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Record Physical Weight Verification">
+                <sheet>
+                    <div class="oe_title">
+                        <h2>Record Physical Stock Weight</h2>
+                        <p class="text-muted">Enter the physically measured scale weight to identify excess or shortage weight for this location.</p>
+                    </div>
+                    <group>
+                        <group string="Location Information">
+                            <field name="location_id" options="{'no_create': True}" readonly="context.get('default_location_id', False)"/>
+                            <field name="branch_id"/>
+                        </group>
+                        <group string="System Registered Weight">
+                            <field name="system_label_weight"/>
+                            <field name="system_quant_weight"/>
+                            <field name="system_weight" class="fw-bold text-primary"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Physical Scale Verification">
+                            <field name="physical_weight" class="fw-bold text-success fs-5"/>
+                            <field name="weight_tolerance"/>
+                        </group>
+                        <group string="Variance &amp; Excess Analysis">
+                            <field name="difference_weight" class="fw-bold"/>
+                            <field name="excess_weight" class="fw-bold text-danger fs-5" invisible="excess_weight == 0"/>
+                            <field name="shortage_weight" class="fw-bold text-warning fs-5" invisible="shortage_weight == 0"/>
+                            <field name="status" widget="badge" 
+                                   decoration-success="status == 'balanced'"
+                                   decoration-danger="status == 'excess'"
+                                   decoration-warning="status == 'shortage'"/>
+                        </group>
+                    </group>
+                    <group string="Audit Notes">
+                        <field name="notes" placeholder="e.g. Weighed on Scale #2 by Counter Manager. All display trays counted." nolabel="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_confirm" string="Confirm &amp; Record Weight" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_stock_location_weight_wizard" model="ir.actions.act_window">
+        <field name="name">Record Physical Weight</field>
+        <field name="res_model">stock.location.weight.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="stock.model_stock_location"/>
+        <field name="binding_view_types">form,list</field>
+    </record>
+</odoo>

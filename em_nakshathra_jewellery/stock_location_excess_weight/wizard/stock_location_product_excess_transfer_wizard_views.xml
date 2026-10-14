@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Form View for Weight Transfer Wizard (Excess & Shortage) -->
+    <record id="view_stock_location_product_excess_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">stock.location.product.excess.transfer.wizard.form</field>
+        <field name="model">stock.location.product.excess.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Transfer Weight (Excess / Shortage)">
+                <sheet>
+                    <field name="transfer_type" invisible="1"/>
+                    <div class="alert alert-danger py-2" role="alert" invisible="transfer_type != 'outbound'">
+                        <i class="fa fa-arrow-circle-right me-1" title="Outbound"/> 
+                        <b>Excess Weight Transfer:</b> Transfer surplus weight of the selected product variant(s) out to another stock location.
+                    </div>
+                    <div class="alert alert-warning py-2" role="alert" invisible="transfer_type != 'inbound'">
+                        <i class="fa fa-arrow-circle-left me-1" title="Inbound"/> 
+                        <b>Shortage Weight Fulfillment:</b> Transfer needed weight of the product variant(s) from another source location into this location to fulfill the shortage.
+                    </div>
+                    <group>
+                        <group string="Source Location (From)">
+                            <field name="location_id" 
+                                   readonly="transfer_type == 'outbound'" 
+                                   required="1" 
+                                   force_save="1" 
+                                   options="{'no_create': True}" 
+                                   placeholder="Select source location with stock..."/>
+                            <field name="branch_id" options="{'no_open': True}"/>
+                            <field name="company_id" invisible="1"/>
+                        </group>
+                        <group string="Destination / Needed Location (To)">
+                            <field name="location_dest_id" 
+                                   readonly="transfer_type == 'inbound'" 
+                                   required="1" 
+                                   force_save="1" 
+                                   options="{'no_create': True}" 
+                                   placeholder="Select destination location..."/>
+                            <field name="picking_type_id" 
+                                   required="1" 
+                                   options="{'no_create': True}"/>
+                            <field name="notes" placeholder="e.g. Shortage Fulfillment / Excess Adjustment"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Product Variants to Transfer">
+                            <field name="line_ids">
+                                <tree editable="bottom" create="false" delete="true">
+                                    <field name="excess_weight_id" invisible="1" force_save="1"/>
+                                    <field name="product_id" readonly="1" force_save="1"/>
+                                    <field name="system_quant_weight" readonly="1" force_save="1" string="Quant Wt (g)"/>
+                                    <field name="physical_weight" readonly="1" force_save="1" string="Physical Wt (g)"/>
+                                    <field name="excess_weight" readonly="1" force_save="1" string="Excess Wt (g)" class="fw-bold text-danger" column_invisible="parent.transfer_type != 'outbound'"/>
+                                    <field name="shortage_weight" readonly="1" force_save="1" string="Shortage Wt (g)" class="fw-bold text-warning" column_invisible="parent.transfer_type != 'inbound'"/>
+                                    <field name="source_stock_weight" readonly="1" force_save="1" string="Available in Source (g)" class="fw-bold text-info" column_invisible="parent.transfer_type != 'inbound'"/>
+                                    <field name="transfer_weight" string="Transfer Wt (g)" class="fw-bold text-success"/>
+                                    <field name="product_uom_id" readonly="1" optional="hide"/>
+                                </tree>
+                            </field>
+                            <group class="oe_subtotal_footer oe_right">
+                                <field name="total_transfer_weight" readonly="1" class="fw-bold text-primary"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button name="action_transfer_and_validate" 
+                            string="Transfer &amp; Validate Now" 
+                            type="object" 
+                            class="btn-primary" 
+                            icon="fa-check-circle"/>
+                    <button name="action_create_draft_transfer" 
+                            string="Create Draft Transfer" 
+                            type="object" 
+                            class="btn-secondary" 
+                            icon="fa-file-text-o"/>
+                    <button string="Cancel" 
+                            class="btn-secondary" 
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Server Action: Transfer Excess Weight for selected lines in Tree View -->
+    <record id="action_server_transfer_excess_weight" model="ir.actions.server">
+        <field name="name">Transfer Excess Weight Out</field>
+        <field name="model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+action = {
+    'name': 'Transfer Excess Weight Out',
+    'type': 'ir.actions.act_window',
+    'res_model': 'stock.location.product.excess.transfer.wizard',
+    'view_mode': 'form',
+    'target': 'new',
+    'context': dict(env.context, active_ids=records.ids, active_model='stock.location.product.excess.weight', default_transfer_type='outbound'),
+}
+        </field>
+    </record>
+
+    <!-- Server Action: Fulfill Shortage Weight for selected lines in Tree View -->
+    <record id="action_server_fulfill_shortage_weight" model="ir.actions.server">
+        <field name="name">Fulfill Shortage Weight In</field>
+        <field name="model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_model_id" ref="model_stock_location_product_excess_weight"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+action = {
+    'name': 'Fulfill Shortage Weight In',
+    'type': 'ir.actions.act_window',
+    'res_model': 'stock.location.product.excess.transfer.wizard',
+    'view_mode': 'form',
+    'target': 'new',
+    'context': dict(env.context, active_ids=records.ids, active_model='stock.location.product.excess.weight', default_transfer_type='inbound'),
+}
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View for Weight Check Audits -->
+    <record id="view_stock_location_weight_check_tree" model="ir.ui.view">
+        <field name="name">stock.location.weight.check.tree</field>
+        <field name="model">stock.location.weight.check</field>
+        <field name="arch" type="xml">
+            <tree string="Location Weight Checks" 
+                  decoration-danger="status == 'excess'" 
+                  decoration-warning="status == 'shortage'" 
+                  decoration-success="status == 'balanced'" 
+                  create="false">
+                <field name="date"/>
+                <field name="location_id"/>
+                <field name="branch_id" optional="show"/>
+                <field name="system_weight"/>
+                <field name="physical_weight" class="fw-bold"/>
+                <field name="difference_weight"/>
+                <field name="excess_weight" class="fw-bold text-danger"/>
+                <field name="shortage_weight" class="fw-bold text-warning"/>
+                <field name="status" widget="badge" 
+                       decoration-success="status == 'balanced'" 
+                       decoration-danger="status == 'excess'" 
+                       decoration-warning="status == 'shortage'"/>
+                <field name="user_id"/>
+                <field name="notes" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View for Weight Check Audits -->
+    <record id="view_stock_location_weight_check_form" model="ir.ui.view">
+        <field name="name">stock.location.weight.check.form</field>
+        <field name="model">stock.location.weight.check</field>
+        <field name="arch" type="xml">
+            <form string="Location Weight Check Audit" create="false" edit="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h2>
+                            <field name="location_id" readonly="1"/>
+                        </h2>
+                    </div>
+                    <group>
+                        <group string="Audit Metadata">
+                            <field name="date" readonly="1"/>
+                            <field name="user_id" readonly="1"/>
+                            <field name="branch_id" readonly="1"/>
+                        </group>
+                        <group string="Reconciliation Status">
+                            <field name="status" widget="badge" 
+                                   decoration-success="status == 'balanced'" 
+                                   decoration-danger="status == 'excess'" 
+                                   decoration-warning="status == 'shortage'"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Weight Data (grams)">
+                            <field name="system_weight" readonly="1"/>
+                            <field name="physical_weight" readonly="1"/>
+                        </group>
+                        <group string="Variance Analysis">
+                            <field name="difference_weight" readonly="1"/>
+                            <field name="excess_weight" readonly="1" class="text-danger fw-bold"/>
+                            <field name="shortage_weight" readonly="1" class="text-warning fw-bold"/>
+                        </group>
+                    </group>
+                    <group string="Verification Notes">
+                        <field name="notes" nolabel="1" readonly="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_stock_location_weight_check_search" model="ir.ui.view">
+        <field name="name">stock.location.weight.check.search</field>
+        <field name="model">stock.location.weight.check</field>
+        <field name="arch" type="xml">
+            <search string="Search Weight Checks">
+                <field name="location_id"/>
+                <field name="branch_id"/>
+                <field name="user_id"/>
+                <separator/>
+                <filter string="Excess Weight" name="excess" domain="[('status', '=', 'excess')]"/>
+                <filter string="Shortage Weight" name="shortage" domain="[('status', '=', 'shortage')]"/>
+                <filter string="Balanced" name="balanced" domain="[('status', '=', 'balanced')]"/>
+                <separator/>
+                <filter string="Today" name="today" domain="[('date', '&gt;=', (context_today()).strftime('%Y-%m-%d 00:00:00'))]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Location" name="group_location" domain="[]" context="{'group_by': 'location_id'}"/>
+                    <filter string="Branch" name="group_branch" domain="[]" context="{'group_by': 'branch_id'}"/>
+                    <filter string="Status" name="group_status" domain="[]" context="{'group_by': 'status'}"/>
+                    <filter string="Verified By" name="group_user" domain="[]" context="{'group_by': 'user_id'}"/>
+                    <filter string="Date" name="group_date" domain="[]" context="{'group_by': 'date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_stock_location_weight_check" model="ir.actions.act_window">
+        <field name="name">Location Weight Audits</field>
+        <field name="res_model">stock.location.weight.check</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_stock_location_weight_check_search"/>
+    </record>
+</odoo>

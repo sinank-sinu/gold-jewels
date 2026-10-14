@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_location_excess_weight_export_wizard_form" model="ir.ui.view">
+        <field name="name">location.excess.weight.export.wizard.form</field>
+        <field name="model">location.excess.weight.export.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Export Location Excess Weight Report">
+                <sheet>
+                    <div class="oe_title">
+                        <h2>Export Excess Weight Report (Excel)</h2>
+                        <p class="text-muted">Export an audit sheet showing location-by-location system weight, physical scale weight, and excess weight.</p>
+                    </div>
+                    <group>
+                        <group string="Filter Options">
+                            <field name="status_filter" widget="radio"/>
+                            <field name="only_internal"/>
+                        </group>
+                        <group string="Branch Selection">
+                            <field name="branch_ids" widget="many2many_tags" placeholder="All Branches"/>
+                        </group>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_export_xlsx" string="Download Excel Report" type="object" class="btn-primary" icon="fa-download"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_location_excess_weight_export_wizard" model="ir.actions.act_window">
+        <field name="name">Export Excess Weight Report</field>
+        <field name="res_model">location.excess.weight.export.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>
