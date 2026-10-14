@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Application Category for User Access Rights -->
+    <record id="module_category_excess_weight" model="ir.module.category">
+        <field name="name">Excess Weight Verification</field>
+        <field name="description">Manage and monitor physical stock excess and shortage weight verification across locations.</field>
+        <field name="sequence">25</field>
+    </record>
+
+    <!-- User Group: Can view weights, load products, view labels, and export reports -->
+    <record id="group_stock_location_excess_weight_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="category_id" ref="module_category_excess_weight"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Manager Group: Full control, auto-fill, and transfer excess/shortage weights -->
+    <record id="group_stock_location_excess_weight_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="category_id" ref="module_category_excess_weight"/>
+        <field name="implied_ids" eval="[(4, ref('group_stock_location_excess_weight_user'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+</odoo>

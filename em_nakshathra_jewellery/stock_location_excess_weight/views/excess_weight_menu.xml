@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Menu under Inventory > Operations -->
+    <menuitem id="menu_stock_location_excess_weight_operations"
+              name="Location Excess Weight"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_stock_location_excess_weight"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="25"/>
+
+    <menuitem id="menu_stock_location_product_excess_weight_operations"
+              name="Excess Weight by Product"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_stock_location_product_excess_weight"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="26"/>
+
+    <menuitem id="menu_stock_location_product_load_wizard_operations"
+              name="Load Products for Excess Weight"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_stock_location_product_load_wizard"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="27"/>
+
+    <!-- Menu under Inventory > Reporting -->
+    <menuitem id="menu_stock_location_excess_weight_report"
+              name="Location Excess Weight"
+              parent="stock.menu_warehouse_report"
+              action="action_stock_location_excess_weight"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="15"/>
+
+    <menuitem id="menu_stock_location_product_excess_weight_report"
+              name="Excess Weight by Product"
+              parent="stock.menu_warehouse_report"
+              action="action_stock_location_product_excess_weight"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="16"/>
+
+    <menuitem id="menu_stock_location_weight_check_report"
+              name="Location Weight Audits"
+              parent="stock.menu_warehouse_report"
+              action="action_stock_location_weight_check"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="17"/>
+
+    <menuitem id="menu_stock_location_excess_weight_export"
+              name="Export Excess Weight (Excel)"
+              parent="stock.menu_warehouse_report"
+              action="action_location_excess_weight_export_wizard"
+              groups="stock_location_excess_weight.group_stock_location_excess_weight_user"
+              sequence="18"/>
+</odoo>

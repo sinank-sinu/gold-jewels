@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_stock_location_product_load_wizard_form" model="ir.ui.view">
+        <field name="name">stock.location.product.load.wizard.form</field>
+        <field name="model">stock.location.product.load.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Load / Scan Products for Excess Weight">
+                <sheet>
+                    <div class="oe_title">
+                        <h2>Load Products for Excess Weight Verification</h2>
+                        <p class="text-muted">
+                            Automatically scans active barcode labels and ledger stock across locations, creating/updating product variant weight lines.
+                        </p>
+                    </div>
+                    <group>
+                        <group string="Location Scope">
+                            <field name="branch_id" options="{'no_create': True}" placeholder="All Branches"/>
+                            <field name="all_locations"/>
+                            <field name="location_ids" widget="many2many_tags" 
+                                   options="{'no_create': True}" 
+                                   invisible="all_locations"
+                                   placeholder="Select internal locations..."/>
+                        </group>
+                        <group string="Product Scope">
+                            <field name="all_products"/>
+                            <field name="product_ids" widget="many2many_tags" 
+                                   options="{'no_create': True}" 
+                                   invisible="all_products"
+                                   placeholder="Select product variants..."/>
+                        </group>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_load_products" string="Scan &amp; Load Products" type="object" class="btn-primary" icon="fa-cubes"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_stock_location_product_load_wizard" model="ir.actions.act_window">
+        <field name="name">Load Products for Excess Weight</field>
+        <field name="res_model">stock.location.product.load.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="stock_location_excess_weight.model_stock_location_product_excess_weight"/>
+        <field name="binding_view_types">list</field>
+    </record>
+</odoo>

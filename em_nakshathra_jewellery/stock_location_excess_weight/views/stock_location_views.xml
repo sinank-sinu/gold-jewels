@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Inherit Location Form View -->
+    <record id="view_location_form_inherit_excess_weight" model="ir.ui.view">
+        <field name="name">stock.location.form.inherit.excess.weight</field>
+        <field name="model">stock.location</field>
+        <field name="inherit_id" ref="stock.view_location_form"/>
+        <field name="arch" type="xml">
+            <!-- Add Smart Buttons -->
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_active_labels"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-tags"
+                        invisible="usage != 'internal'">
+                    <div class="o_stat_info">
+                        <span class="o_stat_value">
+                            <field name="system_label_count"/>
+                        </span>
+                        <span class="o_stat_text">
+                            Labels (<field name="system_label_weight"/>g)
+                        </span>
+                    </div>
+                </button>
+                <button name="action_view_weight_checks"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-history"
+                        invisible="usage != 'internal'">
+                    <field name="weight_check_count" widget="statinfo" string="Weight Audits"/>
+                </button>
+            </xpath>
+
+            <!-- Add Weight Verification Tab/Group -->
+            <xpath expr="//sheet" position="inside">
+                <notebook invisible="usage != 'internal'">
+                    <page string="Weight Verification &amp; Excess Analysis" name="weight_verification">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <span class="fs-6 me-2 fw-bold">Reconciliation Status:</span>
+                                <field name="weight_status" widget="badge" readonly="1"
+                                       decoration-success="weight_status == 'balanced'"
+                                       decoration-danger="weight_status == 'excess'"
+                                       decoration-warning="weight_status == 'shortage'"
+                                       decoration-info="weight_status == 'unverified'"/>
+                            </div>
+                            <div class="btn-group">
+                                <button name="action_refresh_location_weights" 
+                                        type="object" 
+                                        string="Refresh System Weights" 
+                                        icon="fa-refresh" 
+                                        class="btn btn-outline-primary"/>
+                                <button name="action_open_weight_wizard" 
+                                        type="object" 
+                                        string="Record Physical Scale Weight" 
+                                        icon="fa-balance-scale" 
+                                        class="btn btn-primary"/>
+                            </div>
+                        </div>
+
+                        <group>
+                            <group string="System Registered Stock">
+                                <field name="system_weight_basis" widget="radio"/>
+                                <field name="system_label_count"/>
+                                <field name="system_label_weight"/>
+                                <field name="system_quant_weight"/>
+                                <field name="system_weight" class="fw-bold text-primary fs-5"/>
+                            </group>
+                            <group string="Physical Scale Verification">
+                                <field name="physical_weight" class="fw-bold fs-5"/>
+                                <field name="weight_tolerance"/>
+                                <field name="difference_weight" class="fw-bold"/>
+                                <field name="excess_weight" class="fw-bold text-danger fs-5" invisible="excess_weight == 0"/>
+                                <field name="shortage_weight" class="fw-bold text-warning fs-5" invisible="shortage_weight == 0"/>
+                                <field name="last_weight_check_date" readonly="1"/>
+                                <field name="last_weight_check_user_id" readonly="1"/>
+                            </group>
+                        </group>
+
+                        <separator string="Physical Verification History"/>
+                        <field name="weight_check_ids" readonly="1">
+                            <tree string="Verification History" create="false" delete="false"
+                                  decoration-danger="status == 'excess'"
+                                  decoration-warning="status == 'shortage'"
+                                  decoration-success="status == 'balanced'">
+                                <field name="date"/>
+                                <field name="user_id"/>
+                                <field name="system_weight"/>
+                                <field name="physical_weight"/>
+                                <field name="difference_weight"/>
+                                <field name="excess_weight" class="fw-bold text-danger"/>
+                                <field name="shortage_weight" class="fw-bold text-warning"/>
+                                <field name="status" widget="badge" 
+                                       decoration-success="status == 'balanced'" 
+                                       decoration-danger="status == 'excess'" 
+                                       decoration-warning="status == 'shortage'"/>
+                                <field name="notes"/>
+                            </tree>
+                        </field>
+                    </page>
+                    <page string="Product Variants Breakdown" name="product_variants_weight">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <p class="text-muted mb-0">
+                                Weigh and monitor excess/shortage weight for each individual product variant in this location.
+                            </p>
+                            <button name="action_load_or_refresh_products" 
+                                    type="object" 
+                                    string="Load / Refresh Products in Location" 
+                                    icon="fa-cubes" 
+                                    class="btn btn-outline-primary"/>
+                        </div>
+                        <field name="product_weight_ids">
+                            <tree string="Product Variant Weights" editable="bottom"
+                                  decoration-danger="weight_status == 'excess'"
+                                  decoration-warning="weight_status == 'shortage'"
+                                  decoration-success="weight_status == 'balanced'"
+                                  decoration-muted="weight_status == 'unverified'">
+                                <field name="product_id" readonly="1"/>
+                                <field name="default_code" readonly="1" optional="hide"/>
+                                <field name="system_label_count" readonly="1" string="Labels Qty"/>
+                                <field name="system_label_weight" readonly="1" string="Labels Wt (g)"/>
+                                <field name="system_quant_weight" readonly="1" string="Quant Wt (g)"/>
+                                <field name="system_weight" readonly="1" class="fw-bold text-primary" string="System Wt (g)"/>
+                                <field name="physical_weight" class="fw-bold text-dark" string="Physical Wt (g)"/>
+                                <field name="weight_tolerance" optional="hide"/>
+                                <field name="difference_weight" readonly="1" optional="hide"/>
+                                <field name="excess_weight" readonly="1" class="fw-bold text-danger" string="Excess Wt (g)"/>
+                                <field name="shortage_weight" readonly="1" class="fw-bold text-warning" string="Shortage Wt (g)"/>
+                                <field name="weight_status" readonly="1" widget="badge"
+                                       decoration-success="weight_status == 'balanced'"
+                                       decoration-danger="weight_status == 'excess'"
+                                       decoration-warning="weight_status == 'shortage'"
+                                       decoration-info="weight_status == 'unverified'"/>
+                                <field name="notes" placeholder="Tray / Note" optional="show"/>
+                                <button name="action_view_labels" type="object" icon="fa-tags" title="View Active Labels"/>
+                            </tree>
+                        </field>
+                    </page>
+                </notebook>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Standard Location Tree View (Add optional weight columns) -->
+    <record id="view_location_tree2_inherit_excess_weight" model="ir.ui.view">
+        <field name="name">stock.location.tree.inherit.excess.weight</field>
+        <field name="model">stock.location</field>
+        <field name="inherit_id" ref="stock.view_location_tree2"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='usage']" position="after">
+                <field name="system_weight" optional="show"/>
+                <field name="physical_weight" optional="show"/>
+                <field name="excess_weight" optional="show" class="fw-bold text-danger"/>
+                <field name="shortage_weight" optional="hide" class="fw-bold text-warning"/>
+                <field name="weight_status" optional="show" widget="badge"
+                       decoration-success="weight_status == 'balanced'"
+                       decoration-danger="weight_status == 'excess'"
+                       decoration-warning="weight_status == 'shortage'"
+                       decoration-info="weight_status == 'unverified'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Specialized Dedicated Tree View for Location Excess Weight -->
+    <record id="view_location_excess_weight_tree" model="ir.ui.view">
+        <field name="name">stock.location.excess.weight.tree</field>
+        <field name="model">stock.location</field>
+        <field name="arch" type="xml">
+            <tree string="Location Excess Weight" 
+                  editable="bottom"
+                  multi_edit="1"
+                  decoration-danger="weight_status == 'excess'" 
+                  decoration-warning="weight_status == 'shortage'" 
+                  decoration-success="weight_status == 'balanced'" 
+                  decoration-muted="weight_status == 'unverified'">
+                <header>
+                    <button name="action_auto_fill_physical_weight" 
+                            type="object" 
+                            string="Auto-Fill Physical Weight" 
+                            class="btn-primary" 
+                            icon="fa-clone"/>
+                </header>
+                <field name="complete_name" readonly="1" string="Stock Location"/>
+                <field name="branch_id" readonly="1" optional="show"/>
+                <field name="system_weight_basis" optional="hide"/>
+                <field name="system_label_count" readonly="1" optional="show" string="Labels Qty"/>
+                <field name="system_label_weight" readonly="1" optional="show" string="Labels Wt (g)"/>
+                <field name="system_quant_weight" readonly="1" optional="show" string="Quant Wt (g)"/>
+                <field name="system_weight" readonly="1" class="fw-bold text-primary" string="System Wt (g)"/>
+                <field name="physical_weight" class="fw-bold text-dark" string="Physical Wt (g)"/>
+                <field name="weight_tolerance" optional="hide" string="Tolerance (±g)"/>
+                <field name="difference_weight" readonly="1" optional="hide" string="Diff Wt (g)"/>
+                <field name="excess_weight" readonly="1" class="fw-bold text-danger" string="Excess Wt (g)"/>
+                <field name="shortage_weight" readonly="1" class="fw-bold text-warning" string="Shortage Wt (g)" optional="show"/>
+                <field name="weight_status" readonly="1" widget="badge" 
+                       decoration-success="weight_status == 'balanced'" 
+                       decoration-danger="weight_status == 'excess'" 
+                       decoration-warning="weight_status == 'shortage'" 
+                       decoration-info="weight_status == 'unverified'"/>
+                <field name="last_weight_check_date" readonly="1" optional="show"/>
+                <field name="last_weight_check_user_id" readonly="1" optional="hide"/>
+                <button name="action_auto_fill_physical_weight" 
+                        type="object" 
+                        icon="fa-clone" 
+                        title="Auto-fill Physical Weight from System Weight"/>
+                <button name="action_load_or_refresh_products" 
+                        type="object" 
+                        icon="fa-cubes" 
+                        title="Load / Refresh Product Variants"/>
+                <button name="action_open_weight_wizard" 
+                        type="object" 
+                        string="Verify Scale" 
+                        icon="fa-balance-scale" 
+                        title="Record Physical Scale Verification"/>
+                <button name="action_view_active_labels" 
+                        type="object" 
+                        string="Labels" 
+                        icon="fa-tags" 
+                        title="View Active Labels in Location"/>
+                <button name="action_refresh_location_weights" 
+                        type="object" 
+                        icon="fa-refresh" 
+                        title="Refresh System Weight"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Server Action: Auto-Fill Physical Weight for selected locations -->
+    <record id="action_server_location_auto_fill_weight" model="ir.actions.server">
+        <field name="name">Auto-Fill Physical Weight (= System Weight)</field>
+        <field name="model_id" ref="stock.model_stock_location"/>
+        <field name="binding_model_id" ref="stock.model_stock_location"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            records.action_auto_fill_physical_weight()
+        </field>
+    </record>
+
+    <!-- Dedicated Search View for Excess Weight Analysis -->
+    <record id="view_location_excess_weight_search" model="ir.ui.view">
+        <field name="name">stock.location.excess.weight.search</field>
+        <field name="model">stock.location</field>
+        <field name="arch" type="xml">
+            <search string="Search Location Weights">
+                <field name="complete_name" string="Location Name"/>
+                <field name="branch_id" string="Branch"/>
+                <field name="barcode" string="Barcode"/>
+                <separator/>
+                <filter string="Excess Weight (Surplus)" name="filter_excess" domain="[('excess_weight', '&gt;', 0)]"/>
+                <filter string="Shortage Weight (Deficit)" name="filter_shortage" domain="[('shortage_weight', '&gt;', 0)]"/>
+                <filter string="Mismatched Locations" name="filter_mismatch" domain="[('weight_status', 'in', ['excess', 'shortage'])]"/>
+                <filter string="Balanced / Matched" name="filter_balanced" domain="[('weight_status', '=', 'balanced')]"/>
+                <filter string="Unverified Locations" name="filter_unverified" domain="[('weight_status', '=', 'unverified')]"/>
+                <separator/>
+                <filter string="Internal Locations Only" name="filter_internal" domain="[('usage', '=', 'internal')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Branch" name="group_branch" domain="[]" context="{'group_by': 'branch_id'}"/>
+                    <filter string="Weight Status" name="group_status" domain="[]" context="{'group_by': 'weight_status'}"/>
+                    <filter string="Location Type" name="group_usage" domain="[]" context="{'group_by': 'usage'}"/>
+                    <filter string="Warehouse" name="group_warehouse" domain="[]" context="{'group_by': 'warehouse_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action for Location Excess Weight -->
+    <record id="action_stock_location_excess_weight" model="ir.actions.act_window">
+        <field name="name">Location Excess Weight</field>
+        <field name="res_model">stock.location</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_location_excess_weight_search"/>
+        <field name="context">{
+            'search_default_filter_internal': 1,
+            'default_usage': 'internal'
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No location excess weight records found.
+            </p>
+            <p>
+                Use this screen to monitor physical scale weight vs system registered weight per stock location.
+                Enter physical weights directly in the list, or click the balance scale icon to record detailed scale audits.
+            </p>
+        </field>
+    </record>
+
+    <!-- Set tree view id explicitly for action -->
+    <record id="action_stock_location_excess_weight_view_tree" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_location_excess_weight_tree"/>
+        <field name="act_window_id" ref="action_stock_location_excess_weight"/>
+    </record>
+
+    <record id="action_stock_location_excess_weight_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="stock.view_location_form"/>
+        <field name="act_window_id" ref="action_stock_location_excess_weight"/>
+    </record>
+</odoo>
