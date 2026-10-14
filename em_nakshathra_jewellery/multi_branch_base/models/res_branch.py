@@ -48,8 +48,10 @@ class Branch(models.Model):
     phone = fields.Char(store=True)
     website = fields.Char(readonly=False)
     branch_code = fields.Char()
-    branch_location_id = fields.Many2one('stock.location',"Brand Location")
-    old_gold_location_id = fields.Many2one('stock.location',"Old Gold Location")
+    branch_location_id = fields.Many2one('stock.location', string="Brand Location")
+    old_gold_location_id = fields.Many2one('stock.location', string="OG Location")
+    diamond_og_location_id = fields.Many2one('stock.location', string="Diamond OG Location")
+    sr_location_id = fields.Many2one('stock.location', string="SR Location")
 
     _sql_constraints = [
         ('name_uniq', 'unique (name)', 'The Branch name must be unique !')

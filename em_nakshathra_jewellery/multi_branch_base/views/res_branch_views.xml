@@ -36,7 +36,8 @@
                                 <field name="branch_code"/>
                                 <field name="branch_location_id"/>
                                 <field name="old_gold_location_id"/>
-
+                                <field name="diamond_og_location_id"/>
+                                <field name="sr_location_id"/>
                             </group>
                             </group>
                         </page>

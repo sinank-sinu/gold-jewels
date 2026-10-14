@@ -7,6 +7,7 @@
             <tree>
                 <field name="name"/>
                 <field name="percentage"/>
+                <field name="is_diamond_og" widget="boolean_toggle"/>
                 <field name="active"/>
             </tree>
         </field>
@@ -21,6 +22,7 @@
                     <group>
                         <field name="name" placeholder="22K / 18K"/>
                         <field name="percentage"/>
+                        <field name="is_diamond_og" widget="boolean_toggle"/>
                         <field name="active"/>
                     </group>
                 </sheet>
