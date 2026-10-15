@@ -187,12 +187,11 @@ class PurchaseOrder(models.Model):
             else:
                 invalid_lines = order.order_line.filtered(
                     lambda l: (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
-                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
-                              l.product_id.detailed_type in ('consu', 'service')
+                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og))
                 )
                 if invalid_lines:
                     names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('This standard Purchase Order contains Old Gold, Diamond OG, or Expense products (%s). Please remove them before saving.') % names)
+                    raise ValidationError(_('This standard Purchase Order contains Old Gold or Diamond OG products (%s). Please remove them before saving.') % names)
 
     @api.constrains('is_old_gold', 'is_diamond_og', 'is_purchase_expense', 'unfix')
     def _check_mutually_exclusive_types(self):
@@ -327,18 +326,14 @@ class PurchaseOrder(models.Model):
                               (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
                               l.product_id.detailed_type in ('consu', 'service')
                 )
-                if invalid_lines:
-                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('Cannot confirm order: This is an Old Gold purchase, but contains non-Old Gold products (%s). Please remove them first.') % names)
+               
             elif order.is_diamond_og:
                 invalid_lines = order.order_line.filtered(
                     lambda l: not (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
                               (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
                               l.product_id.detailed_type in ('consu', 'service')
                 )
-                if invalid_lines:
-                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('Cannot confirm order: This is a Diamond OG purchase, but contains non-Diamond OG products (%s). Please remove them first.') % names)
+               
             elif order.is_purchase_expense:
                 invalid_lines = order.order_line.filtered(lambda l: l.product_id and l.product_id.detailed_type not in ('consu', 'service'))
                 if invalid_lines:
@@ -347,8 +342,7 @@ class PurchaseOrder(models.Model):
             else:
                 invalid_lines = order.order_line.filtered(
                     lambda l: (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
-                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
-                              l.product_id.detailed_type in ('consu', 'service')
+                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og))
                 )
                 if invalid_lines:
                     names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
