@@ -13,6 +13,12 @@ class ProductTemplate(models.Model):
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
     is_old_gold = fields.Boolean(string="Is Old Gold")
+    is_diamond_og = fields.Boolean(string="Is Diamond OG")
+    is_purchase_expense = fields.Boolean(
+        string="Is Purchase Expense",
+        compute="_compute_is_purchase_expense",
+        search="_search_is_purchase_expense",
+    )
     is_scheme_product = fields.Boolean(string="Scheme Product")
     purity_id = fields.Many2one(
         'gold.purity',
@@ -22,6 +28,19 @@ class ProductTemplate(models.Model):
         string="Labels",
         compute="_compute_label_count"
     )
+
+    @api.depends('detailed_type')
+    def _compute_is_purchase_expense(self):
+        for tmpl in self:
+            tmpl.is_purchase_expense = tmpl.detailed_type in ('consu', 'service')
+
+    def _search_is_purchase_expense(self, operator, value):
+        if operator not in ('=', '!='):
+            return []
+        is_true = bool(value) if operator == '=' else not bool(value)
+        if is_true:
+            return [('detailed_type', 'in', ['consu', 'service'])]
+        return [('detailed_type', 'not in', ['consu', 'service'])]
 
 
     def _compute_label_count(self):
@@ -61,8 +80,19 @@ class ProductTemplate(models.Model):
 class Product(models.Model):
     _inherit = 'product.product'
 
-    is_old_gold = fields.Boolean(string="Is Old Gold")
-    is_scheme_product = fields.Boolean(string="Scheme Product")
+    is_old_gold = fields.Boolean(
+        related='product_tmpl_id.is_old_gold',
+        string="Is Old Gold",
+        store=True,
+        readonly=False,
+    )
+    is_diamond_og = fields.Boolean(
+        related='product_tmpl_id.is_diamond_og',
+        string="Is Diamond OG",
+        store=True,
+        readonly=False,
+    )
+
     sale_purity_id = fields.Many2one(
         'gold.purity',
         string="Sale Purity"

@@ -11,7 +11,7 @@ class ProductLabel(models.Model):
     _name = 'product.label'
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = 'Product Label'
-    _rec_names_search = ['name', 'barcode']
+    _rec_names_search = ['name', 'barcode', 'barcode2']
     # _rec_name = 'label_name'
 
     name = fields.Char(string="Label Reference", required=True, copy=False, default="New", tracking=True)
@@ -155,6 +155,9 @@ class ProductLabel(models.Model):
     barcode = fields.Char(
         'Barcode', copy=False, index='btree_not_null',
         help="International Article Number used for product identification.")
+    barcode2 = fields.Char(
+        'Second Barcode', copy=False, index='btree_not_null',
+        help="Second barcode for alternative product identification (e.g. manufacturer or vendor barcode).")
     tag_weight = fields.Float(string="Tag Weight (g)")
     sale_fine_weight = fields.Float(string="Fine Weight  (g)", compute="_compute_sale_fine_weight", digits=(16, 3))
     purchase_fine_weight = fields.Float(string="Fine Weight  (g)", compute="_compute_purchase_fine_weight", digits=(16, 3))

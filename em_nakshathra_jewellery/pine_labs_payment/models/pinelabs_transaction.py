@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import requests
+import time
 from datetime import timezone
 
 from odoo import api, fields, models, _
@@ -79,8 +80,8 @@ class PineLabsTransaction(models.Model):
 
     @api.model
     def create(self, vals):
-        if vals.get('name', _('New')) == _('New'):
-            vals['name'] = self.env['ir.sequence'].next_by_code('pinelabs.transaction') or _('New')
+        if not vals.get('name') or vals.get('name') in ('New', _('New')):
+            vals['name'] = self.env['ir.sequence'].next_by_code('pinelabs.transaction') or f"PLT/{int(time.time())}"
         return super().create(vals)
 
     def action_retry(self):
@@ -249,11 +250,69 @@ class PineLabsTransaction(models.Model):
             self.state = 'failed'
             return response
 
-        # Pine Labs returns PlutusTransactionReferenceID (integer) on success
+        # If terminal has an open pending transaction, attempt auto-cancel and retry
+        response_code = response.get('ResponseCode')
+        response_message = str(response.get('ResponseMessage', ''))
+
+        if response_code is not None and str(response_code) != '0':
+            if 'OPEN TXN' in response_message.upper() or 'APPROVE' in response_message.upper():
+                existing_ref = None
+                existing_amt = None
+                add_info = response.get('AdditionalInfo') or []
+                if isinstance(add_info, list):
+                    for item in add_info:
+                        if isinstance(item, dict):
+                            if item.get('Tag') == 'ExistingReferenceId':
+                                existing_ref = item.get('Value')
+                            elif item.get('Tag') == 'Amount':
+                                existing_amt = item.get('Value')
+                if existing_ref:
+                    _logger.warning('Pine Labs terminal has open transaction %s (amt=%s). Attempting auto-cancel and retry...', existing_ref, existing_amt)
+                    try:
+                        plutus_cancel_id = int(existing_ref)
+                    except (TypeError, ValueError):
+                        plutus_cancel_id = existing_ref
+
+                    try:
+                        cancel_amt = int(existing_amt) if existing_amt else int(round(amount * 100))
+                    except (TypeError, ValueError):
+                        cancel_amt = int(round(amount * 100))
+
+                    cancel_url = f"{config['base_url']}/CancelTransaction"
+                    cancel_payload = {
+                        "MerchantID": config['merchant_id'],
+                        "SecurityToken": config['security_token'],
+                        "ClientID": config['client_id'],
+                        "StoreID": config['store_id'],
+                        "PlutusTransactionReferenceID": plutus_cancel_id,
+                        "Amount": cancel_amt,
+                    }
+                    cancel_resp = self._pinelabs_make_request(cancel_url, cancel_payload)
+                    _logger.info('Auto-cancel open txn %s response: %s', existing_ref, cancel_resp)
+                    if cancel_resp.get('ResponseCode') == 0 or 'APPROVED' in str(cancel_resp.get('ResponseMessage', '')).upper():
+                        # Retry uploading new payment now that previous stuck transaction is cancelled
+                        time.sleep(1)
+                        response = self._pinelabs_make_request(url, payload)
+                        _logger.info('Pine Labs retry UploadBilledTransaction response: %s', response)
+                        self.response_log = str(response)
+                    else:
+                        # Cancel could not be done by server (e.g. CANNOT CANCEL AS TRANSACTION IS IN PROGRESS)
+                        # Save the cancel error message into response so wizard can explain it clearly
+                        cancel_err = cancel_resp.get('ResponseMessage') or cancel_resp.get('error') or ''
+                        if cancel_err:
+                            response['TerminalCancelError'] = cancel_err
+                            response['ExistingReferenceId'] = str(existing_ref)
+
+        # Pine Labs returns PlutusTransactionReferenceID (positive integer) on success
         ref_id = (response.get('PlutusTransactionReferenceID') or
                   response.get('plutusTransactionReferenceID'))
-        if ref_id:
-            self.pinelabs_transaction_id = str(ref_id)
+        try:
+            ref_int = int(ref_id) if ref_id is not None else 0
+        except (ValueError, TypeError):
+            ref_int = 0
+
+        if response.get('ResponseCode') == 0 and ref_int > 0:
+            self.pinelabs_transaction_id = str(ref_int)
             self.merchant_id = config['merchant_id']
             self.terminal_id = config['terminal_id']
             self.state = 'waiting'
@@ -334,10 +393,29 @@ class PineLabsTransaction(models.Model):
         _logger.info('Pine Labs status parsed txn_dict: %s', txn_dict)
 
         # ── Determine outcome based on ResponseCode ──────────────────────
-        # ResponseCode 0 = TXN APPROVED
-        # ResponseCode 1008 = TXN VOIDED
-        # None / missing TransactionData = still pending
-        if response_code is None or (not txn_dict and response_code not in (0, 1008)):
+        # ResponseCode 0 = TXN APPROVED (Success)
+        # ResponseCode 1001 = TXN UPLOADED (Pending on terminal)
+        # ResponseCode 1008 = TXN VOIDED / CANCELLED
+        msg_upper = response_message.upper()
+
+        if response_code in (1008, '1008'):  # Voided / Cancelled
+            self.state = 'cancelled'
+            return {'status': 'failed', 'message': _('Transaction voided/cancelled on Pine Labs terminal.')}
+
+        # Terminal has completed, dropped, or cancelled the transaction:
+        if response_code not in (0, '0') and any(
+            x in msg_upper for x in [
+                'NOT FOUND', 'INVALID TRANSACTION', 'CANCELLED', 'CANCELED',
+                'TIMED OUT', 'TIMEOUT', 'DECLINED', 'DOES NOT EXIST', 'NOT APPLICABLE'
+            ]
+        ):
+            self.state = 'cancelled' if any(c in msg_upper for c in ['CANCEL', 'NOT FOUND', 'INVALID']) else 'failed'
+            return {
+                'status': 'failed',
+                'message': _('Pine Labs terminal: %s') % response_message,
+            }
+
+        if response_code in (1001, '1001') or response_code is None or (not txn_dict and response_code not in (0, '0')):
             return {'status': 'pending'}
 
         if response_code == 0 or str(response_code) == '0':  # Success / Approved
@@ -444,22 +522,43 @@ class PineLabsTransaction(models.Model):
                 str(self.pinelabs_transaction_id).startswith('DEMO')):
             self.state = 'cancelled'
             self.response_log = "DEMO MODE CANCEL SUCCESS"
-            return {'status': 'cancelled'}
+            return {'status': 'cancelled', 'success': True, 'ResponseCode': 0, 'ResponseMessage': 'DEMO CANCEL SUCCESS'}
 
         url = f"{config['base_url']}/CancelTransaction"
+
+        # Pine Labs expects PlutusTransactionReferenceID as integer if possible
+        try:
+            plutus_ref_id = int(self.pinelabs_transaction_id)
+        except (TypeError, ValueError):
+            plutus_ref_id = self.pinelabs_transaction_id
 
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
             "ClientID": config['client_id'],
             "StoreID": config['store_id'],
-            "PlutusTransactionReferenceID": self.pinelabs_transaction_id,
+            "PlutusTransactionReferenceID": plutus_ref_id,
             "Amount": int(round(self.amount * 100)),  # Pine Labs expects paise (rupees × 100)
         }
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs CancelTransaction response: %s', response)
         self.response_log = str(response)
-        if not response.get('error'):
+
+        resp_code = response.get('ResponseCode')
+        resp_msg = str(response.get('ResponseMessage', ''))
+        resp_upper = resp_msg.upper()
+
+        # Pine Labs success: ResponseCode == 0 or APPROVED in response message,
+        # OR terminal reports that the transaction is already gone / not found / cancelled
+        if (resp_code == 0 or str(resp_code) == '0' or
+            'APPROVED' in resp_upper or
+            any(k in resp_upper for k in ['NOT FOUND', 'INVALID TRANSACTION', 'ALREADY CANCELLED', 'DOES NOT EXIST'])):
             self.state = 'cancelled'
+            response['success'] = True
+            if any(k in resp_upper for k in ['NOT FOUND', 'INVALID TRANSACTION', 'DOES NOT EXIST']):
+                response['ResponseMessage'] = _('Transaction is no longer active on terminal (closed or already cancelled).')
+        else:
+            response['success'] = False
+
         return response

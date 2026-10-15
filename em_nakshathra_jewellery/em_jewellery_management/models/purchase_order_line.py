@@ -1,4 +1,5 @@
-from odoo import models, fields,api
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
 
 
 class PurchaseOrderLine(models.Model):
@@ -42,6 +43,8 @@ class PurchaseOrderLine(models.Model):
     product_qty = fields.Float(digits=(16, 3))
 
     sale_return_line_id = fields.Many2one('sale.return.line', string="Sale Return Line", ondelete='set null')
+    is_diamond_og = fields.Boolean(related='order_id.is_diamond_og', string="Is Diamond OG")
+    is_old_gold = fields.Boolean(related='order_id.is_old_gold', string="Is OG")
     purity_id = fields.Many2one('gold.purity', string="Purity")
     fine_weight = fields.Float(string="Fine Weight  (g)",compute="_compute_fine_weight",digits=(16, 3))
     metal_amount = fields.Float(string="Metal Amount",compute="_compute_metal_amount", digits=(16, 3))
@@ -148,19 +151,27 @@ class PurchaseOrderLine(models.Model):
             else:
                 rec.mc_amount = rec.net_weight * rec.gold_rate
 
-    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount')
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty')
     def _compute_subtotal(self):
         for rec in self:
-            if rec.sale_return_line_id:
+            if rec.order_id and rec.order_id.is_purchase_expense:
+                rec.price_subtotal = (rec.price_unit or 0.0) * (rec.product_qty or 0.0)
+            elif rec.sale_return_line_id:
                 rec.price_subtotal = rec.sale_return_line_id.amount
             else:
                 rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
 
-    @api.depends('price_subtotal', 'product_qty', 'product_uom_qty')
+    @api.depends('price_subtotal', 'product_qty', 'product_uom_qty', 'order_id.is_purchase_expense')
     def _compute_price_unit(self):
         for rec in self:
+            if rec.order_id and rec.order_id.is_purchase_expense:
+                continue
             rec.price_unit = (rec.price_subtotal / rec.product_qty) if rec.product_qty else 0.0
 
+    @api.onchange('product_qty', 'price_unit')
+    def _onchange_expense_price_or_qty(self):
+        if self.order_id and self.order_id.is_purchase_expense:
+            self.price_subtotal = (self.price_unit or 0.0) * (self.product_qty or 0.0)
 
     def _prepare_stock_moves(self, picking):
         moves = super()._prepare_stock_moves(picking)
@@ -175,12 +186,191 @@ class PurchaseOrderLine(models.Model):
         for rec in self:
             rec.total_fine = rec.mc_fine + rec.fine_weight
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('product_template_id') and not vals.get('product_id'):
+                tmpl = self.env['product.template'].browse(vals['product_template_id'])
+                variant = tmpl.product_variant_id or tmpl.product_variant_ids[:1]
+                if variant:
+                    vals['product_id'] = variant.id
+                    if 'product_uom' not in vals:
+                        vals['product_uom'] = (variant.uom_po_id or variant.uom_id).id
+                    if 'name' not in vals:
+                        vals['name'] = variant.display_name
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if vals.get('product_template_id') and not vals.get('product_id'):
+            tmpl = self.env['product.template'].browse(vals['product_template_id'])
+            variant = tmpl.product_variant_id or tmpl.product_variant_ids[:1]
+            if variant:
+                vals['product_id'] = variant.id
+        return super().write(vals)
+
+    @api.onchange('product_template_id')
+    def _onchange_product_template_id(self):
+        if self.product_template_id and (not self.product_id or self.product_id.product_tmpl_id != self.product_template_id):
+            variant = self.product_template_id.product_variant_id or self.product_template_id.product_variant_ids[:1]
+            if variant:
+                self.product_id = variant
+                self.product_uom = variant.uom_po_id or variant.uom_id
+                self.name = variant.display_name
+                if not self.price_unit:
+                    self.price_unit = variant.standard_price or 0.0
+                if not self.product_qty:
+                    self.product_qty = 1.0
+                if self.order_id and self.order_id.is_purchase_expense:
+                    self.price_subtotal = (self.price_unit or 0.0) * (self.product_qty or 1.0)
+
     @api.onchange('product_id')
     def _onchange_purchase_product_id(self):
         if self.product_id:
-            self.purity_id = self.product_id.purity_id.id
+            if self.product_id.purity_id:
+                if self.order_id.is_diamond_og and not self.product_id.purity_id.is_diamond_og:
+                    self.purity_id = False
+                elif self.order_id.is_old_gold and self.product_id.purity_id.is_diamond_og:
+                    self.purity_id = False
+                else:
+                    self.purity_id = self.product_id.purity_id.id
+            else:
+                self.purity_id = False
+            if not self.product_uom:
+                self.product_uom = self.product_id.uom_po_id or self.product_id.uom_id
+            if not self.name:
+                self.name = self.product_id.display_name
+            if not self.price_unit and self.product_id.standard_price:
+                self.price_unit = self.product_id.standard_price
             if self.order_id.is_old_gold:
                 self.purchase_making_charge_type = 'rate_per_gram'
+
+        for line in self:
+            if not line.order_id or not line.product_id:
+                continue
+            is_og = line.product_id.is_old_gold or (line.product_template_id and line.product_template_id.is_old_gold)
+            is_dog = line.product_id.is_diamond_og or (line.product_template_id and line.product_template_id.is_diamond_og)
+            is_exp = line.product_id.detailed_type in ('consu', 'service')
+
+            # 1. Purchase Expense mode: Only Consumable and Service products allowed
+            if line.order_id.is_purchase_expense:
+                if not is_exp:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('Only Consumable and Service products can be selected when Purchase Expense is enabled!')
+                        }
+                    }
+
+            # 2. Old Gold mode: Only Old Gold products allowed
+            elif line.order_id.is_old_gold:
+                if not is_og or is_dog:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('You can only select Old Gold products when the OG toggle is turned on!')
+                        }
+                    }
+
+            # 3. Diamond OG mode: Only Diamond OG products allowed
+            elif line.order_id.is_diamond_og:
+                if not is_dog or is_og:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('You can only select Diamond OG products when the Diamond OG toggle is turned on!')
+                        }
+                    }
+
+            # 4. Standard mode: No Old Gold, No Diamond OG, No Expense products
+            else:
+                if is_og:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('You cannot select Old Gold products in a standard Purchase Order!')
+                        }
+                    }
+                if is_dog:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('You cannot select Diamond OG products in a standard Purchase Order!')
+                        }
+                    }
+                if is_exp:
+                    line.product_id = False
+                    return {
+                        'warning': {
+                            'title': _('Invalid Product Selection'),
+                            'message': _('You cannot select Expense (Consumable/Service) products in a standard Purchase Order! Please enable Purchase Expense.')
+                        }
+                    }
+
+    @api.constrains('product_id')
+    def _check_product_type_and_og(self):
+        for line in self:
+            if not line.order_id or not line.product_id:
+                continue
+            is_og = line.product_id.is_old_gold or (line.product_template_id and line.product_template_id.is_old_gold)
+            is_dog = line.product_id.is_diamond_og or (line.product_template_id and line.product_template_id.is_diamond_og)
+            is_exp = line.product_id.detailed_type in ('consu', 'service')
+
+            if line.order_id.is_purchase_expense:
+                if not is_exp:
+                    raise ValidationError(_('In Purchase Expense mode, only Consumable and Service products are allowed.'))
+            elif line.order_id.is_old_gold:
+                if not is_og or is_dog:
+                    raise ValidationError(_('In Old Gold mode, only Old Gold products are allowed.'))
+            elif line.order_id.is_diamond_og:
+                if not is_dog or is_og:
+                    raise ValidationError(_('In Diamond OG mode, only Diamond OG products are allowed.'))
+            else:
+                if is_og:
+                    raise ValidationError(_('Old Gold products cannot be purchased in a standard Purchase Order.'))
+                if is_dog:
+                    raise ValidationError(_('Diamond OG products cannot be purchased in a standard Purchase Order.'))
+                if is_exp:
+                    raise ValidationError(_('Expense (Consumable/Service) products cannot be purchased in a standard Purchase Order. Please enable Purchase Expense.'))
+
+    @api.onchange('purity_id')
+    def _onchange_purity_id_diamond_og(self):
+        for line in self:
+            if not line.purity_id or not line.order_id:
+                continue
+            if line.order_id.is_diamond_og and not line.purity_id.is_diamond_og:
+                p_name = line.purity_id.name
+                line.purity_id = False
+                return {
+                    'warning': {
+                        'title': _('Invalid Purity Selection'),
+                        'message': _('Purity "%s" is not a Diamond OG purity! Only Diamond OG purities can be selected when Diamond OG is enabled.') % p_name
+                    }
+                }
+            elif line.order_id.is_old_gold and line.purity_id.is_diamond_og:
+                p_name = line.purity_id.name
+                line.purity_id = False
+                return {
+                    'warning': {
+                        'title': _('Invalid Purity Selection'),
+                        'message': _('Purity "%s" is a Diamond OG purity! It cannot be selected in a regular Old Gold (OG) Purchase Order.') % p_name
+                    }
+                }
+
+    @api.constrains('purity_id', 'order_id')
+    def _check_purity_diamond_og(self):
+        for line in self:
+            if not line.order_id or not line.purity_id:
+                continue
+            if line.order_id.is_diamond_og and not line.purity_id.is_diamond_og:
+                raise ValidationError(_('In Diamond OG mode, only Diamond OG purities are allowed (purity: %s).') % line.purity_id.name)
+            elif line.order_id.is_old_gold and line.purity_id.is_diamond_og:
+                raise ValidationError(_('Diamond OG purities (such as %s) cannot be selected in a regular Old Gold (OG) Purchase Order.') % line.purity_id.name)
+
 
 
 

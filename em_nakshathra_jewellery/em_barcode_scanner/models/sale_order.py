@@ -24,13 +24,14 @@ class SaleOrder(models.Model):
         company_id = order.company_id.id if hasattr(order, 'company_id') and order.company_id else False
 
         label = False
+        barcode_domain = ['|', ('barcode', '=', barcode), ('barcode2', '=', barcode)]
         if company_id:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+                barcode_domain + [('company_id', '=', company_id), ('active', '=', True)], limit=1
             )
         if not label:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('active', '=', True)], limit=1
+                barcode_domain + [('active', '=', True)], limit=1
             )
 
         if label:
@@ -55,7 +56,7 @@ class SaleOrder(models.Model):
         # Check if barcode / label has already been scanned in this order
         if label:
             already_scanned = order.order_line.filtered(
-                lambda l: l.label_id == label or (l.label_id and l.label_id.barcode == barcode)
+                lambda l: l.label_id == label or (l.label_id and (l.label_id.barcode == barcode or l.label_id.barcode2 == barcode))
             )
         else:
             already_scanned = order.order_line.filtered(
@@ -126,7 +127,7 @@ class SaleOrder(models.Model):
         company_id = order.company_id.id if hasattr(order, 'company_id') and order.company_id else False
 
         label = False
-        domain = ['|', '|', ('barcode', '=', barcode), ('name', '=', barcode), ('label_number', '=', barcode)]
+        domain = ['|', '|', '|', ('barcode', '=', barcode), ('barcode2', '=', barcode), ('name', '=', barcode), ('label_number', '=', barcode)]
         if company_id:
             label = self.env['product.label'].with_context(active_test=False).search(
                 domain + [('company_id', '=', company_id)], limit=1

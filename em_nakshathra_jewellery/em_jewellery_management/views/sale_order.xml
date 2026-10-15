@@ -115,7 +115,10 @@
                     <field name="is_sale_return" widget="boolean_toggle"/>
                 </group>
                  <group>
-                    <field name="branch_location_id" readonly="old_gold_bill_id != False" required="has_old_gold"/>
+                    <field name="has_diamond_og" invisible="1"/>
+                    <field name="has_regular_og" invisible="1"/>
+                    <field name="branch_location_id" string="Old Gold Location" readonly="old_gold_bill_id != False" required="has_old_gold" invisible="not has_old_gold or (has_diamond_og and not has_regular_og)"/>
+                    <field name="diamond_og_location_id" string="Diamond OG Location" readonly="1" invisible="not has_diamond_og"/>
                     <field name="sale_return_branch_location_id" readonly="sale_return_bill_id != False" required="is_sale_return"/>
                 </group>
 <!--                <group>-->
@@ -162,6 +165,8 @@
                        readonly="old_gold_bill_id != False and not is_editing_old_gold">
                     <tree editable="bottom">
                         <field name="purity_id"/>
+                        <field name="is_diamond_og" string="Diamond OG" optional="show" widget="boolean_toggle"/>
+                        <field name="location_id" string="Location" readonly="1" options="{'no_open': True}"/>
                         <field name="gross_weight"/>
                         <field name="stone_weight"/>
                         <field name="net_weight" readonly="1"/>

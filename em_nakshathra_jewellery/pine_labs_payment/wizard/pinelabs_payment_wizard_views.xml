@@ -169,13 +169,53 @@
                          WAITING STATE
                          ══════════════════════════════════════════════ -->
                     <div invisible="state != 'waiting'">
+                        <!-- Hidden poll tracking fields (used by JS) -->
+                        <field name="poll_count" invisible="1"/>
+                        <field name="max_polls" invisible="1"/>
+                        <field name="poll_interval" invisible="1"/>
+                        <field name="cancel_attempts" invisible="1"/>
+                        <field name="cancel_message" invisible="1"/>
+
+                        <!-- Auto-poll status banner -->
                         <div class="alert alert-warning" style="border-radius: 8px;">
-                            <i class="fa fa-spinner fa-spin me-2"/>
-                            Payment request sent. Please complete the transaction on the
-                            <strong>Pine Labs terminal</strong>, then click <strong>Check Status</strong>.
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <i class="fa fa-spinner fa-spin" style="font-size:20px; color:#d97706; flex-shrink:0;"/>
+                                <div>
+                                    <strong>Waiting for Pine Labs terminal…</strong><br/>
+                                    <span style="font-size:12px; color:#92400e;">
+                                        Status is checked automatically every
+                                        <strong><field name="poll_interval" nolabel="1"
+                                            readonly="1"
+                                            style="display:inline; border:none; background:transparent;
+                                                   font-weight:700; width:20px; padding:0;"/></strong> seconds (up to <strong><field name="max_polls" nolabel="1" readonly="1" style="display:inline; border:none; background:transparent; font-weight:700; width:20px; padding:0;"/></strong> attempts).
+                                        You can also click <strong>Check Status</strong> below at any time.
+                                    </span>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- Cancel Request Feedback Alert -->
+                        <div class="alert alert-danger" style="border-radius: 8px; margin-top: 8px;"
+                             invisible="cancel_attempts == 0 or not cancel_message">
+                            <div style="display:flex; align-items:flex-start; gap:10px;">
+                                <i class="fa fa-exclamation-triangle" style="font-size:20px; color:#dc2626; flex-shrink:0; margin-top:2px;"/>
+                                <div>
+                                    <strong>Cancellation Feedback (Attempt <field name="cancel_attempts" nolabel="1" readonly="1" style="display:inline; border:none; background:transparent; font-weight:700; width:20px; padding:0;"/>):</strong><br/>
+                                    <span style="font-size:13px; color:#991b1b; font-weight:700;">
+                                        <field name="cancel_message" nolabel="1" readonly="1" style="display:inline; border:none; background:transparent; font-weight:700;"/>
+                                    </span>
+                                    <div style="font-size:11px; color:#7f1d1d; margin-top:4px; line-height:1.4;">
+                                        <strong>How to cancel:</strong><br/>
+                                        • If the terminal is displaying an active prompt, press the <strong>Red Cancel (X) button</strong> on the Pine Labs POS keypad.<br/>
+                                        • Click <strong>Retry Cancel</strong> or <strong>Check Status</strong> to re-check the terminal.<br/>
+                                        • Or click <strong>Force Cancel (Unlock)</strong> below to immediately cancel and discard this attempt in Odoo.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <group>
-                            <field name="pinelabs_transaction_ref"/>
+                            <field name="pinelabs_transaction_ref" string="Plutus Reference ID"/>
                             <field name="amount"/>
                         </group>
                     </div>
@@ -204,7 +244,13 @@
                         <div class="alert alert-danger" style="border-radius: 8px;">
                             <i class="fa fa-times-circle me-2"/>
                             <strong>Payment failed or cancelled.</strong>
-                            Please try again or choose a different payment mode.
+                            <div invisible="not cancel_message" style="margin-top: 6px; font-size: 13px; font-weight: 600;">
+                                <i class="fa fa-info-circle me-1"/>
+                                <field name="cancel_message" nolabel="1" readonly="1"/>
+                            </div>
+                            <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">
+                                Please try again or choose a different payment mode.
+                            </div>
                         </div>
                     </div>
 
@@ -232,17 +278,40 @@
                             class="btn-success"
                             invisible="state != 'draft' or payment_method_type != 'cash'"/>
 
-                    <!-- Waiting -->
+                    <!-- Waiting State: Check Status & Cancel Payment -->
                     <button name="action_check_status"
                             string="Check Status"
                             type="object"
                             class="btn-primary"
+                            icon="fa-refresh"
                             invisible="state != 'waiting'"/>
                     <button name="action_cancel_payment"
                             string="Cancel Payment"
                             type="object"
                             class="btn-danger"
-                            invisible="state != 'waiting'"/>
+                            icon="fa-times"
+                            invisible="state != 'waiting' or cancel_attempts &gt; 0"/>
+                    <button name="action_cancel_payment"
+                            string="Retry Cancel"
+                            type="object"
+                            class="btn-danger"
+                            icon="fa-times"
+                            invisible="state != 'waiting' or cancel_attempts == 0"/>
+                    <button name="action_force_cancel"
+                            string="Force Cancel (Unlock)"
+                            type="object"
+                            class="btn-outline-danger"
+                            icon="fa-ban"
+                            invisible="state != 'waiting' or cancel_attempts == 0"
+                            confirm="Force Cancel will cancel this transaction in Odoo without waiting for terminal response. Are you sure?"/>
+
+                    <!-- Failed State: Try Again -->
+                    <button name="action_reset_draft"
+                            string="Try Again"
+                            type="object"
+                            class="btn-primary"
+                            icon="fa-refresh"
+                            invisible="state != 'failed'"/>
 
                     <button string="Close" class="btn-secondary" special="cancel"/>
                 </footer>

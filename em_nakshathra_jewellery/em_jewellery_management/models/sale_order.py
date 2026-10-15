@@ -10,7 +10,53 @@ class SaleOrder(models.Model):
     has_old_gold = fields.Boolean(string='Old Gold Purchase')
     unfix = fields.Boolean(string='Unfix', default=False)
     old_gold_line_ids = fields.One2many('sale.old.gold.line', 'sale_id')
-    branch_location_id = fields.Many2one('stock.location',default=lambda self: self.env.user.branch_id.old_gold_location_id.id)
+    branch_location_id = fields.Many2one('stock.location', string="Old Gold Location", default=lambda self: self.env.user.branch_id.old_gold_location_id.id)
+    diamond_og_location_id = fields.Many2one(
+        'stock.location',
+        string='Diamond OG Location',
+        compute='_compute_og_locations',
+        store=True,
+        readonly=False,
+    )
+    has_diamond_og = fields.Boolean(
+        string='Has Diamond OG',
+        compute='_compute_og_locations',
+        store=True,
+    )
+    has_regular_og = fields.Boolean(
+        string='Has Regular OG',
+        compute='_compute_og_locations',
+        store=True,
+    )
+
+    def _get_diamond_og_location(self, branch=None):
+        self.ensure_one()
+        branch = branch or self.branch_id or self.env.user.branch_id
+        if branch and branch.diamond_og_location_id:
+            return branch.diamond_og_location_id
+        return (branch and branch.old_gold_location_id) or self.branch_location_id
+
+    def _get_regular_og_location(self, branch=None):
+        self.ensure_one()
+        branch = branch or self.branch_id or self.env.user.branch_id
+        if branch and branch.old_gold_location_id:
+            return branch.old_gold_location_id
+        return self.branch_location_id
+
+    @api.depends('branch_id', 'old_gold_line_ids.purity_id', 'old_gold_line_ids.is_diamond_og', 'old_gold_line_ids.diamond_amount')
+    def _compute_og_locations(self):
+        for order in self:
+            branch = order.branch_id or self.env.user.branch_id
+            dmd_loc = order._get_diamond_og_location(branch)
+            order.diamond_og_location_id = dmd_loc.id if dmd_loc else False
+            order.has_diamond_og = any(
+                l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+                for l in order.old_gold_line_ids
+            )
+            order.has_regular_og = any(
+                not (l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og))
+                for l in order.old_gold_line_ids
+            )
     # old_gold_po_ids = fields.One2many(
     #     'purchase.order',
     #     'sale_id',
@@ -38,12 +84,67 @@ class SaleOrder(models.Model):
         readonly=True,
         copy=False,
     )
+    old_gold_bill_ids = fields.Many2many(
+        'account.move',
+        string='Old Gold Vendor Bills',
+        compute='_compute_old_gold_bills',
+    )
+    old_gold_po_ids = fields.Many2many(
+        'purchase.order',
+        string='Old Gold Purchase Orders',
+        compute='_compute_old_gold_pos',
+    )
     old_gold_bill_amount = fields.Monetary(
-        related='old_gold_bill_id.amount_total',
-        currency_field='currency_id',
         string='Bill Amount',
+        compute='_compute_old_gold_bill_amount',
+        currency_field='currency_id',
         readonly=True,
     )
+
+    def _get_old_gold_bills(self):
+        self.ensure_one()
+        bills = self.env['account.move']
+        if self.id:
+            bills = self.env['account.move'].search([
+                ('is_old_gold_bill', '=', True),
+                ('line_ids.purchase_line_id.order_id.sale_id', '=', self.id)
+            ])
+        if not bills and self.old_gold_bill_id:
+            bills = self.old_gold_bill_id
+        return bills
+
+    def _get_old_gold_pos(self):
+        self.ensure_one()
+        pos = self.env['purchase.order']
+        if self.id:
+            pos = self.env['purchase.order'].search([
+                ('sale_id', '=', self.id),
+                '|', ('is_old_gold', '=', True), ('is_diamond_og', '=', True)
+            ])
+        if not pos and self.purchase_order_id:
+            pos = self.purchase_order_id
+        return pos
+
+    def _compute_old_gold_bills(self):
+        for order in self:
+            order.old_gold_bill_ids = order._get_old_gold_bills()
+
+    def _compute_old_gold_pos(self):
+        for order in self:
+            order.old_gold_po_ids = order._get_old_gold_pos()
+
+    @api.depends('old_gold_line_ids.amount')
+    def _compute_old_gold_bill_amount(self):
+        for order in self:
+            bills = order._get_old_gold_bills()
+            if bills:
+                order.old_gold_bill_amount = sum(bills.mapped('amount_total'))
+            elif order.old_gold_line_ids:
+                order.old_gold_bill_amount = sum(order.old_gold_line_ids.mapped('amount'))
+            elif order.old_gold_bill_id:
+                order.old_gold_bill_amount = order.old_gold_bill_id.amount_total
+            else:
+                order.old_gold_bill_amount = 0.0
     old_gold_entry_id = fields.Many2one(
         'account.move',
         string='Old Gold Journal Entry',
@@ -69,8 +170,27 @@ class SaleOrder(models.Model):
     sale_return_branch_location_id = fields.Many2one(
         'stock.location',
         string='Sale Return Branch Location',
-        default=lambda self: self.env.user.branch_id.old_gold_location_id.id
+        default=lambda self: self.env.user.branch_id.sr_location_id.id
     )
+
+    @api.onchange('branch_id', 'old_gold_line_ids')
+    def _onchange_branch_id_locations(self):
+        for order in self:
+            branch = order.branch_id or self.env.user.branch_id
+            if branch:
+                if branch.diamond_og_location_id:
+                    order.diamond_og_location_id = branch.diamond_og_location_id.id
+                if branch.sr_location_id:
+                    order.sale_return_branch_location_id = branch.sr_location_id.id
+
+                has_dog = any(l.purity_id and l.purity_id.is_diamond_og for l in order.old_gold_line_ids)
+                has_reg = any(l.purity_id and not l.purity_id.is_diamond_og for l in order.old_gold_line_ids)
+                if has_dog and not has_reg:
+                    if branch.diamond_og_location_id:
+                        order.branch_location_id = branch.diamond_og_location_id.id
+                else:
+                    if branch.old_gold_location_id:
+                        order.branch_location_id = branch.old_gold_location_id.id
 
     # Editing flags – unlock line tables when True
     is_editing_main_so = fields.Boolean(string='Editing Main Order', default=False, copy=False)
@@ -316,6 +436,7 @@ class SaleOrder(models.Model):
             for s in schemes:
                 if s.phone:
                     valid_phones.append(''.join(filter(str.isdigit, s.phone))[-10:])
+
             valid_phones = [p for p in valid_phones if p]
 
             if not current_phone or current_phone not in valid_phones:
@@ -363,155 +484,219 @@ class SaleOrder(models.Model):
             raise ValidationError(_("Cash/Bank journal not found."))
 
         for order in self:
+            if not order.old_gold_line_ids:
+                raise ValidationError(_("No Old Gold lines found."))
 
-            # FIX: Add sudo() to avoid OLD GOLD product access error
-            product = self.env.ref(
+            company_id = order.branch_id.company_id.id or order.company_id.id or self.env.company.id
+
+            regular_product = self.env.ref(
                 'em_jewellery_management.product_old_gold',
                 raise_if_not_found=False
             ).sudo()
 
-            company_id = order.company_id.id or self.env.company.id
-
-            if product and product.company_id and product.company_id.id != company_id:
-                product = self.env['product.product'].sudo().search([
+            if regular_product and regular_product.company_id and regular_product.company_id.id != company_id:
+                regular_product = self.env['product.product'].sudo().search([
                     ('name', '=ilike', 'Old Gold'),
+                    ('is_old_gold', '=', True),
                     ('company_id', 'in', [company_id, False])
                 ], limit=1)
 
-                if not product:
-                    product = self.env['product.product'].sudo().search([
-                        ('is_old_gold', '=', True),
-                        ('name', 'not ilike', 'Scrap'),
-                        ('company_id', 'in', [company_id, False])
-                    ], limit=1)
+            if not regular_product:
+                regular_product = self.env['product.product'].sudo().search([
+                    ('is_old_gold', '=', True),
+                    ('name', 'not ilike', 'Scrap'),
+                    ('company_id', 'in', [company_id, False])
+                ], limit=1)
 
-            if not product:
-                raise ValidationError(_("Old Gold product not configured for company."))
+            diamond_product = self.env['product.product'].sudo().search([
+                ('is_diamond_og', '=', True),
+                ('company_id', 'in', [company_id, False])
+            ], limit=1)
 
-            if not order.old_gold_line_ids:
-                raise ValidationError(_("No Old Gold lines found."))
+            if not diamond_product:
+                diamond_product = self.env['product.product'].sudo().search([
+                    ('is_diamond_og', '=', True)
+                ], limit=1)
+
+            if not diamond_product:
+                diamond_product = self.env['product.product'].sudo().search([
+                    ('name', 'ilike', 'Diamond OG'),
+                    ('company_id', 'in', [company_id, False])
+                ], limit=1) or regular_product
+
+            # Group lines into Regular OG and Diamond OG
+            diamond_lines = order.old_gold_line_ids.filtered(
+                lambda l: l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+            )
+            regular_lines = order.old_gold_line_ids.filtered(
+                lambda l: not (l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og))
+            )
+
+            dmd_loc = order._get_diamond_og_location(order.branch_id)
+            reg_loc = order._get_regular_og_location(order.branch_id) or order.branch_location_id
+            dmd_loc_id = dmd_loc.id if dmd_loc else order.branch_location_id.id
+            reg_loc_id = reg_loc.id if reg_loc else order.branch_location_id.id
 
             # ------------------------------------------------
             # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
             # ------------------------------------------------
-            self.env['old.gold.purchase'].create({
-                'partner_id': order.partner_id.id,
-                'date': fields.Date.today(),
-                'branch_location_id': order.branch_location_id.id,
-                'sale_id': order.id,
-                'branch_id': order.branch_id.id,
-                'old_gold_line_ids': [
-                    (0, 0, {
-                        'purity_id': l.purity_id.id,
-                        'gross_weight': l.gross_weight,
-                        'stone_weight': l.stone_weight,
-                        'rate': l.rate,
-                    }) for l in order.old_gold_line_ids
-                ],
-            })
-
-            # ------------------------------------------------
-            # 2️⃣ GROUP AMOUNT BY PURITY
-            # ------------------------------------------------
-            purity_map = {}
-
-            for line in order.old_gold_line_ids:
-                purity = line.purity_id
-
-                if purity not in purity_map:
-                    purity_map[purity] = {
-                        'weight': 0.0,
-                        'amount': 0.0,
-                    }
-
-                purity_map[purity]['weight'] += line.net_weight
-                purity_map[purity]['amount'] += line.amount
-
-            # ------------------------------------------------
-            # 3️⃣ CREATE PURCHASE ORDER
-            # ------------------------------------------------
-            po = PurchaseOrder.create({
-                'partner_id': order.partner_id.id,
-                'date_order': fields.Date.today(),
-                'origin': order.name,
-                'branch_id': order.branch_id.id,
-                'sale_id': order.id,
-                'unfix': order.unfix,
-            })
-
-            for purity, vals in purity_map.items():
-                total_weight = vals['weight']
-                total_amount = vals['amount']
-
-                if not total_weight:
+            for grp_lines, grp_loc in [
+                (regular_lines, reg_loc_id),
+                (diamond_lines, dmd_loc_id),
+            ]:
+                if not grp_lines:
                     continue
-
-                rate = total_amount / total_weight
-
-                PurchaseLine.create({
-                    'order_id': po.id,
-                    'product_id': product.id,
-                    'name': f'Old Gold Purchase ({purity.name})',
-
-                    # ADDED: Purity in Purchase Order Line
-                    'purity_id': purity.id,
-
-                    'product_qty': total_weight,
-                    'gold_rate': rate,
-                    'price_unit': rate,  # ✅ gold rate
-                    'product_uom': product.uom_po_id.id,
-                    'taxes_id': [(6, 0, [])],
+                self.env['old.gold.purchase'].create({
+                    'partner_id': order.partner_id.id,
+                    'date': fields.Date.today(),
+                    'branch_location_id': grp_loc,
+                    'sale_id': order.id,
+                    'branch_id': order.branch_id.id,
+                    'old_gold_line_ids': [
+                        (0, 0, {
+                            'purity_id': l.purity_id.id,
+                            'gross_weight': l.gross_weight,
+                            'stone_weight': l.stone_weight,
+                            'rate': l.rate,
+                        }) for l in grp_lines
+                    ],
                 })
 
-            # ------------------------------------------------
-            # 4️⃣ CONFIRM PO
-            # ------------------------------------------------
-            po.button_confirm()
-            self.purchase_order_id = po.id
+            groups = []
+            if regular_lines:
+                if not regular_product:
+                    raise ValidationError(_("Old Gold product not configured for company."))
+                groups.append({
+                    'is_diamond_og': False,
+                    'is_old_gold': True,
+                    'lines': regular_lines,
+                    'product': regular_product,
+                    'dest_loc_id': reg_loc_id,
+                })
+            if diamond_lines:
+                if not diamond_product:
+                    raise ValidationError(_("Diamond Old Gold product not configured for company."))
+                groups.append({
+                    'is_diamond_og': True,
+                    'is_old_gold': False,
+                    'lines': diamond_lines,
+                    'product': diamond_product,
+                    'dest_loc_id': dmd_loc_id,
+                })
 
-            for picking in po.picking_ids:
-                picking.location_dest_id = order.branch_location_id.id
-                for move in picking.move_ids:
-                    move.location_dest_id = order.branch_location_id.id
+            created_pos = []
+            created_bills = []
+            target_date = self.env.context.get('old_gold_invoice_date') or fields.Date.context_today(self)
 
-                picking.action_confirm()
-                picking.action_assign()
+            for grp in groups:
+                is_dog = grp['is_diamond_og']
+                grp_lines = grp['lines']
+                grp_product = grp['product']
+                dest_loc_id = grp['dest_loc_id']
 
-                for move in picking.move_ids:
-                    move.quantity = move.product_uom_qty
+                # ------------------------------------------------
+                # 2️⃣ GROUP AMOUNT BY PURITY
+                # ------------------------------------------------
+                purity_map = {}
+                for line in grp_lines:
+                    purity = line.purity_id
+                    if purity not in purity_map:
+                        purity_map[purity] = {
+                            'weight': 0.0,
+                            'amount': 0.0,
+                        }
+                    purity_map[purity]['weight'] += line.net_weight
+                    purity_map[purity]['amount'] += line.amount
 
-                picking.button_validate()
+                # ------------------------------------------------
+                # 3️⃣ CREATE PURCHASE ORDER
+                # ------------------------------------------------
+                po_vals = {
+                    'partner_id': order.partner_id.id,
+                    'company_id': company_id,
+                    'date_order': fields.Date.today(),
+                    'origin': order.name,
+                    'branch_id': order.branch_id.id,
+                    'sale_id': order.id,
+                    'unfix': order.unfix,
+                }
+                if is_dog:
+                    po_vals['is_diamond_og'] = True
+                else:
+                    po_vals['is_old_gold'] = True
 
-            # ------------------------------------------------
-            # 5️⃣ CREATE & POST VENDOR BILL
-            # ------------------------------------------------
-            bill_action = po.action_create_invoice()
-            bill = AccountMove.browse(bill_action['res_id'])
+                po = PurchaseOrder.create(po_vals)
+                created_pos.append(po)
 
-            for bill_line in bill.invoice_line_ids:
-                purchase_line = bill_line.purchase_line_id
+                for purity, vals in purity_map.items():
+                    total_weight = vals['weight']
+                    total_amount = vals['amount']
+                    if not total_weight:
+                        continue
+                    rate = total_amount / total_weight
 
-                if purchase_line and purchase_line.purity_id:
-                    bill_line.purity_id = purchase_line.purity_id.id
+                    p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
+                    PurchaseLine.create({
+                        'order_id': po.id,
+                        'product_id': grp_product.id,
+                        'name': p_name,
+                        'purity_id': purity.id,
+                        'product_qty': total_weight,
+                        'gold_rate': rate,
+                        'price_unit': rate,
+                        'product_uom': grp_product.uom_po_id.id or grp_product.uom_id.id,
+                        'taxes_id': [(6, 0, [])],
+                    })
 
-            target_date = self.env.context.get('old_gold_invoice_date')
-            if not target_date:
-                target_date = fields.Date.context_today(self)
+                # ------------------------------------------------
+                # 4️⃣ CONFIRM PO
+                # ------------------------------------------------
+                po.button_confirm()
 
-            bill.with_context(check_move_validity=False).write({
-                'name': '/',
-                'invoice_date': target_date,
-                'date': target_date,
-                'is_old_gold_bill': True
-            })
+                for picking in po.picking_ids:
+                    picking.location_dest_id = dest_loc_id
+                    for move in picking.move_ids:
+                        move.location_dest_id = dest_loc_id
 
-            bill.action_post()
-            order.old_gold_bill_id = bill.id
+                    picking.action_confirm()
+                    picking.action_assign()
+
+                    for move in picking.move_ids:
+                        move.quantity = move.product_uom_qty
+
+                    picking.button_validate()
+
+                # ------------------------------------------------
+                # 5️⃣ CREATE & POST VENDOR BILL
+                # ------------------------------------------------
+                bill_action = po.action_create_invoice()
+                bill = AccountMove.browse(bill_action['res_id'])
+
+                for bill_line in bill.invoice_line_ids:
+                    purchase_line = bill_line.purchase_line_id
+                    if purchase_line and purchase_line.purity_id:
+                        bill_line.purity_id = purchase_line.purity_id.id
+
+                bill.with_context(check_move_validity=False).write({
+                    'name': '/',
+                    'invoice_date': target_date,
+                    'date': target_date,
+                    'is_old_gold_bill': True
+                })
+
+                bill.action_post()
+                created_bills.append(bill)
+
+            if created_pos:
+                order.purchase_order_id = created_pos[0].id
+            if created_bills:
+                order.old_gold_bill_id = created_bills[0].id
 
             # ------------------------------------------------
             # 6️⃣ CREATE & POST CONTRA JOURNAL ENTRY (CREDITORS -> DEBTORS)
             # ------------------------------------------------
-            order._create_or_update_old_gold_journal_entry(bill, target_date=target_date)
+            bills_rec = self.env['account.move'].concat(*created_bills) if created_bills else False
+            order._create_or_update_old_gold_journal_entry(bills_rec, target_date=target_date)
 
         return True
 
@@ -539,19 +724,24 @@ class SaleOrder(models.Model):
 
     def _create_or_update_old_gold_journal_entry(self, bill, target_date=None):
         self.ensure_one()
-        if not bill or bill.amount_total <= 0:
+        if not bill:
+            return False
+
+        bills = bill if hasattr(bill, '__iter__') else self.env['account.move'].browse(bill.id)
+        total_bill_amount = sum(bills.mapped('amount_total'))
+        if total_bill_amount <= 0:
             return False
 
         AccountMove = self.env['account.move']
         company_id = (self.company_id or self.env.company).id
-        entry_date = target_date or bill.date or bill.invoice_date or fields.Date.context_today(self)
+        entry_date = target_date or bills[0].date or bills[0].invoice_date or fields.Date.context_today(self)
 
         journal = self._get_old_gold_journal()
         if not journal:
             raise ValidationError(_("General/Miscellaneous journal not found for company %s.") % (self.company_id.name or self.env.company.name))
 
         # Find Creditors account (Account Payable)
-        creditors_line = bill.line_ids.filtered(lambda l: l.account_id.account_type == 'liability_payable')
+        creditors_line = bills.mapped('line_ids').filtered(lambda l: l.account_id.account_type == 'liability_payable')
         creditors_account = creditors_line[0].account_id if creditors_line else self.partner_id.with_company(company_id).property_account_payable_id
         if not creditors_account:
             creditors_account = self.env['account.account'].search([
@@ -580,13 +770,13 @@ class SaleOrder(models.Model):
             if creditors_move_line and debtors_move_line:
                 creditors_move_line.write({
                     'account_id': creditors_account.id,
-                    'debit': bill.amount_total,
+                    'debit': total_bill_amount,
                     'credit': 0.0,
                 })
                 debtors_move_line.write({
                     'account_id': debtors_account.id,
                     'debit': 0.0,
-                    'credit': bill.amount_total,
+                    'credit': total_bill_amount,
                 })
             entry.write({
                 'date': entry_date,
@@ -606,7 +796,7 @@ class SaleOrder(models.Model):
                         'name': f"Old Gold Creditors Adjustment - {self.name}",
                         'account_id': creditors_account.id,
                         'partner_id': self.partner_id.id,
-                        'debit': bill.amount_total,
+                        'debit': total_bill_amount,
                         'credit': 0.0,
                     }),
                     (0, 0, {
@@ -614,7 +804,7 @@ class SaleOrder(models.Model):
                         'account_id': debtors_account.id,
                         'partner_id': self.partner_id.id,
                         'debit': 0.0,
-                        'credit': bill.amount_total,
+                        'credit': total_bill_amount,
                     }),
                 ],
             }
@@ -622,14 +812,15 @@ class SaleOrder(models.Model):
             entry.action_post()
             self.old_gold_entry_id = entry.id
 
-        # Reconcile Creditors between bill and entry
-        bill_creditors_lines = bill.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
-        entry_creditors_lines = entry.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
-        if bill_creditors_lines and entry_creditors_lines:
-            try:
-                (bill_creditors_lines + entry_creditors_lines).reconcile()
-            except Exception:
-                pass
+        # Reconcile Creditors between bills and entry
+        for b in bills:
+            bill_creditors_lines = b.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+            entry_creditors_lines = entry.line_ids.filtered(lambda l: l.account_id == creditors_account and not l.reconciled)
+            if bill_creditors_lines and entry_creditors_lines:
+                try:
+                    (bill_creditors_lines + entry_creditors_lines).reconcile()
+                except Exception:
+                    pass
 
         # If any customer invoice already exists for this order, reconcile with Debtors
         posted_invoices = self.invoice_ids.filtered(lambda m: m.move_type == 'out_invoice' and m.state == 'posted')
@@ -936,13 +1127,23 @@ class SaleOrder(models.Model):
 
     def action_open_old_gold_bill(self):
         self.ensure_one()
-
+        bills = self._get_old_gold_bills()
+        if len(bills) > 1:
+            return {
+                'type': 'ir.actions.act_window',
+                'name': _('Old Gold Vendor Bills'),
+                'res_model': 'account.move',
+                'view_mode': 'tree,form',
+                'domain': [('id', 'in', bills.ids)],
+                'context': {'create': False, 'hide_payment_button': True},
+            }
+        bill = bills[:1] or self.old_gold_bill_id
         return {
             'type': 'ir.actions.act_window',
             'name': _('Old Gold Vendor Bill'),
             'res_model': 'account.move',
             'view_mode': 'form',
-            'res_id': self.old_gold_bill_id.id,
+            'res_id': bill.id,
             'context': {'create': False, 'hide_payment_button': True},
         }
 
@@ -1006,10 +1207,6 @@ class SaleOrder(models.Model):
 
         po = self.purchase_order_id
 
-        product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
-        if not product:
-            raise ValidationError(_("Old Gold product not configured."))
-
         # ─ 1. Group current Old Gold lines by Purity ───────────────────────────────
         purity_map = {}
         for line in self.old_gold_line_ids:
@@ -1019,10 +1216,31 @@ class SaleOrder(models.Model):
             purity_map[purity]['weight'] += line.net_weight
             purity_map[purity]['amount'] += line.amount
 
+        is_dog = bool(po and po.is_diamond_og) or any(
+            l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
+            for l in self.old_gold_line_ids
+        )
+        if is_dog:
+            comp_id = self.branch_id.company_id.id or self.company_id.id or self.env.company.id
+            product = self.env['product.product'].sudo().search([
+                ('is_diamond_og', '=', True),
+                ('company_id', 'in', [comp_id, False])
+            ], limit=1)
+            if not product:
+                product = self.env['product.product'].sudo().search([
+                    ('is_diamond_og', '=', True)
+                ], limit=1)
+        else:
+            product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+
+        if not product:
+            raise ValidationError(_("Old Gold product not configured."))
+
         # ─ 2. Update PO lines in-place via write() ─────────────────────────────────
         if po:
-            # Enable silent SQL update mode for the PO
-            po.is_editing_main_po = True
+            # Enable silent SQL update mode for the PO if em_purchase_edit is installed
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = True
             
             existing_po_lines = list(po.order_line)
             purity_list = list(purity_map.items())
@@ -1030,12 +1248,13 @@ class SaleOrder(models.Model):
             for i, (purity, vals) in enumerate(purity_list):
                 qty = vals['weight']
                 rate = vals['amount'] / qty if qty else 0.0
+                p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
                 
                 if i < len(existing_po_lines):
                     # Update existing PO line (triggers our SQL logic in PurchaseOrderLine.write)
                     existing_po_lines[i].write({
                         'product_id': product.id,
-                        'name': f'Old Gold Purchase ({purity.name})',
+                        'name': p_name,
                         'product_qty': qty,
                         'price_unit': rate,
                         'gold_rate': rate,
@@ -1046,30 +1265,34 @@ class SaleOrder(models.Model):
                     new_line = self.env['purchase.order.line'].create({
                         'order_id': po.id,
                         'product_id': product.id,
-                        'name': f'Old Gold Purchase ({purity.name})',
+                        'name': p_name,
                         'product_qty': qty,
                         'price_unit': rate,
                         'gold_rate': rate,
-                        'product_uom': product.uom_po_id.id,
+                        'product_uom': product.uom_po_id.id or product.uom_id.id,
                         'taxes_id': [(6, 0, [])],
                     })
                     new_line.qty_received = qty
 
             # ─ 3. Create fresh pickings for any NEW PO lines ─────────
             # Temporarily disable edit mode so _create_picking functions normally
-            po.is_editing_main_po = False
+            if hasattr(po, 'is_editing_main_po'):
+                po.is_editing_main_po = False
             po._create_picking()
             
             # For any pickings that are still waiting (newly created), validate them
+            dmd_loc = self._get_diamond_og_location(self.branch_id)
+            reg_loc = self._get_regular_og_location(self.branch_id) or self.branch_location_id
+            dest_loc_id = dmd_loc.id if (is_dog and dmd_loc) else (reg_loc.id if reg_loc else self.branch_location_id.id)
             for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
                 picking.write({
                     'is_old_gold': True,
                     'sale_old_id': self.id,
                     'branch_id': self.branch_id.id,
-                    'location_dest_id': self.branch_location_id.id,
+                    'location_dest_id': dest_loc_id,
                 })
                 for move in picking.move_ids:
-                    move.location_dest_id = self.branch_location_id.id
+                    move.location_dest_id = dest_loc_id
                     
                 picking.action_confirm()
                 picking.action_assign()
@@ -1134,7 +1357,8 @@ class SaleOrder(models.Model):
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
             bill.action_post()
-            self._create_or_update_old_gold_journal_entry(bill)
+            all_bills = self._get_old_gold_bills() or bill
+            self._create_or_update_old_gold_journal_entry(all_bills)
 
     # ────────────────────────────────────────────────────────────────────────────
     # EDIT / SAVE – Main Order buttons
@@ -1303,17 +1527,19 @@ class SaleOrder(models.Model):
             # Trigger PO to create new pickings for any NEW lines
             po._create_picking()
             
+            dest_loc = self.sale_return_branch_location_id
+
             # Confirm and validate the newly created pickings
             for picking in po.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-                if self.sale_return_branch_location_id:
+                if dest_loc:
                     picking.write({
                         'is_old_gold': True,
                         'sale_old_id': self.id,
                         'branch_id': self.branch_id.id,
-                        'location_dest_id': self.sale_return_branch_location_id.id,
+                        'location_dest_id': dest_loc.id,
                     })
                     for move in picking.move_ids:
-                        move.location_dest_id = self.sale_return_branch_location_id.id
+                        move.location_dest_id = dest_loc.id
                 
                 picking.action_confirm()
                 picking.action_assign()
@@ -1394,9 +1620,10 @@ class SaleOrder(models.Model):
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
-        vals['old_gold_price'] = self.old_gold_bill_amount
+        og_amt = self.old_gold_bill_amount or sum(self.old_gold_line_ids.mapped('amount'))
+        vals['old_gold_price'] = og_amt
         vals['unfix'] = self.unfix
-        vals['sale_return_price'] = self.sale_return_bill_amount
+        vals['sale_return_price'] = self.sale_return_bill_amount or sum(self.sale_return_line_ids.mapped('amount'))
         vals['is_sale_return'] = self.is_sale_return
         return vals
 
@@ -1470,16 +1697,18 @@ class SaleOrder(models.Model):
             for line in po.order_line:
                 line.qty_received = line.product_qty
 
+            dest_loc = order.sale_return_branch_location_id
+
             for picking in po.picking_ids:
-                if order.sale_return_branch_location_id:
+                if dest_loc:
                     picking.write({
                         'is_old_gold': True,
                         'sale_old_id': order.id,
                         'branch_id': order.branch_id.id,
-                        'location_dest_id': order.sale_return_branch_location_id.id,
+                        'location_dest_id': dest_loc.id,
                     })
                     for move in picking.move_ids:
-                        move.location_dest_id = order.sale_return_branch_location_id.id
+                        move.location_dest_id = dest_loc.id
 
                 picking.action_confirm()
                 picking.action_assign()

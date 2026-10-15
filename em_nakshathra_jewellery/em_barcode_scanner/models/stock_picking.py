@@ -19,12 +19,13 @@ class StockPicking(models.Model):
         company_id = picking.company_id.id if hasattr(picking, 'company_id') and picking.company_id else False
 
         label = False
+        barcode_domain = ['|', ('barcode', '=', barcode), ('barcode2', '=', barcode)]
         if company_id:
             label = self.env['product.label'].search(
-                [('barcode', '=', barcode), ('company_id', '=', company_id), ('active', '=', True)], limit=1
+                barcode_domain + [('company_id', '=', company_id), ('active', '=', True)], limit=1
             )
         if not label:
-            label = self.env['product.label'].search([('barcode', '=', barcode), ('active', '=', True)], limit=1)
+            label = self.env['product.label'].search(barcode_domain + [('active', '=', True)], limit=1)
 
         if label:
             product = label.product_id
@@ -40,7 +41,7 @@ class StockPicking(models.Model):
         # Check if barcode / label has already been scanned in this picking
         if label:
             already_scanned = picking.move_ids.filtered(
-                lambda m: m.state != 'cancel' and (m.label_id == label or (m.label_id and m.label_id.barcode == barcode))
+                lambda m: m.state != 'cancel' and (m.label_id == label or (m.label_id and (m.label_id.barcode == barcode or m.label_id.barcode2 == barcode)))
             )
         else:
             already_scanned = picking.move_ids.filtered(

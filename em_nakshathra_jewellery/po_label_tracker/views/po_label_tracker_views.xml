@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Form View -->
+    <record id="view_po_label_tracker_form" model="ir.ui.view">
+        <field name="name">po.label.tracker.form</field>
+        <field name="model">po.label.tracker</field>
+        <field name="arch" type="xml">
+            <form string="Purchase Order Label Tracker">
+
+                <sheet>
+                    <div class="oe_title">
+                        <label for="purchase_id" string="Purchase Order"/>
+                        <h1>
+                            <field name="purchase_id" options="{'no_create': True, 'no_create_edit': True}" placeholder="Select Purchase Order..."/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="partner_id" string="Vendor"/>
+                            <field name="po_date" string="Order Date"/>
+                        </group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="fulfillment_pct" widget="progressbar" string="Labeling Progress"/>
+                        </group>
+                    </group>
+
+                    <!-- Interactive Metrics Dashboard -->
+                    <div class="card border-0 shadow-sm rounded-4 p-3 my-3" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0 !important;">
+                        <div class="row g-3">
+                            <!-- Card 1: Total PO Weight -->
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none"
+                                     style="border-left: 4px solid #0ea5e9 !important;">
+                                    <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width: 44px; height: 44px; background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0284c7;">
+                                        <i class="fa fa-shopping-basket fa-lg"/>
+                                    </div>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Total PO Weight</div>
+                                        <div class="fw-bolder fs-4 text-primary lh-1 my-1">
+                                            <field name="total_weight" readonly="1"/> <span class="fs-6 text-muted">g</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size: 11px;">Ordered in Purchase</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 2: Total Labelled -->
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none"
+                                     style="border-left: 4px solid #10b981 !important;">
+                                    <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width: 44px; height: 44px; background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #059669;">
+                                        <i class="fa fa-tags fa-lg"/>
+                                    </div>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Labelled Weight</div>
+                                        <div class="fw-bolder fs-4 text-success lh-1 my-1">
+                                            <field name="total_labelled" readonly="1"/> <span class="fs-6 text-muted">g</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size: 11px;">Across <field name="total_labels_count" readonly="1"/> Labels</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Weight Left to Label -->
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none"
+                                     style="border-left: 4px solid #f59e0b !important;">
+                                    <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width: 44px; height: 44px; background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706;">
+                                        <i class="fa fa-hourglass-half fa-lg"/>
+                                    </div>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Left to Label</div>
+                                        <div class="fw-bolder fs-4 text-warning lh-1 my-1">
+                                            <field name="weight_left_to_label" readonly="1"/> <span class="fs-6 text-muted">g</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size: 11px;">Unlabelled Remaining</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card 4: Label Active Breakdown -->
+                            <div class="col-12 col-sm-6 col-lg-3">
+                                <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none"
+                                     style="border-left: 4px solid #8b5cf6 !important;">
+                                    <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                                         style="width: 44px; height: 44px; background: linear-gradient(135deg, #f3e8ff, #e9d5ff); color: #7c3aed;">
+                                        <i class="fa fa-shield fa-lg"/>
+                                    </div>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <div class="text-uppercase text-muted fw-bold d-flex justify-content-between align-items-center" style="font-size: 11px; letter-spacing: 0.05em;">
+                                            <span>Total Labels Created</span>
+                                            <span class="badge bg-primary text-white px-2 py-1 rounded-pill" style="font-size: 11px;">Total: <field name="total_labels_count" readonly="1"/></span>
+                                        </div>
+                                        <div class="fw-bolder fs-4 text-dark lh-1 my-1">
+                                            <span class="text-success" title="Active"><field name="active_labels_count" readonly="1"/></span>
+                                            <span class="text-muted fs-6 mx-1">/</span>
+                                            <span class="text-danger" title="Sold"><field name="sold_labels_count" readonly="1"/></span>
+                                            <span class="text-muted fs-6 mx-1">/</span>
+                                            <span class="text-warning" title="Not Activated"><field name="not_activated_labels_count" readonly="1"/></span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size: 11px;">
+                                            <span class="text-success fw-bold">Active</span> / <span class="text-danger fw-bold">Sold</span> / <span class="text-warning fw-bold">Not Activated</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Labels Table -->
+                    <notebook>
+                        <page name="po_labels" string="Labels against PO">
+                            <field name="label_ids" mode="tree" readonly="1">
+                                <tree string="PO Product Labels" decoration-muted="not active">
+                                    <field name="name" string="Label No"/>
+                                    <field name="barcode" string="Barcode"/>
+                                    <field name="product_id" string="Product Variant"/>
+                                    <field name="purity_id" string="Purity"/>
+                                    <field name="sale_gross_weight" string="Weight (g)" digits="[16, 3]" sum="Total Weight"/>
+                                    <field name="source_location_id" string="Source Location"/>
+                                    <field name="branch_location_id" string="Current Location"/>
+                                    <field name="branch_id" string="Branch" optional="show"/>
+                                    <field name="partner_id" string="Vendor" optional="show"/>
+                                    <field name="sold_status" string="Status" widget="badge" decoration-danger="sold_status == 'sold'" decoration-warning="sold_status == 'not_activated'"/>
+                                    <field name="active" column_invisible="True"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Tree / List View -->
+    <record id="view_po_label_tracker_tree" model="ir.ui.view">
+        <field name="name">po.label.tracker.tree</field>
+        <field name="model">po.label.tracker</field>
+        <field name="arch" type="xml">
+            <tree string="PO Label Trackers" decoration-info="weight_left_to_label &gt; 0" decoration-success="weight_left_to_label &lt;= 0">
+                <field name="purchase_id" string="Purchase Order"/>
+                <field name="partner_id" string="Vendor"/>
+                <field name="po_date" string="Order Date"/>
+                <field name="total_weight" string="Total PO Weight (g)" sum="Total PO Weight"/>
+                <field name="total_labelled" string="Labelled Weight (g)" sum="Total Labelled"/>
+                <field name="weight_left_to_label" string="Left to Label (g)" sum="Total Left"/>
+                <field name="total_labels_count" string="Total Labels" sum="Total Labels"/>
+                <field name="active_labels_count" string="Active Labels" optional="show"/>
+                <field name="sold_labels_count" string="Sold Labels" optional="show"/>
+                <field name="not_activated_labels_count" string="Not Activated" optional="show"/>
+                <field name="fulfillment_pct" string="Labeling %" widget="progressbar"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_po_label_tracker_search" model="ir.ui.view">
+        <field name="name">po.label.tracker.search</field>
+        <field name="model">po.label.tracker</field>
+        <field name="arch" type="xml">
+            <search string="Search PO Labels">
+                <field name="purchase_id" string="Purchase Order"/>
+                <field name="partner_id" string="Vendor"/>
+                <filter name="pending_labels" string="Weight Left to Label" domain="[('weight_left_to_label', '&gt;', 0)]"/>
+                <filter name="fully_labelled" string="Fully Labelled" domain="[('weight_left_to_label', '&lt;=', 0)]"/>
+                <filter name="has_labels" string="Has Labels" domain="[('total_labels_count', '&gt;', 0)]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter name="group_partner" string="Vendor" context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_po_date" string="Order Date" context="{'group_by': 'po_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+</odoo>

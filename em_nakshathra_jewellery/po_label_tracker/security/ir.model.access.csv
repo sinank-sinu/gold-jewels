@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_po_label_tracker_user,po.label.tracker.user,model_po_label_tracker,custom_label_user.group_product_label_user,1,1,1,1
+access_po_label_tracker_manager,po.label.tracker.manager,model_po_label_tracker,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_po_label_tracker_admin,po.label.tracker.admin,model_po_label_tracker,base.group_system,1,1,1,1
+access_po_label_tracker_internal,po.label.tracker.internal,model_po_label_tracker,base.group_user,1,1,1,0
