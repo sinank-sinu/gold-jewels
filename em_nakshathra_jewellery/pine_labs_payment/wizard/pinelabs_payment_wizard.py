@@ -5,6 +5,9 @@ from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 from dateutil.relativedelta import relativedelta  # Added for safe month arithmetic
 
+import logging
+_logger = logging.getLogger(__name__)
+
 
 # Maps wizard payment_method_type to Pine Labs AllowedPaymentMode codes
 # Pine Labs AllowedPaymentMode reference:
@@ -88,7 +91,7 @@ class PineLabsPaymentWizard(models.TransientModel):
 
     # ── Auto-polling tracking fields ───────────────────────────────────
     poll_count = fields.Integer(string='Poll Attempts', default=0, readonly=True)
-    max_polls = fields.Integer(string='Max Poll Attempts', default=24)   # 24 × 5s = 2 min
+    max_polls = fields.Integer(string='Max Poll Attempts', default=10)   # 10 × 5s = 50s
     poll_interval = fields.Integer(string='Poll Interval (seconds)', default=5)
     cancel_attempts = fields.Integer(string='Cancel Attempts', default=0, readonly=True)
     cancel_message = fields.Char(string='Cancel Status Message', readonly=True)
@@ -741,7 +744,7 @@ class PineLabsPaymentWizard(models.TransientModel):
         new_count = self.poll_count + 1
         self.poll_count = new_count
 
-        # Automatically cancel if maximum attempts (24) reached
+        # Automatically cancel if maximum attempts (10) reached
         if new_count >= self.max_polls:
             _logger.info('Auto-check reached %d/%d attempts for txn %s. Automatically cancelling...',
                          new_count, self.max_polls, self.pinelabs_transaction_ref)

@@ -76,7 +76,7 @@ patch(FormController.prototype, {
 
         // Update the status label in the DOM
         this._pinelabs_updateStatusLabel(0,
-            this.model?.root?.data?.max_polls || 24, false);
+            this.model?.root?.data?.max_polls || 10, false);
 
         this._plTimer = setInterval(
             () => this._pinelabs_doPoll(),
@@ -119,7 +119,7 @@ patch(FormController.prototype, {
 
         const status     = result?.status || "pending";
         const pollCount  = result?.poll_count || 0;
-        const maxPolls   = result?.max_polls  || 24;
+        const maxPolls   = result?.max_polls  || 10;
         const message    = result?.message    || "";
 
         console.info("[PineLabs] Poll result:", status, `(${pollCount}/${maxPolls})`);
@@ -182,7 +182,7 @@ patch(FormController.prototype, {
 
     /**
      * Inject a small status line into the waiting-state div so the user
-     * can see live "Checking… 3 / 24" progress without any extra XML field.
+     * can see live "Checking… 3 / 10" progress without any extra XML field.
      */
     _pinelabs_updateStatusLabel(count, max, timedOut) {
         // Find the spinner alert inside the dialog
