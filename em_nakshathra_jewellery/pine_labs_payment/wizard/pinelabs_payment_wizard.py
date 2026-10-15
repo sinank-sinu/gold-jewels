@@ -11,9 +11,9 @@ from dateutil.relativedelta import relativedelta  # Added for safe month arithme
 #   0=All modes, 1=Card, 2=Cash, 3=Points, 4=Wallets,
 #   6=Brand EMI, 7=Sodexo, 8=PhonePe, 10=UPI Sale
 PINE_LABS_MODE_MAP = {
-    'card': '1',
-    'upi': '10',
-    'points': '3',   # Points / Reward Redemption (State Bank Rewardz, etc.)
+    'card': 1,
+    'upi': 10,
+    'points': 3,   # Points / Reward Redemption (State Bank Rewardz, etc.)
 }
 
 
@@ -506,25 +506,33 @@ class PineLabsPaymentWizard(models.TransientModel):
             )
         config = terminal.get_config()
 
-        billing_ref = (
+        import re
+        raw_ref = (
                 self.sale_order_id.name or
                 (self.invoice_id and self.invoice_id.name) or
                 (self.payment_id and self.payment_id.name) or
                 (self.scheme_installment_id and (self.scheme_installment_id.enrollment_id.ticket_number or self.scheme_installment_id.enrollment_id.name)) or
-                f'PAY-{int(time.time())}'
+                f'PAY{int(time.time())}'
         )
+        billing_ref = re.sub(r'[^A-Za-z0-9]', '', str(raw_ref)) or f'PAY{int(time.time())}'
 
         # Determine AllowedPaymentMode from wizard selection
-        allowed_mode = PINE_LABS_MODE_MAP.get(self.payment_method_type, '1')
+        allowed_mode = PINE_LABS_MODE_MAP.get(self.payment_method_type, 1)
+
+        if allowed_mode == 10 and self.amount < 1.0:
+            raise UserError(_('Minimum amount for Pine Labs UPI payment is ₹1.00 (100 paise). Please enter an amount of at least ₹1.00.'))
 
         # Create the transaction log record
         txn = self.env['pinelabs.transaction'].create({
+            'name': billing_ref,
             'amount': self.amount,
             'currency_id': self.currency_id.id,
             'sale_order_id': self.sale_order_id.id if self.sale_order_id else False,
             'invoice_id': self.invoice_id.id if self.invoice_id else False,
             'payment_id': self.payment_id.id if self.payment_id else False,
             'terminal_id': terminal.terminal_id if terminal else '',
+            'merchant_store_pos_code': config.get('merchant_store_pos_code', ''),
+            'imei': config.get('imei', ''),
             'merchant_id': config['merchant_id'] if config else 'DEMO',
             'pinelabs_terminal_id': terminal.id if terminal else False,
         })

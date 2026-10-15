@@ -33,8 +33,20 @@ class PineLabsTerminal(models.Model):
     # ── Pine Labs credentials (override company defaults) ──────────────
     merchant_id = fields.Char(string='Merchant ID', required=True)
     security_token = fields.Char(string='Security Token', required=True)
-    client_id = fields.Char(string='Client ID', required=True)
-    store_id = fields.Char(string='Store ID', required=True)
+    merchant_store_pos_code = fields.Char(
+        string='Merchant Store POS Code',
+        help='Code mapping the store POS counter (e.g. 1548792957). Required for cloud-based UPI/Card terminals.',
+    )
+    imei = fields.Char(
+        string='IMEI / Terminal Device ID',
+        help='Pine Labs terminal device IMEI or Terminal Identifier (e.g. NGD005).',
+    )
+    user_id_code = fields.Char(
+        string='User ID',
+        help='User / Cashier name sent to Pine Labs (e.g. ashwini rajgopal). Leave blank to use current user.',
+    )
+    client_id = fields.Char(string='Client ID', required=False)
+    store_id = fields.Char(string='Store ID', required=False)
     terminal_id = fields.Char(string='Terminal ID')
 
     base_url = fields.Char(
@@ -108,11 +120,14 @@ class PineLabsTerminal(models.Model):
         """Return a config dict ready for API calls."""
         self.ensure_one()
         return {
-            'merchant_id': self.merchant_id,
-            'security_token': self.security_token,
-            'client_id': self.client_id,
-            'store_id': self.store_id,
-            'terminal_id': self.terminal_id or '',
+            'merchant_id': self.merchant_id or '',
+            'security_token': self.security_token or '',
+            'merchant_store_pos_code': self.merchant_store_pos_code or '',
+            'imei': self.imei or self.terminal_id or '',
+            'user_id': self.user_id_code or '',
+            'client_id': self.client_id or '',
+            'store_id': self.store_id or '',
+            'terminal_id': self.terminal_id or self.imei or '',
             'base_url': self._get_effective_base_url(),
             'auto_cancel_minutes': self.auto_cancel_minutes,
             'demo_mode': self.demo_mode,
@@ -126,10 +141,18 @@ class PineLabsTerminal(models.Model):
         payload = {
             "MerchantID": self.merchant_id,
             "SecurityToken": self.security_token,
-            "ClientID": self.client_id,
-            "StoreID": self.store_id,
             "PlutusTransactionReferenceID": 0,
         }
+        if self.merchant_store_pos_code:
+            payload["MerchantStorePosCode"] = self.merchant_store_pos_code
+        elif self.store_id:
+            payload["StoreID"] = self.store_id
+
+        if self.imei or self.terminal_id:
+            payload["IMEI"] = self.imei or self.terminal_id
+
+        if self.client_id and not self.merchant_store_pos_code:
+            payload["ClientID"] = self.client_id
         try:
             resp = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT,
                                  headers={'Content-Type': 'application/json'})
