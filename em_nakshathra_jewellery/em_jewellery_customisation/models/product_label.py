@@ -14,6 +14,11 @@ class ProductLabel(models.Model):
         'product.template',
         string="Product"
     )
+    purchase_id = fields.Many2one(
+        'purchase.order',
+        string="Purchase Order",
+        domain="[('state', '=', 'purchase'), ('order_line.product_template_id', '=', product_template_id)]"
+    )
     fine_rate_id = fields.Many2one('fine.rate.master')
     product_template_attribute_value_ids = fields.Many2many(
         'product.template.attribute.value',
@@ -54,7 +59,14 @@ class ProductLabel(models.Model):
     )
 
     pricelist_id = fields.Many2one('product.pricelist')
-    partner_id = fields.Many2one('res.partner')
+    partner_id = fields.Many2one(
+        'res.partner',
+        string="Vendor",
+        compute='_compute_partner_id',
+        store=True,
+        readonly=False,
+        precompute=True,
+    )
     currency_id = fields.Many2one(
         'res.currency',
         related='company_id.currency_id'
@@ -99,15 +111,39 @@ class ProductLabel(models.Model):
                 elif rv.making_charge_type == 'rate_per_gram':
                     self.purchase_making_charge_value = rv.rate_value
     
+    @api.depends('purchase_id.partner_id')
+    def _compute_partner_id(self):
+        for rec in self:
+            if rec.purchase_id and rec.purchase_id.partner_id:
+                rec.partner_id = rec.purchase_id.partner_id
+            elif not rec.partner_id:
+                rec.partner_id = False
+
     @api.onchange('purchase_id')
     def _onchange_purchase_id(self):
         if self.product_id:
             self.purity_id = self.product_id.purity_id
+        if self.purchase_id and self.purchase_id.partner_id:
+            self.partner_id = self.purchase_id.partner_id
+        elif not self.purchase_id:
+            self.partner_id = False
+
+    @api.depends('product_template_id')
+    def _compute_unlabelled_weight(self):
+        super()._compute_unlabelled_weight()
+
+    @api.constrains('product_template_id')
+    def _check_unlabelled_weight_limit_template(self):
+        self._check_unlabelled_weight_limit()
 
     @api.onchange('product_template_id')
     def _onchange_product_template(self):
         if self.product_template_id:
             self.product_id = False
+            if self.purchase_id and self.product_template_id not in self.purchase_id.order_line.product_template_id:
+                self.purchase_id = False
+        self._compute_unlabelled_weight()
+        return self._onchange_check_unlabelled_weight_limit()
           
 
     @api.model

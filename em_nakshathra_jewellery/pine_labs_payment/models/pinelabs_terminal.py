@@ -51,7 +51,7 @@ class PineLabsTerminal(models.Model):
 
     base_url = fields.Char(
         string='API Base URL',
-        default='https://instore-ism.uat.pinelabs.com/api/CloudBasedIntegration/V1',
+        default='https://www.plutuscloudservice.in:8201/API/CloudBasedIntegration/V1',
         help='Leave blank to inherit from company settings.',
     )
     demo_mode = fields.Boolean(
