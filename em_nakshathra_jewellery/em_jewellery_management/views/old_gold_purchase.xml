@@ -7,6 +7,7 @@
             <tree>
                 <field name="name"/>
                 <field name="partner_id"/>
+                <field name="company_id" optional="hide"/>
                 <field name="date"/>
                 <field name="total_gross_weight"/>
                 <field name="total_amount"/>
@@ -71,6 +72,7 @@
                             <field name="branch_location_id" string="Source Location"/>
                             <field name="ho_location_id" string="HO Location"/>
                             <field name="branch_id" />
+                            <field name="company_id" />
                             <field name="is_smith_transfer" widget="boolean_toggle" readonly="smith_transferred"/>
                             <field name="smith_transferred" invisible="1"/>
 
@@ -138,8 +140,10 @@
             <search>
                 <field name="name"/>
                 <field name="partner_id"/>
+                <field name="company_id"/>
                 <filter string="Exclude Batched" name="exclude_batched" domain="[('state', '!=', 'batched')]"/>
                 <group expand="0" string="Group By">
+                    <filter string="Company" name="group_by_company" context="{'group_by': 'company_id'}"/>
                     <filter string="Status" name="group_by_state" context="{'group_by': 'state'}"/>
                 </group>
             </search>

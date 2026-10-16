@@ -9,6 +9,12 @@ class OldGoldPurchase(models.Model):
     partner_id = fields.Many2one('res.partner', required=True)
     name = fields.Char("name")
     date = fields.Date("date")
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        required=True,
+        default=lambda self: self.env.company,
+    )
     old_gold_line_ids = fields.One2many('sale.old.gold.line', 'old_gold_purchase_id')
     state = fields.Selection([
     ('draft','Draft'),('ho_transfer','HO Transfer'),('done','Verified'),('batched','Batched')
@@ -73,17 +79,48 @@ class OldGoldPurchase(models.Model):
         for rec in self:
             rec.state = 'done'
 
+    def _get_old_gold_product(self, is_diamond_og=False):
+        self.ensure_one()
+        company_id = self.company_id.id or self.branch_id.company_id.id or self.env.company.id
+        Product = self.env['product.product'].sudo()
+
+        if is_diamond_og:
+            product = Product.search([
+                ('is_diamond_og', '=', True),
+                ('company_id', '=', company_id)
+            ], limit=1) or Product.search([
+                ('name', 'ilike', 'Diamond OG'),
+                ('company_id', '=', company_id)
+            ], limit=1) or Product.search([
+                ('is_diamond_og', '=', True),
+                ('company_id', 'in', [company_id, False])
+            ], limit=1)
+            if product:
+                return product
+
+        product = Product.search([
+            ('is_old_gold', '=', True),
+            ('company_id', '=', company_id)
+        ], limit=1) or Product.search([
+            ('name', '=ilike', 'Old Gold'),
+            ('company_id', '=', company_id)
+        ], limit=1) or Product.search([
+            ('is_old_gold', '=', True),
+            ('name', 'not ilike', 'Scrap'),
+            ('company_id', 'in', [company_id, False])
+        ], limit=1) or self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+
+        return product
+
     def action_transfer_to_ho(self,source_id=False,destination_id=False):
         if not source_id and not destination_id:
             source_id = self.branch_location_id
             destination_id = self.ho_location_id
 
-        product = self.env.ref('em_jewellery_management.product_old_gold')
-        uom = product.uom_id
         for rec in self:
             rec.branch_location_id = source_id.id
             rec.ho_location_id = destination_id.id
-            company_id = source_id.company_id.id or self.env.company.id
+            company_id = rec.company_id.id or source_id.company_id.id or self.env.company.id
             picking_type = self.env['stock.picking.type'].sudo().search([
                 ('code', '=', 'internal'),
                 ('company_id', '=', company_id)
@@ -101,9 +138,14 @@ class OldGoldPurchase(models.Model):
                 'company_id': company_id,
             })
 
+            default_product = rec._get_old_gold_product()
+            default_uom = default_product.uom_id if default_product else False
+
             for line in rec.old_gold_line_ids:
+                line_product = rec._get_old_gold_product(is_diamond_og=line.is_diamond_og) or default_product
+                uom = line_product.uom_id or default_uom
                 self.env['stock.move'].sudo().create({
-                    'product_id': self.env.ref('em_jewellery_management.product_old_gold').id,
+                    'product_id': line_product.id,
                     'name': f'Old Gold ({line.purity_id.name})',
                     'purity_id': line.purity_id.id,
                     'product_uom_qty': line.net_weight,
@@ -111,6 +153,7 @@ class OldGoldPurchase(models.Model):
                     'location_id': picking.location_id.id,
                     'location_dest_id': picking.location_dest_id.id,
                     'picking_id': picking.id,
+                    'company_id': company_id,
                 })
 
             picking.sudo().action_confirm()
@@ -198,15 +241,13 @@ class OldGoldPurchase(models.Model):
     @api.model
     def create(self, vals):
         if vals.get('name', _('New')) == _('New'):
-            vals['name'] = self.env['ir.sequence'].next_by_code(
+            company_id = vals.get('company_id') or self.env.company.id
+            vals['name'] = self.env['ir.sequence'].with_company(company_id).next_by_code(
                 'old.gold.purchase'
             ) or _('New')
         return super().create(vals)
 
     def action_transfer_add_less(self):
-        # Get the fixed Add/Less product from XML
-        product = self.env.ref('em_jewellery_management.product_old_gold')
-
         for record in self:
             if not record.add_less or record.add_less == 0:
                 raise UserError("No Add/Less difference to transfer.")
@@ -223,7 +264,12 @@ class OldGoldPurchase(models.Model):
 
             # Determine source and destination location objects to get company
             src_loc_obj = self.env['stock.location'].browse(source_location)
-            company_id = src_loc_obj.company_id.id or self.env.company.id
+            company_id = record.company_id.id or src_loc_obj.company_id.id or self.env.company.id
+
+            product = record._get_old_gold_product()
+            if not product:
+                raise ValidationError(_("Old Gold product not configured for company %s.") % (record.company_id.name or ''))
+            uom = product.uom_id
             
             picking_type = self.env['stock.picking.type'].sudo().search([
                 ('code', '=', 'internal'),

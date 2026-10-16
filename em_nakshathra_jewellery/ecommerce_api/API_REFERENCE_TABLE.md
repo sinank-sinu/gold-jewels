@@ -8,7 +8,8 @@
 |----------|--------|-------------|----------------|---------------------|
 | `/register` | POST | Register new customer and receive auth_token | public | `first_name`, `last_name`, `phone`, `city`, `email`, `password`, `confirm_password` |
 | `/login` | POST | Authenticate customer (token only at registration) | public | `email`, `password` |
-| `/branch_products` | POST | Get products for a branch with location-wise stock | public | `branch_name` OR `branch_id`, optional: `location_name` |
+| `/branch_products` | POST | Get products for a branch (or all products across all branches if no branch specified) | public | optional: `branch_name` OR `branch_id`, `location_name`, `currency` |
+| `/all_products` | POST / GET | View all products across all branches | public | optional: `currency`, `location_id`, `in_stock_only` |
 | `/cart/add` | POST | Add product to customer's cart | public | `customer_id`, `product_id`, optional: `quantity` |
 | `/cart/view` | POST | View customer's shopping cart | public | `customer_id` |
 | `/cart/update` | POST | Update quantity of an item in cart | public | `customer_id`, `cart_line_id`, `quantity` |

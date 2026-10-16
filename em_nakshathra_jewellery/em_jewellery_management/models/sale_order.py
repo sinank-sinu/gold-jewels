@@ -546,12 +546,14 @@ class SaleOrder(models.Model):
             ]:
                 if not grp_lines:
                     continue
-                self.env['old.gold.purchase'].create({
+                company = order.company_id or order.branch_id.company_id or self.env.company
+                self.env['old.gold.purchase'].with_company(company).create({
                     'partner_id': order.partner_id.id,
                     'date': fields.Date.today(),
                     'branch_location_id': grp_loc,
                     'sale_id': order.id,
                     'branch_id': order.branch_id.id,
+                    'company_id': company.id,
                     'old_gold_line_ids': [
                         (0, 0, {
                             'purity_id': l.purity_id.id,
