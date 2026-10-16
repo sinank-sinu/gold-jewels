@@ -18,11 +18,12 @@ class PosPaymentMethod(models.Model):
                                            help='Select the terminal configuration for this POS.')
     pinelabs_payment_mode = fields.Selection([
         ('1', 'Card (Credit/Debit)'),
-        ('3', 'UPI'),
+        ('10', 'UPI'),
+        ('3', 'Points Redemption'),
         ('4', 'Net Banking'),
         ('7', 'Wallet'),
-        ('10', 'EMI'),
-        ('1,3', 'Card + UPI'),
+        ('6', 'Brand EMI'),
+        ('1,10', 'Card + UPI'),
     ], string='Pine Labs Payment Mode', default='1',
         help='AllowedPaymentMode sent to Pine Labs terminal')
 
@@ -77,23 +78,98 @@ class PosPaymentMethod(models.Model):
 
         url = f"{config['base_url']}/UploadBilledTransaction"
 
-        # Amount must be in paise (rupees × 100) — e.g. ₹100 = 10000
-        payment_mode = self.pinelabs_payment_mode or '1'
+        import re
+        clean_txn_number = re.sub(r'[^A-Za-z0-9]', '', str(billing_ref_no or ''))
+        if not clean_txn_number:
+            clean_txn_number = f"POS{int(time.time())}"
+
+        # Payment Mode: '1' for Card, '10' for UPI Sale
+        payment_mode = self.pinelabs_payment_mode
+        if not payment_mode:
+            payment_mode = '10' if 'UPI' in (self.name or '').upper() else '1'
+        mode_val = int(payment_mode) if str(payment_mode).isdigit() else payment_mode
+        if mode_val == 10 and float(amount) < 1.0:
+            return {'error': _('Minimum amount for Pine Labs UPI payment is ₹1.00 (100 paise). Please enter an amount of at least ₹1.00.')}
+        user_id = config.get('user_id') or self.env.user.name or self.env.user.login or ''
+
         payload = {
-            "TransactionNumber": billing_ref_no,
+            "MerchantID": str(config['merchant_id']),
+            "SecurityToken": str(config['security_token']),
+            "TransactionNumber": clean_txn_number,
             "SequenceNumber": 1,
-            "AllowedPaymentMode": payment_mode,
+            "AllowedPaymentMode": mode_val,
+            "MerchantStorePosCode": str(config.get('merchant_store_pos_code') or config.get('store_id') or ''),
             "Amount": int(round(float(amount) * 100)),
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
-            "UserID": "",
-            "MerchantID": config['merchant_id'],
-            "SecurityToken": config['security_token'],
-            "AutoCancelDurationInMinutes": 5,
+            "UserID": str(user_id),
+            "IMEI": str(config.get('imei') or config.get('terminal_id') or ''),
         }
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs UploadBilledTransaction response: %s', response)
+
+        # If terminal returns TXN ALREADY COMPLETED, retry with fresh unique TransactionNumber and SequenceNumber 1
+        if (resp_code is not None and str(resp_code) != '0' and
+                'ALREADY COMPLETED' in resp_msg.upper()):
+            payload['TransactionNumber'] = f"{clean_txn_number[:12]}{str(int(time.time()))[-6:]}"
+            payload['SequenceNumber'] = 1
+            time.sleep(1)
+            response = self._pinelabs_make_request(url, payload)
+            _logger.info('Pine Labs POS retry response: %s', response)
+            resp_code = response.get('ResponseCode')
+            resp_msg = str(response.get('ResponseMessage', ''))
+
+        # Handle stuck open transaction auto-cancel
+        if resp_code is not None and str(resp_code) != '0' and ('OPEN TXN' in resp_msg.upper() or 'APPROVE' in resp_msg.upper()):
+            existing_ref = None
+            existing_amt = None
+            add_info = response.get('AdditionalInfo') or []
+            if isinstance(add_info, list):
+                for item in add_info:
+                    if isinstance(item, dict):
+                        if item.get('Tag') == 'ExistingReferenceId':
+                            existing_ref = item.get('Value')
+                        elif item.get('Tag') == 'Amount':
+                            existing_amt = item.get('Value')
+            if existing_ref:
+                try:
+                    plutus_cancel_id = int(existing_ref)
+                except (TypeError, ValueError):
+                    plutus_cancel_id = existing_ref
+
+                try:
+                    cancel_amt = int(existing_amt) if existing_amt else int(round(float(amount) * 100))
+                except (TypeError, ValueError):
+                    cancel_amt = int(round(float(amount) * 100))
+
+                cancel_url = f"{config['base_url']}/CancelTransaction"
+                cancel_payload = {
+                    "MerchantID": str(config['merchant_id']),
+                    "SecurityToken": str(config['security_token']),
+                    "PlutusTransactionReferenceID": plutus_cancel_id,
+                    "Amount": cancel_amt,
+                }
+                if config.get('merchant_store_pos_code'):
+                    cancel_payload["MerchantStorePosCode"] = str(config['merchant_store_pos_code'])
+                elif config.get('store_id'):
+                    cancel_payload["StoreID"] = str(config['store_id'])
+
+                if config.get('imei'):
+                    cancel_payload["IMEI"] = str(config['imei'])
+
+                cancel_resp = self._pinelabs_make_request(cancel_url, cancel_payload)
+                _logger.info('POS Auto-cancel open txn %s response: %s', existing_ref, cancel_resp)
+                if cancel_resp.get('ResponseCode') == 0 or 'APPROVED' in str(cancel_resp.get('ResponseMessage', '')).upper():
+                    time.sleep(1)
+                    response = self._pinelabs_make_request(url, payload)
+                    _logger.info('POS retry UploadBilledTransaction response: %s', response)
+                    resp_code = response.get('ResponseCode')
+                    resp_msg = str(response.get('ResponseMessage', ''))
+
+        if resp_code is not None and str(resp_code) != '0':
+            if 'OPEN TXN' in resp_msg.upper():
+                return {'error': _("Pine Labs terminal has an active transaction in progress. Please press the RED cancel (✕) key on the physical terminal, or wait for it to cancel, then try again.")}
+            return {'error': f"Pine Labs: {resp_msg} (Code: {resp_code})"}
+
         return response
 
     def pinelabs_fetch_payment_status(self, plutus_transaction_ref_id):
@@ -123,10 +199,18 @@ class PosPaymentMethod(models.Model):
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
             "PlutusTransactionReferenceID": plutus_transaction_ref_id,
         }
+        if config.get('merchant_store_pos_code'):
+            payload["MerchantStorePosCode"] = config['merchant_store_pos_code']
+        elif config.get('store_id'):
+            payload["StoreID"] = config['store_id']
+
+        if config.get('imei'):
+            payload["IMEI"] = config['imei']
+
+        if config.get('client_id') and not config.get('merchant_store_pos_code'):
+            payload["ClientID"] = config['client_id']
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs GetCloudBasedTxnStatus response: %s', response)
@@ -149,11 +233,19 @@ class PosPaymentMethod(models.Model):
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
             "PlutusTransactionReferenceID": plutus_transaction_ref_id,
             "Amount": int(round(float(amount) * 100)),  # Pine Labs expects paise (rupees × 100)
         }
+        if config.get('merchant_store_pos_code'):
+            payload["MerchantStorePosCode"] = config['merchant_store_pos_code']
+        elif config.get('store_id'):
+            payload["StoreID"] = config['store_id']
+
+        if config.get('imei'):
+            payload["IMEI"] = config['imei']
+
+        if config.get('client_id') and not config.get('merchant_store_pos_code'):
+            payload["ClientID"] = config['client_id']
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs CancelTransaction response: %s', response)
@@ -163,24 +255,39 @@ class PosPaymentMethod(models.Model):
         """Parse a status response and return a normalized dict for the JS layer."""
         if response.get('error'):
             return response
-        txn_data = response.get('TransactionData')
-        if not txn_data:
-            return {'status': 'pending', 'raw': response}
-        detail = txn_data[0] if isinstance(txn_data, list) else txn_data
-        txn_status = str(detail.get('TxnStatus', ''))
-        if txn_status in ('0', '0000'):
+
+        response_code = response.get('ResponseCode')
+        response_message = str(response.get('ResponseMessage', ''))
+        transaction_data = response.get('TransactionData')
+
+        # Convert Tag/Value array to flat dict
+        txn_dict = {}
+        if isinstance(transaction_data, list):
+            for item in transaction_data:
+                if isinstance(item, dict) and 'Tag' in item and 'Value' in item:
+                    txn_dict[item['Tag']] = item.get('Value', '')
+        elif isinstance(transaction_data, dict):
+            txn_dict = transaction_data
+
+        msg_upper = response_message.upper()
+
+        if response_code == 0 or str(response_code) == '0':
             return {
                 'status': 'success',
-                'approval_code': detail.get('ApprovalCode', ''),
-                'card_type': detail.get('CardType', ''),
-                'payment_mode': detail.get('TxnModeName', ''),
-                'card_number_masked': detail.get('CardNumberMasked', ''),
-                'issuer_bank': detail.get('IssuingBankName', ''),
-                'rrn': detail.get('RRN', ''),
-                'batch_number': detail.get('BatchNumber', ''),
-                'txn_status_msg': detail.get('TxnStatusMsg', ''),
+                'approval_code': txn_dict.get('ApprovalCode', ''),
+                'card_type': txn_dict.get('CardType') or txn_dict.get('Card Type', ''),
+                'payment_mode': txn_dict.get('PaymentMode') or txn_dict.get('Payment Mode', ''),
+                'card_number_masked': txn_dict.get('CardNumber') or txn_dict.get('Card Number', ''),
+                'issuer_bank': txn_dict.get('AcquirerName') or txn_dict.get('Acquirer Name', ''),
+                'rrn': txn_dict.get('RRN', ''),
+                'batch_number': txn_dict.get('BatchNumber', ''),
+                'txn_status_msg': response_message,
             }
-        elif txn_status in ('', 'None'):
-            return {'status': 'pending'}
-        else:
-            return {'status': 'failed', 'message': detail.get('TxnStatusMsg', 'Transaction declined')}
+
+        if response_code in (1001, '1001', 1052, '1052') or 'INITIATED' in msg_upper or 'UPLOADED' in msg_upper or not txn_dict:
+            return {'status': 'pending', 'raw': response}
+
+        if response_code in (1008, '1008') or any(c in msg_upper for c in ['CANCEL', 'NOT FOUND', 'INVALID', 'DECLINED', 'TIMEOUT']):
+            return {'status': 'cancelled' if 'CANCEL' in msg_upper else 'failed', 'message': response_message}
+
+        return {'status': 'pending', 'raw': response}

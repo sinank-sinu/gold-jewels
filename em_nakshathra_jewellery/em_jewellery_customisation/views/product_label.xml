@@ -19,11 +19,16 @@
                 <field name="product_uom_qty" invisible="1"/>
                 <field name="company_id" invisible="1"/>
                 <field name="pricelist_id" invisible="1"/>
-                <field name="partner_id" invisible="1"/>
                 <field name="date_order" invisible="1"/>
                 <field name="currency_id" invisible="1"/>
                 <field name="order_id" invisible="1"/>
                 <field name="is_configurable_product" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='purchase_id']" position="attributes">
+                <attribute name="domain">[('state', '=', 'purchase'), ('order_line.product_template_id', '=', product_template_id)]</attribute>
+            </xpath>
+            <xpath expr="//field[@name='purchase_id']" position="after">
+                <field name="partner_id" string="Vendor" readonly="purchase_id != False" force_save="1" options="{'no_create': True, 'no_create_edit': True}"/>
             </xpath>
             <xpath expr="//field[@name='branch_location_id']" position="attributes">
                 <attribute name="required">0</attribute>

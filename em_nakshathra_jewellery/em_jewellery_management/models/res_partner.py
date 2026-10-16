@@ -90,6 +90,8 @@ class ResPartner(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        if self.env.context.get('skip_duplicate_phone_check'):
+            return super().create(vals_list)
         for vals in vals_list:
             country_id = vals.get('country_id')
             if vals.get('phone'):
@@ -101,6 +103,9 @@ class ResPartner(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
+        if self.env.context.get('skip_duplicate_phone_check'):
+            return super().write(vals)
+
         if 'phone' in vals or 'mobile' in vals:
             for rec in self:
                 c_id = vals.get('country_id', rec.country_id.id)
@@ -114,16 +119,16 @@ class ResPartner(models.Model):
         
         if 'phone' in vals or 'mobile' in vals:
             for rec in self:
-                if rec.phone:
+                if 'phone' in vals and vals.get('phone') and rec.phone:
                     rec._check_duplicate_phone(rec.phone, ignore_id=rec.id)
-                if rec.mobile:
+                if 'mobile' in vals and vals.get('mobile') and rec.mobile:
                     rec._check_duplicate_phone(rec.mobile, ignore_id=rec.id)
                     
         return res
 
     @api.model
     def _check_duplicate_phone(self, phone, ignore_id=False):
-        if not phone:
+        if not phone or self.env.context.get('skip_duplicate_phone_check'):
             return
         
         domain = ['|', ('phone', '=', phone), ('mobile', '=', phone)]

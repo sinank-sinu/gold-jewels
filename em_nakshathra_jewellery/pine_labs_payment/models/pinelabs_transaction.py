@@ -2,6 +2,7 @@
 import logging
 import requests
 import time
+import re
 from datetime import timezone
 
 from odoo import api, fields, models, _
@@ -71,6 +72,9 @@ class PineLabsTransaction(models.Model):
     # Configuration snapshot
     merchant_id = fields.Char(string='Merchant ID Used')
     terminal_id = fields.Char(string='Terminal ID Used')
+    merchant_store_pos_code = fields.Char(string='Merchant Store POS Code Used')
+    imei = fields.Char(string='IMEI Used')
+    sequence_number = fields.Integer(string='Sequence Number', default=1, copy=False)
     pinelabs_terminal_id = fields.Many2one('pinelabs.terminal', string='Terminal Record')
 
     company_id = fields.Many2one('res.company', string='Company',
@@ -82,6 +86,21 @@ class PineLabsTransaction(models.Model):
     def create(self, vals):
         if not vals.get('name') or vals.get('name') in ('New', _('New')):
             vals['name'] = self.env['ir.sequence'].next_by_code('pinelabs.transaction') or f"PLT/{int(time.time())}"
+
+        if not vals.get('sequence_number'):
+            domain = [('state', '=', 'success')]
+            if vals.get('invoice_id'):
+                domain.append(('invoice_id', '=', vals['invoice_id']))
+            elif vals.get('sale_order_id'):
+                domain.append(('sale_order_id', '=', vals['sale_order_id']))
+            elif vals.get('payment_id'):
+                domain.append(('payment_id', '=', vals['payment_id']))
+            elif vals.get('name'):
+                domain.append(('name', '=', vals['name']))
+
+            successful_count = self.search_count(domain) if len(domain) > 1 else 0
+            vals['sequence_number'] = successful_count + 1
+
         return super().create(vals)
 
     def action_retry(self):
@@ -191,56 +210,30 @@ class PineLabsTransaction(models.Model):
 
         url = f"{config['base_url']}/UploadBilledTransaction"
 
-        # ── GST & Invoice fields ──────────────────────────────────────
-        company = self.env.company
-        gst_in = company.vat or ''
+        # User / Cashier Name
+        user_id = config.get('user_id') or self.env.user.name or self.env.user.login or ''
 
-        # Resolve linked invoice for GST breakdown, date, and number
-        invoice = self.invoice_id
-        invoice_number = ''
-        invoice_date_str = ''
-        gst_brkup = ''
+        # Ensure AllowedPaymentMode is numeric/integer if digits (e.g. 10 for UPI, 1 for Card)
+        mode_val = int(allowed_mode) if str(allowed_mode).isdigit() else allowed_mode
 
-        if invoice:
-            invoice_number = (invoice.name or '').strip()
-            if invoice.invoice_date:
-                # Format as ISO 8601 with IST offset (+05:30) as expected by Pine Labs
-                inv_date = invoice.invoice_date
-                invoice_date_str = '%d-%02d-%02dT00:00:00+05:30' % (
-                    inv_date.year, inv_date.month, inv_date.day
-                )
-            gst_brkup = self._build_gst_breakdown(invoice)
-        elif self.sale_order_id:
-            invoice_number = self.sale_order_id.name or ''
+        clean_txn_number = re.sub(r'[^A-Za-z0-9]', '', str(self.name or ''))
+        if not clean_txn_number:
+            clean_txn_number = f"PAY{int(time.time())}"
 
-        # Current user login name
-        user_id = self.env.user.login or self.env.user.name or ''
-
-        # AutoCancel from terminal config (default 120 min for UPI)
-        auto_cancel = config.get('auto_cancel_minutes', 5)
+        # Sequence number for this payment attempt on this document
+        seq_num = self.sequence_number or 1
 
         payload = {
-            "TransactionNumber": self.name,
-            "SequenceNumber": 1,
-            "AllowedPaymentMode": allowed_mode,
+            "MerchantID": str(config['merchant_id']),
+            "SecurityToken": str(config['security_token']),
+            "TransactionNumber": clean_txn_number,
+            "SequenceNumber": seq_num,
+            "AllowedPaymentMode": mode_val,
+            "MerchantStorePosCode": str(config.get('merchant_store_pos_code') or config.get('store_id') or ''),
             "Amount": int(round(amount * 100)),  # Pine Labs expects paise (rupees × 100)
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
-            "UserID": user_id,
-            "MerchantID": config['merchant_id'],
-            "SecurityToken": config['security_token'],
-            "AutoCancelDurationInMinutes": auto_cancel,
+            "UserID": str(user_id),
+            "IMEI": str(config.get('imei') or config.get('terminal_id') or ''),
         }
-
-        # Append GST and Invoice fields only when available
-        if gst_in:
-            payload['GstIn'] = gst_in
-        if gst_brkup:
-            payload['GstBrkUp'] = gst_brkup
-        if invoice_number:
-            payload['invoicenumber'] = invoice_number
-        if invoice_date_str:
-            payload['InvoiceDate'] = invoice_date_str
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs UploadBilledTransaction response: %s', response)
@@ -250,9 +243,28 @@ class PineLabsTransaction(models.Model):
             self.state = 'failed'
             return response
 
-        # If terminal has an open pending transaction, attempt auto-cancel and retry
         response_code = response.get('ResponseCode')
         response_message = str(response.get('ResponseMessage', ''))
+
+        # If terminal returns TXN ALREADY COMPLETED, automatically increment SequenceNumber and retry
+        # If terminal returns TXN ALREADY COMPLETED, automatically retry with a fresh unique TransactionNumber and SequenceNumber 1
+        if (response_code is not None and str(response_code) != '0' and
+                'ALREADY COMPLETED' in response_message.upper()):
+            new_txn_number = f"{clean_txn_number[:12]}{str(int(time.time()))[-6:]}"
+            self.name = new_txn_number
+            self.sequence_number = 1
+            payload['TransactionNumber'] = new_txn_number
+            payload['SequenceNumber'] = 1
+            _logger.warning(
+                'Pine Labs transaction %s was already completed. Retrying with fresh TransactionNumber %s and SequenceNumber 1...',
+                clean_txn_number, new_txn_number
+            )
+            time.sleep(1)
+            response = self._pinelabs_make_request(url, payload)
+            _logger.info('Pine Labs retry response: %s', response)
+            self.response_log = str(response)
+            response_code = response.get('ResponseCode')
+            response_message = str(response.get('ResponseMessage', ''))
 
         if response_code is not None and str(response_code) != '0':
             if 'OPEN TXN' in response_message.upper() or 'APPROVE' in response_message.upper():
@@ -282,11 +294,19 @@ class PineLabsTransaction(models.Model):
                     cancel_payload = {
                         "MerchantID": config['merchant_id'],
                         "SecurityToken": config['security_token'],
-                        "ClientID": config['client_id'],
-                        "StoreID": config['store_id'],
                         "PlutusTransactionReferenceID": plutus_cancel_id,
                         "Amount": cancel_amt,
                     }
+                    if config.get('merchant_store_pos_code'):
+                        cancel_payload["MerchantStorePosCode"] = config['merchant_store_pos_code']
+                    elif config.get('store_id'):
+                        cancel_payload["StoreID"] = config['store_id']
+
+                    if config.get('imei'):
+                        cancel_payload["IMEI"] = config['imei']
+
+                    if config.get('client_id') and not config.get('merchant_store_pos_code'):
+                        cancel_payload["ClientID"] = config['client_id']
                     cancel_resp = self._pinelabs_make_request(cancel_url, cancel_payload)
                     _logger.info('Auto-cancel open txn %s response: %s', existing_ref, cancel_resp)
                     if cancel_resp.get('ResponseCode') == 0 or 'APPROVED' in str(cancel_resp.get('ResponseMessage', '')).upper():
@@ -315,6 +335,8 @@ class PineLabsTransaction(models.Model):
             self.pinelabs_transaction_id = str(ref_int)
             self.merchant_id = config['merchant_id']
             self.terminal_id = config['terminal_id']
+            self.merchant_store_pos_code = config.get('merchant_store_pos_code', '')
+            self.imei = config.get('imei', '')
             self.state = 'waiting'
         else:
             self.state = 'failed'
@@ -353,10 +375,18 @@ class PineLabsTransaction(models.Model):
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
             "PlutusTransactionReferenceID": plutus_ref_id,
         }
+        if config.get('merchant_store_pos_code'):
+            payload["MerchantStorePosCode"] = config['merchant_store_pos_code']
+        elif config.get('store_id'):
+            payload["StoreID"] = config['store_id']
+
+        if config.get('imei'):
+            payload["IMEI"] = config['imei']
+
+        if config.get('client_id') and not config.get('merchant_store_pos_code'):
+            payload["ClientID"] = config['client_id']
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs GetCloudBasedTxnStatus response: %s', response)
@@ -415,7 +445,7 @@ class PineLabsTransaction(models.Model):
                 'message': _('Pine Labs terminal: %s') % response_message,
             }
 
-        if response_code in (1001, '1001') or response_code is None or (not txn_dict and response_code not in (0, '0')):
+        if response_code in (1001, '1001', 1052, '1052') or 'INITIATED' in msg_upper or 'UPLOADED' in msg_upper or response_code is None or (not txn_dict and response_code not in (0, '0')):
             return {'status': 'pending'}
 
         if response_code == 0 or str(response_code) == '0':  # Success / Approved
@@ -535,11 +565,19 @@ class PineLabsTransaction(models.Model):
         payload = {
             "MerchantID": config['merchant_id'],
             "SecurityToken": config['security_token'],
-            "ClientID": config['client_id'],
-            "StoreID": config['store_id'],
             "PlutusTransactionReferenceID": plutus_ref_id,
             "Amount": int(round(self.amount * 100)),  # Pine Labs expects paise (rupees × 100)
         }
+        if config.get('merchant_store_pos_code'):
+            payload["MerchantStorePosCode"] = config['merchant_store_pos_code']
+        elif config.get('store_id'):
+            payload["StoreID"] = config['store_id']
+
+        if config.get('imei'):
+            payload["IMEI"] = config['imei']
+
+        if config.get('client_id') and not config.get('merchant_store_pos_code'):
+            payload["ClientID"] = config['client_id']
 
         response = self._pinelabs_make_request(url, payload)
         _logger.info('Pine Labs CancelTransaction response: %s', response)

@@ -284,7 +284,7 @@ class PurchaseOrderLine(models.Model):
                         }
                     }
 
-            # 4. Standard mode: No Old Gold, No Diamond OG, No Expense products
+            # 4. Standard mode: No Old Gold, No Diamond OG
             else:
                 if is_og:
                     line.product_id = False
@@ -300,14 +300,6 @@ class PurchaseOrderLine(models.Model):
                         'warning': {
                             'title': _('Invalid Product Selection'),
                             'message': _('You cannot select Diamond OG products in a standard Purchase Order!')
-                        }
-                    }
-                if is_exp:
-                    line.product_id = False
-                    return {
-                        'warning': {
-                            'title': _('Invalid Product Selection'),
-                            'message': _('You cannot select Expense (Consumable/Service) products in a standard Purchase Order! Please enable Purchase Expense.')
                         }
                     }
 
@@ -334,8 +326,6 @@ class PurchaseOrderLine(models.Model):
                     raise ValidationError(_('Old Gold products cannot be purchased in a standard Purchase Order.'))
                 if is_dog:
                     raise ValidationError(_('Diamond OG products cannot be purchased in a standard Purchase Order.'))
-                if is_exp:
-                    raise ValidationError(_('Expense (Consumable/Service) products cannot be purchased in a standard Purchase Order. Please enable Purchase Expense.'))
 
     @api.onchange('purity_id')
     def _onchange_purity_id_diamond_og(self):

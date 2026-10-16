@@ -33,6 +33,9 @@
                         <group string="Pine Labs Credentials">
                             <field name="merchant_id"/>
                             <field name="security_token" password="True"/>
+                            <field name="merchant_store_pos_code"/>
+                            <field name="imei"/>
+                            <field name="user_id_code"/>
                             <field name="client_id"/>
                             <field name="store_id"/>
                             <field name="terminal_id"/>
@@ -76,6 +79,8 @@
                 <field name="name"/>
                 <field name="branch_id"/>
                 <field name="merchant_id"/>
+                <field name="merchant_store_pos_code"/>
+                <field name="imei"/>
                 <field name="store_id"/>
                 <field name="terminal_id"/>
                 <field name="is_production" widget="boolean_toggle"/>

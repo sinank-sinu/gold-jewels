@@ -5,6 +5,7 @@ from io import BytesIO
 
 from odoo.exceptions import ValidationError, UserError
 from odoo.tools import barcode as barcode_tool
+from odoo.tools.float_utils import float_compare
 
 
 class ProductLabel(models.Model):
@@ -83,6 +84,28 @@ class ProductLabel(models.Model):
         for rec in self:
             if rec.sale_gross_weight <= 0.0:
                 raise ValidationError(_("Sale Gross Weight must be greater than 0."))
+
+    @api.constrains('sale_gross_weight', 'purchase_id', 'job_work_id', 'product_id', 'product_tmpl_id')
+    def _check_unlabelled_weight_limit(self):
+        for rec in self:
+            rec._compute_unlabelled_weight()
+            if rec.purchase_id and float_compare(rec.unlabelled_weight, -1.0, precision_digits=3) <= 0:
+                raise ValidationError(_(
+                    "Unlabelled weight for Purchase Order '%s' reached %s g. "
+                    "Unlabelled weight cannot be -1 g or less."
+                ) % (rec.purchase_id.name, round(rec.unlabelled_weight, 3)))
+
+            if rec.job_work_id and float_compare(rec.unlabelled_weight_jw, -1.0, precision_digits=3) <= 0:
+                raise ValidationError(_(
+                    "Unlabelled weight for Job Work '%s' reached %s g. "
+                    "Unlabelled weight cannot be -1 g or less."
+                ) % (rec.job_work_id.name, round(rec.unlabelled_weight_jw, 3)))
+
+            if hasattr(rec, 'unlabelled_weight_mrp') and rec.production_id and float_compare(rec.unlabelled_weight_mrp, -1.0, precision_digits=3) <= 0:
+                raise ValidationError(_(
+                    "Unlabelled weight for Manufacturing Order '%s' reached %s g. "
+                    "Unlabelled weight cannot be -1 g or less."
+                ) % (rec.production_id.name, round(rec.unlabelled_weight_mrp, 3)))
 
 
     sale_net_weight = fields.Float(
@@ -400,25 +423,72 @@ class ProductLabel(models.Model):
 
 
 
-    @api.depends('purchase_id', 'job_work_id', 'sale_gross_weight')
+    @api.depends('purchase_id', 'job_work_id', 'sale_gross_weight', 'product_tmpl_id', 'product_id')
     def _compute_unlabelled_weight(self):
         for rec in self:
             rec.unlabelled_weight = 0.0
             rec.unlabelled_weight_jw = 0.0
 
+            tmpl = getattr(rec, 'product_template_id', False) or rec.product_tmpl_id or rec.product_id.product_tmpl_id
+            rec_origin_id = rec._origin.id or (rec.id if isinstance(rec.id, int) else False)
+
             if rec.purchase_id:
-                po = rec.purchase_id
-                # Deduct all other labels on this PO, then deduct current label's live weight
-                other_labels = po.label_ids - rec
+                po = rec.purchase_id.with_context(active_test=False)
+                if tmpl:
+                    matching_lines = po.order_line.filtered(
+                        lambda l: (l.product_template_id or l.product_id.product_tmpl_id) == tmpl
+                    )
+                    po_weight = sum(l.qty_received if l.qty_received else l.product_qty for l in matching_lines)
+                    other_labels = po.label_ids.filtered(
+                        lambda l: l.id != rec_origin_id and (getattr(l, 'product_template_id', False) or l.product_tmpl_id or l.product_id.product_tmpl_id) == tmpl
+                    )
+                else:
+                    po_weight = po.total_weight
+                    other_labels = po.label_ids.filtered(lambda l: l.id != rec_origin_id)
+
                 total_other = sum(other_labels.mapped('sale_gross_weight'))
-                rec.unlabelled_weight = po.total_weight - total_other - (rec.sale_gross_weight or 0.0)
+                rec.unlabelled_weight = po_weight - total_other - (rec.sale_gross_weight or 0.0)
 
             if rec.job_work_id:
-                jw = rec.job_work_id
-                # Deduct all other labels on this Job Work, then deduct current label's live weight
-                other_labels = jw.jw_label_ids - rec
+                jw = rec.job_work_id.with_context(active_test=False)
+                if tmpl:
+                    matching_jw_lines = jw.job_work_line_ids.filtered(
+                        lambda l: (l.product_template_id or l.product_id.product_tmpl_id) == tmpl
+                    )
+                    jw_weight = sum(matching_jw_lines.mapped('quantity')) if matching_jw_lines else jw.total_weight
+                    other_labels = jw.jw_label_ids.filtered(
+                        lambda l: l.id != rec_origin_id and (getattr(l, 'product_template_id', False) or l.product_tmpl_id or l.product_id.product_tmpl_id) == tmpl
+                    )
+                else:
+                    jw_weight = jw.total_weight
+                    other_labels = jw.jw_label_ids.filtered(lambda l: l.id != rec_origin_id)
+
                 total_other = sum(other_labels.mapped('sale_gross_weight'))
-                rec.unlabelled_weight_jw = jw.total_weight - total_other - (rec.sale_gross_weight or 0.0)
+                rec.unlabelled_weight_jw = jw_weight - total_other - (rec.sale_gross_weight or 0.0)
+
+    @api.onchange('sale_gross_weight', 'purchase_id', 'job_work_id', 'product_id', 'product_tmpl_id')
+    def _onchange_check_unlabelled_weight_limit(self):
+        self._compute_unlabelled_weight()
+        if self.purchase_id and float_compare(self.unlabelled_weight, -1.0, precision_digits=3) <= 0:
+            return {
+                'warning': {
+                    'title': _("Unlabelled Weight Limit Exceeded"),
+                    'message': _(
+                        "Unlabelled weight for Purchase Order '%s' reached %s g. "
+                        "Unlabelled weight cannot be -1 g or less! You will not be able to save this record."
+                    ) % (self.purchase_id.name, round(self.unlabelled_weight, 3)),
+                }
+            }
+        if self.job_work_id and float_compare(self.unlabelled_weight_jw, -1.0, precision_digits=3) <= 0:
+            return {
+                'warning': {
+                    'title': _("Unlabelled Weight Limit Exceeded"),
+                    'message': _(
+                        "Unlabelled weight for Job Work '%s' reached %s g. "
+                        "Unlabelled weight cannot be -1 g or less! You will not be able to save this record."
+                    ) % (self.job_work_id.name, round(self.unlabelled_weight_jw, 3)),
+                }
+            }
 
 
     def _compute_stock_move_count(self):
