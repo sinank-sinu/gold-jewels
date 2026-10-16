@@ -37,15 +37,32 @@ class OldGoldSmithTransferWizard(models.TransientModel):
         if not self.line_ids.filtered(lambda l: l.transfer_weight > 0):
             raise ValidationError(_("Please enter weights to transfer."))
 
-        company_id = self.purchase_id.ho_location_id.company_id.id or self.env.company.id
+        company_id = self.purchase_id.company_id.id or self.purchase_id.ho_location_id.company_id.id or self.env.company.id
         picking_type = self.env['stock.picking.type'].sudo().search([
             ('code', '=', 'internal'),
             ('company_id', '=', company_id)
         ], limit=1)
         if not picking_type:
             picking_type = self.env.ref('stock.picking_type_internal').sudo()
-            
-        product = self.env.ref('em_jewellery_management.product_old_gold')
+
+        # Find Old Gold product for the company
+        product = self.purchase_id._get_old_gold_product() if hasattr(self.purchase_id, '_get_old_gold_product') else False
+        if not product:
+            product = self.env['product.product'].sudo().search([
+                ('is_old_gold', '=', True),
+                ('company_id', '=', company_id)
+            ], limit=1) or self.env['product.product'].sudo().search([
+                ('name', '=ilike', 'Old Gold'),
+                ('company_id', '=', company_id)
+            ], limit=1) or self.env['product.product'].sudo().search([
+                ('is_old_gold', '=', True),
+                ('name', 'not ilike', 'Scrap'),
+                ('company_id', 'in', [company_id, False])
+            ], limit=1) or self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+
+        if not product:
+            raise ValidationError(_("Old Gold product not configured for company %s.") % (self.purchase_id.company_id.name or ''))
+
         uom = product.uom_id
 
         picking = self.env['stock.picking'].sudo().create({
@@ -61,21 +78,26 @@ class OldGoldSmithTransferWizard(models.TransientModel):
         for line in self.line_ids:
             if line.transfer_weight <= 0:
                 continue
-            
+
             if line.transfer_weight > line.available_weight:
                 raise ValidationError(_("Transfer weight for %s exceeds available weight.") % line.purity_id.name)
 
+            is_diamond = (line.purchase_line_id and line.purchase_line_id.is_diamond_og) or (line.purity_id and line.purity_id.is_diamond_og)
+            line_product = (self.purchase_id._get_old_gold_product(is_diamond_og=is_diamond) if hasattr(self.purchase_id, '_get_old_gold_product') else False) or product
+            line_uom = line_product.uom_id or uom
+
             self.env['stock.move'].sudo().create({
-                'product_id': product.id,
+                'product_id': line_product.id,
                 'name': f'Old Gold Transfer to Smith ({line.purity_id.name})',
                 'purity_id': line.purity_id.id,
                 'product_uom_qty': line.transfer_weight,
-                'product_uom': uom.id,
+                'product_uom': line_uom.id,
                 'location_id': picking.location_id.id,
                 'location_dest_id': picking.location_dest_id.id,
                 'picking_id': picking.id,
+                'company_id': company_id,
             })
-            
+
             # Update the purchase line
             line.purchase_line_id.transferred_weight += line.transfer_weight
             line.purchase_line_id.gross_weight -= line.transfer_weight

@@ -362,12 +362,14 @@ class PurchaseOrder(models.Model):
             # ------------------------------------------------
             # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
             # ------------------------------------------------
-                self.env['old.gold.purchase'].with_context(skip_old_gold_amount_compute=True).create({
+                company = order.company_id or order.branch_id.company_id or self.env.company
+                self.env['old.gold.purchase'].with_company(company).with_context(skip_old_gold_amount_compute=True).create({
                     'partner_id': order.partner_id.id,
                     'date': fields.Date.today(),
                     'branch_location_id': location_id,
                     'purchase_order_id': order.id,
                     'branch_id': order.branch_id.id or self.env.user.branch_id.id,
+                    'company_id': company.id,
                     'old_gold_line_ids': [
                         (0, 0, {
                             'purity_id': (l.purity_id or l.product_id.purity_id).id,
