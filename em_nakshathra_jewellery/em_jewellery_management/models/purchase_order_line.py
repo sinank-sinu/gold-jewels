@@ -71,13 +71,13 @@ class PurchaseOrderLine(models.Model):
         compute="_compute_price_unit", readonly=False, store=True)
     price_subtotal = fields.Monetary(compute='_compute_subtotal', string='Subtotal', store=True)
 
-    @api.depends('product_qty', 'price_unit', 'taxes_id', 'discount', 'sale_return_line_id', 'sale_return_line_id.amount')
+    @api.depends('product_qty', 'price_unit', 'taxes_id', 'discount', 'sale_return_line_id', 'sale_return_line_id.amount', 'price_subtotal')
     def _compute_amount(self):
         super()._compute_amount()
         for line in self:
             if line.sale_return_line_id:
                 line.price_subtotal = line.sale_return_line_id.amount
-                line.price_total = line.price_subtotal + line.price_tax
+            line.price_total = line.price_subtotal + line.price_tax
 
 
 
@@ -151,7 +151,7 @@ class PurchaseOrderLine(models.Model):
             else:
                 rec.mc_amount = rec.net_weight * rec.gold_rate
 
-    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty')
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty', 'price_tax')
     def _compute_subtotal(self):
         for rec in self:
             if rec.order_id and rec.order_id.is_purchase_expense:
@@ -160,6 +160,7 @@ class PurchaseOrderLine(models.Model):
                 rec.price_subtotal = rec.sale_return_line_id.amount
             else:
                 rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
+            rec.price_total = rec.price_subtotal + (rec.price_tax or 0.0)
 
     @api.depends('price_subtotal', 'product_qty', 'product_uom_qty', 'order_id.is_purchase_expense')
     def _compute_price_unit(self):

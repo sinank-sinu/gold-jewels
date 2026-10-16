@@ -90,7 +90,7 @@ class OldGoldMarginXlsx(models.AbstractModel):
             purity = rec.purity_id.percentage if rec.purity_id else 0
             gross_wt = rec.product_qty or 0
             net_wt = rec.product_qty or 0
-            amount = rec.price_total or 0
+            amount = rec.price_subtotal or 0
             purchase_rate = rec.price_unit or 0
 
             #Board rate based on purchase date
@@ -101,29 +101,26 @@ class OldGoldMarginXlsx(models.AbstractModel):
 
             # Fetch Fine Rate from fine.rate.master matching the report date
             fine_rate_rec = self.env['fine.rate.master'].search([
-                ('date', '=', date_value)
+                ('date', '<=', date_value)
             ], order='date desc', limit=1)
 
-            purchase_fine_rate = 0
+            market_fine_rate = 0.0
 
             if fine_rate_rec:
                 history_line = self.env['fine.rate.history'].search([
                     ('master_id', '=', fine_rate_rec.id)
                 ], order='id desc', limit=1)
                 if history_line:
-                    purchase_fine_rate = history_line.fine_rate
+                    market_fine_rate = history_line.fine_rate
                 else:
                     # Fallback to the main form view rate field if no history item exists
-                    purchase_fine_rate = fine_rate_rec.fine_rate or 0
+                    market_fine_rate = fine_rate_rec.fine_rate or 0.0
 
-            # purchase_fine_rate = fine_rate_rec.fine_rate if fine_rate_rec else 0
-
-            #Calculations
+            # Calculations
             less_2_board = board_rate * 0.98
-            gain_loss_board = less_2_board - purchase_rate
+            gain_loss_board = purchase_rate - less_2_board
             expected_fine = net_wt * (purity / 100)
-            # purchase_fine_rate = amount / expected_fine if expected_fine else 0
-            market_fine_rate = 10000
+            purchase_fine_rate = (amount / expected_fine) if expected_fine else 0.0
             gain_loss_market = market_fine_rate - purchase_fine_rate
 
             if rec.order_id.sale_id and rec.order_id.sale_id.has_old_gold:
