@@ -15,12 +15,22 @@ RAZORPAY_KEY_ID = "rzp_test_TZTOVDHOQcGeUv"
 RAZORPAY_KEY_SECRET = "mAROO5PBwVt2rmPyjLBSZN5l"
 
 class SchemeMobileAPI(http.Controller):
+
+    @staticmethod
+    def _is_test_otp_number(*values):
+        for val in values:
+            if val:
+                clean = re.sub(r'\D', '', str(val))
+                if clean.endswith('9946185174'):
+                    return True
+        return False
+
     #LOGIN
     @http.route('/api/scheme/login', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def login(self, **kwargs):
         db_name = kwargs.get('db') or request.db
         try:
-            username = kwargs.get('username')
+            username = (kwargs.get('username') or kwargs.get('login') or kwargs.get('phone') or kwargs.get('mobile') or kwargs.get('email') or '').strip()
             password = kwargs.get('password')
 
             if not username or not password:
@@ -39,20 +49,47 @@ class SchemeMobileAPI(http.Controller):
 
             user = request.env['res.users'].sudo().browse(uid)
 
+            target_phone = kwargs.get('phone') or kwargs.get('mobile') or user.partner_id.mobile or user.partner_id.phone or ""
             employee = request.env['hr.employee'].sudo().search([
                 ('user_id', '=', user.id)
             ], limit=1)
 
+            if not target_phone and employee:
+                target_phone = employee.mobile_phone or employee.work_phone or ""
+
+            # Generate and save Login OTP (Fixed 1234 only for +919946185174, random for all others)
+            if self._is_test_otp_number(target_phone, username, user.login):
+                otp_code = "1234"
+            else:
+                otp_code = f"{random.randint(100000, 999999)}"
+            expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
+
+            user.write({
+                'login_otp': otp_code,
+                'login_otp_expiry': expiry
+            })
+
+            if hasattr(user, '_send_login_otp_sms'):
+                try:
+                    user._send_login_otp_sms(otp_code)
+                except Exception:
+                    pass
+
             return {
                 "status": "success",
+                "message": "Login successful. OTP sent successfully.",
                 "session_id": request.session.sid,
+                "otp": otp_code,
+                "otp_sent": True,
                 "data": {
                     "user_id": user.id,
                     "name": user.name,
                     "email": user.login,
+                    "phone": target_phone,
+                    "otp": otp_code,
                     "employee_id": employee.id if employee else None,
                     "employee_name": employee.name if employee else None,
-                    "job_position": employee.job_id if employee else None
+                    "job_position": employee.job_id.name if employee and employee.job_id else None
                 }
             }
 
@@ -163,7 +200,10 @@ class SchemeMobileAPI(http.Controller):
                     }
 
                 # New phone number: create customer account and send OTP
-                otp_code = f"{random.randint(100000, 999999)}"
+                if self._is_test_otp_number(raw_phone, phone, clean_phone):
+                    otp_code = "1234"
+                else:
+                    otp_code = f"{random.randint(100000, 999999)}"
                 expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
                 login = raw_phone
@@ -339,15 +379,18 @@ class SchemeMobileAPI(http.Controller):
             if not user:
                 return {"status": "error", "message": "User account could not be found or created"}
 
-            otp_code = f"{random.randint(100000, 999999)}"
+            target_phone = phone or (user.partner_id.mobile if user and user.partner_id else '') or (user.partner_id.phone if user and user.partner_id else '') or ""
+
+            if self._is_test_otp_number(target_phone, phone, username, user.login if user else False):
+                otp_code = "1234"
+            else:
+                otp_code = f"{random.randint(100000, 999999)}"
             expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
             user.write({
                 'login_otp': otp_code,
                 'login_otp_expiry': expiry
             })
-
-            target_phone = phone or user.partner_id.mobile or user.partner_id.phone or ""
             if hasattr(user, '_send_login_otp_sms'):
                 try:
                     user._send_login_otp_sms(otp_code)
@@ -472,26 +515,33 @@ class SchemeMobileAPI(http.Controller):
                 }
 
             # Validate OTP on the resolved user
-            if not user.login_otp:
-                return {
-                    "status": "error",
-                    "message": "No OTP requested for this user. Please request an OTP first.",
-                    "is_registered": True
-                }
+            check_phone = raw_phone or (user.partner_id.mobile if user and user.partner_id else '') or (user.partner_id.phone if user and user.partner_id else '') or user.login or ''
+            is_test_phone = self._is_test_otp_number(check_phone, raw_phone, username, user.login if user else False)
 
-            if str(user.login_otp).strip() != otp_entered:
-                return {
-                    "status": "error",
-                    "message": "Invalid OTP code",
-                    "is_registered": True
-                }
+            if is_test_phone and otp_entered == "1234":
+                # Master test OTP valid only for +919946185174
+                pass
+            else:
+                if not user.login_otp:
+                    return {
+                        "status": "error",
+                        "message": "No OTP requested for this user. Please request an OTP first.",
+                        "is_registered": True
+                    }
 
-            if user.login_otp_expiry and user.login_otp_expiry < fields.Datetime.now():
-                return {
-                    "status": "error",
-                    "message": "OTP has expired. Please request a new OTP.",
-                    "is_registered": True
-                }
+                if str(user.login_otp).strip() != otp_entered:
+                    return {
+                        "status": "error",
+                        "message": "Invalid OTP code",
+                        "is_registered": True
+                    }
+
+                if user.login_otp_expiry and user.login_otp_expiry < fields.Datetime.now():
+                    return {
+                        "status": "error",
+                        "message": "OTP has expired. Please request a new OTP.",
+                        "is_registered": True
+                    }
 
             # OTP is correct and active -> consume OTP and complete login
             user.write({
