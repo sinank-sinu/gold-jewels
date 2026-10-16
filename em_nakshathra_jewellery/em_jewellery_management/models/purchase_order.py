@@ -349,7 +349,7 @@ class PurchaseOrder(models.Model):
                     raise ValidationError(_('Cannot confirm order: Standard purchase order contains Old Gold, Diamond OG, or Expense products (%s). Please remove them first.') % names)
         res = super(PurchaseOrder, self).button_confirm()
         for order in self:
-            if order.is_old_gold:
+            if order.is_old_gold and not order.sale_id:
                 dest_loc_id = order._get_destination_location()
                 location_id = dest_loc_id if dest_loc_id else (order.branch_id.old_gold_location_id.id or self.env.user.branch_id.old_gold_location_id.id)
 
@@ -358,6 +358,10 @@ class PurchaseOrder(models.Model):
                 if missing_purity:
                     names = ', '.join(missing_purity.mapped('product_id.display_name'))
                     raise ValidationError(_('Please select Purity for Old Gold lines (%s) before confirming.') % names)
+
+                existing_ogp = self.env['old.gold.purchase'].search([('purchase_order_id', '=', order.id)], limit=1)
+                if existing_ogp:
+                    continue
 
             # ------------------------------------------------
             # 1️⃣ CREATE OLD GOLD PURCHASE (LOGICAL RECORD)
