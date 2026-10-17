@@ -19,6 +19,11 @@
             <attribute name="t-if">o.move_type not in ('out_invoice', 'in_invoice')</attribute>
         </xpath>
 
+        <!-- Hide payment communication and bank account details from footer (Pic 2) -->
+        <xpath expr="//p[@name='payment_communication']" position="attributes">
+            <attribute name="t-if">False</attribute>
+        </xpath>
+
         <!-- Custom Jewellery Invoice Design -->
         <xpath expr="//t[@t-set='address']" position="after">
             <!-- Clear default Odoo address so it doesn't print awkwardly on page 2 -->
@@ -29,6 +34,7 @@
 
         <xpath expr="//h2" position="before">
             <t t-if="o.move_type in ('out_invoice', 'in_invoice')">
+                <t t-set="is_hide_discount" t-value="bool(hide_discount or env.context.get('hide_discount'))"/>
                 
                 <style>
                     .jewellery-invoice {
@@ -48,36 +54,36 @@
                         background-color: #fcfcfc;
                         border: 1px solid #e0e0e0;
                         border-radius: 6px;
-                        padding: 15px;
-                        margin-bottom: 20px;
+                        padding: 10px 14px;
+                        margin-bottom: 10px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
                     }
                     .customer-details h5 {
                         color: #2C3E50;
                         font-weight: 600;
-                        margin-bottom: 12px;
+                        margin-bottom: 6px;
                         text-transform: uppercase;
                         font-size: 1rem;
                     }
                     .jewellery-table {
                         width: 100%;
                         border-collapse: collapse;
-                        margin-top: 15px;
+                        margin-top: 8px;
                         font-size: 0.75em;
                     }
                     .jewellery-table th {
-                        background-color: #2C3E50 !important; /* Dark Charcoal */
-                        color: #ffffff !important;
-                        padding: 6px 4px;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
+                        padding: 5px 4px;
                         text-align: center;
-                        border: 1px solid #2C3E50 !important;
-                        font-weight: 600;
+                        border: 1px solid #000000 !important;
+                        font-weight: bold !important;
                         font-size: 0.9em;
                         vertical-align: middle;
                         text-transform: uppercase;
                     }
                     .jewellery-table td {
-                        padding: 6px 4px;
+                        padding: 4px 4px;
                         border: 1px solid #e0e0e0;
                         text-align: right;
                         vertical-align: middle;
@@ -100,12 +106,12 @@
                     .jewellery-totals {
                         float: right;
                         width: 40%;
-                        margin-top: 15px;
+                        margin-top: 8px;
                         font-size: 0.85em;
                         border-collapse: collapse;
                     }
                     .jewellery-totals td {
-                        padding: 8px;
+                        padding: 4px 8px;
                     }
                     .jewellery-totals .totals-label {
                         text-align: right;
@@ -140,52 +146,120 @@
                         .page > #informations { display: none !important; }
                         address, .address, div[name="address"] { display: none !important; }
                         div[name="l10n_in_hsn_summary"] { display: none !important; }
+                        p[name="payment_communication"] { display: none !important; }
+                        .pt-5, div.pt-5 { display: none !important; padding-top: 0 !important; height: 0 !important; margin: 0 !important; }
+                        .article { padding-top: 0 !important; margin-top: 0 !important; }
+                        .page { padding-top: 0 !important; margin-top: 0 !important; }
+                        .jewellery-invoice { margin-top: 0 !important; padding-top: 0 !important; }
                     </style>
 
-                    <div class="row">
-                        <div class="col-7 customer-details">
-                            <h5>
-                                <span t-if="o.move_type == 'out_invoice'">Customer Details</span>
-                                <span t-if="o.move_type == 'in_invoice'">Vendor Details</span>
-                            </h5>
-                            <div t-if="o.partner_id" style="font-size: 0.9em; line-height: 1.5;">
-                                <strong style="font-size: 1.1em; color: #2C3E50;"><span t-field="o.partner_id.name"/></strong><br/>
-                                <span t-if="o.partner_id.street" t-field="o.partner_id.street"/><br t-if="o.partner_id.street"/>
-                                <span t-if="o.partner_id.city" t-esc="o.partner_id.city"/>
-                                <span t-if="o.partner_id.state_id" t-field="o.partner_id.state_id.name"/>
-                                <span t-if="o.partner_id.zip" t-field="o.partner_id.zip"/><br t-if="o.partner_id.city or o.partner_id.state_id or o.partner_id.zip"/>
-                                <span t-if="o.partner_id.phone"><i class="fa fa-phone"/> <span t-field="o.partner_id.phone"/></span><br t-if="o.partner_id.phone"/>
-                                <span t-if="o.partner_id.email"><i class="fa fa-envelope"/> <span t-field="o.partner_id.email"/></span>
-                                <br t-if="o.partner_id.vat"/>
-                                <span t-if="o.partner_id.vat"><strong>TRN: </strong><span t-field="o.partner_id.vat"/></span>
-                            </div>
-                        </div>
-                        <div class="col-5">
-                            <div class="row mb-2" style="font-size: 0.9em;">
-                                <div class="col-5"><strong>Invoice Date:</strong></div>
-                                <div class="col-7 text-right"><span t-field="o.invoice_date"/></div>
-                            </div>
-                        </div>
-                    </div>
+                    <table style="width: 100%; border: none; margin-bottom: 8px; border-collapse: collapse;">
+                        <tr style="border: none;">
+                            <td style="width: 58%; vertical-align: top; border: none; padding: 0 10px 0 0;">
+                                <div class="customer-details">
+                                    <h5 style="margin-top: 0; margin-bottom: 4px; font-weight: bold; color: #2C3E50; font-size: 0.95em; text-transform: uppercase;">
+                                        <span t-if="o.move_type == 'out_invoice'">Customer Details</span>
+                                        <span t-if="o.move_type == 'in_invoice'">Vendor Details</span>
+                                    </h5>
+                                    <div t-if="o.partner_id" style="font-size: 0.85em; line-height: 1.4;">
+                                        <strong style="font-size: 1.05em; color: #2C3E50;"><span t-field="o.partner_id.name"/></strong><br/>
+                                        <t t-if="o.partner_id.street"><span t-field="o.partner_id.street"/><br/></t>
+                                        <t t-if="o.partner_id.street2"><span t-field="o.partner_id.street2"/><br/></t>
+                                        <t t-if="o.partner_id.city or o.partner_id.state_id or o.partner_id.zip">
+                                            <span t-if="o.partner_id.city" t-esc="o.partner_id.city"/>
+                                            <span t-if="o.partner_id.city and (o.partner_id.state_id or o.partner_id.zip)">, </span>
+                                            <span t-if="o.partner_id.state_id" t-field="o.partner_id.state_id.name"/>
+                                            <span t-if="o.partner_id.zip"> - <span t-field="o.partner_id.zip"/></span>
+                                            <br/>
+                                        </t>
+                                        <t t-if="o.partner_id.country_id and o.partner_id.country_id.name not in ['India', False]">
+                                            <span t-field="o.partner_id.country_id.name"/><br/>
+                                        </t>
+                                        <t t-if="o.partner_id.mobile or o.partner_id.phone">
+                                            <span><strong>Phone: </strong><span t-esc="o.partner_id.mobile or o.partner_id.phone"/></span>
+                                            <span t-if="o.partner_id.mobile and o.partner_id.phone and o.partner_id.mobile != o.partner_id.phone"> / <span t-field="o.partner_id.phone"/></span>
+                                            <br/>
+                                        </t>
+                                        <t t-if="o.partner_id.email">
+                                            <span><strong>Email: </strong><span t-field="o.partner_id.email"/></span><br/>
+                                        </t>
+                                        <t t-if="o.partner_id.vat">
+                                            <span><strong>GSTIN: </strong><span t-field="o.partner_id.vat"/></span><br/>
+                                        </t>
+                                        <t t-if="o.partner_id.l10n_in_pan">
+                                            <span><strong>PAN: </strong><span t-field="o.partner_id.l10n_in_pan"/></span><br/>
+                                        </t>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 42%; vertical-align: top; border: none; padding: 0;">
+                                <table style="width: 100%; border: none; font-size: 0.85em; line-height: 1.5; border-collapse: collapse;">
+                                    <tr style="border: none;">
+                                        <td style="border: none; padding: 1px 0; text-align: left; width: 45%;">
+                                            <strong>
+                                                <span t-if="o.move_type == 'out_invoice'">Invoice No:</span>
+                                                <span t-else="">Bill No:</span>
+                                            </strong>
+                                        </td>
+                                        <td style="border: none; padding: 1px 0; text-align: right; width: 55%;">
+                                            <strong><span t-field="o.name"/></strong>
+                                        </td>
+                                    </tr>
+                                    <tr style="border: none;">
+                                        <td style="border: none; padding: 1px 0; text-align: left;">
+                                            <strong>
+                                                <span t-if="o.move_type == 'out_invoice'">Invoice Date:</span>
+                                                <span t-else="">Bill Date:</span>
+                                            </strong>
+                                        </td>
+                                        <td style="border: none; padding: 1px 0; text-align: right;">
+                                            <span t-esc="o.invoice_date.strftime('%d/%m/%Y') if o.invoice_date else ''"/>
+                                        </td>
+                                    </tr>
+                                    <t t-set="report_salesman" t-value="o._get_report_salesman_name()"/>
+                                    <tr t-if="report_salesman" style="border: none;">
+                                        <td style="border: none; padding: 1px 0; text-align: left;">
+                                            <strong>Salesman:</strong>
+                                        </td>
+                                        <td style="border: none; padding: 1px 0; text-align: right;">
+                                            <span t-esc="report_salesman"/>
+                                        </td>
+                                    </tr>
+                                    <t t-set="report_gold_rates" t-value="o._get_report_gold_rates()"/>
+                                    <t t-foreach="report_gold_rates" t-as="gr">
+                                        <tr style="border: none;">
+                                            <td style="border: none; padding: 1px 0; text-align: left; white-space: nowrap;">
+                                                <strong><span t-esc="gr['label']"/></strong>
+                                            </td>
+                                            <td style="border: none; padding: 1px 0; text-align: right;">
+                                                <span t-esc="gr['rate']"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
 
                     <!-- Details Table -->
+                    <t t-set="col_info" t-value="o._get_report_visible_columns()"/>
                     <table class="jewellery-table">
                         <thead>
                             <tr>
-                                <th class="text-left" style="width: 12%;">Name</th>
-                                <th style="width: 4%;">Crt</th>
-                                <th style="width: 6%;">Gr.Wt</th>
-                                <th style="width: 6%;">Nt.Wt</th>
-                                <th style="width: 6%;">St.Wt</th>
-                                <th style="width: 6%;">D.Wt(c)</th>
-                                <th style="width: 8%;">Gold Rate</th>
-                                <th style="width: 10%;">Metal Amt</th>
-                                <th style="width: 6%;">St.Amt</th>
-                                <th style="width: 8%;">D.Amt</th>
-                                <th style="width: 7%;">MC</th>
-                                <th style="width: 7%;">MRP</th>
-                                <th style="width: 7%;">Disc</th>
-                                <th style="width: 7%;">Sub Total</th>
+                                <th class="text-left">Name</th>
+                                <th t-if="col_info['crt']" style="width: 6%;">Crt</th>
+                                <th t-if="col_info['gr_wt']" style="width: 8%;">Gr.Wt</th>
+                                <th t-if="col_info['nt_wt']" style="width: 8%;">Nt.Wt</th>
+                                <th t-if="col_info['st_wt']" style="width: 7%;">St.Wt</th>
+                                <th t-if="col_info['d_wt']" style="width: 7%;">D.Wt(c)</th>
+                                <th t-if="col_info['gold_rate']" style="width: 12%;">Gold Rate</th>
+                                <th t-if="col_info['metal_amt']" style="width: 14%;">Metal Amt</th>
+                                <th t-if="col_info['st_amt']" style="width: 8%;">St.Amt</th>
+                                <th t-if="col_info['d_amt']" style="width: 8%;">D.Amt</th>
+                                <th t-if="col_info['mc_amt']" style="width: 8%;">MC</th>
+                                <th t-if="not is_hide_discount and col_info['mrp']" style="width: 9%;">MRP</th>
+                                <th t-if="not is_hide_discount and col_info['disc']" style="width: 8%;">Disc</th>
+                                <th style="width: 14%;">Sub Total</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -223,19 +297,14 @@
                                         <td class="text-left">
                                             <span t-esc="line.product_id.name.split('(')[0].strip() if line.product_id and line.product_id.name else ''"/>
                                         </td>
-                                        <td>
-                                            <t t-if="sale_line and sale_line.purity_id">
-                                                <span t-field="sale_line.purity_id.name"/>
-                                            </t>
-                                            <t t-elif="purchase_line and purchase_line.purity_id">
-                                                <span t-field="purchase_line.purity_id.name"/>
-                                            </t>
-                                            <t t-elif="line.purity_id">
-                                                <span t-field="line.purity_id.name"/>
+                                        <td t-if="col_info['crt']">
+                                            <t t-set="purity_obj" t-value="(sale_line and sale_line.purity_id) or (purchase_line and purchase_line.purity_id) or line.purity_id"/>
+                                            <t t-if="purity_obj and purity_obj.name">
+                                                <span t-esc="purity_obj.name.split('(')[0].strip()"/>
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="col_info['gr_wt']">
                                             <t t-if="sale_line and sale_line.product_uom_qty">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.product_uom_qty)"/>
                                             </t>
@@ -244,7 +313,7 @@
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="col_info['nt_wt']">
                                             <t t-if="sale_line and sale_line.net_weight">
                                                 <span t-esc="'{0:,.3f}'.format(sale_line.net_weight)"/>
                                             </t>
@@ -253,22 +322,17 @@
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
-                                            <t t-if="sale_line and sale_line.sale_stone_weight">
-                                                <span t-esc="'{0:,.3f}'.format(sale_line.sale_stone_weight)"/>
-                                            </t>
-                                            <t t-elif="purchase_line and purchase_line.stone_weight">
-                                                <span t-esc="'{0:,.3f}'.format(purchase_line.stone_weight)"/>
-                                            </t>
+                                        <td t-if="col_info['st_wt']">
+                                            <t t-set="st_wt" t-value="(sale_line and sale_line.sale_stone_weight) or (sale_line and sale_line.label_id and sale_line.label_id.sale_stone_weight) or (line.label_id and line.label_id.sale_stone_weight) or (purchase_line and purchase_line.stone_weight) or 0.0"/>
+                                            <span t-if="st_wt > 0" t-esc="'{0:,.3f}'.format(st_wt)"/>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
-                                            <t t-if="sale_line and sale_line.sale_diamond_weight_ct">
-                                                <span t-esc="'{0:,.3f}'.format(sale_line.sale_diamond_weight_ct)"/>
-                                            </t>
+                                        <td t-if="col_info['d_wt']">
+                                            <t t-set="d_wt" t-value="(sale_line and sale_line.sale_diamond_weight_ct) or (sale_line and sale_line.label_id and sale_line.label_id.sale_diamond_weight_ct) or (line.label_id and line.label_id.sale_diamond_weight_ct) or (sale_line and sale_line.sale_diamond_weight_gm and sale_line.sale_diamond_weight_gm * 5.0) or (line.label_id and line.label_id.sale_diamond_weight_gm and line.label_id.sale_diamond_weight_gm * 5.0) or (purchase_line and purchase_line.diamond_weight_gm and purchase_line.diamond_weight_gm * 5.0) or 0.0"/>
+                                            <span t-if="d_wt > 0" t-esc="'{0:,.3f}'.format(d_wt)"/>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="col_info['gold_rate']">
                                             <t t-if="sale_line and sale_line.gold_rate">
                                                 <span t-field="sale_line.gold_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
@@ -277,7 +341,7 @@
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="col_info['metal_amt']">
                                             <t t-if="sale_line and sale_line.metal_amount">
                                                 <span t-field="sale_line.metal_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
@@ -286,22 +350,17 @@
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
-                                            <t t-if="sale_line and sale_line.sale_stone_rate">
-                                                <span t-field="sale_line.sale_stone_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                            </t>
-                                            <t t-elif="purchase_line and purchase_line.stone_rate">
-                                                <span t-field="purchase_line.stone_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                            </t>
+                                        <td t-if="col_info['st_amt']">
+                                            <t t-set="st_amt" t-value="(sale_line and sale_line.sale_stone_rate) or (sale_line and sale_line.label_id and sale_line.label_id.sale_stone_rate) or (line.label_id and line.label_id.sale_stone_rate) or (purchase_line and purchase_line.stone_rate) or 0.0"/>
+                                            <span t-if="st_amt > 0" t-esc="st_amt" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
-                                            <t t-if="sale_line and sale_line.sale_diamond_rate">
-                                                <span t-field="sale_line.sale_diamond_rate" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                            </t>
+                                        <td t-if="col_info['d_amt']">
+                                            <t t-set="d_amt" t-value="(sale_line and sale_line.sale_diamond_rate) or (sale_line and sale_line.label_id and sale_line.label_id.sale_diamond_rate) or (line.label_id and line.label_id.sale_diamond_rate) or (purchase_line and purchase_line.diamond_rate) or 0.0"/>
+                                            <span t-if="d_amt > 0" t-esc="d_amt" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="col_info['mc_amt']">
                                             <t t-if="sale_line and sale_line.mc_amount">
                                                 <span t-field="sale_line.mc_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
@@ -310,13 +369,13 @@
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="not is_hide_discount and col_info['mrp']">
                                             <t t-if="line_mrp &gt; 0">
                                                 <span t-esc="line_mrp" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
                                             <t t-else="">-</t>
                                         </td>
-                                        <td>
+                                        <td t-if="not is_hide_discount and col_info['disc']">
                                             <t t-if="line_discount &gt; 0">
                                                 <span t-esc="line_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                             </t>
@@ -328,38 +387,99 @@
                                     </tr>
                                 </t>
                             </t>
-                            <t t-if="total_discount > 0">
-                                <tr style="border-top: 2px solid #2C3E50; background-color: #fafafa;">
-                                    <td colspan="11"></td>
-                                    <td style="font-weight: 600; text-align: right; padding-right: 10px;">Total Disc:</td>
-                                    <td style="font-weight: 600; color: #E74C3C;">
-                                        <span t-esc="total_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                            <!-- Table Total Row: Shows Total Gross Weight under GR.WT, Total Net Weight under NT.WT, and Total Subtotal under SUB TOTAL -->
+                            <tr style="border-top: 2px solid #2C3E50; border-bottom: 2px solid #2C3E50; background-color: #fafafa; font-weight: bold;">
+                                <td t-att-colspan="2 if col_info['crt'] else 1" style="font-weight: 600; text-align: center;">Total:</td>
+                                <td t-if="col_info['gr_wt']" style="font-weight: 600; text-align: right;">
+                                    <span t-esc="o._get_report_total_gross_weight()"/>
+                                </td>
+                                <td t-if="col_info['nt_wt']" style="font-weight: 600; text-align: right;">
+                                    <span t-esc="o._get_report_total_net_weight()"/>
+                                </td>
+                                <td t-if="col_info['st_wt']"></td>
+                                <td t-if="col_info['d_wt']"></td>
+                                <td t-if="col_info['gold_rate']"></td>
+                                <td t-if="col_info['metal_amt']"></td>
+                                <td t-if="col_info['st_amt']"></td>
+                                <td t-if="col_info['d_amt']"></td>
+                                <td t-if="col_info['mc_amt']"></td>
+                                <t t-if="not is_hide_discount and col_info['mrp']">
+                                    <td style="font-weight: 600; text-align: right; padding-right: 6px;">
+                                        <t t-if="total_discount > 0">Total Disc:</t>
                                     </td>
-                                    <td></td>
-                                </tr>
-                            </t>
+                                </t>
+                                <t t-if="not is_hide_discount and col_info['disc']">
+                                    <td style="font-weight: 600; color: #E74C3C; text-align: right;">
+                                        <t t-if="total_discount > 0">
+                                            <span t-esc="total_discount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                        </t>
+                                    </td>
+                                </t>
+                                <td style="font-weight: 600; text-align: right;">
+                                    <span t-esc="o._get_report_total_subtotal()"/>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
 
                     <!-- Totals -->
                     <div class="clearfix jewellery-totals-wrapper">
+                        <div style="float: left; width: 55%; margin-top: 8px;">
+                            <!-- Sale Return Details Table (Separate small table on the left if Sale Return exists) -->
+                            <t t-set="report_sr_details" t-value="o._get_report_sale_return_details()"/>
+                            <div t-if="report_sr_details" style="margin-bottom: 8px;">
+                                <div style="margin-bottom: 4px; font-weight: bold; color: #2C3E50; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    Sale Return Details
+                                </div>
+                                <table class="jewellery-table" style="width: 100%; margin-top: 0px;">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left" style="width: 60%; text-align: left !important; padding-left: 8px;">Bill No</th>
+                                            <th class="text-right" style="width: 40%; text-align: right !important; padding-right: 8px;">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="report_sr_details" t-as="sr">
+                                            <tr>
+                                                <td class="text-left" style="padding-left: 8px;">
+                                                    <span t-esc="sr['bill_no']"/>
+                                                </td>
+                                                <td class="text-right" style="padding-right: 8px;">
+                                                    <span t-esc="sr['amount']" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <tr style="border-top: 2px solid #2C3E50; background-color: #fafafa; font-weight: 600;">
+                                            <td class="text-left" style="padding-left: 8px;">Total Sale Return:</td>
+                                            <td class="text-right" style="padding-right: 8px;">
+                                                <span t-esc="sum(d['amount'] for d in report_sr_details)" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Net Amount in Words -->
+                            <div style="font-size: 0.85em; color: #2C3E50; line-height: 1.5; padding: 4px 0;">
+                                <div>
+                                    <strong>Net Amount in Words: </strong>
+                                    <span style="color: #333; font-style: italic;" t-esc="o._get_report_net_amount_in_words()"/>
+                                </div>
+                            </div>
+                        </div>
                         <table class="jewellery-totals">
+                            <t t-set="report_subtotal" t-value="o._get_report_total_subtotal_amount()"/>
+                            <t t-set="report_net_amount" t-value="o._get_report_net_amount()"/>
                             <tr>
-                                <td class="totals-label">Subtotal:</td>
+                                <td class="totals-label">Total Subtotal:</td>
                                 <td class="totals-value">
-                                    <t t-if="o.tax_totals and o.tax_totals.get('amount_untaxed') is not None">
-                                        <span t-esc="o.tax_totals.get('amount_untaxed')" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                    </t>
-                                    <t t-else="">
-                                        <span t-field="o.amount_untaxed" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                    </t>
+                                    <span t-esc="report_subtotal" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                 </td>
                             </tr>
                             
                             <!-- Total discount is now shown at the bottom of the discount column -->
 
-                            <!-- The main Taxes total line has been removed to only show the breakdown. -->
-                            
+                            <!-- Taxes breakdown -->
                             <t t-if="o.tax_totals">
                                 <t t-foreach="o.tax_totals.get('subtotals', [])" t-as="subtotal">
                                     <t t-foreach="o.tax_totals.get('groups_by_subtotal', {}).get(subtotal['name'], [])" t-as="tax_group">
@@ -374,34 +494,85 @@
                                     </t>
                                 </t>
                             </t>
+
+                            <!-- Round Off -->
+                            <t t-set="report_round_off" t-value="o._get_report_round_off()"/>
+                            <tr t-if="report_round_off and report_round_off != 0">
+                                <td class="totals-label" style="font-size: 0.9em; font-weight: normal; padding-top: 2px; padding-bottom: 2px;">
+                                    &#160;&#160;Round Off:
+                                </td>
+                                <td class="totals-value" style="font-size: 0.9em; font-weight: normal; padding-top: 2px; padding-bottom: 2px; border-bottom: none;">
+                                    <span t-esc="report_round_off" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+
+                            <!-- Heading Total under CGST containing total including CGST and SGST -->
+                            <tr>
+                                <td class="totals-label" style="font-weight: 600; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0; color: #2C3E50;">Total:</td>
+                                <td class="totals-value" style="font-weight: 600; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0; color: #2C3E50;">
+                                    <span t-field="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
                             
                             <tr t-if="'old_gold_price' in o and o.old_gold_price">
-                                <td class="totals-label deduction-label">Less Old Gold Price:</td>
+                                <td class="totals-label deduction-label">Old Gold Price:</td>
                                 <td class="totals-value deduction-value">
                                     - <span t-field="o.old_gold_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                 </td>
                             </tr>
                             
                             <tr t-if="'sale_return_price' in o and o.sale_return_price">
-                                <td class="totals-label deduction-label">Less Sale Return Price:</td>
+                                <td class="totals-label deduction-label">Sale Return Price:</td>
                                 <td class="totals-value deduction-value">
                                     - <span t-field="o.sale_return_price" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
+
+                            <t t-set="scheme_info" t-value="o._get_report_scheme_info()"/>
+                            <tr t-if="scheme_info.get('is_redeemed') and scheme_info.get('amount')">
+                                <td class="totals-label deduction-label">
+                                    Scheme Amount:
+                                </td>
+                                <td class="totals-value deduction-value">
+                                    - <span t-esc="scheme_info['amount']" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                 </td>
                             </tr>
 
                             <tr>
                                 <td class="totals-label grand-total">Net Amount :</td>
                                 <td class="totals-value grand-total">
-                                    <span t-field="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    <span t-esc="report_net_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                 </td>
                             </tr>
                             
-                            <tr t-if="o.payment_state in ['paid', 'in_payment']">
-                                <td class="totals-label" style="color: #27AE60;">Paid Amount:</td>
-                                <td class="totals-value" style="color: #27AE60;">
-                                    <span t-esc="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
-                                </td>
-                            </tr>
+                            <!-- Payments: Show payment method instead of "Paid Amount", and reference in brackets underneath in small size -->
+                            <t t-set="report_payments" t-value="o._get_report_payment_details()"/>
+                            <t t-if="report_payments">
+                                <t t-foreach="report_payments" t-as="pay">
+                                    <tr>
+                                        <td class="totals-label" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                            <span t-esc="pay['method']"/>:
+                                            <t t-if="pay.get('ref')">
+                                                <br/>
+                                                <span style="font-size: 0.75em; color: #555555; font-weight: normal;">(<t t-esc="pay['ref']"/>)</span>
+                                            </t>
+                                        </td>
+                                        <td class="totals-value" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                            <span t-esc="pay['amount']" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </t>
+                            <t t-elif="o.payment_state in ['paid', 'in_payment']">
+                                <tr>
+                                    <td class="totals-label" style="color: #27AE60; font-weight: 600; border-bottom: 1px solid #e0e0e0;">
+                                        Paid:
+                                    </td>
+                                    <td class="totals-value" style="color: #27AE60; font-weight: 600; border-bottom: 1px solid #e0e0e0;">
+                                        <span t-esc="o.amount_total" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                            </t>
                         </table>
                     </div>
                     
@@ -416,11 +587,64 @@
         </xpath>
     </template>
 
-    <!-- Clear out the external layout header to leave white space for pre-printed letterhead -->
+    <!-- Paperformat for Jewellery Invoices: 28.4cm (284mm) height, 21.2cm (212mm) width, 7.9cm (79mm) top offset, 4.0cm (40mm) bottom offset -->
+    <record id="paperformat_jewellery_invoice" model="report.paperformat">
+        <field name="name">Jewellery Invoice Custom Paper</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <field name="page_height">284</field>
+        <field name="page_width">212</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">79</field>
+        <field name="margin_bottom">40</field>
+        <field name="margin_left">7</field>
+        <field name="margin_right">7</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+    </record>
+
+    <record id="account.account_invoices" model="ir.actions.report">
+        <field name="paperformat_id" ref="paperformat_jewellery_invoice"/>
+    </record>
+
+    <record id="account.account_invoices_without_payment" model="ir.actions.report">
+        <field name="paperformat_id" ref="paperformat_jewellery_invoice"/>
+    </record>
+
+    <!-- Clear out the external layout header to leave white space for pre-printed letterhead, and add signatures in footer on invoices -->
     <template id="jewellery_external_layout_standard" inherit_id="web.external_layout_standard">
         <xpath expr="//div[contains(@t-attf-class, 'header')]" position="replace">
             <div t-attf-class="header o_company_#{company.id}_layout" t-att-style="report_header_style">
-                <div style="height: 150px;"></div>
+                <!-- Blank header for pre-printed stationery; 7.9cm offset is controlled cleanly by margin_top (79mm) -->
+            </div>
+        </xpath>
+        <xpath expr="//div[contains(@t-attf-class, 'footer')]" position="replace">
+            <div t-attf-class="footer o_standard_footer o_company_#{company.id}_layout">
+                <t t-if="o and o._name == 'account.move' and o.move_type in ('out_invoice', 'in_invoice')">
+                    <table style="width: 100%; border: none; margin-top: 25mm; font-size: 0.85em; font-weight: bold; color: #2C3E50;">
+                        <tr style="border: none;">
+                            <td style="width: 50%; text-align: left !important; border: none; padding: 0;">
+                                Customer Signature
+                            </td>
+                            <td style="width: 50%; text-align: right !important; border: none; padding: 0;">
+                                Authorized Signatory
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+                <t t-else="">
+                    <div class="text-center">
+                        <div style="border-top: 1px solid black;">
+                            <ul class="list-inline mb4">
+                                <div t-field="company.report_footer"/>
+                            </ul>
+                        </div>
+                        <div t-if="report_type == 'pdf'" class="text-muted" style="font-size: 0.8em; margin-top: 5px;">
+                            Page: <span class="page"/> / <span class="topage"/>
+                        </div>
+                    </div>
+                </t>
             </div>
         </xpath>
     </template>
@@ -428,7 +652,31 @@
     <template id="jewellery_external_layout_boxed" inherit_id="web.external_layout_boxed">
         <xpath expr="//div[contains(@t-attf-class, 'header')]" position="replace">
             <div t-attf-class="header o_company_#{company.id}_layout" t-att-style="report_header_style">
-                <div style="height: 150px;"></div>
+                <!-- Blank header for pre-printed stationery; 7.9cm offset is controlled cleanly by margin_top (79mm) -->
+            </div>
+        </xpath>
+        <xpath expr="//div[contains(@t-attf-class, 'footer')]" position="replace">
+            <div t-attf-class="footer o_boxed_footer o_company_#{company.id}_layout">
+                <t t-if="o and o._name == 'account.move' and o.move_type in ('out_invoice', 'in_invoice')">
+                    <table style="width: 100%; border: none; margin-top: 25mm; font-size: 0.85em; font-weight: bold; color: #2C3E50;">
+                        <tr style="border: none;">
+                            <td style="width: 50%; text-align: left !important; border: none; padding: 0;">
+                                Customer Signature
+                            </td>
+                            <td style="width: 50%; text-align: right !important; border: none; padding: 0;">
+                                Authorized Signatory
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+                <t t-else="">
+                    <div class="text-center">
+                        <div t-field="company.report_footer">Company Report Footer</div>
+                        <div t-if="report_type == 'pdf'" style="font-size: 0.8em;">
+                            Page: <span class="page"/> / <span class="topage"/>
+                        </div>
+                    </div>
+                </t>
             </div>
         </xpath>
     </template>
@@ -436,7 +684,31 @@
     <template id="jewellery_external_layout_bold" inherit_id="web.external_layout_bold">
         <xpath expr="//div[contains(@t-attf-class, 'header')]" position="replace">
             <div t-attf-class="header o_company_#{company.id}_layout" t-att-style="report_header_style">
-                <div style="height: 150px;"></div>
+                <!-- Blank header for pre-printed stationery; 7.9cm offset is controlled cleanly by margin_top (79mm) -->
+            </div>
+        </xpath>
+        <xpath expr="//div[contains(@t-attf-class, 'footer')]" position="replace">
+            <div t-attf-class="footer o_clean_footer o_company_#{company.id}_layout">
+                <t t-if="o and o._name == 'account.move' and o.move_type in ('out_invoice', 'in_invoice')">
+                    <table style="width: 100%; border: none; margin-top: 15mm; font-size: 0.85em; font-weight: bold; color: #2C3E50;">
+                        <tr style="border: none;">
+                            <td style="width: 50%; text-align: left !important; border: none; padding: 0;">
+                                Customer Signature
+                            </td>
+                            <td style="width: 50%; text-align: right !important; border: none; padding: 0;">
+                                Authorized Signatory
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+                <t t-else="">
+                    <div class="text-center">
+                        <div t-field="company.report_footer"/>
+                        <div t-if="report_type == 'pdf'" style="font-size: 0.8em;">
+                            Page: <span class="page"/> / <span class="topage"/>
+                        </div>
+                    </div>
+                </t>
             </div>
         </xpath>
     </template>
@@ -444,8 +716,58 @@
     <template id="jewellery_external_layout_striped" inherit_id="web.external_layout_striped">
         <xpath expr="//div[contains(@t-attf-class, 'header')]" position="replace">
             <div t-attf-class="header o_company_#{company.id}_layout" t-att-style="report_header_style">
-                <div style="height: 150px;"></div>
+                <!-- Blank header for pre-printed stationery; 7.9cm offset is controlled cleanly by margin_top (79mm) -->
             </div>
         </xpath>
+        <xpath expr="//div[contains(@t-attf-class, 'footer')]" position="replace">
+            <div t-attf-class="o_company_#{company.id}_layout footer o_background_footer">
+                <t t-if="o and o._name == 'account.move' and o.move_type in ('out_invoice', 'in_invoice')">
+                    <table style="width: 100%; border: none; margin-top: 25mm; font-size: 0.85em; font-weight: bold; color: #2C3E50;">
+                        <tr style="border: none;">
+                            <td style="width: 50%; text-align: left !important; border: none; padding: 0;">
+                                Customer Signature
+                            </td>
+                            <td style="width: 50%; text-align: right !important; border: none; padding: 0;">
+                                Authorized Signatory
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+                <t t-else="">
+                    <div class="text-center">
+                        <div t-field="company.report_footer"/>
+                        <div t-if="report_type == 'pdf'" style="font-size: 0.8em;">
+                            Page: <span class="page"/> / <span class="topage"/>
+                        </div>
+                    </div>
+                </t>
+            </div>
+        </xpath>
+    </template>
+
+    <!-- Report Action: Print Without Discount -->
+    <record id="action_report_invoice_without_discount" model="ir.actions.report">
+        <field name="name">Invoice Without Discount</field>
+        <field name="model">account.move</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_jewellery_management.report_invoice_without_discount</field>
+        <field name="report_file">em_jewellery_management.report_invoice_without_discount</field>
+        <field name="print_report_name">(object._get_report_base_filename())</field>
+        <field name="attachment"/>
+        <field name="paperformat_id" ref="paperformat_jewellery_invoice"/>
+        <field name="binding_model_id" ref="account.model_account_move"/>
+        <field name="binding_type">report</field>
+        <field name="groups_id" eval="[(4, ref('account.group_account_invoice')), (4, ref('account.group_account_readonly'))]"/>
+    </record>
+
+    <template id="report_invoice_without_discount">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="lang" t-value="o.partner_id.lang"/>
+                <t t-set="print_with_payments" t-value="True"/>
+                <t t-set="hide_discount" t-value="True"/>
+                <t t-call="account.report_invoice_document" t-lang="lang"/>
+            </t>
+        </t>
     </template>
 </odoo>
