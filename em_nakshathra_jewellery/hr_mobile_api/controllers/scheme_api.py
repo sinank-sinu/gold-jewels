@@ -15,16 +15,6 @@ RAZORPAY_KEY_ID = "rzp_test_TZTOVDHOQcGeUv"
 RAZORPAY_KEY_SECRET = "mAROO5PBwVt2rmPyjLBSZN5l"
 
 class SchemeMobileAPI(http.Controller):
-
-    @staticmethod
-    def _is_test_otp_number(*values):
-        for val in values:
-            if val:
-                clean = re.sub(r'\D', '', str(val))
-                if clean.endswith('9946185174'):
-                    return True
-        return False
-
     #LOGIN
     @http.route('/api/scheme/login', type='json', auth='public', methods=['POST', 'OPTIONS'], cors='*', csrf=False)
     def login(self, **kwargs):
@@ -57,11 +47,13 @@ class SchemeMobileAPI(http.Controller):
             if not target_phone and employee:
                 target_phone = employee.mobile_phone or employee.work_phone or ""
 
-            # Generate and save Login OTP (Fixed 1234 only for +919946185174, random for all others)
-            if self._is_test_otp_number(target_phone, username, user.login):
-                otp_code = "1234"
+            # Check if this is the test number (+919946185174 or 9946185174)
+            clean_phone_check = re.sub(r'\D', '', str(target_phone or username or ''))
+            if clean_phone_check.endswith('9946185174'):
+                otp_code = "123456"
             else:
                 otp_code = f"{random.randint(100000, 999999)}"
+
             expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
             user.write({
@@ -200,10 +192,7 @@ class SchemeMobileAPI(http.Controller):
                     }
 
                 # New phone number: create customer account and send OTP
-                if self._is_test_otp_number(raw_phone, phone, clean_phone):
-                    otp_code = "1234"
-                else:
-                    otp_code = f"{random.randint(100000, 999999)}"
+                otp_code = f"{random.randint(100000, 999999)}"
                 expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
                 login = raw_phone
@@ -376,15 +365,13 @@ class SchemeMobileAPI(http.Controller):
                 is_new = True
                 resp_message = "This is a new number"
 
-            if not user:
-                return {"status": "error", "message": "User account could not be found or created"}
-
-            target_phone = phone or (user.partner_id.mobile if user and user.partner_id else '') or (user.partner_id.phone if user and user.partner_id else '') or ""
-
-            if self._is_test_otp_number(target_phone, phone, username, user.login if user else False):
-                otp_code = "1234"
+            target_phone = phone or user.partner_id.mobile or user.partner_id.phone or ""
+            clean_phone_check = re.sub(r'\D', '', str(target_phone or phone or username or ''))
+            if clean_phone_check.endswith('9946185174'):
+                otp_code = "123456"
             else:
                 otp_code = f"{random.randint(100000, 999999)}"
+
             expiry = fields.Datetime.now() + datetime.timedelta(minutes=5)
 
             user.write({
@@ -514,14 +501,13 @@ class SchemeMobileAPI(http.Controller):
                     "message": "Phone number or user ID is required"
                 }
 
-            # Validate OTP on the resolved user
-            check_phone = raw_phone or (user.partner_id.mobile if user and user.partner_id else '') or (user.partner_id.phone if user and user.partner_id else '') or user.login or ''
-            is_test_phone = self._is_test_otp_number(check_phone, raw_phone, username, user.login if user else False)
+            clean_phone_check = re.sub(r'\D', '', str(raw_phone or user.partner_id.mobile or user.partner_id.phone or user.login or ''))
+            is_test_number = clean_phone_check.endswith('9946185174')
 
-            if is_test_phone and otp_entered == "1234":
-                # Master test OTP valid only for +919946185174
-                pass
+            if is_test_number and otp_entered == '123456':
+                pass  # Bypass/accept for test number with 123456
             else:
+                # Validate OTP on the resolved user
                 if not user.login_otp:
                     return {
                         "status": "error",
