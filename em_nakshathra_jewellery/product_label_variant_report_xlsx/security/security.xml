@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <record id="group_product_label_variant_report" model="res.groups">
+            <field name="name">Label Closing Stock Report (With Variants &amp; Vendor)</field>
+            <field name="category_id" ref="em_jewellery_management.module_category_jewellery_management"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+        </record>
+    </data>
+</odoo>

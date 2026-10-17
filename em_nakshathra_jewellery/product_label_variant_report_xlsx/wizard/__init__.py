@@ -1,0 +1,1 @@
+from . import product_label_variant_report_wizard

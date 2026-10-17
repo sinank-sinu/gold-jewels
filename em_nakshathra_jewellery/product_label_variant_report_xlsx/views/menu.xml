@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem
+        id="menu_product_label_variant_report"
+        name="Label Closing Stock Report (With Variants &amp; Vendor)"
+        parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
+        action="action_product_label_variant_report_wizard"
+        groups="product_label_variant_report_xlsx.group_product_label_variant_report"
+        sequence="111"/>
+</odoo>
