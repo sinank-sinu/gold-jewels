@@ -8,7 +8,7 @@ class OldGoldRefineryIssue(models.Model):
 
     def _get_branch_domain(self):
         """methode to get branch domain"""
-        company = self.env.company
+        company = self.company_id or self.env.company
         branch_ids = self.env.user.branch_ids
         branch = branch_ids.filtered(
             lambda branch: branch.company_id == company)
@@ -19,6 +19,30 @@ class OldGoldRefineryIssue(models.Model):
                                 help='Leave this field empty if this account is'
                                      ' shared between all branches',
                                 default=lambda self: self.env.user.branch_id.id, )
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        required=True,
+        default=lambda self: self.env.company,
+    )
+
+    @api.onchange('branch_id')
+    def _onchange_branch_id(self):
+        if self.branch_id and self.branch_id.company_id:
+            self.company_id = self.branch_id.company_id
+
+    @api.onchange('company_id')
+    def _onchange_company_id(self):
+        if self.branch_id and self.branch_id.company_id != self.company_id:
+            self.branch_id = False
+        for line in self.line_ids:
+            if line.purity_id and self.company_id:
+                prod = line._get_company_old_gold_product(
+                    self.company_id.id,
+                    is_diamond_og=line.purity_id.is_diamond_og
+                )
+                if prod:
+                    line.product_id = prod.id
 
     name = fields.Char(default='New', readonly=True)
     # verification_id = fields.Many2one('old.gold.ho.verification', required=True)
@@ -436,6 +460,7 @@ class OldGoldRefineryIssue(models.Model):
             'location_src_id': self.source_location_id.id,
             'location_dest_id': self.received_location_id.id,
             'origin': self.name,
+            'company_id': self.company_id.id,
         })
 
         mo.action_confirm()
@@ -492,6 +517,7 @@ class OldGoldRefineryIssue(models.Model):
             'location_src_id': self.source_location_id.id,
             'location_dest_id': self.received_location_id.id,
             'origin': self.name,
+            'company_id': self.company_id.id,
         })
 
         issue_mo.action_confirm()
@@ -596,14 +622,48 @@ class OldGoldRefineryIssueLine(models.Model):
         'old.gold.refinery.issue',
         ondelete='cascade'
     )
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        related='issue_id.company_id',
+        store=True,
+        readonly=True,
+    )
 
     purity_id = fields.Many2one('gold.purity', required=True)
+
+    @api.model
+    def _get_company_old_gold_product(self, company_id, is_diamond_og=False):
+        """Helper to get company-specific Old Gold or Diamond OG product.
+        - For diamond OG: returns company diamond OG product (e.g., 18KTD OLD GOLD).
+        - For standard OG: returns company Old Gold product (e.g., Silver LLP Old Gold, DMD Old Gold).
+        """
+        Product = self.env['product.product'].sudo()
+
+        product = Product.search([
+            ('is_old_gold', '=', True),
+            ('company_id', '=', company_id)
+        ], limit=1) or Product.search([
+            ('name', '=ilike', 'Old Gold'),
+            ('company_id', '=', company_id)
+        ], limit=1) or Product.search([
+            ('is_old_gold', '=', True),
+            ('name', 'not ilike', 'Scrap'),
+            ('company_id', '=', False)
+        ], limit=1) or self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+
+        return product
+
+    def _default_product_id(self):
+        company_id = self.env.context.get('default_company_id') or self.env.company.id
+        prod = self._get_company_old_gold_product(company_id)
+        return prod.id if prod else False
+
     product_id = fields.Many2one(
         'product.product',
         string="Product",
-        default=lambda self: self.env.ref(
-            'em_jewellery_management.product_old_gold', raise_if_not_found=False
-        ),
+        default=_default_product_id,
+        domain="['|', ('company_id', '=', company_id), ('company_id', '=', False)]",
     )
     issue_weight = fields.Float(required=True,digits=(16, 3))
     fine = fields.Float(

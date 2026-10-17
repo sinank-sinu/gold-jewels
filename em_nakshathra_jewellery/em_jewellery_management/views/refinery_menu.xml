@@ -12,6 +12,8 @@
                 <field name="name"/>
                 <!--                <field name="verification_id"/>-->
                 <field name="refinery_partner_id"/>
+                <field name="branch_id" optional="show"/>
+                <field name="company_id" optional="hide"/>
                 <field name="issue_date"/>
                 <field name="state"/>
             </tree>
@@ -25,7 +27,11 @@
             <search>
                 <field name="name"/>
                 <field name="refinery_partner_id"/>
+                <field name="branch_id"/>
+                <field name="company_id"/>
                 <group expand="0" string="Group By">
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_by_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
                     <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
                 </group>
             </search>
@@ -97,6 +103,7 @@
                             <field name="refinery_partner_id"
                                    readonly="state == 'issued'"/>
                             <field name="branch_id"/>
+                            <field name="company_id" invisible="1"/>
                         </group>
                         <group string="Transfer">
                             <field name="picking_id" readonly="1"/>
@@ -122,7 +129,8 @@
                             <field name="line_ids"
                                    readonly="state == 'issued'">
                                 <tree editable="bottom">
-                                    <field name="product_id"/>
+                                    <field name="company_id" column_invisible="True"/>
+                                    <field name="product_id" domain="['|', ('company_id', '=', company_id), ('company_id', '=', False)]"/>
                                     <field name="purity_id"/>
                                     <field name="issue_weight" sum="Total Weight"/>
                                     <field name="purchase_amount" sum="Total Amount"/>

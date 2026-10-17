@@ -8,11 +8,30 @@
                 <field name="name"/>
                 <field name="batch_date"/>
                 <field name="branch_id"/>
+                <field name="company_id" optional="hide"/>
                 <field name="purity_id"/>
                 <field name="total_grams"/>
                 <field name="total_purchase_amount"/>
                 <field name="refinery_issue_id"/>
             </tree>
+        </field>
+    </record>
+
+    <record id="view_old_gold_batch_search" model="ir.ui.view">
+        <field name="name">old.gold.batch.search</field>
+        <field name="model">old.gold.batch</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="branch_id"/>
+                <field name="company_id"/>
+                <field name="purity_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_by_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
+                    <filter name="group_by_purity" string="Purity" context="{'group_by': 'purity_id'}"/>
+                </group>
+            </search>
         </field>
     </record>
 
@@ -27,6 +46,7 @@
                             <field name="name"/>
                             <field name="batch_date"/>
                             <field name="branch_id"/>
+                            <field name="company_id"/>
                         </group>
                         <group>
                             <field name="purity_id"/>
@@ -47,6 +67,7 @@
         <field name="name">Old Gold Batches</field>
         <field name="res_model">old.gold.batch</field>
         <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_old_gold_batch_search"/>
         <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
