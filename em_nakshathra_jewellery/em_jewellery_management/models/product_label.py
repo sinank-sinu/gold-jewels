@@ -895,11 +895,11 @@ class ProductLabel(models.Model):
                 raise UserError(_("You cannot duplicate a product label that has already been transferred."))
         return super(ProductLabel, self).copy(default=default)
 
-    @api.onchange('purchase_id')
+    @api.onchange('purchase_id','product_template_id')
     def _onchange_purchase_product(self):
-        if self.purchase_id and self.product_id:
+        if self.purchase_id and self.product_template_id:
             line = self.purchase_id.order_line.filtered(
-                lambda l: l.product_id.id == self.product_id.id
+                lambda l: l.product_template_id.id == self.product_template_id.id
             )
             if line:
                 line = line[0]  # take first matching line
