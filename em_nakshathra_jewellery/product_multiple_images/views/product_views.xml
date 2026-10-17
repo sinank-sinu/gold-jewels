@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Product Variant Form View Override (Inventory -> Products -> Product Variants) -->
+    <record id="product_product_form_multi_images" model="ir.ui.view">
+        <field name="name">product.product.form.multi.images</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view"/>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='image_1920']" position="replace">
+                <div class="oe_avatar" style="margin-bottom: 12px;">
+                    <field name="image_1920" widget="multi_image_box"/>
+                    <field name="image_2_1920" invisible="1"/>
+                    <field name="image_3_1920" invisible="1"/>
+                    <field name="image_4_1920" invisible="1"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product Template Form View Override (Inventory -> Products -> Products) -->
+    <record id="product_template_form_multi_images" model="ir.ui.view">
+        <field name="name">product.template.form.multi.images</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='image_1920']" position="replace">
+                <div class="oe_avatar" style="margin-bottom: 12px;">
+                    <field name="image_1920" widget="multi_image_box"/>
+                    <field name="image_2_1920" invisible="1"/>
+                    <field name="image_3_1920" invisible="1"/>
+                    <field name="image_4_1920" invisible="1"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>
