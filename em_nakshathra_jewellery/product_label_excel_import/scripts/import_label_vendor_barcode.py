@@ -218,64 +218,49 @@ def resolve_branch(env, branch_val, company_record, branch_cache):
     return br
 
 
-def find_label(env, label_name, barcode, barcode2, branch, company, match_by):
-    Label = env['product.label'].sudo().with_context(active_test=False)
+def find_label(env, label_name=False, branch=False, company=False, **kwargs):
+    """Search product.label only by Label Reference/Number according to Company and Branch."""
+    if not label_name:
+        return False
 
-    criteria = []
-    if match_by in ('auto', 'name') and label_name:
-        criteria.append(('name', label_name))
-    if match_by in ('auto', 'barcode') and barcode:
-        criteria.append(('barcode', barcode))
-    if match_by in ('auto', 'barcode2') and barcode2:
-        criteria.append(('barcode2', barcode2))
+    Label = env['product.label'].sudo().with_context(active_test=False)
+    domain_name = [('name', '=', label_name)]
+    domain_alt = ['|', ('label_number', '=', label_name), ('label_name', '=', label_name)]
 
     # 1. Branch + Company
     if branch and company:
-        for field, val in criteria:
-            lbl = Label.search([
-                (field, '=', val),
-                ('branch_id', '=', branch.id),
-                ('company_id', '=', company.id)
-            ], limit=1)
-            if lbl:
-                return lbl
+        lbl = Label.search(domain_name + [('branch_id', '=', branch.id), ('company_id', '=', company.id)], limit=1)
+        if lbl:
+            return lbl
+        lbl = Label.search(domain_alt + [('branch_id', '=', branch.id), ('company_id', '=', company.id)], limit=1)
+        if lbl:
+            return lbl
 
     # 2. Branch only
     if branch:
-        for field, val in criteria:
-            lbl = Label.search([
-                (field, '=', val),
-                ('branch_id', '=', branch.id)
-            ], limit=1)
-            if lbl:
-                return lbl
+        lbl = Label.search(domain_name + [('branch_id', '=', branch.id)], limit=1)
+        if lbl:
+            return lbl
+        lbl = Label.search(domain_alt + [('branch_id', '=', branch.id)], limit=1)
+        if lbl:
+            return lbl
 
     # 3. Company only
     if company:
-        for field, val in criteria:
-            lbl = Label.search([
-                (field, '=', val),
-                ('company_id', '=', company.id)
-            ], limit=1)
-            if lbl:
-                return lbl
+        lbl = Label.search(domain_name + [('company_id', '=', company.id)], limit=1)
+        if lbl:
+            return lbl
+        lbl = Label.search(domain_alt + [('company_id', '=', company.id)], limit=1)
+        if lbl:
+            return lbl
 
     # 4. Fallback identifier alone
-    for field, val in criteria:
-        lbl = Label.search([(field, '=', val)], limit=1)
-        if lbl:
-            return lbl
-
-    # 5. Alt label name
-    if match_by in ('auto', 'name') and label_name:
-        domain_alt = ['|', ('label_number', '=', label_name), ('label_name', '=', label_name)]
-        if branch:
-            lbl = Label.search(domain_alt + [('branch_id', '=', branch.id)], limit=1)
-            if lbl:
-                return lbl
-        lbl = Label.search(domain_alt, limit=1)
-        if lbl:
-            return lbl
+    lbl = Label.search(domain_name, limit=1)
+    if lbl:
+        return lbl
+    lbl = Label.search(domain_alt, limit=1)
+    if lbl:
+        return lbl
 
     return False
 
@@ -374,8 +359,8 @@ def main():
                 partner_cache=partner_cache
             )
 
-            # Label search according to company and branch
-            lbl = find_label(env, label_name, barcode, barcode2, branch_rec, company_rec, args.match_by)
+            # Label search according to company and branch (matched by label reference/number)
+            lbl = find_label(env, label_name=label_name, branch=branch_rec, company=company_rec)
 
             if lbl:
                 vals = {}
