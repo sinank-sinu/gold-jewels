@@ -18,6 +18,11 @@ class StockCheckReportController(http.Controller):
         if not report.exists():
             return request.not_found()
 
+        # Enforce security: if user does not belong to manager group, force counter report
+        is_manager = request.env.user.has_group('jewellery_weekly_stock_check.group_jewellery_stock_manager') or request.env.is_superuser()
+        if not is_manager:
+            report_type = 'counter'
+
         output = io.BytesIO()
         
         # Fallback if xlsxwriter is not available
@@ -28,8 +33,12 @@ class StockCheckReportController(http.Controller):
         worksheet = workbook.add_worksheet('Stock Check Report')
         
         # Set Column Widths
-        worksheet.set_column('A:A', 40)  # Product
-        worksheet.set_column('B:H', 15)  # Other columns
+        if report_type == 'manager':
+            worksheet.set_column('A:A', 40)  # Product
+            worksheet.set_column('B:I', 15)  # Other columns
+        else:
+            worksheet.set_column('A:A', 25)  # Label
+            worksheet.set_column('B:C', 18)  # Counted Labels, Counted Weight
         
         # Formats
         header_format = workbook.add_format({
@@ -38,6 +47,8 @@ class StockCheckReportController(http.Controller):
         title_format = workbook.add_format({'bold': True, 'font_size': 14})
         match_format = workbook.add_format({'bg_color': '#C6EFCE', 'border': 1})
         mismatch_format = workbook.add_format({'bg_color': '#FFC7CE', 'border': 1})
+        status_match_format = workbook.add_format({'bg_color': '#C6EFCE', 'border': 1, 'align': 'center'})
+        status_mismatch_format = workbook.add_format({'bg_color': '#FFC7CE', 'border': 1, 'align': 'center'})
         border_format = workbook.add_format({'border': 1})
 
         # Header Info
@@ -53,7 +64,7 @@ class StockCheckReportController(http.Controller):
         if report_type == 'manager':
             headers = ['Product', 'Label', 'System Qty', 'System Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight', 'Status']
         else:
-            headers = ['Product', 'Label', 'Counted Labels', 'Counted Weight']
+            headers = ['Label', 'Counted Labels', 'Counted Weight']
             
         for header in headers:
             worksheet.write(row, col, header, header_format)
@@ -75,16 +86,18 @@ class StockCheckReportController(http.Controller):
                 worksheet.write(row, col+7, line.difference_weight, current_format)
                 worksheet.write(row, col+8, 'Matched' if line.is_matched else 'Mismatch', current_format)
             else:
-                worksheet.write(row, col, line.product_id.display_name, border_format)
-                worksheet.write(row, col+1, line.label_id.name or '', border_format)
-                worksheet.write(row, col+2, line.manual_qty, border_format)
-                worksheet.write(row, col+3, line.manual_weight, border_format)
+                worksheet.write(row, col, line.label_id.name or '', border_format)
+                worksheet.write(row, col+1, line.manual_qty, border_format)
+                worksheet.write(row, col+2, line.manual_weight, border_format)
             row += 1
 
         # Second Worksheet: Template Summary
         summary_sheet = workbook.add_worksheet('Template Summary')
         summary_sheet.set_column('A:A', 40)
-        summary_sheet.set_column('B:G', 15)
+        if report_type == 'manager':
+            summary_sheet.set_column('B:H', 18)
+        else:
+            summary_sheet.set_column('B:D', 20)
 
         summary_sheet.write('A1', 'Product Template Summary', title_format)
         summary_sheet.write('A2', f'Reference: {report.name}')
@@ -93,9 +106,9 @@ class StockCheckReportController(http.Controller):
         row = 5
         col = 0
         if report_type == 'manager':
-            summary_headers = ['Product Template', 'Total Labels', 'Total Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight']
+            summary_headers = ['Product Template', 'Total Labels', 'Total Weight', 'Counted Labels', 'Counted Weight', 'Diff Label', 'Diff Weight', 'Counted Label Match']
         else:
-            summary_headers = ['Product Template', 'Counted Labels', 'Counted Weight']
+            summary_headers = ['Product Template', 'Counted Labels', 'Counted Weight', 'Counted Label Match']
 
         for header in summary_headers:
             summary_sheet.write(row, col, header, header_format)
@@ -104,6 +117,9 @@ class StockCheckReportController(http.Controller):
         row += 1
         for summary in report.template_summary_ids:
             col = 0
+            is_match = bool(summary.is_qty_matched)
+            match_status = 'Match' if is_match else 'Mismatch'
+            match_fmt = status_match_format if is_match else status_mismatch_format
             if report_type == 'manager':
                 summary_sheet.write(row, col, summary.product_tmpl_id.name, border_format)
                 summary_sheet.write(row, col+1, summary.system_qty, border_format)
@@ -112,10 +128,12 @@ class StockCheckReportController(http.Controller):
                 summary_sheet.write(row, col+4, summary.manual_weight, border_format)
                 summary_sheet.write(row, col+5, summary.difference_qty, border_format)
                 summary_sheet.write(row, col+6, summary.difference_weight, border_format)
+                summary_sheet.write(row, col+7, match_status, match_fmt)
             else:
                 summary_sheet.write(row, col, summary.product_tmpl_id.name, border_format)
                 summary_sheet.write(row, col+1, summary.manual_qty, border_format)
                 summary_sheet.write(row, col+2, summary.manual_weight, border_format)
+                summary_sheet.write(row, col+3, match_status, match_fmt)
             row += 1
 
         workbook.close()

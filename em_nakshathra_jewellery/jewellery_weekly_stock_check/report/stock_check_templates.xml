@@ -21,7 +21,6 @@
                         <table class="table table-sm o_main_table mt16">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
                                     <th>Label</th>
                                     <th class="text-right">Counted Labels</th>
                                     <th class="text-right">Counted Weight</th>
@@ -30,7 +29,6 @@
                             <tbody>
                                 <t t-foreach="o.line_ids" t-as="line">
                                     <tr>
-                                        <td><span t-field="line.product_id.display_name"/></td>
                                         <td><span t-field="line.label_id.name"/></td>
                                         <td class="text-right"><span t-field="line.manual_qty"/></td>
                                         <td class="text-right"><span t-field="line.manual_weight"/></td>
@@ -47,6 +45,7 @@
                                         <th>Product Template</th>
                                         <th class="text-right">Counted Labels</th>
                                         <th class="text-right">Counted Weight</th>
+                                        <th class="text-center">Counted Label Match</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -55,6 +54,10 @@
                                             <td><span t-field="summary.product_tmpl_id.name"/></td>
                                             <td class="text-right"><span t-field="summary.manual_qty"/></td>
                                             <td class="text-right"><span t-field="summary.manual_weight"/></td>
+                                            <td class="text-center">
+                                                <span t-if="summary.is_qty_matched" class="badge badge-success text-success font-weight-bold">Match</span>
+                                                <span t-else="" class="badge badge-danger text-danger font-weight-bold">Mismatch</span>
+                                            </td>
                                         </tr>
                                     </t>
                                 </tbody>
@@ -149,6 +152,7 @@
                                         <th class="text-right">Counted Weight</th>
                                         <th class="text-right">Diff Labels</th>
                                         <th class="text-right">Diff Weight</th>
+                                        <th class="text-center">Counted Label Match</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -161,6 +165,10 @@
                                             <td class="text-right"><span t-field="summary.manual_weight"/></td>
                                             <td class="text-right"><span t-field="summary.difference_qty"/></td>
                                             <td class="text-right"><span t-field="summary.difference_weight"/></td>
+                                            <td class="text-center">
+                                                <span t-if="summary.is_qty_matched" class="badge badge-success text-success font-weight-bold">Match</span>
+                                                <span t-else="" class="badge badge-danger text-danger font-weight-bold">Mismatch</span>
+                                            </td>
                                         </tr>
                                     </t>
                                 </tbody>
