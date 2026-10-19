@@ -65,6 +65,7 @@
     <record id="product_bullion_gold" model="product.product">
         <field name="name">Gold Bullion</field>
         <field name="type">product</field>
+        <field name="is_bullion_product">True</field>
 <!--        <field name="sale_ok">True</field>-->
         <field name="purchase_ok">True</field>
         <field name="tracking">none</field>

@@ -15,6 +15,7 @@
             </xpath>
             <xpath expr="//page[@name='general_information']//field[@name='detailed_type']" position="after">
                 <field name="is_scheme_product"/>
+                <field name="is_bullion_product"/>
                 <field name="is_old_gold"/>
                 <field name="is_diamond_og"/>
                 <field name="purity_id"/>
@@ -37,6 +38,7 @@
             </xpath>
             <xpath expr="//page[@name='general_information']//field[@name='detailed_type']" position="after">
                 <field name="is_scheme_product"/>
+                <field name="is_bullion_product"/>
                 <field name="is_old_gold"/>
                 <field name="is_diamond_og"/>
                 <field name="purity_id"/>

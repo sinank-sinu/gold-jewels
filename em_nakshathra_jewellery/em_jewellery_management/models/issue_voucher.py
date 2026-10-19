@@ -252,8 +252,23 @@ class JewelleryIssueVoucher(models.Model):
         if not lines_to_receive:
             raise ValidationError(_("No remaining fine weight to receive for this voucher."))
 
+        company = self.branch_id.company_id or self.company_id or self.env.company
+        Product = self.env['product.product'].with_company(company)
+        bullion_product = Product.search([
+            ('is_bullion_product', '=', True),
+            ('company_id', '=', company.id),
+        ], limit=1)
+        if not bullion_product:
+            canonical_bullion = self.env.ref(
+                'em_jewellery_management.product_bullion_gold',
+                raise_if_not_found=False,
+            )
+            if canonical_bullion and canonical_bullion.company_id in (False, company):
+                bullion_product = canonical_bullion
+        if not bullion_product:
+            raise ValidationError(_("No bullion product is configured for company %s.") % company.display_name)
+
         for line in lines_to_receive:
-            bullion_product = self.env.ref('em_jewellery_management.product_bullion_gold')
             # lab_purity is now Many2one; get percentage from it for weight calculation
             purity_record = line.lab_purity or line.purity_id
             purity_pct = purity_record.percentage if purity_record else 0.0
@@ -298,6 +313,8 @@ class JewelleryIssueVoucher(models.Model):
             'refinery_id': self.refinery_id.id if self.is_refinery else False,
             'is_refinery': self.is_refinery,
             'issue_voucher_id': self.id,
+            'branch_id': self.branch_id.id,
+            'company_id': company.id,
             'line_ids': lines,
         })
 
