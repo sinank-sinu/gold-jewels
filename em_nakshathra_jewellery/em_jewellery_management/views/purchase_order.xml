@@ -94,7 +94,7 @@
         <field name="inherit_id" ref="purchase_product_matrix.purchase_order_form_matrix"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_template_id']" position="after">
-                <field name="product_id" string="Variety" widget="sol_product_many2one" column_invisible="parent.is_purchase_expense" domain="[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og), ('is_purchase_expense', '=', parent.is_purchase_expense)]"/>
+                <field name="product_id" string="Variety" widget="sol_product_many2one" column_invisible="parent.is_purchase_expense" domain="[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og)]"/>
                 <field name="product_uom" string="UOM" column_invisible="parent.is_purchase_expense"/>
                 <field name="purity_id" options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}" column_invisible="parent.is_purchase_expense" domain="[('is_diamond_og', '=', True)] if parent.is_diamond_og else ([('is_diamond_og', '=', False)] if parent.is_old_gold else [])"/>
                 <field name="product_template_attribute_value_ids" column_invisible="1"/>
@@ -111,16 +111,16 @@
                 <attribute name="column_invisible">parent.is_old_gold or parent.is_diamond_og</attribute>
                 <attribute name="required">not display_type and not parent.is_old_gold and not parent.is_diamond_og</attribute>
                 <attribute name="options">{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}</attribute>
-                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og), ('is_purchase_expense', '=', parent.is_purchase_expense)]</attribute>
+                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og)]</attribute>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_id'][1]" position="attributes">
                 <attribute name="required">not display_type and not parent.is_purchase_expense</attribute>
                 <attribute name="options">{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}</attribute>
-                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og), ('is_purchase_expense', '=', parent.is_purchase_expense)]</attribute>
+                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og)]</attribute>
             </xpath>
             <xpath expr="//field[@name='order_line']/form//field[@name='product_id']" position="attributes">
                 <attribute name="options">{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}</attribute>
-                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og), ('is_purchase_expense', '=', parent.is_purchase_expense)]</attribute>
+                <attribute name="domain">[('purchase_ok', '=', True), '|', ('company_id', '=', False), ('company_id', '=', parent.company_id), ('is_old_gold', '=', parent.is_old_gold), ('is_diamond_og', '=', parent.is_diamond_og)]</attribute>
             </xpath>
         </field>
     </record>
