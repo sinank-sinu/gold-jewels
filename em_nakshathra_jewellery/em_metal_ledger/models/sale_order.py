@@ -166,8 +166,8 @@ class SaleOrderMetalLedger(models.Model):
 
         if self.origin and not self.unfix:
             return
-        # Skip only if linked PO is old gold
-        if po and po.is_old_gold:
+        # Skip old-gold and sale-return orders, plus orders linked to an old-gold PO.
+        if self.has_old_gold or self.is_sale_return or (po and po.is_old_gold):
             return
 
         MetalLedger = self.env['metal.ledger']
