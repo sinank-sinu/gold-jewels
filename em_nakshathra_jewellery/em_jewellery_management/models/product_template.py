@@ -12,6 +12,7 @@ class ProductTemplate(models.Model):
     # =========================
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
+    is_bullion_product = fields.Boolean(string="Bullion Product")
     is_old_gold = fields.Boolean(string="Is Old Gold")
     is_diamond_og = fields.Boolean(string="Is Diamond OG")
     is_purchase_expense = fields.Boolean(
@@ -80,6 +81,12 @@ class ProductTemplate(models.Model):
 class Product(models.Model):
     _inherit = 'product.product'
 
+    is_bullion_product = fields.Boolean(
+        related='product_tmpl_id.is_bullion_product',
+        string="Bullion Product",
+        store=True,
+        readonly=False,
+    )
     is_old_gold = fields.Boolean(
         related='product_tmpl_id.is_old_gold',
         string="Is Old Gold",
