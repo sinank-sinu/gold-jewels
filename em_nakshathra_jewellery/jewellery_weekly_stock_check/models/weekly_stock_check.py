@@ -301,6 +301,13 @@ class JewelleryWeeklyStockCheck(models.Model):
             existing_line = check.line_ids.filtered(lambda l: l.label_id == label)
             if existing_line:
                 line = existing_line[0]
+
+                if line.manual_qty <= 0:
+                    line.write({
+                        'manual_qty': 1.0,
+                    })
+                # If manual quantity is already 1 or more,
+                # do not increment it again.
             else:
                 # Create new line for label (Surplus)
                 line = self.env['jewellery.weekly.stock.check.line'].create({
