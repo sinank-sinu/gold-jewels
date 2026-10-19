@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <data noupdate="1">
+    <data noupdate="0">
         <!-- Record Rule for Purchase User to see only their own Purchase Orders -->
         <record id="rule_purchase_order_purchase_user_own" model="ir.rule">
             <field name="name">Jewellery Purchase User: Own Orders Only</field>
@@ -23,6 +23,18 @@
             <field name="perm_write" eval="True"/>
             <field name="perm_create" eval="True"/>
             <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Record Rule for Label User to see ALL Purchase Orders -->
+        <record id="rule_purchase_order_label_user_all" model="ir.rule">
+            <field name="name">Label User Purchase: All Orders</field>
+            <field name="model_id" ref="purchase.model_purchase_order"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('em_jewellery_management.label_user_purchase'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
         </record>
     </data>
 </odoo>
