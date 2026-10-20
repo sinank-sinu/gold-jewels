@@ -21,18 +21,47 @@ class SaleOrder(models.Model):
         if not order.exists():
             return {'error': _('Sale Order not found.')}
 
+        # ── Branch Validation ───────────────────────────────────────────────
+        branch = order.branch_id or self.env.user.branch_id
+        if not branch:
+            return {'error': _('Please select a Branch on the Sale Order before scanning.')}
+
         company_id = order.company_id.id if hasattr(order, 'company_id') and order.company_id else False
 
         label = False
         barcode_domain = ['|', ('barcode', '=', barcode), ('barcode2', '=', barcode)]
-        if company_id:
-            label = self.env['product.label'].search(
-                barcode_domain + [('company_id', '=', company_id), ('active', '=', True)], limit=1
-            )
+        company_domain = [('company_id', '=', company_id)] if company_id else []
+        branch_filter = ['|', ('branch_id', '=', branch.id), '&', ('branch_id', '=', False),
+                         ('branch_location_id.branch_id', '=', branch.id)]
+
+        label = self.env['product.label'].search(
+            barcode_domain + company_domain + [('active', '=', True)] + branch_filter, limit=1
+        )
         if not label:
             label = self.env['product.label'].search(
-                barcode_domain + [('active', '=', True)], limit=1
+                barcode_domain + [('active', '=', True)] + branch_filter, limit=1
             )
+
+        if not label:
+            # Check if this label belongs to another branch
+            other_label = self.env['product.label'].search(
+                barcode_domain + company_domain + [('active', '=', True)], limit=1
+            )
+            if not other_label:
+                other_label = self.env['product.label'].search(
+                    barcode_domain + [('active', '=', True)], limit=1
+                )
+            if other_label:
+                other_branch_name = (
+                        other_label.branch_id.name
+                        or (other_label.branch_location_id and other_label.branch_location_id.branch_id.name)
+                        or _('another branch')
+                )
+                return {
+                    'error': _(
+                        'This item (Label: %s) belongs to branch "%s" and cannot be scanned in branch "%s".'
+                    ) % (other_label.name, other_branch_name, branch.name)
+                }
 
         if label:
             product = label.product_id
