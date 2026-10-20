@@ -91,7 +91,7 @@ class SaleOrder(models.Model):
                 'location_id': source_location.id,
                 'location_dest_id': order.cutpiece_location_dest_id.id,
                 'picking_id': picking.id,
-                'label_id': order.transfer_label_id.id,
+                'label_id': False,
                 'branch_id': order.branch_id.id,
                 'company_id': order.company_id.id,
             })
