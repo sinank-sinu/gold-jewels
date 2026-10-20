@@ -60,6 +60,7 @@
         name="Old Gold Purchase vs Market Fine Report"
         parent="purchase.purchase_report_main"
         action="action_old_gold_market_fine_wizard"
+        groups="em_jewellery_management.group_jewellery_manager"
         sequence="41"
     />
 

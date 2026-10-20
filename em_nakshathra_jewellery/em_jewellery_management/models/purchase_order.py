@@ -322,42 +322,66 @@ class PurchaseOrder(models.Model):
         for order in self:
             if order.is_old_gold:
                 invalid_lines = order.order_line.filtered(
-                    lambda l: not (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
-                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
+                    lambda l: not (l.product_id.is_old_gold or (
+                                l.product_template_id and l.product_template_id.is_old_gold)) or
+                              (l.product_id.is_diamond_og or (
+                                          l.product_template_id and l.product_template_id.is_diamond_og)) or
                               l.product_id.detailed_type in ('consu', 'service')
                 )
-               
+
             elif order.is_diamond_og:
                 invalid_lines = order.order_line.filtered(
-                    lambda l: not (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og)) or
-                              (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
+                    lambda l: not (l.product_id.is_diamond_og or (
+                                l.product_template_id and l.product_template_id.is_diamond_og)) or
+                              (l.product_id.is_old_gold or (
+                                          l.product_template_id and l.product_template_id.is_old_gold)) or
                               l.product_id.detailed_type in ('consu', 'service')
                 )
-               
+
             elif order.is_purchase_expense:
-                invalid_lines = order.order_line.filtered(lambda l: l.product_id and l.product_id.detailed_type not in ('consu', 'service'))
+                invalid_lines = order.order_line.filtered(
+                    lambda l: l.product_id and l.product_id.detailed_type not in ('consu', 'service'))
                 if invalid_lines:
-                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('Cannot confirm order: This is a Purchase Expense order, but contains non-Expense products (%s). Please remove them first.') % names)
+                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped(
+                        'product_template_id.name')))
+                    raise ValidationError(
+                        _('Cannot confirm order: This is a Purchase Expense order, but contains non-Expense products (%s). Please remove them first.') % names)
             else:
                 invalid_lines = order.order_line.filtered(
-                    lambda l: (l.product_id.is_old_gold or (l.product_template_id and l.product_template_id.is_old_gold)) or
-                              (l.product_id.is_diamond_og or (l.product_template_id and l.product_template_id.is_diamond_og))
+                    lambda l: (l.product_id.is_old_gold or (
+                                l.product_template_id and l.product_template_id.is_old_gold)) or
+                              (l.product_id.is_diamond_og or (
+                                          l.product_template_id and l.product_template_id.is_diamond_og))
                 )
                 if invalid_lines:
-                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('Cannot confirm order: Standard purchase order contains Old Gold, Diamond OG, or Expense products (%s). Please remove them first.') % names)
+                    names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped(
+                        'product_template_id.name')))
+                    raise ValidationError(
+                        _('Cannot confirm order: Standard purchase order contains Old Gold, Diamond OG, or Expense products (%s). Please remove them first.') % names)
         res = super(PurchaseOrder, self).button_confirm()
         for order in self:
-            if order.is_old_gold and not order.sale_id:
+            if (order.is_old_gold or order.is_diamond_og) and not order.sale_id:
                 dest_loc_id = order._get_destination_location()
-                location_id = dest_loc_id if dest_loc_id else (order.branch_id.old_gold_location_id.id or self.env.user.branch_id.old_gold_location_id.id)
+                if order.is_diamond_og:
+                    location_id = dest_loc_id if dest_loc_id else (
+                            order.branch_id.diamond_og_location_id.id
+                            or self.env.user.branch_id.diamond_og_location_id.id
+                            or order.branch_id.old_gold_location_id.id
+                            or self.env.user.branch_id.old_gold_location_id.id
+                    )
+                else:
+                    location_id = dest_loc_id if dest_loc_id else (
+                            order.branch_id.old_gold_location_id.id
+                            or self.env.user.branch_id.old_gold_location_id.id
+                    )
 
                 # Ensure each line has a purity before creating old.gold.purchase
                 missing_purity = order.order_line.filtered(lambda l: not l.purity_id and not l.product_id.purity_id)
                 if missing_purity:
                     names = ', '.join(missing_purity.mapped('product_id.display_name'))
-                    raise ValidationError(_('Please select Purity for Old Gold lines (%s) before confirming.') % names)
+                    raise ValidationError(_('Please select Purity for %s lines (%s) before confirming.') % (
+                        'Diamond OG' if order.is_diamond_og else 'Old Gold', names
+                    ))
 
                 existing_ogp = self.env['old.gold.purchase'].search([('purchase_order_id', '=', order.id)], limit=1)
                 if existing_ogp:
@@ -381,6 +405,8 @@ class PurchaseOrder(models.Model):
                             'stone_weight': l.stone_weight,
                             'amount': l.price_subtotal,
                             'rate': l.price_unit,
+                            'diamond_amount': l.diamond_rate if (order.is_diamond_og or l.is_diamond_og) else 0.0,
+                            'is_diamond_og': True if (order.is_diamond_og or l.is_diamond_og) else False,
                         }) for l in order.order_line
                     ],
                 })
