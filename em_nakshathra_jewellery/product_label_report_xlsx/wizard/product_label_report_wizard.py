@@ -49,20 +49,11 @@ class ProductLabelReportWizard(models.TransientModel):
             loc_domain.append(('branch_id', 'in', self.branch_ids.ids))
         locations = self.env['stock.location'].sudo().search(loc_domain)
         loc_ids = locations.ids
-
-        # Get all done stock moves after start_datetime in these locations
-        moves_after = self.env['stock.move'].sudo().search([
-            ('state', '=', 'done'),
-            ('date', '>', self.start_datetime),
-            '|',
-            ('location_id', 'in', loc_ids),
-            ('location_dest_id', 'in', loc_ids)
-        ])
-
-        # Query stock quants with quantity > 0 in those locations
+        # Only vault-item quants are needed for the unlabeled vault sheet.
         quants = self.env['stock.quant'].sudo().search([
             ('location_id', 'in', loc_ids),
-            ('quantity', '>', 0)
+            ('quantity', '>', 0),
+            ('product_id.product_tmpl_id.is_vault_item', '=', True)
         ])
 
         # Get all sale order lines for labels sold after start_datetime
@@ -72,13 +63,6 @@ class ProductLabelReportWizard(models.TransientModel):
             ('order_id.date_order', '>', self.start_datetime)
         ])
         sold_after_label_ids = sold_after_datetime_lines.mapped('label_id').ids
-
-        # Combine all product IDs that might have had stock at start_datetime
-        product_ids = list(set(
-            quants.mapped('product_id').ids +
-            moves_after.mapped('product_id').ids +
-            sold_after_datetime_lines.mapped('product_id').ids
-        ))
 
         import pytz
         local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
@@ -136,33 +120,15 @@ class ProductLabelReportWizard(models.TransientModel):
             label_locations[label.id] = historical_loc
             label_branches[label.id] = historical_branch
 
-        # Build dictionaries to quickly look up incoming and outgoing quantities after start_datetime
-        incoming_after = {}
-        outgoing_after = {}
-        for m in moves_after:
-            prod_id = m.product_id.id
-            qty = m.product_qty
-            if m.location_dest_id.id in loc_ids:
-                key = (prod_id, m.location_dest_id.id)
-                incoming_after[key] = incoming_after.get(key, 0.0) + qty
-            if m.location_id.id in loc_ids:
-                key = (prod_id, m.location_id.id)
-                outgoing_after[key] = outgoing_after.get(key, 0.0) + qty
-
         # Collect current quant information
         current_quant_qty = {(q.product_id.id, q.location_id.id): q.quantity for q in quants}
         current_quant_in_date = {(q.product_id.id, q.location_id.id): q.in_date for q in quants}
         current_quant_create_date = {(q.product_id.id, q.location_id.id): q.create_date for q in quants}
 
-        # Collect all unique (product, location) pairs
+        # Collect all unique (product, location) pairs for vault items.
         prod_loc_pairs = set()
         for q in quants:
             prod_loc_pairs.add((q.product_id, q.location_id))
-        for m in moves_after:
-            if m.location_id.id in loc_ids:
-                prod_loc_pairs.add((m.product_id, m.location_id))
-            if m.location_dest_id.id in loc_ids:
-                prod_loc_pairs.add((m.product_id, m.location_dest_id))
 
         # Query all completed done stock moves of vault items in the selected locations
         vault_product_moves = self.env['stock.move'].sudo().search([
@@ -172,6 +138,21 @@ class ProductLabelReportWizard(models.TransientModel):
             ('location_id', 'in', loc_ids),
             ('location_dest_id', 'in', loc_ids)
         ], order='date asc')
+
+        # Build dictionaries to quickly look up incoming and outgoing quantities after start_datetime
+        incoming_after = {}
+        outgoing_after = {}
+        for m in vault_product_moves:
+            if m.date <= self.start_datetime:
+                continue
+            prod_id = m.product_id.id
+            qty = m.product_qty
+            if m.location_dest_id.id in loc_ids:
+                key = (prod_id, m.location_dest_id.id)
+                incoming_after[key] = incoming_after.get(key, 0.0) + qty
+            if m.location_id.id in loc_ids:
+                key = (prod_id, m.location_id.id)
+                outgoing_after[key] = outgoing_after.get(key, 0.0) + qty
 
         for m in vault_product_moves:
             if m.location_id.id in loc_ids:
