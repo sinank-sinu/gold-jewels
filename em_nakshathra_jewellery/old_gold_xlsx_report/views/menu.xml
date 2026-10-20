@@ -5,7 +5,7 @@
         id="menu_jewellery_reporting_root"
         name="Reporting"
         parent="em_jewellery_management.menu_jewellery_root"
-        groups="em_jewellery_management.group_jewellery_manager"
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.group_jewellery_old_gold"
         sequence="21"
     />
 

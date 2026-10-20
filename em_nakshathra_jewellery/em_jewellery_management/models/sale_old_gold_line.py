@@ -164,20 +164,37 @@ class OldGoldPurchase(models.Model):
     def action_view_old_gold_transfers(self):
         self.ensure_one()
 
-        return {
+        domain = [('is_old_gold', '=', True)]
+        if self.name and self.sale_id:
+            domain += ['|', ('origin', '=', self.name), ('sale_old_id', '=', self.sale_id.id)]
+        elif self.name:
+            domain += [('origin', '=', self.name)]
+        elif self.sale_id:
+            domain += [('sale_old_id', '=', self.sale_id.id)]
+        else:
+            domain += [('id', '=', False)]
+
+        pickings = self.env['stock.picking'].search(domain)
+        action = {
             'type': 'ir.actions.act_window',
             'name': _('Old Gold Transfers'),
             'res_model': 'stock.picking',
-            'view_mode': 'tree,form',
-            'domain': [
-                ('sale_old_id', '=', self.sale_id.id),
-                ('is_old_gold', '=', True),
-            ],
+            'domain': domain,
             'context': {
-                'default_sale_old_id': self.sale_id.id,
+                'default_origin': self.name,
+                'default_sale_old_id': self.sale_id.id if self.sale_id else False,
                 'default_is_old_gold': True,
             },
         }
+
+        if len(pickings) == 1:
+            action['views'] = [(False, 'form')]
+            action['res_id'] = pickings.id
+        else:
+            action['views'] = [(False, 'tree'), (False, 'form')]
+
+        return action
+
     def action_view_ho_verified(self):
         self.ensure_one()
 
