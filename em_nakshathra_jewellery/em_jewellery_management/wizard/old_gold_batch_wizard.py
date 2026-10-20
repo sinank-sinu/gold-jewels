@@ -53,6 +53,7 @@ class OldGoldBatchWizard(models.TransientModel):
                 'purity_id': verified_purity_id,
                 'total_grams': data['grams'],
                 'total_purchase_amount': data['amount'],
+                'line_ids': [(6, 0, [l.id for l in data['lines']])],
             })
 
         ho_lines.write({'state': 'batched'})

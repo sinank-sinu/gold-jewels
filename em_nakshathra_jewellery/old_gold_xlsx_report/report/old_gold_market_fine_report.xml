@@ -1,0 +1,11 @@
+<odoo>
+
+    <record id="old_gold_market_fine_xlsx_report" model="ir.actions.report">
+        <field name="name">Old Gold Purchase vs Market Fine XLSX</field>
+        <field name="model">old.gold.market.fine.wizard</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">old_gold_xlsx_report.old_gold_market_fine_xlsx</field>
+        <field name="report_file">old_gold_purchase_vs_market_fine</field>
+    </record>
+
+</odoo>

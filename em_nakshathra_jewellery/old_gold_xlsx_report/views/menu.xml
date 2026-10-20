@@ -25,7 +25,15 @@
         <field name="target">new</field>
     </record>
 
-    <!-- Submenu -->
+    <!-- Old Gold Purchase vs Market Fine Wizard Action -->
+    <record id="action_old_gold_market_fine_wizard" model="ir.actions.act_window">
+        <field name="name">Old Gold Purchase vs Market Fine Report</field>
+        <field name="res_model">old.gold.market.fine.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Submenus -->
     <menuitem
         id="menu_old_gold_refine_margin_report"
         name="Old Gold Refine Margin Report"
@@ -33,13 +41,26 @@
         action="action_old_gold_refine_margin_wizard"
         sequence="24"
     />
-    <!-- Submenu -->
+    <menuitem
+        id="menu_old_gold_market_fine_report_jewellery"
+        name="Old Gold Purchase vs Market Fine Report"
+        parent="menu_jewellery_reporting_root"
+        action="action_old_gold_market_fine_wizard"
+        sequence="25"
+    />
     <menuitem
         id="menu_old_gold_margin_report"
         name="Old Gold Margin Report"
         parent="purchase.purchase_report_main"
         action="action_old_gold_margin_wizard"
         sequence="40"
+    />
+    <menuitem
+        id="menu_old_gold_market_fine_report_purchase"
+        name="Old Gold Purchase vs Market Fine Report"
+        parent="purchase.purchase_report_main"
+        action="action_old_gold_market_fine_wizard"
+        sequence="41"
     />
 
 </odoo>
