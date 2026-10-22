@@ -286,8 +286,9 @@ class JewelleryWeeklyStockCheck(models.Model):
 
         # 1. Try product.label barcode first
         label = self.env['product.label'].search([
+            '|',
             ('barcode', '=', barcode),
-            ('branch_id', '=', check.branch_id.id),
+            ('barcode2', '=', barcode),
             ('branch_location_id', 'in', check.location_ids.ids)
         ], limit=1)
         if label:
@@ -793,4 +794,3 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             summary.is_total_weight_matched = abs(summary.manual_total_weight - summary.system_total_weight) <= 0.300
             
             summary.is_matched = qty_match and summary.is_total_weight_matched
-
