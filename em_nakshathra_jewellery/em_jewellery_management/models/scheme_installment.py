@@ -178,6 +178,21 @@ class JewellerySchemeInstallment(models.Model):
         return res
 
     def unlink(self):
+        if not self.env.is_superuser() and not self.env.user.has_group('base.group_system'):
+            raise UserError(_(
+                "Only an administrator can delete scheme installment lines."
+            ))
+
+        moves = self.mapped('move_id') | self.mapped('suspense_move_id')
+        # moves_to_cancel = moves.filtered(lambda move: move.state != 'cancel')
+        # if moves_to_cancel:
+        #     moves_to_cancel.button_cancel()
+        if moves.filtered(lambda move: move.state != 'cancel'):
+            raise UserError(_(
+                "The linked journal entries must be cancelled before deleting "
+                "the scheme installment."
+            ))
+
         if not self.env.context.get('skip_scheme_tracking'):
             for rec in self:
                 if rec.enrollment_id:
