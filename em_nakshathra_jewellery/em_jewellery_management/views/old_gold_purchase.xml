@@ -190,6 +190,13 @@
           action="em_jewellery_management.action_old_gold_batch"
           groups="em_jewellery_management.group_jewellery_old_gold,em_jewellery_management.group_jewellery_manager,base.group_system"
           sequence="30"/>
+    <menuitem id="menu_old_gold_internal_transfers"
+              name="Internal Transfers"
+              parent="menu_old_gold_root"
+              action="stock.action_picking_tree_internal"
+              groups="em_jewellery_management.group_jewellery_old_gold,em_jewellery_management.group_jewellery_manager,base.group_system"
+              sequence="35"/>
+
     <menuitem id="menu_old_gold_refinery_issue"
               name="Melting"
               parent="menu_old_gold_root"

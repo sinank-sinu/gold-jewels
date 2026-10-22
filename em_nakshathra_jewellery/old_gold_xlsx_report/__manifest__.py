@@ -13,8 +13,10 @@
         'views/menu.xml',
         'views/old_gold_margin_wizard_view.xml',
         'views/old_gold_refine_margin_wizard_view.xml',
+        'views/old_gold_market_fine_wizard_view.xml',
         'report/old_gold_margin_report.xml',
         'report/old_gold_refine_margin_report.xml',
+        'report/old_gold_market_fine_report.xml',
     ],
     'installable': True,
     'application': False

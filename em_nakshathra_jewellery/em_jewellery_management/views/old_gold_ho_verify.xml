@@ -101,6 +101,7 @@
               name="HO Verification"
               parent="em_jewellery_management.menu_old_gold_root"
               action="action_old_gold_ho_verification"
+              groups="em_jewellery_management.group_jewellery_manager,base.group_system"
               sequence="30"/>
 
 </odoo>
