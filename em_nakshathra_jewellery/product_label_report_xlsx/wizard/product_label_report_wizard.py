@@ -69,9 +69,8 @@ class ProductLabelReportWizard(models.TransientModel):
         # Get all labels created before/at start_datetime that are active or sold after
         labels_domain = [
             ('create_date', '<=', self.start_datetime),
-            '|',
             ('active', '=', True),
-            ('id', 'in', sold_after_label_ids)
+            # ('id', 'in', sold_after_label_ids) hiding for the label correct report
         ]
         candidates = self.env['product.label'].sudo().search(labels_domain)
 
