@@ -67,7 +67,8 @@ class ProductLabelVariantReportWizard(models.TransientModel):
         # 3. Candidate labels and historical locations
         candidates = self.env['product.label'].sudo().search([
             ('create_date', '<=', self.start_datetime),
-            '|', ('active', '=', True), ('id', 'in', sold_after.mapped('label_id').ids)
+            ('active', '=', True),
+            # ('id', 'in', sold_after.mapped('label_id').ids) no need sold after logic , active labels
         ])
         label_moves = self.env['stock.move'].sudo().search([
             ('label_id', 'in', candidates.ids), ('state', '=', 'done')
