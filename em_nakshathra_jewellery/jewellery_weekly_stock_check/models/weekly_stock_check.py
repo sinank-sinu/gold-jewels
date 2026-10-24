@@ -107,7 +107,7 @@ class JewelleryWeeklyStockCheck(models.Model):
         return super().create(vals)
 
     def action_load_products(self):
-        """Load products with active label counts (branch) and vault stock."""
+        """Load labelled stock to detail lines and old-gold stock to summaries."""
         self.ensure_one()
         if not self.location_ids:
             raise UserError(_("Please select at least one location."))
@@ -133,16 +133,28 @@ class JewelleryWeeklyStockCheck(models.Model):
             ('product_id.product_tmpl_id.is_vault_item', '=', True)
         ])
 
-        if not labels and not vault_quants:
-            raise UserError(_("No active labels or vault stock found for this location/branch."))
+        old_gold_quants = self.env['stock.quant'].search([
+            ('location_id', 'in', self.location_ids.ids),
+            ('quantity', '>', 0),
+            '|',
+            ('product_id.is_old_gold', '=', True),
+            ('product_id.is_diamond_og', '=', True),
+        ])
+
+        if not labels and not vault_quants and not old_gold_quants:
+            raise UserError(_("No active labels or eligible product stock found for this location/branch."))
 
         # Create lines per active label
         lines = []
         all_products = labels.mapped('product_id') | vault_quants.mapped('product_id')
-
-        # Explicitly exclude "Old Gold" from stock checks
         all_products = all_products.filtered(
-            lambda p: 'old gold' not in (p.name or '').lower() and not getattr(p, 'is_old_gold', False)
+            lambda product: not (product.is_old_gold or product.is_diamond_og)
+        )
+        summary_only_products = (
+            labels.mapped('product_id').filtered(
+                lambda product: product.is_old_gold or product.is_diamond_og
+            )
+            | old_gold_quants.mapped('product_id')
         )
 
         for product in all_products:
@@ -167,7 +179,7 @@ class JewelleryWeeklyStockCheck(models.Model):
                     'is_vault_item': is_vault,
                 })
 
-            # Handle Vault Stock
+            # Handle unlabelled stock for vault products
             if is_vault:
                 prod_quants = vault_quants.filtered(lambda q: q.product_id == product)
                 total_vault_qty = sum(prod_quants.mapped('quantity'))
@@ -190,13 +202,13 @@ class JewelleryWeeklyStockCheck(models.Model):
                         'manual_tag_weight': 0.0,
                         'branch_id': branch_rec.id,
                         'location_id': loc.id,
-                        'is_vault_item': True,
+                        'is_vault_item': is_vault,
                     })
 
         self.env['jewellery.weekly.stock.check.line'].with_context(skip_line_sync=True).create(lines)
 
         # Create template summary lines
-        templates = self.line_ids.mapped('product_tmpl_id')
+        templates = self.line_ids.mapped('product_tmpl_id') | summary_only_products.mapped('product_tmpl_id')
         summary_vals = []
         for tmpl in templates:
             summary_vals.append({
@@ -734,7 +746,16 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
         store=True
     )
 
-    @api.depends('stock_check_id.line_ids.system_qty', 'stock_check_id.line_ids.system_weight', 'stock_check_id.line_ids.system_tag_weight', 'stock_check_id.line_ids.system_total_weight')
+    @api.depends(
+        'product_tmpl_id',
+        'product_tmpl_id.is_old_gold',
+        'product_tmpl_id.is_diamond_og',
+        'stock_check_id.location_ids',
+        'stock_check_id.line_ids.system_qty',
+        'stock_check_id.line_ids.system_weight',
+        'stock_check_id.line_ids.system_tag_weight',
+        'stock_check_id.line_ids.system_total_weight',
+    )
     def _compute_system_totals(self):
         for check in self.mapped('stock_check_id'):
             summaries = self.filtered(lambda s: s.stock_check_id == check)
@@ -752,6 +773,10 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
                 continue
                 
             tmpl_ids = summaries.mapped('product_tmpl_id').ids
+            summary_only_tmpl_ids = summaries.filtered(
+                lambda summary: summary.product_tmpl_id.is_old_gold
+                or summary.product_tmpl_id.is_diamond_og
+            ).mapped('product_tmpl_id').ids
             line_data = self.env['jewellery.weekly.stock.check.line'].read_group(
                 [('stock_check_id', '=', check.id), ('product_tmpl_id', 'in', tmpl_ids)],
                 ['product_tmpl_id', 'system_qty:sum', 'system_weight:sum', 'system_tag_weight:sum', 'system_total_weight:sum'],
@@ -759,8 +784,44 @@ class JewelleryWeeklyStockCheckTemplateSummary(models.Model):
             )
             
             line_dict = {d['product_tmpl_id'][0]: d for d in line_data}
-            
+            summary_only_totals = {}
+            if summary_only_tmpl_ids:
+                labels = self.env['product.label'].search([
+                    ('product_tmpl_id', 'in', summary_only_tmpl_ids),
+                    ('branch_location_id', 'in', check.location_ids.ids),
+                    ('active', '=', True),
+                ])
+                for label in labels:
+                    totals = summary_only_totals.setdefault(label.product_tmpl_id.id, [0.0, 0.0, 0.0, 0.0])
+                    totals[0] += 1.0
+                    totals[1] += label.sale_gross_weight or 0.0
+                    totals[2] += label.tag_weight or 0.0
+
+                quants = self.env['stock.quant'].search([
+                    ('location_id', 'in', check.location_ids.ids),
+                    ('quantity', '>', 0),
+                    ('product_id.product_tmpl_id', 'in', summary_only_tmpl_ids),
+                    '|',
+                    ('product_id.is_old_gold', '=', True),
+                    ('product_id.is_diamond_og', '=', True),
+                ])
+                for quant in quants:
+                    tmpl_id = quant.product_id.product_tmpl_id.id
+                    totals = summary_only_totals.setdefault(tmpl_id, [0.0, 0.0, 0.0, 0.0])
+                    totals[3] += quant.quantity
+
             for summary in summaries:
+                if summary.product_tmpl_id.id in summary_only_tmpl_ids:
+                    qty, label_weight, tag_weight, quant_weight = summary_only_totals.get(
+                        summary.product_tmpl_id.id, [0.0, 0.0, 0.0, 0.0]
+                    )
+                    gross = max(label_weight, quant_weight)
+                    summary.system_qty = qty
+                    summary.system_weight = gross
+                    summary.system_tag_weight = tag_weight
+                    summary.system_total_weight = gross + tag_weight
+                    continue
+
                 ld = line_dict.get(summary.product_tmpl_id.id, {})
                 summary.system_qty = ld.get('system_qty', 0.0)
                 summary.system_weight = ld.get('system_weight', 0.0)
