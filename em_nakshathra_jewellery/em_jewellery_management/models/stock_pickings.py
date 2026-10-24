@@ -20,6 +20,17 @@ class StockPicking(models.Model):
         string="Multiple Transfer",
         help="Check this if you want to transfer to multiple locations in a single picking."
     )
+    total_label_count = fields.Integer(string="Label Pc", compute="_compute_label_totals", store=True)
+    total_label_weight = fields.Float(string="Total Weight", digits=(16, 2), compute="_compute_label_totals",
+                                      store=True)
+
+    @api.depends('move_ids_without_package.pieces', 'move_ids_without_package.label_weight',
+                 'move_ids_without_package.state')
+    def _compute_label_totals(self):
+        for picking in self:
+            moves = picking.move_ids_without_package.filtered(lambda m: m.state != 'cancel')
+            picking.total_label_count = sum(moves.mapped('pieces'))
+            picking.total_label_weight = round(sum(moves.mapped('label_weight')), 2)
 
     @api.onchange('is_multiple_transfer', 'location_id', 'location_dest_id')
     def _onchange_is_multiple_transfer(self):
@@ -151,10 +162,23 @@ class StockMove(models.Model):
     purity_id = fields.Many2one('gold.purity')
     grams = fields.Float(string="Grams", digits=(16, 3))
     label_id = fields.Many2one(
-            'product.label',
-            string="Label",
-        )
-    def _update_reserved_quantity(self, need, location_id, quant_ids=None, lot_id=None, package_id=None, owner_id=None, strict=True):
+        'product.label',
+        string="Label",
+    )
+    pieces = fields.Integer(string="Pc", compute="_compute_label_info", store=True, readonly=False)
+    label_weight = fields.Float(string="Weight", digits=(16, 3), compute="_compute_label_info", store=True,
+                                readonly=False)
+
+    @api.depends('label_id', 'product_uom_qty', 'quantity')
+    def _compute_label_info(self):
+        for m in self:
+            m.pieces = 1 if m.label_id else 0
+            lbl = m.label_id
+            m.label_weight = (lbl.purchase_gross_weight or lbl.sale_gross_weight or lbl.tag_weight) if lbl else (
+                        m.product_uom_qty or m.quantity or 0.0)
+
+    def _update_reserved_quantity(self, need, location_id, quant_ids=None, lot_id=None, package_id=None, owner_id=None,
+                                  strict=True):
         if self.picking_type_id.code == 'internal':
             strict = True
         return super()._update_reserved_quantity(need, location_id, quant_ids=quant_ids, lot_id=lot_id, package_id=package_id, owner_id=owner_id, strict=strict)
@@ -194,7 +218,12 @@ class StockMove(models.Model):
             if not self.product_id and self.label_id.product_id:
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
-            self.product_uom_qty = self.label_id.purchase_gross_weight
+            weight = self.label_id.purchase_gross_weight or self.label_id.sale_gross_weight or self.label_id.tag_weight or 1.0
+            self.product_uom_qty = weight
+            self.label_weight = weight
+            self.pieces = 1
+        else:
+            self.pieces = 0
 
     @api.constrains('label_id', 'state')
     def _check_label_single_active_transfer(self):
