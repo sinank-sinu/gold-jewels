@@ -111,7 +111,7 @@
                                     string="Variant"
                                     widget="sol_product_many2one"/>
                                     <field name="refinery_issue_id" column_invisible="not parent.is_refinery" domain =""/>
-                                    <field name="lab_weight" column_invisible="not parent.is_refinery" readonly="True" force_save="1"/>
+                                    <field name="lab_weight" column_invisible="not parent.is_refinery" readonly="0" force_save="1"/>
                                     <field name="issued_weight" string="Issued Weight (g)" column_invisible="not parent.is_refinery" readonly="parent.state == 'done'" />
                                     <field name="qty" string="Net Weight" readonly="1" force_save="1"/>
                                     <field name="purity_id"/>

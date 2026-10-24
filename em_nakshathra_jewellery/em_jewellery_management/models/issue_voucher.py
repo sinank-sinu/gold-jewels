@@ -106,6 +106,7 @@ class JewelleryIssueVoucher(models.Model):
         return super().create(vals)
 
     def action_update_lab_purity(self):
+        print('update_lab_purity')
         """Update lab_weight, lab_purity (%) and lab_purity_id on all lines
         that have a linked refinery_issue_id, pulling values from the
         refinery issue's lab test results."""
@@ -125,12 +126,12 @@ class JewelleryIssueVoucher(models.Model):
             # (computed from lab results on the refinery issue)
             if issue.expected_purity_id:
                 line.lab_purity_id = issue.expected_purity_id
-            elif issue.lab_purity_percent:
-                # Fallback: find matching gold.purity by percentage
-                purity = self.env['gold.purity'].search(
-                    [('percentage', '=', round(issue.lab_purity_percent, 2))], limit=1
-                )
-                line.lab_purity_id = purity if purity else False
+            # elif issue.lab_purity_percent:
+            #     # Fallback: find matching gold.purity by percentage
+            #     purity = self.env['gold.purity'].search(
+            #         [('percentage', '=', round(issue.lab_purity_percent, 2))], limit=1
+            #     )
+            #     line.lab_purity_id = purity if purity else False
 
     def action_done(self):
         """Confirm the Issue Voucher and create / update stock moves.
@@ -533,8 +534,8 @@ class JewelleryIssueVoucherLine(models.Model):
         for line in self:
             purity = line.lab_purity or (line.lab_purity_id.percentage if line.lab_purity_id else (line.purity_id.percentage if line.purity_id else 0.0))
             line.lab_fine_weight = line.lab_weight * (purity / 100)
-            line.refinery_fine_weight = line.fine_weight - line.lab_fine_weight
-            line.remaining_lab_fine_weight = line.lab_fine_weight - line.received_lab_fine_weight
+            # line.refinery_fine_weight = line.fine_weight - line.lab_fine_weight
+            # line.remaining_lab_fine_weight = line.lab_fine_weight - line.received_lab_fine_weight
 
     @api.onchange('product_id', 'product_template_id', 'qty')
     def _onchange_product_pricing(self):
@@ -568,7 +569,7 @@ class JewelleryIssueVoucherLine(models.Model):
     def _compute_fine_weight(self):
         for rec in self:
             if rec.voucher_id.is_refinery:
-                purity = rec.lab_purity or (rec.lab_purity_id.percentage if rec.lab_purity_id else (rec.purity_id.percentage if rec.purity_id else 0.0))
+                purity = rec.lab_purity or (rec.lab_purity_id.percentage if rec.lab_purity_id else 0.0)
                 rec.fine_weight = rec.issued_weight * (purity / 100)
 
     @api.depends('issued_weight', 'stone_weight')

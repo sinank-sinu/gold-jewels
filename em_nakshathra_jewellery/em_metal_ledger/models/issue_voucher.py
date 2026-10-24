@@ -45,6 +45,7 @@ class JewelleryIssueVoucher(models.Model):
         return res
 
     def action_update_lab_purity(self):
+        print("working")
         """Update lab_purity in the linked Refinery Lab Report records and
         recompute lab_fine_weight (lab_weight * lab_purity / 100)."""
         self.ensure_one()
