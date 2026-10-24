@@ -450,6 +450,7 @@ class OldGoldRefineryIssue(models.Model):
         finished_qty = self.output_weight or sum(self.line_ids.mapped('issue_weight'))
 
         mo = MRP.create({
+            'name': f"{self.name}/MO",
             'product_id': product_scrap.id,
             'product_uom_id': uom_gram.id,
             'product_qty': finished_qty,
