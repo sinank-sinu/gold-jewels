@@ -286,25 +286,35 @@ class StockMove(models.Model):
             rounding = move.product_uom.rounding if move.product_uom else 0.001
             if float_compare(move.quantity, 0.0, precision_rounding=rounding) <= 0:
                 continue
-            if not move.label_id:
+            label = move.label_id or (move.origin_returned_move_id.label_id if move.origin_returned_move_id else False)
+            if not label:
                 continue
+            if not move.label_id:
+                move.sudo().write({'label_id': label.id})
 
             vals = {}
             if move.location_dest_id.usage in ('internal', 'transit'):
                 vals['branch_location_id'] = move.location_dest_id.id
                 vals['source_location_id'] = move.location_id.id
-                branch = move.location_dest_id.branch_id or move.branch_id or (move.picking_id.branch_id if move.picking_id else False)
+                if move.location_dest_id.usage == 'internal' and (
+                        move.location_id.usage == 'customer'
+                        or move.origin_returned_move_id
+                        or (move.picking_id and move.picking_id.return_id)
+                ):
+                    vals['active'] = True
+                branch = move.location_dest_id.branch_id or move.branch_id or (
+                    move.picking_id.branch_id if move.picking_id else False)
                 if branch:
                     vals['branch_id'] = branch.id
             elif move.location_dest_id.usage == 'customer':
                 vals['active'] = False
             if vals:
-                move.label_id.with_context(from_stock_transfer=True).sudo().write(vals)
+                label.with_context(from_stock_transfer=True).sudo().write(vals)
 
             # Post tracking log in Chatter
             try:
                 transfer_ref = move.picking_id.name if move.picking_id else (move.reference or move.name)
-                branch_name = branch.name if branch else (move.label_id.branch_id.name or _("N/A"))
+                branch_name = branch.name if branch else (label.branch_id.name or _("N/A"))
                 msg = Markup(_(
                     "<b>Stock Transfer Completed</b> (%s)<br/>"
                     "• From: %s<br/>"
