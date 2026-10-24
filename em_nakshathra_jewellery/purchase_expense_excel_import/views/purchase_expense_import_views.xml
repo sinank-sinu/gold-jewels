@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_purchase_expense_import_wizard_form" model="ir.ui.view">
+        <field name="name">purchase.expense.import.wizard.form</field>
+        <field name="model">purchase.expense.import.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Import Purchase Expenses">
+                <group>
+                    <field name="company_id" invisible="1"/>
+                    <field name="file" filename="file_name"/>
+                    <field name="file_name" invisible="1"/>
+                    <field name="payment_journal_id"
+                           domain="[('type', '=', 'bank'), ('company_id', '=', company_id)]"
+                           options="{'no_create': True}"/>
+                </group>
+                <group>
+                    <div class="text-muted">
+                        Upload an .xlsx file with Vendor, Bill Reference, Product,
+                        Quantity and Unit Price columns. Bill Date and Tax are
+                        optional. Rows are grouped by vendor and bill reference.
+                        Odoo calculates taxes and subtotals. Imported bills are
+                        posted and paid using the selected bank journal.
+                    </div>
+                </group>
+                <footer>
+                    <button name="action_import" string="Import and Pay"
+                            type="object" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"
+                            class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_purchase_expense_import" model="ir.actions.act_window">
+        <field name="name">Import Purchase Expenses</field>
+        <field name="res_model">purchase.expense.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_purchase_expense_import"
+              name="Import Purchase Expenses"
+              parent="account.menu_finance_payables"
+              action="action_purchase_expense_import"
+              groups="account.group_account_invoice"
+              sequence="90"/>
+</odoo>

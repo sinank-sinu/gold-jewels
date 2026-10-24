@@ -242,7 +242,7 @@ class PurchaseOrderLine(models.Model):
                 self.name = self.product_id.display_name
             if not self.price_unit and self.product_id.standard_price:
                 self.price_unit = self.product_id.standard_price
-            if self.order_id.is_old_gold:
+            if self.order_id.is_old_gold or self.order_id.is_diamond_og:
                 self.purchase_making_charge_type = 'rate_per_gram'
 
         for line in self:
@@ -361,7 +361,6 @@ class PurchaseOrderLine(models.Model):
                 raise ValidationError(_('In Diamond OG mode, only Diamond OG purities are allowed (purity: %s).') % line.purity_id.name)
             elif line.order_id.is_old_gold and line.purity_id.is_diamond_og:
                 raise ValidationError(_('Diamond OG purities (such as %s) cannot be selected in a regular Old Gold (OG) Purchase Order.') % line.purity_id.name)
-
 
 
 
