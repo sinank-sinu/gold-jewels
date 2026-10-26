@@ -38,4 +38,15 @@
             </xpath>
         </field>
     </record>
+
+    <record id="view_product_label_search_custom" model="ir.ui.view">
+        <field name="name">product.label.search.custom</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='product_tmpl_id']" position="attributes">
+                <attribute name="filter_domain">['|', '|', ('product_tmpl_id', '=', self), ('product_template_id', '=', self), ('product_id.product_tmpl_id', '=', self)]</attribute>
+            </xpath>
+        </field>
+    </record>
 </odoo>
