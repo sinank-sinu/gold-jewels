@@ -305,6 +305,8 @@ class ProductLabelReportWizard(models.TransientModel):
         headers_sheet1 = [
             "Branch Receipt Date",
             "Label No.",
+            "Barcode",
+            "Second Barcode",
             "Item Name",
             "Variety Name",
             "Carat",
@@ -418,45 +420,47 @@ class ProductLabelReportWizard(models.TransientModel):
             # Write data row
             ws1.cell(row=row_idx, column=1, value=receipt_date_str).alignment = align_center
             ws1.cell(row=row_idx, column=2, value=label.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=3, value=item_name or "").alignment = align_left
-            ws1.cell(row=row_idx, column=4, value=variety_name or "").alignment = align_left
-            ws1.cell(row=row_idx, column=5, value=label.purity_id.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=6, value=label_branches[label.id].name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=7, value=label_locations[label.id].complete_name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=3, value=label.barcode or "").alignment = align_center
+            ws1.cell(row=row_idx, column=4, value=label.barcode2 or "").alignment = align_center
+            ws1.cell(row=row_idx, column=5, value=item_name or "").alignment = align_left
+            ws1.cell(row=row_idx, column=6, value=variety_name or "").alignment = align_left
+            ws1.cell(row=row_idx, column=7, value=label.purity_id.name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=8, value=label_branches[label.id].name or "").alignment = align_center
+            ws1.cell(row=row_idx, column=9, value=label_locations[label.id].complete_name or "").alignment = align_center
 
-            c_pcs = ws1.cell(row=row_idx, column=8, value=pcs)
+            c_pcs = ws1.cell(row=row_idx, column=10, value=pcs)
             c_pcs.alignment = align_right
             c_pcs.number_format = "#,##0"
 
-            c_gross = ws1.cell(row=row_idx, column=9, value=gross)
+            c_gross = ws1.cell(row=row_idx, column=11, value=gross)
             c_gross.alignment = align_right
             c_gross.number_format = "#,##0.000"
 
-            c_di_g = ws1.cell(row=row_idx, column=10, value=diamond_g)
+            c_di_g = ws1.cell(row=row_idx, column=12, value=diamond_g)
             c_di_g.alignment = align_right
             c_di_g.number_format = "#,##0.000"
 
-            c_di_ct = ws1.cell(row=row_idx, column=11, value=diamond_ct)
+            c_di_ct = ws1.cell(row=row_idx, column=13, value=diamond_ct)
             c_di_ct.alignment = align_right
             c_di_ct.number_format = "#,##0.00"
 
-            c_stone = ws1.cell(row=row_idx, column=12, value=stone)
+            c_stone = ws1.cell(row=row_idx, column=14, value=stone)
             c_stone.alignment = align_right
             c_stone.number_format = "#,##0.000"
 
-            c_other = ws1.cell(row=row_idx, column=13, value=other)
+            c_other = ws1.cell(row=row_idx, column=15, value=other)
             c_other.alignment = align_right
             c_other.number_format = "#,##0.000"
 
-            c_net = ws1.cell(row=row_idx, column=14, value=net)
+            c_net = ws1.cell(row=row_idx, column=16, value=net)
             c_net.alignment = align_right
             c_net.number_format = "#,##0.000"
 
-            c_days = ws1.cell(row=row_idx, column=15, value=days)
+            c_days = ws1.cell(row=row_idx, column=17, value=days)
             c_days.alignment = align_right
             c_days.number_format = "#,##0"
 
-            for col in range(1, 16):
+            for col in range(1, 18):
                 cell = ws1.cell(row=row_idx, column=col)
                 cell.font = font_data
                 cell.border = border_all_cells
@@ -465,29 +469,29 @@ class ProductLabelReportWizard(models.TransientModel):
 
         # Sheet 1 Totals
         ws1.row_dimensions[row_idx].height = 22
-        ws1.cell(row=row_idx, column=4, value="Total").alignment = align_left
-        ws1.cell(row=row_idx, column=8, value=tot_pcs).number_format = "#,##0"
-        ws1.cell(row=row_idx, column=8).alignment = align_right
-
-        ws1.cell(row=row_idx, column=9, value=tot_gross).number_format = "#,##0.000"
-        ws1.cell(row=row_idx, column=9).alignment = align_right
-
-        ws1.cell(row=row_idx, column=10, value=tot_diamond_g).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=6, value="Total").alignment = align_left
+        ws1.cell(row=row_idx, column=10, value=tot_pcs).number_format = "#,##0"
         ws1.cell(row=row_idx, column=10).alignment = align_right
 
-        ws1.cell(row=row_idx, column=11, value=tot_diamond_ct).number_format = "#,##0.00"
+        ws1.cell(row=row_idx, column=11, value=tot_gross).number_format = "#,##0.000"
         ws1.cell(row=row_idx, column=11).alignment = align_right
 
-        ws1.cell(row=row_idx, column=12, value=tot_stone).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=12, value=tot_diamond_g).number_format = "#,##0.000"
         ws1.cell(row=row_idx, column=12).alignment = align_right
 
-        ws1.cell(row=row_idx, column=13, value=tot_other).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=13, value=tot_diamond_ct).number_format = "#,##0.00"
         ws1.cell(row=row_idx, column=13).alignment = align_right
 
-        ws1.cell(row=row_idx, column=14, value=tot_net).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=14, value=tot_stone).number_format = "#,##0.000"
         ws1.cell(row=row_idx, column=14).alignment = align_right
 
-        for col in range(1, 16):
+        ws1.cell(row=row_idx, column=15, value=tot_other).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=15).alignment = align_right
+
+        ws1.cell(row=row_idx, column=16, value=tot_net).number_format = "#,##0.000"
+        ws1.cell(row=row_idx, column=16).alignment = align_right
+
+        for col in range(1, 18):
             cell = ws1.cell(row=row_idx, column=col)
             cell.font = font_total
             cell.border = border_total_row

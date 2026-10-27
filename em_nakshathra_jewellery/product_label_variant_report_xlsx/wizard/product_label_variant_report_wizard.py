@@ -199,7 +199,7 @@ class ProductLabelVariantReportWizard(models.TransientModel):
         ws1 = wb.active
         ws1.title = "Label Closing Stock Report"
         headers1 = [
-            "Branch Receipt Date", "Label No.", "Vendor Name", "Item Name",
+            "Branch Receipt Date", "Label No.", "Barcode", "Second Barcode", "Vendor Name", "Item Name",
             "Metal Colour", "Variety", "Type", "Design", "Stone Colour", "Size",
             "Carat", "Branch", "Location", "Pcs", "Gross Wt.",
             "Diamond Wt", "Diamond Wt ( Caret )", "Stone Weight", "Other Weight", "Net Wt.", "Aging Days"
@@ -237,6 +237,8 @@ class ProductLabelVariantReportWizard(models.TransientModel):
             cols1 = [
                 (rec_date.strftime('%d-%b-%y'), align_c, None),
                 (l.name or "", align_c, None),
+                (l.barcode or "", align_c, None),
+                (l.barcode2 or "", align_c, None),
                 (vendor_name, align_l, None),
                 (item_name, align_l, None),
                 (p_attrs["Metal Colour"], align_c, None),
@@ -263,16 +265,16 @@ class ProductLabelVariantReportWizard(models.TransientModel):
 
         ws1.row_dimensions[row_idx].height = 22
         tot_map1 = {
-            4: ("Total", align_l, None),
-            14: (tot_pcs, align_r, "#,##0"),
-            15: (tot_gross, align_r, "#,##0.000"),
-            16: (tot_di_g, align_r, "#,##0.000"),
-            17: (tot_di_ct, align_r, "#,##0.00"),
-            18: (tot_stone, align_r, "#,##0.000"),
-            19: (tot_other, align_r, "#,##0.000"),
-            20: (tot_net, align_r, "#,##0.000"),
+            6: ("Total", align_l, None),
+            16: (tot_pcs, align_r, "#,##0"),
+            17: (tot_gross, align_r, "#,##0.000"),
+            18: (tot_di_g, align_r, "#,##0.000"),
+            19: (tot_di_ct, align_r, "#,##0.00"),
+            20: (tot_stone, align_r, "#,##0.000"),
+            21: (tot_other, align_r, "#,##0.000"),
+            22: (tot_net, align_r, "#,##0.000"),
         }
-        for col_idx in range(1, 22):
+        for col_idx in range(1, 24):
             v, al, nf = tot_map1.get(col_idx, ("", None, None))
             set_cell(ws1, row_idx, col_idx, v, align=al, num_format=nf, font=font_total, border=border_tot)
 
