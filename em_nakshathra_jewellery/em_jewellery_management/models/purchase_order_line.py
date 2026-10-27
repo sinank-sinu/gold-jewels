@@ -224,6 +224,20 @@ class PurchaseOrderLine(models.Model):
                 if self.order_id and self.order_id.is_purchase_expense:
                     self.price_subtotal = (self.price_unit or 0.0) * (self.product_qty or 1.0)
 
+        if self.product_template_id:
+            none_values = self.product_template_id.valid_product_template_attribute_line_ids.mapped(
+                'product_template_value_ids'
+            ).filtered(
+                lambda ptav: ptav.ptav_active
+                and (ptav.name or '').strip().casefold() == 'none'
+            )
+            self.product_template_attribute_value_ids = none_values.filtered(
+                lambda ptav: ptav.attribute_id.create_variant != 'no_variant'
+            )
+            self.product_no_variant_attribute_value_ids = none_values.filtered(
+                lambda ptav: ptav.attribute_id.create_variant == 'no_variant'
+            )
+
     @api.onchange('product_id')
     def _onchange_purchase_product_id(self):
         if self.product_id:
@@ -361,6 +375,5 @@ class PurchaseOrderLine(models.Model):
                 raise ValidationError(_('In Diamond OG mode, only Diamond OG purities are allowed (purity: %s).') % line.purity_id.name)
             elif line.order_id.is_old_gold and line.purity_id.is_diamond_og:
                 raise ValidationError(_('Diamond OG purities (such as %s) cannot be selected in a regular Old Gold (OG) Purchase Order.') % line.purity_id.name)
-
 
 
