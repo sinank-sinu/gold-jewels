@@ -25,7 +25,7 @@
                 <field name="is_configurable_product" invisible="1"/>
             </xpath>
             <xpath expr="//field[@name='purchase_id']" position="attributes">
-                <attribute name="domain">[('state', '=', 'purchase'), ('order_line.product_template_id', '=', product_template_id)]</attribute>
+                <attribute name="domain">[('state', 'in', ['purchase', 'done']), ('picking_ids.state', '=', 'done'),('order_line.product_template_id', '=', product_template_id)]</attribute>
             </xpath>
             <xpath expr="//field[@name='purchase_id']" position="after">
                 <field name="partner_id" string="Vendor" readonly="purchase_id != False" force_save="1" options="{'no_create': True, 'no_create_edit': True}"/>

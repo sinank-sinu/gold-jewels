@@ -17,7 +17,7 @@ class ProductLabel(models.Model):
     purchase_id = fields.Many2one(
         'purchase.order',
         string="Purchase Order",
-        domain="[('state', '=', 'purchase'), ('order_line.product_template_id', '=', product_template_id)]"
+        domain="[('state', 'in', ['purchase', 'done']), ('picking_ids.state', '=', 'done'), ('order_line.product_template_id', '=', product_template_id)]"
     )
     fine_rate_id = fields.Many2one('fine.rate.master')
     product_template_attribute_value_ids = fields.Many2many(

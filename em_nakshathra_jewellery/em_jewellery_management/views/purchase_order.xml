@@ -54,9 +54,9 @@
             </xpath>
 
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_qty']" position="after">
-                <field name="stone_weight" optional="hide" column_invisible="parent.is_purchase_expense"/>
-                <field name="diamond_weight_gm" optional="hide" column_invisible="parent.is_purchase_expense"/>
-                <field name="net_weight" optional="hide" column_invisible="parent.is_purchase_expense"/>
+                <field name="stone_weight" optional="hide" sum="Total Stone Weight" digits="[16, 3]" column_invisible="parent.is_purchase_expense"/>
+                <field name="diamond_weight_gm" optional="hide" sum="Total Diamond Weight" digits="[16, 3]" column_invisible="parent.is_purchase_expense"/>
+                <field name="net_weight" optional="show" sum="Total Net Weight" digits="[16, 3]" column_invisible="parent.is_purchase_expense"/>
                 <field name="fine_weight" optional="hide" column_invisible="parent.is_purchase_expense"/>
                 <field name="gold_rate" column_invisible="parent.is_old_gold or parent.is_diamond_og or parent.is_purchase_expense"/>
                 <field name="metal_amount" column_invisible="parent.is_old_gold or parent.is_purchase_expense"/>

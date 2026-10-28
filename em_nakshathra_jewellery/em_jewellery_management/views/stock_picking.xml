@@ -39,7 +39,7 @@
                 <field name="label_id" domain="[('active', '=', True), ('product_id', '=?', product_id), '|', ('branch_location_id', '=', parent.location_id), ('source_location_id', '=', parent.location_id)]" options="{'no_create': True, 'no_create_edit': True}"/>
                 <field name="purity_id"/>
                 <field name="pieces" sum="Total Pc"/>
-                <field name="label_weight" sum="Total Weight"/>
+                <field name="label_weight" sum="Total Weight" optional="hide"/>
                 <field name="location_dest_id" column_invisible="not parent.is_multiple_transfer" required="parent.is_multiple_transfer" optional="show"/>
             </xpath>
             <xpath expr="//tree//field[@name='product_uom_qty']" position="attributes">

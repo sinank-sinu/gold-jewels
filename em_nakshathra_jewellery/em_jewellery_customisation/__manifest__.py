@@ -6,7 +6,7 @@
     'summary': """module manage jewellery""",
     'description': 'Jewellery Management Customisations',
 
-    'depends': ['em_jewellery_management', 'report_xlsx', 'purchase'],
+    'depends': ['em_jewellery_management', 'report_xlsx', 'purchase', 'purchase_stock'],
     'data': [
         'security/ir.model.access.csv',
         'views/jewellery_menu.xml',

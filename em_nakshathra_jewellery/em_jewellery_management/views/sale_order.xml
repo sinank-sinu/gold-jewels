@@ -76,7 +76,7 @@
                 <field name="other_weight_amount" optional="hide"/>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='price_unit']" position="before">
-                    <field name="fine_weight" optinal="hide"/>
+                    <field name="fine_weight" optional="hide"/>
                     <field name="price_subtotal_actual" optional="hide"/>
                     <field name="price_subtotal"/>
                     <field name="mc_discount" optional="hide"/>
