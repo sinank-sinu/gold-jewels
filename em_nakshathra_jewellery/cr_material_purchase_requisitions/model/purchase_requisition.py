@@ -47,6 +47,11 @@ class PurchaseRequisition(models.Model):
         "requisition_id",
         string="Requisition Lines",
     )
+    vendor_id = fields.Many2one(
+        "res.partner",
+        string="Vendor",
+        compute="_compute_vendor_id",
+    )
     destination_location_id = fields.Many2one(
         "stock.location", string="Destination Location"
     )
@@ -87,6 +92,18 @@ class PurchaseRequisition(models.Model):
         """Return the department of the current employee."""
         employee = self.env['hr.employee'].search([('user_id', '=', self.env.uid)], limit=1)
         return employee.department_id.id if employee and employee.department_id else False
+
+    @api.depends("requisition_lines.vendor_ids")
+    def _compute_vendor_id(self):
+        for requisition in self:
+            requisition.vendor_id = next(
+                (
+                    vendor
+                    for line in requisition.requisition_lines
+                    for vendor in line.vendor_ids
+                ),
+                False,
+            )
 
     @api.onchange('employee_id')
     def _onchange_employee(self):

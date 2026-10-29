@@ -151,12 +151,25 @@ class PurchaseOrderLine(models.Model):
             else:
                 rec.mc_amount = rec.net_weight * rec.gold_rate
 
-    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty', 'price_tax')
+    def _uses_jewellery_pricing(self):
+        self.ensure_one()
+        return bool(
+            self.sale_return_line_id
+            or self.metal_amount
+            or self.mc_amount
+            or self.stone_rate
+            or self.diamond_rate
+        )
+
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'price_unit', 'product_qty', 'price_tax')
     def _compute_subtotal(self):
-        for rec in self:
-            if rec.order_id and rec.order_id.is_purchase_expense:
-                rec.price_subtotal = (rec.price_unit or 0.0) * (rec.product_qty or 0.0)
-            elif rec.sale_return_line_id:
+        jewellery_lines = self.filtered(lambda line: line._uses_jewellery_pricing())
+        standard_lines = self - jewellery_lines
+        if standard_lines:
+            super(PurchaseOrderLine, standard_lines)._compute_amount()
+
+        for rec in jewellery_lines:
+            if rec.sale_return_line_id:
                 rec.price_subtotal = rec.sale_return_line_id.amount
             else:
                 rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
@@ -165,9 +178,8 @@ class PurchaseOrderLine(models.Model):
     @api.depends('price_subtotal', 'product_qty', 'product_uom_qty', 'order_id.is_purchase_expense')
     def _compute_price_unit(self):
         for rec in self:
-            if rec.order_id and rec.order_id.is_purchase_expense:
-                continue
-            rec.price_unit = (rec.price_subtotal / rec.product_qty) if rec.product_qty else 0.0
+            if rec._uses_jewellery_pricing():
+                rec.price_unit = (rec.price_subtotal / rec.product_qty) if rec.product_qty else 0.0
 
     @api.onchange('product_qty', 'price_unit')
     def _onchange_expense_price_or_qty(self):
@@ -375,5 +387,3 @@ class PurchaseOrderLine(models.Model):
                 raise ValidationError(_('In Diamond OG mode, only Diamond OG purities are allowed (purity: %s).') % line.purity_id.name)
             elif line.order_id.is_old_gold and line.purity_id.is_diamond_og:
                 raise ValidationError(_('Diamond OG purities (such as %s) cannot be selected in a regular Old Gold (OG) Purchase Order.') % line.purity_id.name)
-
-
