@@ -9,6 +9,7 @@
                     <field name="name"/>
                     <field name="employee_id"/>
                     <field name="requisition_date"/>
+                    <field name="vendor_id"/>
                     <field name="department_id" readonly="1"/>
                     <field name="requisition_responsible"/>
                     <field name="received_date"/>
