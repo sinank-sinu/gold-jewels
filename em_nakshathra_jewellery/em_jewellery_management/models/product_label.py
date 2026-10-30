@@ -3,7 +3,7 @@ import math
 import base64
 from io import BytesIO
 
-from odoo.exceptions import ValidationError, UserError
+from odoo.exceptions import AccessError, ValidationError, UserError
 from odoo.tools import barcode as barcode_tool
 from odoo.tools.float_utils import float_compare
 
@@ -205,6 +205,26 @@ class ProductLabel(models.Model):
     )
     sync_lock = fields.Boolean(default=False)
     is_stocked_in = fields.Boolean(string="Stock Updated", default=False, copy=False, tracking=True)
+    admin_edit_mode = fields.Boolean(default=False, copy=False)
+
+    _admin_editable_fields = {
+        'barcode',
+        'barcode2',
+        'product_id',
+        'product_template_id',
+        'product_tmpl_id',
+        'tag_weight',
+        'sale_gross_weight',
+        'sale_stone_weight',
+        'sale_stone_weight_ct',
+        'sale_diamond_weight_gm',
+        'sale_diamond_weight_ct',
+        'purchase_gross_weight',
+        'purchase_stone_weight',
+        'purchase_stone_weight_ct',
+        'purchase_diamond_weight_gm',
+        'purchase_diamond_weight_ct',
+    }
 
     unlabelled_weight = fields.Float(
         string="Unlabelled Weight",
@@ -874,7 +894,23 @@ class ProductLabel(models.Model):
             rec.sync_lock = False
 
     def write(self, vals):
-        res = super().write(vals)
+        if 'admin_edit_mode' in vals and not self.env.user.has_group('base.group_system'):
+            raise AccessError(_("Only system administrators can change product label edit mode."))
+
+        if self._admin_editable_fields.intersection(vals):
+            if not self.env.user.has_group('base.group_system') or any(
+                not rec.admin_edit_mode for rec in self
+            ):
+                raise AccessError(_(
+                    "Only system administrators can edit barcode, product, and weight details. "
+                    "Enable Admin Edit on the product label first."
+                ))
+
+        write_vals = vals
+        if self._admin_editable_fields.intersection(vals):
+            write_vals = dict(vals, admin_edit_mode=False)
+
+        res = super().write(write_vals)
 
         if 'sale_gross_weight' in vals or 'purchase_id' in vals or 'job_work_id' in vals:
             purchases = self.mapped('purchase_id')
@@ -887,6 +923,28 @@ class ProductLabel(models.Model):
                 job_work._compute_unlabelled_totals()
 
         return res
+
+    def action_enable_admin_edit(self):
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError(_("Only system administrators can enable product label editing."))
+        self.ensure_one()
+        self.write({'admin_edit_mode': True})
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Product Label'),
+            'res_model': self._name,
+            'view_mode': 'form',
+            'res_id': self.id,
+            'target': 'current',
+            'context': dict(self.env.context, form_view_initial_mode='edit'),
+        }
+
+    def action_disable_admin_edit(self):
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError(_("Only system administrators can disable product label editing."))
+        self.ensure_one()
+        self.write({'admin_edit_mode': False})
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
 
     @api.returns('self', lambda value: value.id)
     def copy(self, default=None):
