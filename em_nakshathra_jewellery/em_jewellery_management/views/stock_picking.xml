@@ -21,6 +21,9 @@
                     <field name="is_old_gold"/>
                     <field name="sale_old_id" invisible="not is_old_gold"/>
                     <field name="is_multiple_transfer" widget="boolean_toggle"/>
+                    <field name="previous_internal_transfer_id"
+                           readonly="state == 'done'"
+                           options="{'no_create': True, 'no_create_edit': True}"/>
                     <field name="total_label_count" readonly="1"/>
                     <field name="total_label_weight" readonly="1" digits="[16, 2]"/>
             </xpath>

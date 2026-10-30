@@ -20,9 +20,53 @@ class StockPicking(models.Model):
         string="Multiple Transfer",
         help="Check this if you want to transfer to multiple locations in a single picking."
     )
+    previous_internal_transfer_id = fields.Many2one(
+        'stock.picking',
+        string="Copy From Internal Transfer",
+        domain="[('picking_type_id.code', '=', 'internal'), "
+               "('state', '=', 'done'), ('company_id', '=', company_id), "
+               "('id', '!=', id)]",
+    )
     total_label_count = fields.Integer(string="Label Pc", compute="_compute_label_totals", store=True)
     total_label_weight = fields.Float(string="Total Weight", digits=(16, 2), compute="_compute_label_totals",
                                       store=True)
+
+    @api.onchange('previous_internal_transfer_id')
+    def _onchange_previous_internal_transfer_id(self):
+        for picking in self:
+            previous_transfer = picking.previous_internal_transfer_id
+            if not previous_transfer:
+                continue
+            if previous_transfer.picking_type_id.code != 'internal':
+                raise UserError(_("You can only copy lines from an internal transfer."))
+            if previous_transfer.state != 'done':
+                raise UserError(_("You can only copy lines from a completed internal transfer."))
+            if previous_transfer.company_id != picking.company_id:
+                raise UserError(_("The selected transfer must belong to the same company."))
+            if not previous_transfer.location_dest_id:
+                raise UserError(_(
+                    "The selected transfer has no destination location to use as the source."
+                ))
+
+            picking.location_id = previous_transfer.location_dest_id
+            picking.is_multiple_transfer = previous_transfer.is_multiple_transfer
+            move_commands = [(5, 0, 0)]
+            for move in previous_transfer.move_ids_without_package.filtered(
+                    lambda source_move: source_move.state != 'cancel'):
+                quantity = move.quantity or move.product_uom_qty
+                move_commands.append((0, 0, {
+                    'name': move.name,
+                    'product_id': move.product_id.id,
+                    'product_uom': move.product_uom.id,
+                    'product_uom_qty': quantity,
+                    'location_id': move.location_dest_id.id or previous_transfer.location_dest_id.id,
+                    'label_id': move.label_id.id,
+                    'purity_id': move.purity_id.id,
+                    'pieces': move.pieces,
+                    'label_weight': move.label_weight,
+                    'grams': move.grams,
+                }))
+            picking.move_ids_without_package = move_commands
 
     @api.depends('move_ids_without_package.pieces', 'move_ids_without_package.label_weight',
                  'move_ids_without_package.state')
@@ -416,4 +460,3 @@ class StockRule(models.Model):
         if values.get('purity_id'):
             move_values['purity_id'] = values['purity_id']
         return move_values
-
