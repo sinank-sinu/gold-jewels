@@ -569,7 +569,7 @@ class JewelleryIssueVoucherLine(models.Model):
     def _compute_fine_weight(self):
         for rec in self:
             if rec.voucher_id.is_refinery:
-                purity = rec.lab_purity or (rec.lab_purity_id.percentage if rec.lab_purity_id else 0.0)
+                purity = rec.purity_id or (rec.purity_id.percentage if rec.purity_id else 0.0)
                 rec.fine_weight = rec.issued_weight * (purity / 100)
 
     @api.depends('issued_weight', 'stone_weight')
