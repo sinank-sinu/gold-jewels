@@ -32,6 +32,13 @@
                                         (4, ref('purchase.group_purchase_user'))]"/>
     </record>
 
+    <record id="label_user_purchase" model="res.groups">
+        <field name="name">Label User Purchase</field>
+        <field name="category_id" ref="module_category_jewellery_management"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user')),
+                                        (4, ref('purchase.group_purchase_user'))]"/>
+    </record>
+
     <record id="group_jewellery_scheme_staff" model="res.groups">
         <field name="name">Scheme Staff</field>
         <field name="category_id" ref="module_category_jewellery_management"/>

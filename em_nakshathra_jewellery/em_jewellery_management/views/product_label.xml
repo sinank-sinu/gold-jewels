@@ -58,7 +58,6 @@
                         <page name="Details">
                             <group string="Barcode">
                                 <field name="barcode" readonly="active" />
-                                <field name="barcode2" readonly="active" />
                             </group>
                             <group>
                                 <field name="job_work_id"

@@ -111,6 +111,76 @@ class HrPayslip(models.Model):
     payslip_count = fields.Integer(compute='_compute_payslip_count',
                                    string="Payslip Computation Details",
                                    help="Set Payslip Count")
+    job_id = fields.Many2one('hr.job', string='Job Role',
+                             related='employee_id.job_id', store=True, readonly=True)
+    branch_id = fields.Many2one('res.branch', string='Branch',
+                                compute='_compute_branch_id', store=True, readonly=False)
+    worked_days = fields.Float(string='Working Days',
+                               compute='_compute_worked_days', store=True)
+    basic_amount = fields.Float(string='Basic Salary', compute='_compute_payroll_amounts', store=True)
+    gross_amount = fields.Float(string='Gross Salary', compute='_compute_payroll_amounts', store=True)
+    loan_amount = fields.Float(string='Loan Deduction', compute='_compute_payroll_amounts', store=True)
+    advance_amount = fields.Float(string='Salary Advance', compute='_compute_payroll_amounts', store=True)
+    net_amount = fields.Float(string='Net Salary', compute='_compute_payroll_amounts', store=True)
+
+    @api.depends('employee_id', 'employee_id.branch_id', 'company_id')
+    def _compute_branch_id(self):
+        for payslip in self:
+            branch = False
+            emp = payslip.employee_id
+            if emp:
+                if getattr(emp, 'branch_id', False):
+                    branch = emp.branch_id
+                elif getattr(emp, 'essl_location_id', False):
+                    branch = emp.essl_location_id
+            if not branch and payslip.company_id:
+                branch = self.env['res.branch'].search([('company_id', '=', payslip.company_id.id)], limit=1)
+            payslip.branch_id = branch
+
+    @api.depends('worked_days_line_ids', 'worked_days_line_ids.number_of_days')
+    def _compute_worked_days(self):
+        for payslip in self:
+            payslip.worked_days = sum(line.number_of_days for line in payslip.worked_days_line_ids)
+
+    @api.depends('line_ids', 'line_ids.total', 'line_ids.code', 'input_line_ids', 'input_line_ids.amount', 'input_line_ids.code')
+    def _compute_payroll_amounts(self):
+        for payslip in self:
+            basic = 0.0
+            gross = 0.0
+            loan = 0.0
+            advance = 0.0
+            net = 0.0
+            
+            for line in payslip.line_ids:
+                code = (line.code or '').upper()
+                category_code = (line.category_id.code or '').upper() if line.category_id else ''
+                
+                if code == 'BASIC' or category_code == 'BASIC':
+                    basic += line.total
+                elif code == 'GROSS' or category_code == 'GROSS':
+                    gross += line.total
+                elif code in ('LO', 'LOAN', 'LN'):
+                    loan += abs(line.total)
+                elif code in ('SAR', 'ADV', 'SA', 'ADVANCE'):
+                    advance += abs(line.total)
+                elif code == 'NET' or category_code == 'NET':
+                    net += line.total
+            
+            if not loan:
+                for inp in payslip.input_line_ids:
+                    if (inp.code or '').upper() in ('LO', 'LOAN', 'LN'):
+                        loan += abs(inp.amount)
+            if not advance:
+                for inp in payslip.input_line_ids:
+                    if (inp.code or '').upper() in ('SAR', 'ADV', 'SA', 'ADVANCE'):
+                        advance += abs(inp.amount)
+
+            payslip.basic_amount = basic
+            payslip.gross_amount = gross
+            payslip.loan_amount = loan
+            payslip.advance_amount = advance
+            payslip.net_amount = net
+
 
     def _compute_details_by_salary_rule_category_ids(self):
         """Compute function for Salary Rule Category for getting

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_salesman_target_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">salesman.target.transfer.wizard.form</field>
+        <field name="model">salesman.target.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Transfer Salesman &amp; Reassign Target">
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        <strong>Branch Transfer Logic:</strong> The employee's achievements and target in the current branch will be pro-rated based on days worked (<strong>Days Worked / Total Days</strong>). The achieved incentive will be locked and made redeemable. The remaining balance target will be reassigned to the selected replacement.
+                    </div>
+                    <group>
+                        <group string="Current Information">
+                            <field name="target_id" readonly="1"/>
+                            <field name="salesman_id" readonly="1"/>
+                            <field name="branch_id" readonly="1"/>
+                            <field name="date_from" readonly="1"/>
+                            <field name="date_to" readonly="1"/>
+                        </group>
+                        <group string="Transfer Timing">
+                            <field name="transfer_date"/>
+                            <field name="total_days"/>
+                            <field name="days_worked"/>
+                            <field name="days_remaining"/>
+                            <label for="former_ratio" string="Split Distribution"/>
+                            <div class="o_row">
+                                <span>Former: </span><field name="former_ratio" widget="percentage"/>
+                                <span class="ms-3">Balance: </span><field name="balance_ratio" widget="percentage"/>
+                            </div>
+                        </group>
+                    </group>
+
+                    <separator string="1. Replacement in Current Branch (Balance Target)"/>
+                    <group>
+                        <field name="assign_successor"/>
+                        <field name="successor_salesman_id" invisible="not assign_successor" required="assign_successor"/>
+                    </group>
+
+                    <separator string="2. Allocation at Destination Branch"/>
+                    <group>
+                        <field name="destination_mode"/>
+                        <field name="destination_branch_id" invisible="destination_mode != 'create_new'" required="destination_mode == 'create_new'"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_apply_transfer" string="Confirm &amp; Process Transfer" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_salesman_target_transfer_wizard" model="ir.actions.act_window">
+        <field name="name">Transfer Salesman</field>
+        <field name="res_model">salesman.target.transfer.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

@@ -1,0 +1,77 @@
+/* Branch Barcode Scanner Console Styles */
+
+.blv_scanner_console {
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    border: 1px solid #334155;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    transition: all 0.2s ease-in-out;
+}
+
+.blv_laser_dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #10B981;
+}
+
+.pulse-dot {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: blvPulse 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes blvPulse {
+    to {
+        box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+}
+
+.blv_scanner_input {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 2px solid #E2E8F0 !important;
+    font-size: 1.15rem !important;
+    padding: 0.65rem 1rem !important;
+    border-radius: 8px !important;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.blv_scanner_input:focus {
+    border-color: #F59E0B !important;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25) !important;
+    outline: none !important;
+}
+
+.blv_feedback_pill {
+    animation: blvSlideIn 0.2s ease-out;
+    font-size: 1rem;
+}
+
+@keyframes blvSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.blv_feedback_success {
+    background-color: #064E3B;
+    color: #A7F3D0;
+    border: 1px solid #059669;
+}
+
+.blv_feedback_warning {
+    background-color: #78350F;
+    color: #FDE68A;
+    border: 1px solid #D97706;
+}
+
+.blv_feedback_danger {
+    background-color: #7F1D1D;
+    color: #FECACA;
+    border: 1px solid #DC2626;
+}

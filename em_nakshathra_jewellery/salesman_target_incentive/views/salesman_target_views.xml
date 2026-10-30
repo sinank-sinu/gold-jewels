@@ -13,18 +13,28 @@
                     <button name="action_confirm" string="Confirm" type="object"
                             invisible="state != 'draft'"
                             class="oe_highlight"/>
+                    <button name="action_open_transfer_wizard" string="Transfer Salesman"
+                            type="object" class="btn-warning"
+                            invisible="state not in ('draft', 'confirmed')"/>
+                    <button name="action_close_target" string="Close Target"
+                            type="object"
+                            invisible="state not in ('confirmed', 'transferred')"/>
                     <button name="action_mark_paid" string="Mark as Paid" type="object"
-                            invisible="state != 'confirmed'"
+                            invisible="state not in ('confirmed', 'transferred', 'closed')"
                             class="oe_highlight"/>
                     <button name="action_reset_draft" string="Reset to Draft" type="object"
                             invisible="state == 'draft'"/>
                     <button name="action_refresh_achievements" string="↻ Refresh Achievements"
                             type="object" icon="fa-refresh"/>
                     <field name="state" widget="statusbar"
-                           statusbar_visible="draft,confirmed,paid"/>
+                           statusbar_visible="draft,confirmed,transferred,closed,paid"/>
                 </header>
 
                 <sheet>
+                    <div class="alert alert-warning" role="alert" invisible="not is_transferred">
+                        <strong>Employee Transferred:</strong> Transferred on <field name="transfer_date" readonly="1"/> (<field name="working_days" readonly="1"/> of <field name="total_period_days" readonly="1"/> days worked). Target pro-rated and achievements are locked for payslip redemption.
+                    </div>
+
                     <!-- Smart buttons -->
                     <div class="oe_button_box" name="button_box">
                         <button name="action_refresh_achievements" type="object"
@@ -46,7 +56,16 @@
                             <field name="earned_incentive" widget="monetary"
                                    class="oe_stat_value"/>
                             <div class="o_stat_info">
-                                <span class="o_stat_text">Earned Incentive</span>
+                                <span class="o_stat_text">Net Incentive</span>
+                            </div>
+                        </button>
+                        <button name="action_refresh_achievements" type="object"
+                                class="oe_stat_button" icon="fa-minus-circle"
+                                invisible="total_deductions == 0">
+                            <field name="total_deductions" widget="monetary"
+                                   class="oe_stat_value"/>
+                            <div class="o_stat_info">
+                                <span class="o_stat_text text-danger">Return Deductions</span>
                             </div>
                         </button>
                     </div>
@@ -60,26 +79,40 @@
                     <group>
                         <group string="Salesperson">
                             <field name="branch_id"/>
-                            <field name="salesman_id" domain="[('branch_ids', 'in', branch_id), ('share', '=', False)]"/>                            <field name="employee_id" readonly="1"/>
+                            <field name="salesman_id" domain="[('branch_ids', 'in', branch_id), ('share', '=', False)]"/>
+                            <field name="employee_id" readonly="1"/>
+                            <field name="parent_target_id" readonly="1" invisible="not parent_target_id"/>
+                            <field name="is_transferred" invisible="1"/>
                             <field name="currency_id" invisible="1"/>
                         </group>
-                        <group string="Period">
+                        <group string="Period &amp; Tenancy">
                             <field name="date_from"/>
                             <field name="date_to"/>
+                            <field name="working_days" readonly="1"/>
+                            <field name="total_period_days" readonly="1"/>
+                            <field name="transfer_date" readonly="1" invisible="not is_transferred"/>
                             <field name="target_amount"/>
-
                         </group>
                     </group>
 
-                    <group string="Incentive Computation">
+                    <group string="Incentive &amp; Deductions">
                         <group>
                             <field name="inc_18ct" readonly="state != 'draft'"/>
                             <field name="dmd_inc" readonly="state != 'draft'"/>
                             <field name="gold_inc" readonly="state != 'draft'"/>
+                            <field name="incentive_amount" readonly="state != 'draft'"/>
                             <field name="payslip_id"/>
-                            <field name="earned_incentive" readonly="1" widget="monetary"/>
                         </group>
-                        <notebook>
+                        <group>
+                            <field name="gross_incentive" readonly="1" widget="monetary"/>
+                            <field name="total_deductions" readonly="1" widget="monetary"/>
+                            <field name="earned_incentive" readonly="1" widget="monetary" class="text-success fw-bold"/>
+                            <field name="unabsorbed_deduction" readonly="1" widget="monetary"
+                                   invisible="unabsorbed_deduction == 0" class="text-danger"/>
+                        </group>
+                    </group>
+
+                    <notebook>
                         <page string="Individual Metrics">
                             <group>
                                 <group string="Target Weights">
@@ -95,7 +128,6 @@
                                     <field name="achieved_diamond_ct"/>
                                 </group>
                             </group>
-
                         </page>
                         <page string="Branch Overall" groups="base.group_erp_manager">
                             <group>
@@ -113,8 +145,52 @@
                                 </group>
                             </group>
                         </page>
+                        <page string="Return Deductions" invisible="not deduction_ids and total_deductions == 0">
+                            <field name="deduction_ids" readonly="1">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="sale_order_ids" widget="many2many_tags"/>
+                                    <field name="return_date"/>
+                                    <field name="return_amount"/>
+                                    <field name="deduction_amount" sum="Total Deductions"/>
+                                    <field name="state" widget="badge"
+                                           decoration-success="state == 'applied'"
+                                           decoration-warning="state == 'pending'"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Transfer &amp; Succession" invisible="not is_transferred and not parent_target_id and not successor_target_ids">
+                            <group>
+                                <group string="Original Full Targets (Pre-Split)" invisible="not is_transferred">
+                                    <field name="orig_target_amount" readonly="1"/>
+                                    <field name="orig_target_gms_22k" readonly="1"/>
+                                    <field name="orig_target_gms_18ct" readonly="1"/>
+                                    <field name="orig_target_gms_22kt" readonly="1"/>
+                                    <field name="orig_target_diamond_ct" readonly="1"/>
+                                    <field name="orig_incentive_amount" readonly="1"/>
+                                </group>
+                                <group string="Lineage &amp; Successors">
+                                    <field name="parent_target_id" readonly="1" invisible="not parent_target_id"/>
+                                </group>
+                            </group>
+                            <separator string="Successor / Split Targets" invisible="not successor_target_ids"/>
+                            <field name="successor_target_ids" readonly="1">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="salesman_id"/>
+                                    <field name="branch_id"/>
+                                    <field name="date_from"/>
+                                    <field name="date_to"/>
+                                    <field name="target_amount"/>
+                                    <field name="earned_incentive"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="notes" placeholder="Internal notes..."/>
+                        </page>
                     </notebook>
-                    </group>
 
                     <group string="Progress">
                         <group>
@@ -128,12 +204,6 @@
                     <group>
                         <field name="is_achieved" widget="boolean_toggle" readonly="1"/>
                     </group>
-
-                    <notebook>
-                        <page string="Notes">
-                            <field name="notes" placeholder="Internal notes..."/>
-                        </page>
-                    </notebook>
                 </sheet>
 
                 <div class="oe_chatter">
@@ -157,8 +227,10 @@
                 <field name="name"/>
                 <field name="salesman_id"/>
                 <field name="employee_id"/>
+                <field name="branch_id"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
+                <field name="is_transferred" widget="boolean_toggle" optional="show"/>
                 <field name="target_amount" sum="Total Target Amount"/>
                 <field name="target_gms_22k" sum="Total Target 22K GMS"/>
                 <field name="target_gms_18ct" sum="Total Target 18CT GMS"/>
@@ -169,13 +241,15 @@
                 <field name="achieved_gms_22kt" sum="Achieved 22KT GMS"/>
                 <field name="amount_progress" widget="progressbar"/>
                 <field name="gms_progress" widget="progressbar"/>
-                <field name="incentive_amount"/>
-                <field name="earned_incentive" sum="Total Earned Incentive"/>
+                <field name="gross_incentive" sum="Total Gross Incentive" optional="hide"/>
+                <field name="total_deductions" sum="Total Deductions" optional="show"/>
+                <field name="earned_incentive" sum="Total Net Incentive"/>
                 <field name="is_achieved" widget="boolean_toggle"/>
                 <field name="state" widget="badge"
                        decoration-success="state == 'paid'"
                        decoration-info="state == 'confirmed'"
-                       decoration-muted="state == 'draft'"/>
+                       decoration-warning="state == 'transferred'"
+                       decoration-muted="state in ('draft', 'closed')"/>
                 <field name="currency_id" invisible="1"/>
             </tree>
         </field>
@@ -192,18 +266,24 @@
                 <field name="name"/>
                 <field name="salesman_id"/>
                 <field name="employee_id"/>
+                <field name="branch_id"/>
                 <separator/>
                 <filter string="Achieved" name="achieved" domain="[('is_achieved', '=', True)]"/>
                 <filter string="Not Achieved" name="not_achieved" domain="[('is_achieved', '=', False)]"/>
                 <separator/>
                 <filter string="Draft" name="draft" domain="[('state', '=', 'draft')]"/>
                 <filter string="Confirmed" name="confirmed" domain="[('state', '=', 'confirmed')]"/>
+                <filter string="Transferred" name="transferred" domain="[('state', '=', 'transferred')]"/>
+                <filter string="Closed" name="closed" domain="[('state', '=', 'closed')]"/>
                 <filter string="Paid" name="paid" domain="[('state', '=', 'paid')]"/>
+                <separator/>
+                <filter string="Transferred Targets" name="filter_transferred" domain="[('is_transferred', '=', True)]"/>
                 <separator/>
                 <filter string="This Month" name="this_month"
                         domain="[('date_from','&gt;=', (context_today()).strftime('%Y-%m-01'))]"/>
                 <group expand="0" string="Group By">
                     <filter string="Salesman" name="group_salesman" context="{'group_by': 'salesman_id'}"/>
+                    <filter string="Branch" name="group_branch" context="{'group_by': 'branch_id'}"/>
                     <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
                     <filter string="Period Start" name="group_period" context="{'group_by': 'date_from:month'}"/>
                 </group>
@@ -226,7 +306,7 @@
             </p>
             <p>
                 Set a period, target amount, target GMS and a fixed incentive.
-                The system automatically computes achievements from confirmed sale orders.
+                The system automatically computes achievements from confirmed sale orders, handles branch transfers with pro-rata target reassignment, and applies sales return deductions.
             </p>
         </field>
     </record>

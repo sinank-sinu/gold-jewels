@@ -31,7 +31,7 @@
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',
     'website': 'https://www.openhrms.com',
-    'depends': ['hr_contract', 'hr_holidays'],
+    'depends': ['hr_contract', 'hr_holidays', 'multi_branch_base'],
     'data': [
         'security/hr_payroll_security.xml',
         'security/ir.model.access.csv',
@@ -53,6 +53,7 @@
         'views/hr_payslip_line_views.xml',
         'views/hr_employee_views.xml',
         'views/hr_payslip_run_views.xml',
+        'views/hr_payslip_run_report.xml',
         'views/res_config_settings_views.xml',
 
     ],

@@ -71,7 +71,7 @@ class HrPayslip(models.Model):
                     ('employee_id', '=', employee.id),
                     ('salesman_id', '=', employee.user_id.id if employee.user_id else -1),
                     ('salesman_id.name', '=', employee.name),
-                ('state', 'in', ['confirmed', 'paid']),
+                ('state', 'in', ['confirmed', 'transferred', 'closed', 'paid']),
                 ('is_achieved', '=', True),
                 ('payslip_id', 'in', [False, self.id] if hasattr(self, 'id') and self.id else [False]),
                 ('date_from', '<=', date_to),
@@ -128,7 +128,7 @@ class HrPayslip(models.Model):
                         ('employee_id', '=', employee.id),
                         ('salesman_id', '=', employee.user_id.id if employee.user_id else -1),
                         ('salesman_id.name', '=', employee.name),
-                    ('state', 'in', ['confirmed', 'paid']),
+                    ('state', 'in', ['confirmed', 'transferred', 'closed', 'paid']),
                     ('is_achieved', '=', True),
                     ('payslip_id', 'in', [False, payslip.id]),
                     ('date_from', '<=', payslip.date_to),
@@ -171,7 +171,7 @@ class HrPayslip(models.Model):
                     ('employee_id', '=', employee.id),
                     ('salesman_id', '=', employee.user_id.id if employee.user_id else -1),
                     ('salesman_id.name', '=', employee.name),
-                ('state', 'in', ['confirmed', 'paid']),
+                ('state', 'in', ['confirmed', 'transferred', 'closed', 'paid']),
                 ('is_achieved', '=', True),
                 ('payslip_id', 'in', [False, payslip.id]),
                 ('date_from', '<=', payslip.date_to),
@@ -189,32 +189,27 @@ class HrPayslip(models.Model):
 
         return res
 
-    def action_payslip_cancel(self):
+    def _restore_targets(self):
         for payslip in self:
             targets = self.env['salesman.target'].search([('payslip_id', '=', payslip.id)])
-            if targets:
-                targets.write({
+            for target in targets:
+                prev_state = 'transferred' if target.is_transferred else (
+                    'closed' if target.date_to and target.date_to < fields.Date.today() else 'confirmed'
+                )
+                target.write({
                     'payslip_id': False,
                     'payment_date': False,
+                    'state': prev_state,
                 })
+
+    def action_payslip_cancel(self):
+        self._restore_targets()
         return super(HrPayslip, self).action_payslip_cancel()
 
     def action_payslip_draft(self):
-        for payslip in self:
-            targets = self.env['salesman.target'].search([('payslip_id', '=', payslip.id)])
-            if targets:
-                targets.write({
-                    'payslip_id': False,
-                    'payment_date': False,
-                })
+        self._restore_targets()
         return super(HrPayslip, self).action_payslip_draft()
 
     def unlink(self):
-        for payslip in self:
-            targets = self.env['salesman.target'].search([('payslip_id', '=', payslip.id)])
-            if targets:
-                targets.write({
-                    'payslip_id': False,
-                    'payment_date': False,
-                })
+        self._restore_targets()
         return super(HrPayslip, self).unlink()

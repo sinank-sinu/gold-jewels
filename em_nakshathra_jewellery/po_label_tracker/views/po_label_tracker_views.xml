@@ -27,6 +27,35 @@
                         </group>
                     </group>
 
+                    <field name="available_product_template_ids" invisible="1"/>
+
+                    <!-- Search / Filter by Product Template -->
+                    <div class="card border-0 shadow-sm rounded-3 p-3 my-3" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #cbd5e1 !important;">
+                        <div class="row align-items-center g-2">
+                            <div class="col-12 col-md-auto d-flex align-items-center gap-2">
+                                <span class="badge bg-primary text-white p-2 rounded-2">
+                                    <i class="fa fa-search" title="Search"/>
+                                </span>
+                                <span class="fw-bold text-dark" style="font-size: 13px; letter-spacing: 0.02em;">Search Product:</span>
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <field name="product_template_id"
+                                       options="{'no_create': True, 'no_create_edit': True}"
+                                       domain="[('id', 'in', available_product_template_ids)]"
+                                       placeholder="All Products (Select or search product template...)"
+                                       class="w-100"/>
+                            </div>
+                            <div class="col-12 col-md text-md-end">
+                                <span invisible="not product_template_id" class="badge bg-info-subtle text-info border border-info px-3 py-2 rounded-pill fw-medium">
+                                    <i class="fa fa-filter me-1"/> Filtered by Product Template
+                                </span>
+                                <span invisible="product_template_id" class="badge bg-light text-muted border px-3 py-2 rounded-pill fw-normal">
+                                    <i class="fa fa-cubes me-1"/> Showing all products for this PO
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Interactive Metrics Dashboard -->
                     <div class="card border-0 shadow-sm rounded-4 p-3 my-3" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0 !important;">
                         <div class="row g-3">
@@ -116,10 +145,19 @@
                     <!-- Labels Table -->
                     <notebook>
                         <page name="po_labels" string="Labels against PO">
+                            <div class="d-flex justify-content-between align-items-center mb-2 px-1" invisible="not product_template_id">
+                                <span class="text-primary fw-bold small">
+                                    <i class="fa fa-filter me-1"/> Filtered by Product: <field name="product_template_id" readonly="1" class="d-inline fw-bolder"/>
+                                </span>
+                                <span class="text-muted small">
+                                    Showing <field name="total_labels_count" readonly="1" class="d-inline fw-bold"/> label(s)
+                                </span>
+                            </div>
                             <field name="label_ids" mode="tree" readonly="1">
                                 <tree string="PO Product Labels" decoration-muted="not active">
                                     <field name="name" string="Label No"/>
                                     <field name="barcode" string="Barcode"/>
+                                    <field name="product_template_id" string="Product Template"/>
                                     <field name="product_id" string="Product Variant"/>
                                     <field name="purity_id" string="Purity"/>
                                     <field name="sale_gross_weight" string="Weight (g)" digits="[16, 3]" sum="Total Weight"/>
@@ -146,6 +184,7 @@
             <tree string="PO Label Trackers" decoration-info="weight_left_to_label &gt; 0" decoration-success="weight_left_to_label &lt;= 0">
                 <field name="purchase_id" string="Purchase Order"/>
                 <field name="partner_id" string="Vendor"/>
+                <field name="product_template_id" string="Product Template" optional="hide"/>
                 <field name="po_date" string="Order Date"/>
                 <field name="total_weight" string="Total PO Weight (g)" sum="Total PO Weight"/>
                 <field name="total_labelled" string="Labelled Weight (g)" sum="Total Labelled"/>
@@ -167,12 +206,15 @@
             <search string="Search PO Labels">
                 <field name="purchase_id" string="Purchase Order"/>
                 <field name="partner_id" string="Vendor"/>
+                <field name="product_template_id" string="Product Template"
+                       filter_domain="['|', ('product_template_id', '=', self), ('purchase_id.order_line.product_id.product_tmpl_id', '=', self)]"/>
                 <filter name="pending_labels" string="Weight Left to Label" domain="[('weight_left_to_label', '&gt;', 0)]"/>
                 <filter name="fully_labelled" string="Fully Labelled" domain="[('weight_left_to_label', '&lt;=', 0)]"/>
                 <filter name="has_labels" string="Has Labels" domain="[('total_labels_count', '&gt;', 0)]"/>
                 <separator/>
                 <group expand="0" string="Group By">
                     <filter name="group_partner" string="Vendor" context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_product_template" string="Product Template" context="{'group_by': 'product_template_id'}"/>
                     <filter name="group_po_date" string="Order Date" context="{'group_by': 'po_date:month'}"/>
                 </group>
             </search>

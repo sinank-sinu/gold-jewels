@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================== -->
+    <!-- Search View -->
+    <!-- ============================================== -->
+    <record id="view_branch_label_verification_search" model="ir.ui.view">
+        <field name="name">branch.label.verification.search</field>
+        <field name="model">branch.label.verification</field>
+        <field name="arch" type="xml">
+            <search string="Search Label Audits">
+                <field name="name" string="Audit Reference"/>
+                <field name="branch_id"/>
+                <field name="user_id"/>
+                <field name="date"/>
+                <separator/>
+                <filter name="filter_draft" string="Draft" domain="[('state', '=', 'draft')]"/>
+                <filter name="filter_in_progress" string="Verifying" domain="[('state', '=', 'in_progress')]"/>
+                <filter name="filter_done" string="Completed" domain="[('state', '=', 'done')]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
+                    <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
+                    <filter name="group_by_user" string="Auditor" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_by_date" string="Date" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================== -->
+    <!-- Tree View -->
+    <!-- ============================================== -->
+    <record id="view_branch_label_verification_tree" model="ir.ui.view">
+        <field name="name">branch.label.verification.tree</field>
+        <field name="model">branch.label.verification</field>
+        <field name="arch" type="xml">
+            <tree string="Branch Label Audits" decoration-success="state == 'done'" decoration-info="state == 'draft'" decoration-warning="state == 'in_progress'" decoration-muted="state == 'cancel'">
+                <field name="name"/>
+                <field name="branch_id"/>
+                <field name="date"/>
+                <field name="user_id"/>
+                <field name="total_expected_count" string="Expected"/>
+                <field name="verified_count" string="Verified"/>
+                <field name="pending_count" string="Pending"/>
+                <field name="missing_count" string="Missing" decoration-danger="missing_count &gt; 0"/>
+                <field name="extra_count" string="Extra / Mismatch" decoration-warning="extra_count &gt; 0"/>
+                <field name="progress_rate" widget="progressbar"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-success="state == 'done'"
+                       decoration-muted="state == 'cancel'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================== -->
+    <!-- Kanban View -->
+    <!-- ============================================== -->
+    <record id="view_branch_label_verification_kanban" model="ir.ui.view">
+        <field name="name">branch.label.verification.kanban</field>
+        <field name="model">branch.label.verification</field>
+        <field name="arch" type="xml">
+            <kanban class="o_kanban_mobile">
+                <field name="name"/>
+                <field name="branch_id"/>
+                <field name="date"/>
+                <field name="state"/>
+                <field name="total_expected_count"/>
+                <field name="verified_count"/>
+                <field name="missing_count"/>
+                <field name="extra_count"/>
+                <field name="progress_rate"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div class="oe_kanban_global_click p-3 shadow-sm rounded border">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong class="text-primary font-weight-bold"><field name="name"/></strong>
+                                <field name="state" widget="badge"
+                                       decoration-info="state == 'draft'"
+                                       decoration-warning="state == 'in_progress'"
+                                       decoration-success="state == 'done'"
+                                       decoration-muted="state == 'cancel'"/>
+                            </div>
+                            <div class="mb-2">
+                                <span class="badge bg-secondary me-1"><i class="fa fa-building-o me-1" title="Branch"/> <field name="branch_id"/></span>
+                                <span class="text-muted small"><i class="fa fa-calendar me-1" title="Date"/> <field name="date"/></span>
+                            </div>
+                            <div class="my-2">
+                                <field name="progress_rate" widget="progressbar"/>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small mt-2 pt-2 border-top">
+                                <span><i class="fa fa-check text-success me-1" title="Verified"/> <field name="verified_count"/> / <field name="total_expected_count"/></span>
+                                <span t-if="record.missing_count.raw_value &gt; 0" class="text-danger"><i class="fa fa-exclamation-circle me-1" title="Missing"/> <field name="missing_count"/> Missing</span>
+                                <span t-if="record.extra_count.raw_value &gt; 0" class="text-warning"><i class="fa fa-question-circle me-1" title="Extra"/> <field name="extra_count"/> Extra</span>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- ============================================== -->
+    <!-- Form View -->
+    <!-- ============================================== -->
+    <record id="view_branch_label_verification_form" model="ir.ui.view">
+        <field name="name">branch.label.verification.form</field>
+        <field name="model">branch.label.verification</field>
+        <field name="arch" type="xml">
+            <form string="Branch Label Verification &amp; Stock Audit">
+                <header>
+                    <!-- Load Branch Labels -->
+                    <button name="action_load_branch_labels"
+                            string="Load Branch Labels"
+                            type="object"
+                            class="oe_highlight"
+                            icon="fa-refresh"
+                            invisible="state != 'draft'"/>
+
+                    <button name="action_load_branch_labels"
+                            string="Reload Labels"
+                            type="object"
+                            icon="fa-refresh"
+                            confirm="Reloading will reset existing scan lines. Are you sure?"
+                            invisible="state != 'in_progress'"/>
+
+                    <!-- Missing and Complete actions -->
+                    <button name="action_mark_remaining_missing"
+                            string="Mark Pending as Missing"
+                            type="object"
+                            class="btn-outline-danger"
+                            icon="fa-exclamation-triangle"
+                            confirm="Are you sure you want to mark all remaining unverified labels as Missing?"
+                            invisible="state != 'in_progress' or pending_count == 0"/>
+
+                    <button name="action_complete"
+                            string="Complete Verification"
+                            type="object"
+                            class="oe_highlight btn-success"
+                            icon="fa-check-circle"
+                            confirm="Are you sure you want to finalize this audit? Any unverified items will be marked as missing."
+                            invisible="state != 'in_progress'"/>
+
+                    <!-- Reports & Tools -->
+                    <button name="action_export_excel"
+                            string="Export Excel"
+                            type="object"
+                            class="btn-secondary"
+                            icon="fa-file-excel-o"/>
+
+                    <button name="action_reset"
+                            string="Reset Audit Counts"
+                            type="object"
+                            icon="fa-undo"
+                            confirm="This will reset verified counts back to pending and remove extra lines. Proceed?"
+                            invisible="state != 'in_progress'"/>
+
+                    <button name="action_cancel"
+                            string="Cancel"
+                            type="object"
+                            invisible="state in ('done', 'cancel')"/>
+
+                    <button name="action_draft"
+                            string="Set to Draft"
+                            type="object"
+                            invisible="state != 'cancel'"/>
+
+                    <field name="state" widget="statusbar" statusbar_visible="draft,in_progress,done"/>
+                </header>
+                <sheet>
+                    <field name="last_scanned_status" invisible="1"/>
+                    <div class="oe_title mb-3">
+                        <span class="o_form_label text-muted">Branch Label Audit Reference</span>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <!-- Top Metadata Grid -->
+                    <group>
+                        <group>
+                            <field name="branch_id" options="{'no_create': True}" readonly="state != 'draft'"/>
+                            <field name="location_ids" widget="many2many_tags" options="{'no_create': True}" readonly="state != 'draft'"/>
+                            <field name="label_filter" readonly="state != 'draft'"/>
+                        </group>
+                        <group>
+                            <field name="date" readonly="state == 'done'"/>
+                            <field name="user_id" options="{'no_create': True}" readonly="state == 'done'"/>
+                            <field name="company_id" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <!-- KPI Statistics Ribbon Cards -->
+                    <div class="row text-center my-3 g-2">
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm bg-light">
+                                <div class="text-muted small font-weight-bold">EXPECTED</div>
+                                <div class="h4 mb-0 text-dark"><field name="total_expected_count"/></div>
+                                <div class="small text-muted"><field name="total_expected_gross_weight" widget="float"/> g</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm" style="background-color: #ECFDF5; border-color: #A7F3D0 !important;">
+                                <div class="text-success small font-weight-bold">VERIFIED</div>
+                                <div class="h4 mb-0 text-success"><field name="verified_count"/></div>
+                                <div class="small text-muted"><field name="verified_gross_weight" widget="float"/> g</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm" style="background-color: #FFFBEB; border-color: #FDE68A !important;">
+                                <div class="text-warning small font-weight-bold">PENDING</div>
+                                <div class="h4 mb-0 text-warning"><field name="pending_count"/></div>
+                                <div class="small text-muted"><field name="pending_gross_weight" widget="float"/> g</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm" style="background-color: #FEF2F2; border-color: #FECACA !important;">
+                                <div class="text-danger small font-weight-bold">MISSING</div>
+                                <div class="h4 mb-0 text-danger"><field name="missing_count"/></div>
+                                <div class="small text-muted"><field name="missing_gross_weight" widget="float"/> g</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm" style="background-color: #F5F3FF; border-color: #DDD6FE !important;">
+                                <div class="text-primary small font-weight-bold">EXTRA / MISMATCH</div>
+                                <div class="h4 mb-0 text-primary"><field name="extra_count"/></div>
+                                <div class="small text-muted"><field name="extra_gross_weight" widget="float"/> g</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="p-2 border rounded shadow-sm bg-light">
+                                <div class="text-muted small font-weight-bold">PROGRESS</div>
+                                <div class="h4 mb-0 text-info"><field name="progress_rate"/>%</div>
+                                <div class="mt-1"><field name="progress_rate" widget="progressbar"/></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Automatic Barcode Gun Scanner Widget (Instantly Verifies & Beeps on Scan) -->
+                    <widget name="branch_barcode_scanner" invisible="state != 'in_progress'"/>
+
+                    <!-- Notebook Tabs -->
+                    <notebook>
+                        <!-- Tab 1: All Labels -->
+                        <page string="All Labels" name="page_all_lines">
+                            <field name="line_ids" readonly="state == 'done'">
+                                <tree string="All Labels" decoration-success="status == 'verified'" decoration-warning="status == 'pending'" decoration-danger="status == 'missing'" decoration-info="status == 'extra'">
+                                    <field name="status" widget="badge"
+                                           decoration-success="status == 'verified'"
+                                           decoration-warning="status == 'pending'"
+                                           decoration-danger="status == 'missing'"
+                                           decoration-info="status == 'extra'"/>
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="categ_id" optional="show"/>
+                                    <field name="purity_id" optional="show"/>
+                                    <field name="location_id" optional="show"/>
+                                    <field name="sale_gross_weight" sum="Total Gross"/>
+                                    <field name="sale_net_weight" sum="Total Net" optional="show"/>
+                                    <field name="verified_datetime" optional="hide"/>
+                                    <field name="verified_by" optional="hide"/>
+                                    <field name="notes" optional="show"/>
+                                    <!-- One-click Verify / Undo -->
+                                    <button name="action_verify_line"
+                                            string="Verify"
+                                            type="object"
+                                            icon="fa-check text-success"
+                                            invisible="status == 'verified'"/>
+                                    <button name="action_unverify_line"
+                                            string="Undo"
+                                            type="object"
+                                            icon="fa-undo text-muted"
+                                            invisible="status != 'verified'"/>
+                                    <button name="action_view_label"
+                                            string="Open"
+                                            type="object"
+                                            icon="fa-external-link text-primary"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab 2: Pending (Awaiting Scan) -->
+                        <page string="Pending Verification" name="page_pending_lines">
+                            <field name="line_ids" domain="[('status', '=', 'pending')]" readonly="state == 'done'">
+                                <tree string="Pending Labels" decoration-warning="1 == 1">
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="categ_id"/>
+                                    <field name="purity_id"/>
+                                    <field name="location_id"/>
+                                    <field name="sale_gross_weight" sum="Pending Gross Wt"/>
+                                    <field name="sale_net_weight" sum="Pending Net Wt" optional="show"/>
+                                    <button name="action_verify_line"
+                                            string="Verify Now"
+                                            type="object"
+                                            icon="fa-check text-success"
+                                            class="btn-sm btn-outline-success"/>
+                                    <button name="action_view_label"
+                                            string="Open"
+                                            type="object"
+                                            icon="fa-external-link"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab 3: Verified -->
+                        <page string="Verified Labels" name="page_verified_lines">
+                            <field name="line_ids" domain="[('status', '=', 'verified')]" readonly="state == 'done'">
+                                <tree string="Verified Labels" decoration-success="1 == 1">
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="categ_id"/>
+                                    <field name="purity_id"/>
+                                    <field name="location_id"/>
+                                    <field name="sale_gross_weight" sum="Verified Gross Wt"/>
+                                    <field name="sale_net_weight" sum="Verified Net Wt" optional="show"/>
+                                    <field name="verified_datetime"/>
+                                    <field name="verified_by"/>
+                                    <button name="action_unverify_line"
+                                            string="Undo"
+                                            type="object"
+                                            icon="fa-undo text-muted"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab 4: Missing -->
+                        <page string="Missing Labels" name="page_missing_lines">
+                            <field name="line_ids" domain="[('status', '=', 'missing')]" readonly="state == 'done'">
+                                <tree string="Missing Labels" decoration-danger="1 == 1">
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="categ_id"/>
+                                    <field name="location_id"/>
+                                    <field name="sale_gross_weight" sum="Missing Gross Wt"/>
+                                    <field name="sale_net_weight" sum="Missing Net Wt" optional="show"/>
+                                    <field name="notes"/>
+                                    <button name="action_verify_line"
+                                            string="Found &amp; Verify"
+                                            type="object"
+                                            icon="fa-check text-success"
+                                            class="btn-sm btn-outline-success"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab 5: Extra / Foreign Branch -->
+                        <page string="Extra / Mismatch Labels" name="page_extra_lines">
+                            <field name="line_ids" domain="[('status', '=', 'extra')]" readonly="state == 'done'">
+                                <tree string="Extra / Mismatched Labels" decoration-info="1 == 1">
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="branch_id" string="Assigned Branch"/>
+                                    <field name="location_id"/>
+                                    <field name="sale_gross_weight" sum="Extra Gross Wt"/>
+                                    <field name="verified_datetime"/>
+                                    <field name="verified_by"/>
+                                    <field name="notes"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab 6: Audit Notes -->
+                        <page string="Audit Remarks &amp; Notes" name="page_notes">
+                            <field name="notes" placeholder="Enter any notes, discrepancy explanations, or audit observations here..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <!-- Chatter for Audit Trail -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" widget="mail_followers"/>
+                    <field name="activity_ids" widget="mail_activity"/>
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================== -->
+    <!-- Window Action -->
+    <!-- ============================================== -->
+    <record id="action_branch_label_verification" model="ir.actions.act_window">
+        <field name="name">Branch Label Verification</field>
+        <field name="res_model">branch.label.verification</field>
+        <field name="view_mode">tree,kanban,form</field>
+        <field name="context">{'search_default_filter_in_progress': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new Branch Label Verification Audit!
+            </p>
+            <p>
+                This module lets you check how many labels exist in your default branch and verify each label individually via rapid barcode scanning or manual confirmation.
+            </p>
+        </field>
+    </record>
+
+</odoo>

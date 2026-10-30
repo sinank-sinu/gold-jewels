@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="branch_label_verification.BranchBarcodeScanner">
+        <div class="blv_scanner_console p-3 my-3 rounded-3 shadow">
+            
+            <!-- Console Header -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="blv_laser_dot pulse-dot"></span>
+                    <h5 class="mb-0 text-white font-weight-bold tracking-wide">
+                        <i class="fa fa-barcode me-1 text-warning"/> Automatic Barcode Gun Scanner
+                    </h5>
+                    <span class="badge bg-success-subtle text-success border border-success ms-2">
+                        <i class="fa fa-bolt me-1"/> AUTO-VERIFY ACTIVE
+                    </span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                            t-on-click="toggleSound"
+                            t-att-title="state.soundEnabled ? 'Mute Beep' : 'Unmute Beep'">
+                        <i t-attf-class="fa #{state.soundEnabled ? 'fa-volume-up text-warning' : 'fa-volume-off text-muted'}"/>
+                        <span class="small" t-esc="state.soundEnabled ? 'Sound ON' : 'Muted'"/>
+                    </button>
+                    <span t-if="state.totalScannedCount &gt; 0" class="badge bg-primary text-white">
+                        Scanned in session: <t t-esc="state.totalScannedCount"/>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Scanner Input Row -->
+            <div class="row align-items-center g-2">
+                <div class="col-12 col-md-10">
+                    <div class="position-relative">
+                        <input
+                            t-ref="barcodeInput"
+                            type="text"
+                            class="form-control form-control-lg blv_scanner_input font-weight-bold"
+                            placeholder="⚡ Point scanner gun &amp; scan barcode here (verifies automatically)..."
+                            t-att-value="state.barcode"
+                            t-on-input="onInput"
+                            t-on-keydown="onKeyDown"
+                            autocomplete="off"
+                            spellcheck="false"
+                            t-att-disabled="state.isProcessing"
+                        />
+                        <span t-if="state.isProcessing" class="position-absolute end-0 top-50 translate-middle-y me-3 text-warning">
+                            <i class="fa fa-spinner fa-spin fa-lg"/>
+                        </span>
+                    </div>
+                </div>
+                <div class="col-12 col-md-2">
+                    <button
+                        type="button"
+                        class="btn btn-warning btn-lg w-100 font-weight-bold d-flex align-items-center justify-content-center gap-2"
+                        t-on-click="processBarcode"
+                        t-att-disabled="state.isProcessing or !state.barcode"
+                    >
+                        <i class="fa fa-check"/>
+                        <span>Verify</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Instant Audio-Visual Feedback Banner -->
+            <t t-if="state.feedbackMessage">
+                <div t-attf-class="blv_feedback_pill mt-3 p-2 rounded-2 d-flex align-items-center gap-2 #{state.feedbackType == 'success' ? 'blv_feedback_success' : (state.feedbackType == 'warning' ? 'blv_feedback_warning' : 'blv_feedback_danger')}">
+                    <i t-if="state.feedbackType == 'success'" class="fa fa-check-circle fa-lg"/>
+                    <i t-if="state.feedbackType == 'warning'" class="fa fa-exclamation-triangle fa-lg"/>
+                    <i t-if="state.feedbackType == 'danger'" class="fa fa-times-circle fa-lg"/>
+                    <span class="font-weight-bold" t-esc="state.feedbackMessage"/>
+                </div>
+            </t>
+
+        </div>
+    </t>
+
+</templates>

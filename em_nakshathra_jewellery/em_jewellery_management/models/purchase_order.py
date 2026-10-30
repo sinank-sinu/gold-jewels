@@ -299,7 +299,7 @@ class PurchaseOrder(models.Model):
     def _compute_totals(self):
         for order in self:
             order.total_weight = sum(
-                order.order_line.mapped('qty_received')
+                order.order_line.filtered(lambda l: l.product_id.detailed_type == 'product').mapped('qty_received')
             )
 
     @api.depends('label_ids.sale_gross_weight')
@@ -346,7 +346,7 @@ class PurchaseOrder(models.Model):
                 )
                 if invalid_lines:
                     names = ', '.join((invalid_lines.mapped('product_id.display_name') or invalid_lines.mapped('product_template_id.name')))
-                    raise ValidationError(_('Cannot confirm order: Standard purchase order contains Old Gold, Diamond OG, or Expense products (%s). Please remove them first.') % names)
+                    raise ValidationError(_('Cannot confirm order: Standard purchase order contains Old Gold or Diamond OG products (%s). Please remove them first.') % names)
         res = super(PurchaseOrder, self).button_confirm()
         for order in self:
             if order.is_old_gold and not order.sale_id:

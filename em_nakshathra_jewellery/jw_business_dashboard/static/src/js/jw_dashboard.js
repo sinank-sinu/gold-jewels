@@ -103,12 +103,15 @@ class JwBusinessDashboard extends Component {
             invoicedTopProducts: [],
             invoicedTopSalespeople: [],
             schemesKpis: {
+                new_joinee: { count: 0, total_paid: 0.0 },
                 running: { count: 0, total_paid: 0.0 },
                 completed: { count: 0, total_paid: 0.0 },
                 redeemed: { count: 0, total_paid: 0.0 },
                 total: { count: 0, total_paid: 0.0 }
             },
             schemesMonthlyTrend: [],
+            schemesNewJoineesDaily: [],
+            schemesNewJoinees: [],
             schemesRunning: [],
             schemesCompleted: [],
             schemesRedeemed: [],
@@ -222,6 +225,8 @@ class JwBusinessDashboard extends Component {
                 invoicedTopSalespeople: data.invoiced_top_salespeople || [],
                 schemesKpis: data.schemes_kpis || this.state.schemesKpis,
                 schemesMonthlyTrend: data.schemes_monthly_trend || [],
+                schemesNewJoineesDaily: data.schemes_new_joinees_daily || [],
+                schemesNewJoinees: data.schemes_new_joinees || [],
                 schemesRunning: data.schemes_running || [],
                 schemesCompleted: data.schemes_completed || [],
                 schemesRedeemed: data.schemes_redeemed || [],
@@ -1690,49 +1695,106 @@ class JwBusinessDashboard extends Component {
     }
 
     _renderSchemesCharts() {
-        const canvas = this._getCanvas('schemesTrendChart');
-        if (!canvas) return;
-        this._destroyChart('schemesTrendChart');
+        // 1. New Scheme Joinees Bar Chart (Daily / In-Period)
+        const joineesCanvas = this._getCanvas('schemesNewJoineesBarChart');
+        if (joineesCanvas) {
+            this._destroyChart('schemesNewJoineesBarChart');
+            const data = this.state.schemesNewJoineesDaily || [];
+            const labels = data.map(item => item.label);
+            const values = data.map(item => item.value);
 
-        const data = this.state.schemesMonthlyTrend || [];
-        const labels = data.map(item => item.label);
-        const values = data.map(item => item.value);
-
-        this.charts.schemesTrendChart = new window.Chart(canvas, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'New Enrollments Count',
-                    data: values,
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                    borderColor: '#38bdf8',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#38bdf8',
-                    pointBorderColor: '#ffffff',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15,23,42,0.9)',
-                        callbacks: { label: (ctx) => ` Enrollments: ${ctx.raw}` }
-                    }
+            this.charts.schemesNewJoineesBarChart = new window.Chart(joineesCanvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'New Joinees',
+                        data: values,
+                        backgroundColor: 'rgba(6, 182, 212, 0.85)',
+                        borderColor: '#0891b2',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        hoverBackgroundColor: '#22d3ee',
+                    }]
                 },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', stepSize: 1, callback: (val) => Math.floor(val) } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.9)',
+                            callbacks: { label: (ctx) => ` New Joinees: ${ctx.raw}` }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', stepSize: 1, callback: (val) => Math.floor(val) } }
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        // 2. Schemes Status Breakdown (Pie Chart)
+        const pieCanvas = this._getCanvas('schemesPieChart');
+        if (pieCanvas) {
+            this._destroyChart('schemesPieChart');
+            const kpis = this.state.schemesKpis || {};
+            const labels = ['New Scheme Joinees', 'Running Schemes', 'Completed Schemes', 'Redeemed Schemes'];
+            const values = [
+                (kpis.new_joinee && kpis.new_joinee.count) || 0,
+                (kpis.running && kpis.running.count) || 0,
+                (kpis.completed && kpis.completed.count) || 0,
+                (kpis.redeemed && kpis.redeemed.count) || 0,
+            ];
+
+            this.charts.schemesPieChart = new window.Chart(pieCanvas, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: [
+                            '#06b6d4', // Cyan (New Scheme Joinees)
+                            '#ef4444', // Red (Running Schemes)
+                            '#10b981', // Green (Completed Schemes)
+                            '#f97316', // Orange (Redeemed Schemes)
+                        ],
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        hoverOffset: 8,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                padding: 14,
+                                font: { size: 11, family: 'Inter, sans-serif' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.95)',
+                            padding: 10,
+                            callbacks: {
+                                label: (ctx) => {
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                    return ` ${ctx.label}: ${ctx.raw} (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     _renderInvoicedCategoryChart() {
@@ -1889,7 +1951,8 @@ class JwBusinessDashboard extends Component {
             'vendorAmountBarChart': 'Top Vendors by Gross Weight',
             'invoicedMonthlyBarChart': 'Invoiced by Month (Purity-Wise Weight)',
             'invoicedCategoryChart': 'Invoiced by Category (Gross Weight)',
-            'schemesTrendChart': 'Monthly Schemes Enrollment Trend',
+            'schemesNewJoineesBarChart': 'New Scheme Joinees (In Selected Period)',
+            'schemesPieChart': 'Schemes Status Breakdown',
         };
         return titles[this.state.maximizedChartId] || 'Chart';
     }
@@ -2591,41 +2654,86 @@ class JwBusinessDashboard extends Component {
                     }
                 }
             });
-        } else if (chartId === 'schemesTrendChart') {
-            const data = this.state.schemesMonthlyTrend || [];
+        } else if (chartId === 'schemesNewJoineesBarChart') {
+            const data = this.state.schemesNewJoineesDaily || [];
             const labels = data.map(item => item.label);
             const values = data.map(item => item.value);
             this.charts.maximizedChartCanvas = new window.Chart(canvas, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'New Enrollments Count',
+                        label: 'New Joinees',
                         data: values,
-                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                        borderColor: '#38bdf8',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: '#38bdf8',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        backgroundColor: 'rgba(6, 182, 212, 0.85)',
+                        borderColor: '#0891b2',
+                        borderWidth: 1,
+                        borderRadius: 6,
                     }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(15,23,42,0.9)',
-                            callbacks: { label: (ctx) => ` Enrollments: ${ctx.raw}` }
+                            callbacks: { label: (ctx) => ` New Joinees: ${ctx.raw}` }
                         }
                     },
                     scales: {
                         x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                        y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', callback: (val) => Math.floor(val) } }
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', stepSize: 1, callback: (val) => Math.floor(val) } }
+                    }
+                }
+            });
+        } else if (chartId === 'schemesPieChart') {
+            const kpis = this.state.schemesKpis || {};
+            const labels = ['New Scheme Joinees', 'Running Schemes', 'Completed Schemes', 'Redeemed Schemes'];
+            const values = [
+                (kpis.new_joinee && kpis.new_joinee.count) || 0,
+                (kpis.running && kpis.running.count) || 0,
+                (kpis.completed && kpis.completed.count) || 0,
+                (kpis.redeemed && kpis.redeemed.count) || 0,
+            ];
+            this.charts.maximizedChartCanvas = new window.Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ['#06b6d4', '#ef4444', '#10b981', '#f97316'],
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        hoverOffset: 12,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                padding: 20,
+                                font: { size: 14, family: 'Inter, sans-serif' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.95)',
+                            padding: 14,
+                            callbacks: {
+                                label: (ctx) => {
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                    return ` ${ctx.label}: ${ctx.raw} (${pct}%)`;
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -2702,7 +2810,7 @@ class JwBusinessDashboard extends Component {
         if (!id) return;
         this.action.doAction({
             type: 'ir.actions.act_window',
-            res_model: 'hr.expense',
+            res_model: 'purchase.order',
             res_id: id,
             views: [[false, 'form']],
             target: 'current',
@@ -2766,21 +2874,23 @@ class JwBusinessDashboard extends Component {
 
     openSchemeEnrollmentsByState(state) {
         const domain = [];
-        if (state !== 'all') {
+        if (state === 'new_joinee') {
+            if (this.state.resolvedDateFrom) {
+                domain.push(['date_of_joining', '>=', this.state.resolvedDateFrom]);
+            }
+            if (this.state.resolvedDateTo) {
+                domain.push(['date_of_joining', '<=', this.state.resolvedDateTo]);
+            }
+        } else if (state !== 'all') {
             domain.push(['state', '=', state]);
-        }
-        if (this.state.resolvedDateFrom) {
-            domain.push(['date_of_joining', '>=', this.state.resolvedDateFrom]);
-        }
-        if (this.state.resolvedDateTo) {
-            domain.push(['date_of_joining', '<=', this.state.resolvedDateTo]);
         }
         if (this.state.branchId !== 'all') {
             domain.push(['branch_id', '=', parseInt(this.state.branchId)]);
         }
 
         let name = 'Schemes';
-        if (state === 'running') name = 'Running Schemes';
+        if (state === 'new_joinee') name = 'New Scheme Joinees';
+        else if (state === 'running') name = 'Running Schemes';
         else if (state === 'completed') name = 'Completed Schemes';
         else if (state === 'redeemed') name = 'Redeemed Schemes';
 

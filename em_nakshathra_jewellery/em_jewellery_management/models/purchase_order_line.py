@@ -105,19 +105,30 @@ class PurchaseOrderLine(models.Model):
         'product_qty',
         'stone_weight',
         'diamond_weight_gm',
+        'product_id',
+        'product_id.detailed_type',
+        'product_template_id.detailed_type',
     )
     def _compute_net_weight(self):
         for rec in self:
-            rec.net_weight = (
-                    rec.product_qty
-                    - rec.stone_weight
-                    - rec.diamond_weight_gm
-            )
+            is_expense = (rec.product_id and rec.product_id.detailed_type in ('consu', 'service')) or (rec.product_template_id and rec.product_template_id.detailed_type in ('consu', 'service'))
+            if is_expense:
+                rec.net_weight = 0.0
+            else:
+                rec.net_weight = (
+                        rec.product_qty
+                        - rec.stone_weight
+                        - rec.diamond_weight_gm
+                )
 
-    @api.depends('net_weight', 'purity_id')
+    @api.depends('net_weight', 'purity_id', 'product_id', 'product_id.detailed_type', 'product_template_id.detailed_type')
     def _compute_fine_weight(self):
         for rec in self:
-            rec.fine_weight = rec.net_weight * (rec.purity_id.percentage)/100
+            is_expense = (rec.product_id and rec.product_id.detailed_type in ('consu', 'service')) or (rec.product_template_id and rec.product_template_id.detailed_type in ('consu', 'service'))
+            if is_expense or not rec.purity_id:
+                rec.fine_weight = 0.0
+            else:
+                rec.fine_weight = rec.net_weight * (rec.purity_id.percentage)/100
 
     @api.depends('gold_rate', 'fine_weight', 'net_weight', 'order_id.is_sale_return_shop', 'order_id.is_sale_return_po')
     def _compute_metal_amount(self):
@@ -151,10 +162,11 @@ class PurchaseOrderLine(models.Model):
             else:
                 rec.mc_amount = rec.net_weight * rec.gold_rate
 
-    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty', 'price_tax')
+    @api.depends('metal_amount', 'mc_amount', 'diamond_rate', 'stone_rate', 'sale_return_line_id', 'sale_return_line_id.amount', 'order_id.is_purchase_expense', 'price_unit', 'product_qty', 'product_id', 'product_id.detailed_type', 'product_template_id.detailed_type', 'price_tax')
     def _compute_subtotal(self):
         for rec in self:
-            if rec.order_id and rec.order_id.is_purchase_expense:
+            is_expense = (rec.product_id and rec.product_id.detailed_type in ('consu', 'service')) or (rec.product_template_id and rec.product_template_id.detailed_type in ('consu', 'service'))
+            if (rec.order_id and rec.order_id.is_purchase_expense) or is_expense:
                 rec.price_subtotal = (rec.price_unit or 0.0) * (rec.product_qty or 0.0)
             elif rec.sale_return_line_id:
                 rec.price_subtotal = rec.sale_return_line_id.amount
@@ -162,16 +174,18 @@ class PurchaseOrderLine(models.Model):
                 rec.price_subtotal = rec.metal_amount + rec.mc_amount + rec.stone_rate + rec.diamond_rate
             rec.price_total = rec.price_subtotal + (rec.price_tax or 0.0)
 
-    @api.depends('price_subtotal', 'product_qty', 'product_uom_qty', 'order_id.is_purchase_expense')
+    @api.depends('price_subtotal', 'product_qty', 'product_uom_qty', 'order_id.is_purchase_expense', 'product_id', 'product_id.detailed_type', 'product_template_id.detailed_type')
     def _compute_price_unit(self):
         for rec in self:
-            if rec.order_id and rec.order_id.is_purchase_expense:
+            is_expense = (rec.product_id and rec.product_id.detailed_type in ('consu', 'service')) or (rec.product_template_id and rec.product_template_id.detailed_type in ('consu', 'service'))
+            if (rec.order_id and rec.order_id.is_purchase_expense) or is_expense:
                 continue
             rec.price_unit = (rec.price_subtotal / rec.product_qty) if rec.product_qty else 0.0
 
     @api.onchange('product_qty', 'price_unit')
     def _onchange_expense_price_or_qty(self):
-        if self.order_id and self.order_id.is_purchase_expense:
+        is_expense = (self.product_id and self.product_id.detailed_type in ('consu', 'service')) or (self.product_template_id and self.product_template_id.detailed_type in ('consu', 'service'))
+        if (self.order_id and self.order_id.is_purchase_expense) or is_expense:
             self.price_subtotal = (self.price_unit or 0.0) * (self.product_qty or 0.0)
 
     def _prepare_stock_moves(self, picking):
@@ -221,7 +235,8 @@ class PurchaseOrderLine(models.Model):
                     self.price_unit = variant.standard_price or 0.0
                 if not self.product_qty:
                     self.product_qty = 1.0
-                if self.order_id and self.order_id.is_purchase_expense:
+                is_expense = variant.detailed_type in ('consu', 'service')
+                if (self.order_id and self.order_id.is_purchase_expense) or is_expense:
                     self.price_subtotal = (self.price_unit or 0.0) * (self.product_qty or 1.0)
 
     @api.onchange('product_id')

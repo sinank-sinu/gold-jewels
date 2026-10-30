@@ -172,6 +172,44 @@ class SaleOrder(models.Model):
         string='Sale Return Branch Location',
         default=lambda self: self.env.user.branch_id.sr_location_id.id
     )
+    sale_return_amount_rounding = fields.Monetary(
+        string="Round Off",
+        currency_field='currency_id',
+        default=0.0,
+    )
+    sale_return_subtotal = fields.Monetary(
+        string="Sale Return Subtotal",
+        compute='_compute_sale_return_totals',
+        store=True,
+        currency_field='currency_id',
+    )
+    sale_return_total_amount = fields.Monetary(
+        string="Total Return Amount",
+        compute='_compute_sale_return_totals',
+        store=True,
+        currency_field='currency_id',
+    )
+
+    @api.depends('sale_return_line_ids.amount', 'sale_return_amount_rounding', 'sale_return_bill_id.amount_total', 'sale_return_bill_id.state')
+    def _compute_sale_return_totals(self):
+        for order in self:
+            subtotal = sum(order.sale_return_line_ids.mapped('amount'))
+            order.sale_return_subtotal = subtotal
+            if order.sale_return_bill_id and order.sale_return_bill_id.state == 'posted':
+                order.sale_return_total_amount = order.sale_return_bill_id.amount_total
+                if hasattr(order.sale_return_bill_id, 'amount_rounding') and order.sale_return_bill_id.amount_rounding and not order.sale_return_amount_rounding:
+                    order.sale_return_amount_rounding = order.sale_return_bill_id.amount_rounding
+            else:
+                order.sale_return_total_amount = subtotal + (order.sale_return_amount_rounding or 0.0)
+
+    @api.onchange('sale_return_amount_rounding')
+    def _onchange_sale_return_amount_rounding(self):
+        for order in self:
+            subtotal = sum(order.sale_return_line_ids.mapped('amount'))
+            order.sale_return_subtotal = subtotal
+            if not (order.sale_return_bill_id and order.sale_return_bill_id.state == 'posted'):
+                order.sale_return_total_amount = subtotal + (order.sale_return_amount_rounding or 0.0)
+
 
     @api.onchange('branch_id', 'old_gold_line_ids')
     def _onchange_branch_id_locations(self):
@@ -1615,6 +1653,11 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
+            if hasattr(bill, 'amount_rounding'):
+                bill.amount_rounding = self.sale_return_amount_rounding or 0.0
+                if hasattr(bill, '_recompute_cash_rounding_lines'):
+                    bill._recompute_cash_rounding_lines()
+
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_sale_return = True
             bill.action_post()
@@ -1625,7 +1668,7 @@ class SaleOrder(models.Model):
         og_amt = self.old_gold_bill_amount or sum(self.old_gold_line_ids.mapped('amount'))
         vals['old_gold_price'] = og_amt
         vals['unfix'] = self.unfix
-        vals['sale_return_price'] = self.sale_return_bill_amount or sum(self.sale_return_line_ids.mapped('amount'))
+        vals['sale_return_price'] = self.sale_return_bill_amount or self.sale_return_total_amount or (sum(self.sale_return_line_ids.mapped('amount')) + (self.sale_return_amount_rounding or 0.0))
         vals['is_sale_return'] = self.is_sale_return
         return vals
 
@@ -1658,6 +1701,7 @@ class SaleOrder(models.Model):
                 'branch_id': order.branch_id.id,
                 'sale_id': order.id,
                 'is_sale_return_po': True,
+                'amount_rounding': order.sale_return_amount_rounding or 0.0,
             })
 
 
@@ -1727,6 +1771,10 @@ class SaleOrder(models.Model):
             # Create & Post Vendor Bill
             bill_action = po.action_create_invoice()
             bill = AccountMove.browse(bill_action['res_id'])
+            if order.sale_return_amount_rounding:
+                bill.amount_rounding = order.sale_return_amount_rounding
+                if hasattr(bill, '_recompute_cash_rounding_lines'):
+                    bill._recompute_cash_rounding_lines()
             for bill_line in bill.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
                 po_line = bill_line.purchase_line_id
                 if po_line:

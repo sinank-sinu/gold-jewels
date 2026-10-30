@@ -1,13 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- Employee Transfer Module Category (Visible in Settings -> Users -> Access Rights) -->
+    <record id="module_category_employee_transfer" model="ir.module.category">
+        <field name="name">Employee Transfer</field>
+        <field name="description">User access levels for Employee Transfer</field>
+        <field name="sequence">26</field>
+    </record>
+
+    <!-- User Group: can request transfers and view their own transfer records -->
+    <record id="group_employee_transfer_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="category_id" ref="module_category_employee_transfer"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Administrator Group: full access, approve, transfer, create contracts -->
+    <record id="group_employee_transfer_admin" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="category_id" ref="module_category_employee_transfer"/>
+        <field name="implied_ids" eval="[(4, ref('group_employee_transfer_user'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
     <data noupdate="1">
         <!-- Record for Employee Multi company rule -->
         <record id="hr_employee_rule_company" model="ir.rule">
             <field name="name">Employee Multi Company Rule</field>
             <field name="model_id" ref="hr.model_hr_employee"/>
-            <field name="active" eval="True"/>
+            <field name="active" eval="False"/>
             <field name="domain_force">['|',('company_id','=',False),('company_id','child_of',[user.company_id.id])]
             </field>
+        </record>
+        <!-- HR Contract Multi Company Rule: allow reading contracts linked to transfers -->
+        <record id="hr_contract.ir_rule_hr_contract_multi_company" model="ir.rule">
+            <field name="name">HR Contract: Multi Company</field>
+            <field name="model_id" ref="hr_contract.model_hr_contract"/>
+            <field name="domain_force">['|', '|', ('company_id', '=', False), ('company_id', 'in', company_ids), ('emp_transfer', '!=', False)]</field>
+        </record>
+    </data>
+
+    <data noupdate="0">
+        <!-- Transfer User can only see and access their own transfer requests -->
+        <record id="employee_transfer_rule_employee" model="ir.rule">
+            <field name="name">Employee Transfer: Own Records</field>
+            <field name="model_id" ref="model_employee_transfer"/>
+            <field name="domain_force">['|', ('employee_id.user_id', '=', user.id), ('create_uid', '=', user.id)]</field>
+            <field name="groups" eval="[(4, ref('group_employee_transfer_user'))]"/>
+        </record>
+
+        <!-- HR Officers can see transfers for their company or transfer target company -->
+        <record id="employee_transfer_rule_officer" model="ir.rule">
+            <field name="name">Employee Transfer: HR Officer</field>
+            <field name="model_id" ref="model_employee_transfer"/>
+            <field name="domain_force">['|', '|', ('company_id', '=', False), ('company_id', 'in', company_ids), ('transfer_company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[(4, ref('hr.group_hr_user'))]"/>
+        </record>
+
+        <!-- Transfer Administrator has full access across all companies -->
+        <record id="employee_transfer_rule_manager" model="ir.rule">
+            <field name="name">Employee Transfer: Administrator All Records</field>
+            <field name="model_id" ref="model_employee_transfer"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_employee_transfer_admin')), (4, ref('hr.group_hr_manager'))]"/>
+        </record>
+
+        <!-- Allow employees to read all companies for transfer destination selection -->
+        <record id="res_company_rule_employee_transfer" model="ir.rule">
+            <field name="name">Employee Transfer: Read All Companies</field>
+            <field name="model_id" ref="base.model_res_company"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_employee_transfer_user'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
         </record>
     </data>
 </odoo>

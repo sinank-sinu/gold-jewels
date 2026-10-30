@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Branch Label Verification Menu Item under Product Labels App -->
+    <menuitem
+        id="menu_branch_label_verification"
+        name="Branch Label Verification"
+        parent="ornament_label.menu_product_label_app"
+        action="action_branch_label_verification"
+        sequence="36"
+        groups="custom_label_user.group_product_label_user,base.group_user,base.group_system"
+    />
+
+    <!-- Quick Check Branch Labels Menu Item -->
+    <menuitem
+        id="menu_branch_label_checker"
+        name="Check Branch Labels"
+        parent="ornament_label.menu_product_label_app"
+        action="action_branch_label_checker"
+        sequence="37"
+        groups="custom_label_user.group_product_label_user,base.group_user,base.group_system"
+    />
+
+</odoo>
