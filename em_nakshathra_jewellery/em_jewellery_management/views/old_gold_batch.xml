@@ -50,7 +50,7 @@
                         </group>
                         <group>
                             <field name="purity_id"/>
-                            <field name="total_grams"/>
+                            <field name="total_grams" readonly = "1"/>
                             <field name="total_purchase_amount"/>
                         </group>
                         <group string="Links">
