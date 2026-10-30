@@ -54,32 +54,26 @@
 
                     </group>
 
-                    <notebook>
-                        <page name="Details">
-                            <group string="Barcode">
-                                <field name="barcode" readonly="active" />
-                                <field name="barcode2" readonly="active" />
-                            </group>
-                            <group>
-                                <field name="job_work_id"
-                                       domain="[('state', 'in', ['received', 'done']),('job_work_line_ids.product_id','=',product_id)]"/>
-                                <field name="unlabelled_weight_jw"/>
-
-                                <field name="purchase_id"/>
-                                <field name="unlabelled_weight"/>
-
-
-                            </group>
-                            <group string="Diamond Certificate">
-                                <field name="diamond_certificate"
-                                       filename="diamond_certificate_filename"/>
-                                <field name="diamond_certificate_filename"
-                                       invisible="1"/>
-
-                            </group>
-                        </page>
-                        <page name="Sale Details">
-                            <group string="Jewellery Sale Details">
+                    <group string="Details">
+                        <group string="Barcode">
+                            <field name="barcode" readonly="active" />
+                            <field name="barcode2" readonly="active" />
+                        </group>
+                        <group>
+                            <field name="job_work_id"
+                                   domain="[('state', 'in', ['received', 'done']),('job_work_line_ids.product_id','=',product_id)]"/>
+                            <field name="unlabelled_weight_jw"/>
+                            <field name="purchase_id"/>
+                            <field name="unlabelled_weight"/>
+                        </group>
+                        <group string="Diamond Certificate">
+                            <field name="diamond_certificate"
+                                   filename="diamond_certificate_filename"/>
+                            <field name="diamond_certificate_filename"
+                                   invisible="1"/>
+                        </group>
+                    </group>
+                    <group string="Sale Details">
                                 <group>
                                     <!--                                    <field name="sale_purity_id"/>-->
                                     <!--                                    <field name="sale_price_per_gram"/>-->
@@ -111,10 +105,8 @@
                                     <field name="sale_making_charge_min" readonly="active" invisible="sale_making_charge_type == 'amount'"/>
                                     <field name="sale_making_charge_amount" readonly="1" invisible="1"/>
                                 </group>
-                            </group>
-                        </page>
-                        <page name="Purchase Details">
-                            <group string="Jewellery Purchase Details">
+                    </group>
+                    <group string="Purchase Details">
                                 <group>
                                     <!--                                    <field name="purchase_purity_id"/>-->
                                     <field name="purchase_price_per_gram"/>
@@ -147,10 +139,8 @@
                                     <field name="mc_fine"/>
                                     <field name="purchase_making_charge_amount" readonly="1"/>
                                 </group>
-                            </group>
 
-                        </page>
-                    </notebook>
+                    </group>
                 </sheet>
                 <div class="oe_chatter">
                     <field name="message_follower_ids"/>

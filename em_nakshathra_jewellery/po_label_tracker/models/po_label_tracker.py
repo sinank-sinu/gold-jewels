@@ -15,6 +15,16 @@ class PoLabelTracker(models.Model):
         index=True,
         domain="[('state', 'in', ['purchase', 'done'])]",
     )
+    product_template_id = fields.Many2one(
+        'product.template',
+        string="Product Template",
+        domain="[('id', 'in', available_product_template_ids)]",
+    )
+    available_product_template_ids = fields.Many2many(
+        'product.template',
+        compute='_compute_available_product_templates',
+        string="Available Product Templates",
+    )
     name = fields.Char(
         string="PO Reference",
         related='purchase_id.name',
@@ -119,14 +129,40 @@ class PoLabelTracker(models.Model):
         not_activated_count = len(inactive_labels) - sold_count
         return sold_count, not_activated_count
 
+    @api.depends('purchase_id')
+    def _compute_available_product_templates(self):
+        for rec in self:
+            if not rec.purchase_id:
+                rec.available_product_template_ids = [(5, 0, 0)]
+                continue
+            tmpl_ids = set()
+            for line in rec.purchase_id.order_line:
+                if getattr(line, 'product_template_id', False):
+                    tmpl_ids.add(line.product_template_id.id)
+                elif line.product_id and line.product_id.product_tmpl_id:
+                    tmpl_ids.add(line.product_id.product_tmpl_id.id)
+
+            labels = self.env['product.label'].with_context(active_test=False).search([
+                ('purchase_id', '=', rec.purchase_id.id)
+            ])
+            for label in labels:
+                if label.product_template_id:
+                    tmpl_ids.add(label.product_template_id.id)
+                elif label.product_id and label.product_id.product_tmpl_id:
+                    tmpl_ids.add(label.product_id.product_tmpl_id.id)
+
+            rec.available_product_template_ids = [(6, 0, list(tmpl_ids))]
+
     @api.depends(
         'purchase_id',
         'purchase_id.total_weight',
         'purchase_id.order_line.product_qty',
+        'purchase_id.order_line.qty_received',
         'purchase_id.partner_id',
         'purchase_id.label_ids',
         'purchase_id.label_ids.sale_gross_weight',
         'purchase_id.label_ids.active',
+        'product_template_id',
     )
     def _compute_po_weights(self):
         for rec in self:
@@ -143,10 +179,30 @@ class PoLabelTracker(models.Model):
                 continue
 
             po = rec.purchase_id
-            labels = self.env['product.label'].with_context(active_test=False).search([
-                ('purchase_id', '=', po.id)
-            ])
-            total_po_wt = po.total_weight or sum(po.order_line.mapped('product_qty'))
+            domain = [('purchase_id', '=', po.id)]
+            if rec.product_template_id:
+                domain += [
+                    '|',
+                    ('product_template_id', '=', rec.product_template_id.id),
+                    ('product_id.product_tmpl_id', '=', rec.product_template_id.id)
+                ]
+
+            labels = self.env['product.label'].with_context(active_test=False).search(domain)
+
+            if rec.product_template_id:
+                matching_lines = po.order_line.filtered(
+                    lambda l: l.product_id.product_tmpl_id == rec.product_template_id or (getattr(l, 'product_template_id', False) == rec.product_template_id)
+                )
+                po_prod_lines = matching_lines.filtered(lambda l: l.product_id.detailed_type == 'product')
+                if po_prod_lines and any(po_prod_lines.mapped('qty_received')):
+                    total_po_wt = sum(po_prod_lines.mapped('qty_received'))
+                elif matching_lines:
+                    total_po_wt = sum(matching_lines.mapped('product_qty'))
+                else:
+                    total_po_wt = sum(labels.mapped('sale_gross_weight'))
+            else:
+                total_po_wt = po.total_weight or sum(po.order_line.mapped('product_qty'))
+
             labeled_wt = sum(labels.mapped('sale_gross_weight'))
             left_wt = max(0.0, total_po_wt - labeled_wt)
 
@@ -162,40 +218,54 @@ class PoLabelTracker(models.Model):
             rec.not_activated_labels_count = not_activated_count
             rec.fulfillment_pct = min(100.0, round((labeled_wt / total_po_wt * 100.0), 1)) if total_po_wt > 0 else (100.0 if labeled_wt > 0 else 0.0)
 
-    @api.depends('purchase_id')
+    @api.depends('purchase_id', 'product_template_id')
     def _compute_labels(self):
         for rec in self:
             if rec.purchase_id:
-                labels = self.env['product.label'].with_context(active_test=False).search([
-                    ('purchase_id', '=', rec.purchase_id.id)
-                ])
+                domain = [('purchase_id', '=', rec.purchase_id.id)]
+                if rec.product_template_id:
+                    domain += [
+                        '|',
+                        ('product_template_id', '=', rec.product_template_id.id),
+                        ('product_id.product_tmpl_id', '=', rec.product_template_id.id)
+                    ]
+                labels = self.env['product.label'].with_context(active_test=False).search(domain)
                 rec.label_ids = [(6, 0, labels.ids)]
             else:
                 rec.label_ids = [(5, 0, 0)]
 
+    @api.onchange('product_template_id')
+    def _onchange_product_template_id(self):
+        self._compute_labels()
+        self._compute_po_weights()
+
     @api.onchange('purchase_id')
     def _onchange_purchase_id(self):
+        self.product_template_id = False
         if self.purchase_id:
-            labels = self.env['product.label'].with_context(active_test=False).search([
-                ('purchase_id', '=', self.purchase_id.id)
-            ])
-            self.label_ids = [(6, 0, labels.ids)]
-            total_po_wt = self.purchase_id.total_weight or sum(self.purchase_id.order_line.mapped('product_qty'))
-            labeled_wt = sum(labels.mapped('sale_gross_weight'))
-            sold_count, not_activated_count = self._split_inactive_counts(labels)
-
             self.partner_id = self.purchase_id.partner_id.id
-            self.total_weight = total_po_wt
-            self.total_labelled = labeled_wt
-            self.weight_left_to_label = max(0.0, total_po_wt - labeled_wt)
-            self.total_labels_count = len(labels)
-            self.active_labels_count = len(labels.filtered(lambda l: l.active))
-            self.inactive_labels_count = len(labels.filtered(lambda l: not l.active))
-            self.sold_labels_count = sold_count
-            self.not_activated_labels_count = not_activated_count
-            self.fulfillment_pct = min(100.0, round((labeled_wt / total_po_wt * 100.0), 1)) if total_po_wt > 0 else 0.0
+            self.company_id = self.purchase_id.company_id.id
+            self.po_date = self.purchase_id.date_order
+            self.po_state = self.purchase_id.state
+            self._compute_available_product_templates()
+            self._compute_labels()
+            self._compute_po_weights()
+        else:
+            self.partner_id = False
+            self.available_product_template_ids = [(5, 0, 0)]
+            self.label_ids = [(5, 0, 0)]
+            self.total_weight = 0.0
+            self.total_labelled = 0.0
+            self.weight_left_to_label = 0.0
+            self.total_labels_count = 0
+            self.active_labels_count = 0
+            self.inactive_labels_count = 0
+            self.sold_labels_count = 0
+            self.not_activated_labels_count = 0
+            self.fulfillment_pct = 0.0
 
     def action_refresh(self):
+        self._compute_available_product_templates()
         self._compute_po_weights()
         self._compute_labels()
 
@@ -212,16 +282,19 @@ class PoLabelTracker(models.Model):
 
     def action_create_label(self):
         self.ensure_one()
+        context = {
+            'default_purchase_id': self.purchase_id.id,
+            'default_partner_id': self.partner_id.id if self.partner_id else False,
+        }
+        if self.product_template_id:
+            context['default_product_template_id'] = self.product_template_id.id
         return {
             'type': 'ir.actions.act_window',
             'name': _('New Product Label'),
             'res_model': 'product.label',
             'view_mode': 'form',
             'target': 'current',
-            'context': {
-                'default_purchase_id': self.purchase_id.id,
-                'default_partner_id': self.partner_id.id if self.partner_id else False,
-            }
+            'context': context,
         }
 
     @api.model
