@@ -66,5 +66,6 @@
               parent="ornament_label.menu_product_label_app"
               action="action_product_label_search"
               sequence="40"
-              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.label_user_purchase/>
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.label_user_purchase"/>
+
 </odoo>
