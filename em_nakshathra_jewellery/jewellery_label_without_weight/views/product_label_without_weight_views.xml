@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View for Labels Without Weight -->
+    <record id="view_product_label_without_weight_tree" model="ir.ui.view">
+        <field name="name">product.label.without.weight.tree</field>
+        <field name="model">product.label</field>
+        <field name="arch" type="xml">
+            <tree string="Labels Without Weight" decoration-danger="sale_gross_weight &lt;= 0" decoration-warning="active == False" create="1" edit="1">
+                <field name="name" string="Label Ref"/>
+                <field name="barcode"/>
+                <field name="product_tmpl_id" string="Product Template"/>
+                <field name="product_id" string="Variant"/>
+                <field name="branch_id" optional="show"/>
+                <field name="branch_location_id" string="Destination Location" optional="show"/>
+                <field name="source_location_id" string="Source Location" optional="hide"/>
+                <field name="sale_gross_weight" string="Sale Gross (g)" decoration-danger="sale_gross_weight &lt;= 0" decoration-bf="1"/>
+                <field name="sale_net_weight" string="Sale Net (g)" optional="show"/>
+                <field name="purchase_gross_weight" string="Purchase Gross (g)" optional="show" decoration-danger="purchase_gross_weight &lt;= 0"/>
+                <field name="purchase_net_weight" string="Purchase Net (g)" optional="hide"/>
+                <field name="active" string="Active" widget="boolean_toggle" optional="show"/>
+                <field name="create_date" string="Created On" optional="show"/>
+                <field name="create_uid" string="Created By" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_product_label_without_weight_search" model="ir.ui.view">
+        <field name="name">product.label.without.weight.search</field>
+        <field name="model">product.label</field>
+        <field name="arch" type="xml">
+            <search string="Search Labels Without Weight">
+                <field name="name" string="Label Reference"/>
+                <field name="barcode"/>
+                <field name="product_tmpl_id" string="Product"/>
+                <field name="product_id" string="Variant"/>
+                <field name="branch_id"/>
+                <field name="branch_location_id"/>
+
+                <separator/>
+                <filter string="Without Weight" name="filter_without_weight"
+                        domain="['|', '|', ('sale_gross_weight', '=', False), ('sale_gross_weight', '&lt;=', 0), ('purchase_gross_weight', '&lt;=', 0)]"/>
+                <filter string="Active Only" name="filter_active" domain="[('active', '=', True)]"/>
+                <filter string="Inactive / In-Transit" name="filter_inactive" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter string="Has Product Assigned" name="filter_has_product" domain="[('product_id', '!=', False)]"/>
+                <filter string="Missing Product Assigned" name="filter_missing_product" domain="[('product_id', '=', False)]"/>
+
+                <group expand="0" string="Group By">
+                    <filter name="group_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
+                    <filter name="group_product_tmpl" string="Product Template" context="{'group_by': 'product_tmpl_id'}"/>
+                    <filter name="group_location" string="Location" context="{'group_by': 'branch_location_id'}"/>
+                    <filter name="group_active" string="Status (Active/Inactive)" context="{'group_by': 'active'}"/>
+                    <filter name="group_created_by" string="Created By" context="{'group_by': 'create_uid'}"/>
+                    <filter name="group_create_date" string="Creation Month" context="{'group_by': 'create_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_product_label_without_weight" model="ir.actions.act_window">
+        <field name="name">Labels Without Weight</field>
+        <field name="res_model">product.label</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">['|', '|', ('sale_gross_weight', '=', False), ('sale_gross_weight', '&lt;=', 0), ('purchase_gross_weight', '&lt;=', 0)]</field>
+        <field name="context">{'active_test': False, 'search_default_filter_without_weight': 1}</field>
+        <field name="search_view_id" ref="view_product_label_without_weight_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No labels without weight found!
+            </p>
+            <p>
+                All product labels have valid positive gross and net weights assigned.
+            </p>
+        </field>
+    </record>
+
+    <!-- Bind Tree View to Action -->
+    <record id="action_product_label_without_weight_tree_view" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_product_label_without_weight_tree"/>
+        <field name="act_window_id" ref="action_product_label_without_weight"/>
+    </record>
+
+    <!-- Menuitem under Jewellery > Products -->
+    <menuitem id="menu_product_label_without_weight"
+              name="Labels Without Weight"
+              parent="em_jewellery_management.menu_jewellery_products_root"
+              sequence="75"
+              action="action_product_label_without_weight"/>
+
+    <!-- Menuitem under Stock Checks -->
+    <menuitem id="menu_stock_check_label_without_weight"
+              name="Labels Without Weight"
+              parent="jewellery_weekly_stock_check.menu_jewellery_weekly_stock_root"
+              sequence="25"
+              action="action_product_label_without_weight"/>
+</odoo>

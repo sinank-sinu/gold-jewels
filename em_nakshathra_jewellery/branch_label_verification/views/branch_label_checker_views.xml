@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Branch Label Checker Wizard Form -->
+    <record id="view_branch_label_checker_form" model="ir.ui.view">
+        <field name="name">branch.label.checker.form</field>
+        <field name="model">branch.label.checker</field>
+        <field name="arch" type="xml">
+            <form string="Check Branch Labels (Overview)">
+                <sheet>
+                    <div class="oe_title mb-3">
+                        <h2 class="text-primary font-weight-bold">
+                            <i class="fa fa-tags me-2"/> Branch Label Count &amp; Stock Overview
+                        </h2>
+                        <span class="text-muted">Quickly inspect how many labels are in your default branch and review stock weight breakdowns.</span>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="branch_id" options="{'no_create': True}" class="oe_inline font-weight-bold"/>
+                        </group>
+                    </group>
+
+                    <!-- KPI Cards for Branch Labels -->
+                    <div class="row text-center my-3 g-2">
+                        <div class="col-md-4 col-12">
+                            <div class="p-3 border rounded shadow-sm bg-light">
+                                <div class="text-muted small font-weight-bold">TOTAL LABELS IN BRANCH</div>
+                                <div class="h2 mb-0 text-dark font-weight-bold"><field name="total_labels_count"/></div>
+                                <div class="small text-muted">All active &amp; inactive labels</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <div class="p-3 border rounded shadow-sm" style="background-color: #ECFDF5; border-color: #A7F3D0 !important;">
+                                <div class="text-success small font-weight-bold">ACTIVE LABELS (IN STOCK)</div>
+                                <div class="h2 mb-0 text-success font-weight-bold"><field name="active_labels_count"/></div>
+                                <div class="small text-muted"><field name="active_gross_weight" widget="float"/> g Active Weight</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <div class="p-3 border rounded shadow-sm" style="background-color: #FEF2F2; border-color: #FECACA !important;">
+                                <div class="text-danger small font-weight-bold">INACTIVE / SOLD LABELS</div>
+                                <div class="h2 mb-0 text-danger font-weight-bold"><field name="inactive_labels_count"/></div>
+                                <div class="small text-muted">Transferred, Sold, or Archived</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row text-center mb-3 g-2">
+                        <div class="col-md-6 col-12">
+                            <div class="p-2 border rounded shadow-sm bg-light">
+                                <span class="text-muted small">Total Branch Gross Weight: </span>
+                                <strong class="text-dark"><field name="total_gross_weight" widget="float"/> g</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-12">
+                            <div class="p-2 border rounded shadow-sm bg-light">
+                                <span class="text-muted small">Total Branch Net Weight: </span>
+                                <strong class="text-dark"><field name="total_net_weight" widget="float"/> g</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Shortcut Buttons -->
+                    <div class="d-flex gap-2 my-3 p-2 bg-light rounded border justify-content-between align-items-center">
+                        <div>
+                            <span class="font-weight-bold text-dark me-2">Actions:</span>
+                            <button name="action_view_active_labels"
+                                    string="View Active Labels List"
+                                    type="object"
+                                    class="btn-outline-primary btn-sm me-1"
+                                    icon="fa-list"/>
+                            <button name="action_view_all_labels"
+                                    string="View All Labels"
+                                    type="object"
+                                    class="btn-outline-secondary btn-sm"
+                                    icon="fa-tags"/>
+                        </div>
+                        <div>
+                            <button name="action_start_verification"
+                                    string="Start Verification Audit for this Branch"
+                                    type="object"
+                                    class="btn-success btn-sm font-weight-bold"
+                                    icon="fa-check-circle"/>
+                        </div>
+                    </div>
+
+                    <!-- Breakdown Tabs -->
+                    <notebook>
+                        <page string="Breakdown by Location" name="page_loc_breakdown">
+                            <field name="location_summary_ids" readonly="1">
+                                <tree string="Locations">
+                                    <field name="location_id"/>
+                                    <field name="total_count" sum="Total"/>
+                                    <field name="active_count" sum="Active"/>
+                                    <field name="inactive_count" sum="Inactive"/>
+                                    <field name="total_weight" sum="Total Weight (g)"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Breakdown by Product Category" name="page_cat_breakdown">
+                            <field name="category_summary_ids" readonly="1">
+                                <tree string="Categories">
+                                    <field name="categ_id"/>
+                                    <field name="total_count" sum="Total"/>
+                                    <field name="active_count" sum="Active"/>
+                                    <field name="inactive_count" sum="Inactive"/>
+                                    <field name="total_weight" sum="Total Weight (g)"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Window Action for Branch Label Checker -->
+    <record id="action_branch_label_checker" model="ir.actions.act_window">
+        <field name="name">Check Branch Labels</field>
+        <field name="res_model">branch.label.checker</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+
+</odoo>

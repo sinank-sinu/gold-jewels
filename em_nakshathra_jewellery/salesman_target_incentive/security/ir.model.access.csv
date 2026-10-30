@@ -1,3 +1,6 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_salesman_target_user,salesman.target user,model_salesman_target,base.group_user,1,0,0,0
 access_salesman_target_manager,salesman.target manager,model_salesman_target,sales_team.group_sale_manager,1,1,1,1
+access_salesman_incentive_deduction_user,salesman.incentive.deduction user,model_salesman_incentive_deduction,base.group_user,1,0,0,0
+access_salesman_incentive_deduction_manager,salesman.incentive.deduction manager,model_salesman_incentive_deduction,sales_team.group_sale_manager,1,1,1,1
+access_salesman_target_transfer_wizard,salesman.target.transfer.wizard,model_salesman_target_transfer_wizard,sales_team.group_sale_manager,1,1,1,1

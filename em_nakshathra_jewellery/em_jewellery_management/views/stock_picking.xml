@@ -54,6 +54,108 @@
                 <attribute name="sum">Total</attribute>
                 <attribute name="readonly">not is_quantity_done_editable</attribute>
             </xpath>
+            <xpath expr="//notebook/page[@name='operations']" position="inside">
+                <div class="clearfix"/>
+                <div class="o_transfer_analytics_box card border-0 shadow-sm rounded-4 p-3 mt-4" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0 !important; box-shadow: 0 4px 16px rgba(0,0,0,0.04) !important;">
+                    <div class="d-flex align-items-center justify-content-between pb-3 mb-3" style="border-bottom: 1px dashed #cbd5e1;">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary-subtle text-primary" style="width: 32px; height: 32px;">
+                                <i class="fa fa-cubes"/>
+                            </span>
+                            <div>
+                                <span class="fw-bold text-dark text-uppercase small" style="letter-spacing: 0.05em;">Live Transfer Metrics</span>
+                                <span class="badge rounded-pill bg-light text-muted border border-secondary-subtle ms-2 small">All Pages Included</span>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <field name="transfer_fulfillment_status" widget="badge" 
+                                   decoration-success="transfer_fulfillment_status == 'matched'" 
+                                   decoration-warning="transfer_fulfillment_status in ('partial', 'pending')" 
+                                   decoration-danger="transfer_fulfillment_status == 'excess'"/>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Card 1: Total Labels -->
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none" 
+                                 style="border-left: 4px solid #6366f1 !important; transition: transform 0.2s, box-shadow 0.2s;">
+                                <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" 
+                                     style="width: 44px; height: 44px; background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4f46e5;">
+                                    <i class="fa fa-tags fa-lg"/>
+                                </div>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Total Labels</div>
+                                    <div class="fw-bolder fs-4 text-dark lh-1 my-1">
+                                        <field name="total_label_count" readonly="1"/>
+                                    </div>
+                                    <div class="text-muted small" style="font-size: 11px;">Barcoded Lines</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Total Demand -->
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none" 
+                                 style="border-left: 4px solid #0ea5e9 !important; transition: transform 0.2s, box-shadow 0.2s;">
+                                <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" 
+                                     style="width: 44px; height: 44px; background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0284c7;">
+                                    <i class="fa fa-balance-scale fa-lg"/>
+                                </div>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Total Demand</div>
+                                    <div class="fw-bolder fs-4 text-primary lh-1 my-1 d-flex align-items-baseline gap-1">
+                                        <field name="total_demand" readonly="1" digits="[16, 3]"/>
+                                        <span class="fw-bold text-muted" style="font-size: 12px;">GMS</span>
+                                    </div>
+                                    <div class="text-muted small" style="font-size: 11px;">Required Weight</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Total Quantity (Done) -->
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none" 
+                                 style="border-left: 4px solid #10b981 !important; transition: transform 0.2s, box-shadow 0.2s;">
+                                <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" 
+                                     style="width: 44px; height: 44px; background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #059669;">
+                                    <i class="fa fa-check-circle fa-lg"/>
+                                </div>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Total Quantity</div>
+                                    <div class="fw-bolder fs-4 text-success lh-1 my-1 d-flex align-items-baseline gap-1">
+                                        <field name="total_quantity" readonly="1" digits="[16, 3]"/>
+                                        <span class="fw-bold text-muted" style="font-size: 12px;">GMS</span>
+                                    </div>
+                                    <div class="text-muted small" style="font-size: 11px;">Verified &amp; Done</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 4: Fulfillment Progress -->
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-3 bg-white rounded-3 h-100 d-flex align-items-center gap-3 border shadow-none" 
+                                 style="border-left: 4px solid #8b5cf6 !important; transition: transform 0.2s, box-shadow 0.2s;">
+                                <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" 
+                                     style="width: 44px; height: 44px; background: linear-gradient(135deg, #f3e8ff, #e9d5ff); color: #7c3aed;">
+                                    <i class="fa fa-pie-chart fa-lg"/>
+                                </div>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="text-uppercase text-muted fw-bold" style="font-size: 11px; letter-spacing: 0.05em;">Fulfillment Rate</div>
+                                    <div class="fw-bolder fs-4 text-dark lh-1 my-1 d-flex align-items-baseline gap-1">
+                                        <field name="transfer_fulfillment_pct" readonly="1"/>
+                                        <span class="fw-bold text-muted" style="font-size: 13px;">%</span>
+                                    </div>
+                                    <div class="text-muted small" style="font-size: 11px;">
+                                        Diff: <field name="transfer_weight_diff" readonly="1" digits="[16, 3]"/> GMS
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="clearfix"/>
+            </xpath>
         </field>
     </record>
 

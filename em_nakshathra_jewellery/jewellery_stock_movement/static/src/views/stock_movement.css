@@ -1,0 +1,73 @@
+.o_stock_movement_dashboard {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.o_sm_filter_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.o_sm_kpi_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 18px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.o_sm_kpi_card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.o_sm_kpi_icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 20px;
+}
+
+.o_sm_kpi_icon.primary {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+}
+
+.o_sm_kpi_icon.success {
+    background-color: rgba(25, 135, 84, 0.1);
+    color: #198754;
+}
+
+.o_sm_kpi_icon.warning {
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+}
+
+.o_sm_kpi_title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 2px;
+}
+
+.o_sm_kpi_value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #1e293b;
+}
+
+.o_sm_kpi_unit {
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    margin-left: 4px;
+}

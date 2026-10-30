@@ -35,11 +35,12 @@ class HrContract(models.Model):
         'employee.transfer', string='Transferred Employee',
         help="Employee who has been transferred")
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
         """Create a new HR contract record with the provided values."""
-        res = super(HrContract, self).create(vals)
-        if res.emp_transfer:
-            res.emp_transfer.write(
-                {'state': 'done'})
-        return res
+        records = super(HrContract, self).create(vals_list)
+        if not self.env.context.get('skip_transfer_done'):
+            for res in records:
+                if res.emp_transfer:
+                    res.emp_transfer.write({'state': 'done'})
+        return records

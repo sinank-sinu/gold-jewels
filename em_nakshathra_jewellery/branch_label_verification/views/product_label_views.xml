@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_product_label_form_inherit_verification" model="ir.ui.view">
+        <field name="name">product.label.form.inherit.verification</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_form"/>
+        <field name="arch" type="xml">
+            <!-- Add Smart Button -->
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_verification_audits"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-check-square-o"
+                        invisible="not last_verification_id">
+                    <div class="o_stat_info">
+                        <span class="o_stat_text">Verified</span>
+                        <span class="o_stat_value"><field name="last_verification_date" widget="date"/></span>
+                    </div>
+                </button>
+            </xpath>
+
+            <!-- Add Audit Info into Details notebook or group -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Stock Verification" name="page_verification_audit">
+                    <group string="Last Branch Verification Audit">
+                        <group>
+                            <field name="last_verification_id"/>
+                            <field name="last_verification_date"/>
+                            <field name="last_verified_by"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Tree View Inherit to show Last Verified Date -->
+    <record id="view_product_label_tree_inherit_verification" model="ir.ui.view">
+        <field name="name">product.label.tree.inherit.verification</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='branch_location_id']" position="after">
+                <field name="last_verification_date" string="Last Verified" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

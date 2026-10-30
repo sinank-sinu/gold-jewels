@@ -1,0 +1,144 @@
+.o_transfer_analytics_box {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-top: 18px;
+    margin-bottom: 12px;
+
+    .analytics-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 12px;
+        margin-bottom: 14px;
+        border-bottom: 1px dashed rgba(203, 213, 225, 0.8);
+    }
+
+    .analytics-title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #475569;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .stat-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+    }
+
+    .stat-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: default;
+        position: relative;
+        overflow: hidden;
+
+        &:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px -2px rgba(0, 0, 0, 0.08);
+            border-color: #cbd5e1;
+        }
+
+        &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+        }
+
+        &.card-labels::before {
+            background: linear-gradient(180deg, #6366f1, #4f46e5);
+        }
+        &.card-demand::before {
+            background: linear-gradient(180deg, #0ea5e9, #0284c7);
+        }
+        &.card-quantity::before {
+            background: linear-gradient(180deg, #10b981, #059669);
+        }
+        &.card-status::before {
+            background: linear-gradient(180deg, #8b5cf6, #7c3aed);
+        }
+
+        .icon-circle {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+
+            &.icon-purple {
+                background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+                color: #4f46e5;
+            }
+            &.icon-blue {
+                background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+                color: #0284c7;
+            }
+            &.icon-green {
+                background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+                color: #059669;
+            }
+            &.icon-indigo {
+                background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
+                color: #7c3aed;
+            }
+        }
+
+        .stat-details {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex-grow: 1;
+
+            .stat-label {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                color: #64748b;
+                margin-bottom: 2px;
+            }
+
+            .stat-value {
+                font-size: 20px;
+                font-weight: 800;
+                color: #0f172a;
+                line-height: 1.2;
+                display: flex;
+                align-items: baseline;
+                gap: 4px;
+
+                .unit {
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                }
+            }
+
+            .stat-subtext {
+                font-size: 11px;
+                color: #94a3b8;
+                margin-top: 2px;
+            }
+        }
+    }
+}

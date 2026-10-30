@@ -40,7 +40,7 @@
                         class="oe_stat_button"
                         icon="fa-cogs"
                         invisible="not production_id"
-                        groups="base.group_system">
+                        groups="mrp.group_mrp_user,base.group_system">
                     <div class="o_stat_info">
                         <span class="o_stat_text">Manufacturing</span>
                     </div>

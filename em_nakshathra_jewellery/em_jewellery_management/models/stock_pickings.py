@@ -27,9 +27,47 @@ class StockPicking(models.Model):
                "('state', '=', 'done'), ('company_id', '=', company_id), "
                "('id', '!=', id)]",
     )
-    total_label_count = fields.Integer(string="Label Pc", compute="_compute_label_totals", store=True)
-    total_label_weight = fields.Float(string="Total Weight", digits=(16, 2), compute="_compute_label_totals",
-                                      store=True)
+    total_label_count = fields.Integer(
+        string="Total Count of Labels",
+        compute='_compute_transfer_totals',
+        store=True,
+    )
+    total_label_weight = fields.Float(
+        string="Total Weight",
+        digits=(16, 2),
+        compute="_compute_transfer_totals",
+        store=True,
+    )
+    total_demand = fields.Float(
+        string="Total Demand",
+        compute='_compute_transfer_totals',
+        digits=(16, 3),
+        store=True,
+    )
+    total_quantity = fields.Float(
+        string="Total Quantity",
+        compute='_compute_transfer_totals',
+        digits=(16, 3),
+        store=True,
+    )
+    transfer_weight_diff = fields.Float(
+        string="Weight Difference",
+        compute='_compute_transfer_totals',
+        digits=(16, 3),
+        store=True,
+    )
+    transfer_fulfillment_pct = fields.Float(
+        string="Fulfillment %",
+        compute='_compute_transfer_totals',
+        digits=(16, 1),
+        store=True,
+    )
+    transfer_fulfillment_status = fields.Selection([
+        ('matched', 'Fully Matched (100%)'),
+        ('partial', 'Partially Fulfilled'),
+        ('excess', 'Excess Weight'),
+        ('pending', 'Pending Verification'),
+    ], string="Fulfillment Status", compute='_compute_transfer_totals', store=True)
 
     @api.onchange('previous_internal_transfer_id')
     def _onchange_previous_internal_transfer_id(self):
@@ -68,13 +106,41 @@ class StockPicking(models.Model):
                 }))
             picking.move_ids_without_package = move_commands
 
-    @api.depends('move_ids_without_package.pieces', 'move_ids_without_package.label_weight',
-                 'move_ids_without_package.state')
-    def _compute_label_totals(self):
+    @api.depends(
+        'move_ids_without_package.state',
+        'move_ids_without_package.label_id',
+        'move_ids_without_package.product_uom_qty',
+        'move_ids_without_package.quantity',
+        'move_ids_without_package.pieces',
+        'move_ids_without_package.label_weight',
+    )
+    def _compute_transfer_totals(self):
         for picking in self:
             moves = picking.move_ids_without_package.filtered(lambda m: m.state != 'cancel')
-            picking.total_label_count = sum(moves.mapped('pieces'))
+            picking.total_label_count = len(moves.filtered(lambda m: m.label_id)) or sum(moves.mapped('pieces'))
             picking.total_label_weight = round(sum(moves.mapped('label_weight')), 2)
+            tot_demand = sum(moves.mapped('product_uom_qty'))
+            tot_qty = sum(moves.mapped('quantity'))
+            picking.total_demand = tot_demand
+            picking.total_quantity = tot_qty
+            diff = tot_demand - tot_qty
+            picking.transfer_weight_diff = diff
+
+            if tot_demand > 0:
+                pct = round((tot_qty / tot_demand) * 100.0, 1)
+            elif tot_qty > 0:
+                pct = 100.0
+            else:
+                pct = 0.0
+            picking.transfer_fulfillment_pct = min(pct, 100.0)
+
+            rounding = 0.001
+            if float_compare(diff, 0.0, precision_rounding=rounding) == 0:
+                picking.transfer_fulfillment_status = 'matched' if tot_demand > 0 else 'pending'
+            elif diff > 0:
+                picking.transfer_fulfillment_status = 'partial' if tot_qty > 0 else 'pending'
+            else:
+                picking.transfer_fulfillment_status = 'excess'
 
     @api.onchange('is_multiple_transfer', 'location_id', 'location_dest_id')
     def _onchange_is_multiple_transfer(self):

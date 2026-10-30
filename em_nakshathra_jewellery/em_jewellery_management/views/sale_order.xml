@@ -210,6 +210,17 @@
                         <field name="amount" string="Subtotal" readonly="1"/>
                     </tree>
                 </field>
+                <group col="12" class="oe_invoice_lines_tab" invisible="is_sale_return == False">
+                    <group colspan="8"/>
+                    <group colspan="4" class="oe_subtotal_footer oe_right">
+                        <field name="sale_return_subtotal" string="Subtotal" readonly="1" widget="monetary"/>
+                        <field name="sale_return_amount_rounding" string="Round Off" readonly="sale_return_bill_id != False and not is_editing_sale_return"/>
+                        <div class="oe_subtotal_footer_separator oe_inline o_td_label">
+                            <label for="sale_return_total_amount" string="Total Return Amount"/>
+                        </div>
+                        <field name="sale_return_total_amount" nolabel="1" class="oe_subtotal_footer_separator" widget="monetary" readonly="1"/>
+                    </group>
+                </group>
                 <!--                </group>-->
             </xpath>
             <xpath expr="//field[@name='source_id']" position="after">

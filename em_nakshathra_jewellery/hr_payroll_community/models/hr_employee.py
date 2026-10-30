@@ -35,6 +35,7 @@ class HrEmployee(models.Model):
     payslip_count = fields.Integer(compute='_compute_payslip_count',
                                    string='Payslip Count',
                                    help="Set Payslip Count")
+    branch_id = fields.Many2one('res.branch', string='Branch')
 
     def _compute_payslip_count(self):
         """Function for count Payslips"""

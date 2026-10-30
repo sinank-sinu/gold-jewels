@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree / List View with Custom JS Class for Top Controls & Summary Cards -->
+    <record id="view_stock_movement_report_tree" model="ir.ui.view">
+        <field name="name">stock.movement.report.tree</field>
+        <field name="model">stock.movement.report</field>
+        <field name="arch" type="xml">
+            <tree string="Stock Movement" js_class="stock_movement_list" create="0" delete="0" edit="0" expand="0">
+                <field name="product_tmpl_id" invisible="1"/>
+                <field name="product_id" string="Variant / Product"/>
+                <field name="warehouse_id" optional="show"/>
+                <field name="categ_id" optional="show"/>
+                <field name="qty_in" string="Stock In" sum="Total Stock In" decoration-success="qty_in &gt; 0"/>
+                <field name="qty_out" string="Stock Out" sum="Total Stock Out" decoration-danger="qty_out &gt; 0"/>
+                <field name="balance" string="Balance" sum="Total Balance" decoration-bf="1" decoration-info="balance &gt; 0"/>
+                <field name="uom_id" string="UoM"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Pivot View -->
+    <record id="view_stock_movement_report_pivot" model="ir.ui.view">
+        <field name="name">stock.movement.report.pivot</field>
+        <field name="model">stock.movement.report</field>
+        <field name="arch" type="xml">
+            <pivot string="Stock Movement Analysis">
+                <field name="warehouse_id" type="row"/>
+                <field name="product_tmpl_id" type="row"/>
+                <field name="qty_in" type="measure"/>
+                <field name="qty_out" type="measure"/>
+                <field name="balance" type="measure"/>
+                <field name="weight" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_stock_movement_report_search" model="ir.ui.view">
+        <field name="name">stock.movement.report.search</field>
+        <field name="model">stock.movement.report</field>
+        <field name="arch" type="xml">
+            <search string="Search Stock Movement">
+                <field name="product_id" string="Product / Variant"
+                       filter_domain="['|', ('product_id.name', 'ilike', self), ('product_id.default_code', 'ilike', self)]"/>
+                <field name="product_tmpl_id" string="Product Template"/>
+                <field name="warehouse_id"/>
+                <field name="categ_id"/>
+
+                <separator/>
+                <filter name="filter_in_stock" string="In Stock" domain="[('balance', '&gt;', 0)]"/>
+                <filter name="filter_has_movement" string="Has Movement" domain="['|', ('qty_in', '&gt;', 0), ('qty_out', '&gt;', 0)]"/>
+
+                <group expand="1" string="Group By">
+                    <filter name="group_product_tmpl" string="Product" context="{'group_by': 'product_tmpl_id'}"/>
+                    <filter name="group_warehouse" string="Warehouse" context="{'group_by': 'warehouse_id'}"/>
+                    <filter name="group_category" string="Category" context="{'group_by': 'categ_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_stock_movement_report" model="ir.actions.act_window">
+        <field name="name">Stock Movement</field>
+        <field name="res_model">stock.movement.report</field>
+        <field name="view_mode">tree,pivot</field>
+        <field name="domain">[('create_uid', '=', uid)]</field>
+        <field name="search_view_id" ref="view_stock_movement_report_search"/>
+        <field name="context">{'search_default_group_product_tmpl': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No stock movement records found.
+            </p>
+            <p>
+                Select a warehouse or date range from the top bar to analyze product stock movements.
+            </p>
+        </field>
+    </record>
+
+    <!-- Stock Movement Menu Item next to Stock Checks tab -->
+    <menuitem id="menu_jewellery_stock_movement"
+              name="Stock Movement"
+              parent="jewellery_weekly_stock_check.menu_jewellery_weekly_stock_root"
+              action="action_stock_movement_report"
+              groups="jewellery_weekly_stock_check.group_jewellery_stock_counter"
+              sequence="20"/>
+</odoo>

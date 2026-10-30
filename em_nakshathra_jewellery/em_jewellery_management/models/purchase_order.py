@@ -299,7 +299,7 @@ class PurchaseOrder(models.Model):
     def _compute_totals(self):
         for order in self:
             order.total_weight = sum(
-                order.order_line.mapped('qty_received')
+                order.order_line.filtered(lambda l: l.product_id.detailed_type == 'product').mapped('qty_received')
             )
 
     @api.depends('label_ids.sale_gross_weight')

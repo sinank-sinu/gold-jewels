@@ -55,6 +55,7 @@
     'assets': {
         'web.assets_backend': [
             'em_jewellery_management/static/src/js/sale_product_field_patch.js',
+            'em_jewellery_management/static/src/scss/transfer_totals.scss',
         ],
     },
 

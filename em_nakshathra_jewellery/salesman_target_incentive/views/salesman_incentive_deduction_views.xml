@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- FORM VIEW -->
+    <record id="view_salesman_incentive_deduction_form" model="ir.ui.view">
+        <field name="name">salesman.incentive.deduction.form</field>
+        <field name="model">salesman.incentive.deduction</field>
+        <field name="arch" type="xml">
+            <form string="Sales Return Incentive Deduction">
+                <header>
+                    <button name="action_confirm" string="Set to Pending" type="object"
+                            invisible="state != 'draft'" class="oe_highlight"/>
+                    <button name="action_apply" string="Mark as Applied" type="object"
+                            invisible="state != 'pending'" class="oe_highlight"/>
+                    <button name="action_cancel" string="Cancel" type="object"
+                            invisible="state in ('applied', 'cancelled')"/>
+                    <button name="action_reset_draft" string="Reset to Draft" type="object"
+                            invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,pending,applied,cancelled"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Salesperson &amp; Return Info">
+                            <field name="salesman_id" readonly="state == 'applied'"/>
+                            <field name="employee_id" readonly="1"/>
+                            <field name="branch_id" readonly="state == 'applied'"/>
+                            <field name="sale_order_ids" widget="many2many_tags" readonly="state == 'applied'" options="{'no_create': True}"/>
+                            <field name="return_date" readonly="state == 'applied'"/>
+                        </group>
+                        <group string="Deduction Details (Next Month)">
+                            <field name="deduction_amount" widget="monetary" readonly="state == 'applied'"/>
+                            <field name="deduction_month_start" readonly="state == 'applied'"/>
+                            <field name="deduction_month_end" readonly="state == 'applied'"/>
+                            <field name="target_id" readonly="1"/>
+                            <field name="return_amount" widget="monetary" readonly="state == 'applied'"/>
+                            <field name="return_grams" readonly="state == 'applied'"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Notes">
+                            <field name="notes" placeholder="Reason or details of this return clawback..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- LIST VIEW -->
+    <record id="view_salesman_incentive_deduction_list" model="ir.ui.view">
+        <field name="name">salesman.incentive.deduction.list</field>
+        <field name="model">salesman.incentive.deduction</field>
+        <field name="arch" type="xml">
+            <tree string="Sales Return Deductions" decoration-muted="state == 'cancelled'"
+                  decoration-warning="state == 'pending'" decoration-success="state == 'applied'">
+                <field name="name"/>
+                <field name="salesman_id"/>
+                <field name="employee_id"/>
+                <field name="branch_id"/>
+                <field name="sale_order_ids" widget="many2many_tags"/>
+                <field name="return_date"/>
+                <field name="return_amount" sum="Total Return Amount"/>
+                <field name="return_grams" sum="Total Return Grams"/>
+                <field name="deduction_amount" sum="Total Deductions"/>
+                <field name="deduction_month_start"/>
+                <field name="deduction_month_end"/>
+                <field name="target_id"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'applied'"
+                       decoration-warning="state == 'pending'"
+                       decoration-muted="state in ('draft', 'cancelled')"/>
+                <field name="currency_id" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- SEARCH VIEW -->
+    <record id="view_salesman_incentive_deduction_search" model="ir.ui.view">
+        <field name="name">salesman.incentive.deduction.search</field>
+        <field name="model">salesman.incentive.deduction</field>
+        <field name="arch" type="xml">
+            <search string="Search Return Deductions">
+                <field name="name"/>
+                <field name="salesman_id"/>
+                <field name="employee_id"/>
+                <field name="sale_order_ids"/>
+                <separator/>
+                <filter string="Pending Next Month" name="pending" domain="[('state', '=', 'pending')]"/>
+                <filter string="Applied" name="applied" domain="[('state', '=', 'applied')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Salesman" name="group_salesman" context="{'group_by': 'salesman_id'}"/>
+                    <filter string="Branch" name="group_branch" context="{'group_by': 'branch_id'}"/>
+                    <filter string="Deduction Month" name="group_month" context="{'group_by': 'deduction_month_start:month'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ACTION -->
+    <record id="action_salesman_incentive_deduction" model="ir.actions.act_window">
+        <field name="name">Return Deductions</field>
+        <field name="res_model">salesman.incentive.deduction</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_salesman_incentive_deduction_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No return deductions logged yet.
+            </p>
+            <p>
+                When sales returns occur, incentive clawbacks are scheduled here to be automatically deducted from the salesperson's next month incentive.
+            </p>
+        </field>
+    </record>
+
+    <!-- MENU -->
+    <menuitem id="menu_salesman_incentive_deduction"
+              name="Return Deductions (Next Month)"
+              parent="menu_salesman_target_root"
+              action="action_salesman_incentive_deduction"
+              groups="sales_team.group_sale_manager"
+              sequence="20"/>
+
+</odoo>

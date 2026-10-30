@@ -6,21 +6,38 @@
         <field name="model">employee.transfer</field>
         <field name="arch" type="xml">
             <search string="Employee Transfer">
-                <field name="name" string="Employee"
-                       filter_domain="['|','|', ('name','ilike',self), ('name', 'ilike', self), ('employee_id', 'child_of', self)]"/>
+                <field name="name" string="Transfer"
+                       filter_domain="['|', ('name', 'ilike', self), ('employee_id.name', 'ilike', self)]"/>
+                <field name="employee_id"/>
+                <field name="branch_id"/>
+                <field name="transfer_company_id"/>
+                <field name="transfer_branch_id"/>
+                <filter name="my_transfers" string="My Transfers"
+                        domain="[('employee_id.user_id', '=', uid)]"/>
+                <separator/>
                 <filter name="draft" string="Draft"
-                        domain="[('state','=','draft')]"/>
-                <filter name="transfer" string="Transferred"
+                        domain="[('state', '=', 'draft')]"/>
+                <filter name="requested" string="Requested"
+                        domain="[('state', '=', 'requested')]"/>
+                <filter name="transfer" string="Approved"
                         domain="[('state', '=', 'transfer')]"/>
                 <filter name="done" string="Done"
                         domain="[('state', '=', 'done')]"/>
                 <group expand="0" string="Group By">
                     <filter name="employee" string="Employee"
-                            context="{'group_by':'employee_id'}"/>
+                            context="{'group_by': 'employee_id'}"/>
                     <filter name="status" string="Status"
-                            context="{'group_by':'state'}"/>
+                            context="{'group_by': 'state'}"/>
+                    <filter name="company" string="Current Company"
+                            context="{'group_by': 'company_id'}"/>
+                    <filter name="branch" string="Current Branch"
+                            context="{'group_by': 'branch_id'}"/>
+                    <filter name="transfer_company" string="Transfer Company"
+                            context="{'group_by': 'transfer_company_id'}"/>
+                    <filter name="transfer_branch" string="Transfer Branch"
+                            context="{'group_by': 'transfer_branch_id'}"/>
                     <filter name="responsible" string="Responsible Person"
-                            context="{'group_by':'responsible_employee_id'}"/>
+                            context="{'group_by': 'responsible_employee_id'}"/>
                 </group>
             </search>
         </field>
@@ -33,22 +50,62 @@
         <field name="arch" type="xml">
             <form string="Employee Transfer">
                 <header>
-                    <button name="action_transfer" string="Transfer"
+                    <!-- Employee or Administrator submits the request -->
+                    <button name="action_submit_request" string="Submit Request"
                             class="oe_highlight" type="object"
-                            invisible="state != 'draft'"
-                            groups="hr.group_hr_manager"/>
-                    <button name="action_receive_employee" string="Receive"
+                            invisible="state != 'draft'"/>
+
+                    <!-- Administrator creates / populates the contract from existing contract (Only for cross-company transfers) -->
+                    <button name="action_create_contract" string="Create Contract"
                             class="oe_highlight" type="object"
-                            groups="hr.group_hr_manager"
-                            invisible="not transferred or state != 'transfer'"/>
+                            invisible="is_same_company or has_existing_contract or state != 'requested'"
+                            groups="hr_employee_transfer.group_employee_transfer_admin"/>
+
+                    <!-- Administrator approves the request -->
+                    <button name="action_approve" string="Approve"
+                            class="oe_highlight" type="object"
+                            invisible="state != 'requested'"
+                            groups="hr_employee_transfer.group_employee_transfer_admin"/>
+
+                    <!-- Administrator completes the transfer (updates branch or creates cross-company employee & contract) -->
+                    <button name="action_receive_employee" string="Complete Transfer"
+                            class="oe_highlight" type="object"
+                            groups="hr_employee_transfer.group_employee_transfer_admin"
+                            invisible="state != 'transfer'"/>
+
                     <button name="cancel_transfer" string="Cancel"
                             type="object"
-                            invisible="state in ('draft', 'cancel', 'done')"
-                            groups="hr.group_hr_manager"/>
+                            invisible="state in ('cancel', 'done')"/>
+
+                    <button name="action_draft" string="Set to Draft"
+                            type="object"
+                            groups="hr_employee_transfer.group_employee_transfer_admin"
+                            invisible="state != 'cancel'"/>
+
                     <field name="state" widget="statusbar"
-                           statusbar_visible="draft,transfer,done"/>
+                           statusbar_visible="draft,requested,transfer,done"/>
                 </header>
                 <sheet>
+                    <field name="is_same_company" invisible="1"/>
+                    <field name="has_existing_contract" invisible="1"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_contract" type="object"
+                                class="oe_stat_button" icon="fa-book"
+                                groups="hr_employee_transfer.group_employee_transfer_admin"
+                                invisible="is_same_company or not contract_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Contract</span>
+                            </div>
+                        </button>
+                        <button name="action_view_new_employee" type="object"
+                                class="oe_stat_button" icon="fa-user"
+                                groups="hr_employee_transfer.group_employee_transfer_admin"
+                                invisible="is_same_company or not new_employee_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Employee</span>
+                            </div>
+                        </button>
+                    </div>
                     <div class="oe_title oe_left">
                         <h2>
                             <field name="name" class="oe_inline"
@@ -56,31 +113,50 @@
                         </h2>
                     </div>
                     <group>
-                        <group>
+                        <group string="Current Information">
+                            <field name="is_hr_manager" invisible="1"/>
                             <field name="employee_id"
                                    options="{'no_create': True}"
-                                   readonly="state != 'draft'"/>
-                            <field name="transfer_date" readonly="state != 'draft'"/>
-                            <field name="transferred" invisible="1"/>
-                            <field name="transfer_company_id"
-                                   groups="base.group_multi_company"
-                                   options="{'no_create': True}"
-                                   readonly="state != 'draft'"/>
-                        </group>
-                        <group>
-                            <field name="company_id"
-                                   groups="base.group_multi_company"
+                                   readonly="not is_hr_manager or state != 'draft'"/>
+                            <field name="company_id" readonly="1" force_save="1"
                                    options="{'no_create': True}"/>
+                            <field name="branch_id" readonly="1" force_save="1"
+                                   options="{'no_create': True}"/>
+                            <field name="transfer_date" readonly="state not in ('draft', 'requested')"/>
+                        </group>
+                        <group string="Transfer Information">
+                            <field name="transfer_company_id"
+                                   options="{'no_create': True}"
+                                   readonly="state not in ('draft', 'requested')"/>
+                            <field name="transfer_branch_id"
+                                   options="{'no_create': True}"
+                                   readonly="state not in ('draft', 'requested')"/>
                             <field name="responsible_employee_id"
                                    options="{'no_create': True}"/>
                         </group>
                     </group>
+                    <group string="Transfer Outcome" invisible="is_same_company or (state != 'done' and not new_employee_id and not contract_id)">
+                        <group>
+                            <field name="old_employee_id" readonly="1" invisible="not old_employee_id"/>
+                            <field name="new_employee_id" readonly="1" invisible="not new_employee_id"/>
+                        </group>
+                        <group>
+                            <field name="contract_id" readonly="1" invisible="not contract_id"/>
+                        </group>
+                    </group>
                     <notebook colspan="4">
-                        <page string="Internal Notes">
-                            <field name="note"/>
+                        <page string="Reason / Notes">
+                            <field name="note"
+                                   readonly="state in ('done', 'cancel')"
+                                   placeholder="Specify reasons or notes for the transfer request..."/>
                         </page>
                     </notebook>
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record>
@@ -91,38 +167,67 @@
         <field name="model">employee.transfer</field>
         <field name="arch" type="xml">
             <tree string="Employee Transfer" decoration-info="state == 'draft'"
-                  decoration-muted="state in ('done','cancel')">
+                  decoration-warning="state == 'requested'"
+                  decoration-primary="state == 'transfer'"
+                  decoration-success="state == 'done'"
+                  decoration-muted="state == 'cancel'">
                 <field name="name"/>
                 <field name="employee_id"/>
+                <field name="company_id"/>
+                <field name="branch_id"/>
+                <field name="transfer_company_id"/>
+                <field name="transfer_branch_id"/>
                 <field name="transfer_date"/>
-                <field name="transfer_company_id"
-                       groups="base.group_multi_company"/>
-                <field name="company_id" groups="base.group_multi_company"/>
-                <field name="state"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'requested'"
+                       decoration-primary="state == 'transfer'"
+                       decoration-success="state == 'done'"
+                       decoration-muted="state == 'cancel'"/>
             </tree>
         </field>
     </record>
 
     <!-- Employee Transfer Action -->
     <record id="employee_transfer_action" model="ir.actions.act_window">
-        <field name="name">Transfer</field>
-        <field name="type">ir.actions.act_window</field>
+        <field name="name">Transfers</field>
         <field name="res_model">employee.transfer</field>
         <field name="view_mode">tree,form</field>
-        <field name="view_id" eval="False"/>
-        <field name="domain">[]</field>
+        <field name="context">{}</field>
         <field name="help" type="html">
-            <p class="oe_view_nocontent_create">
-                Create a new Employee Transfer.
+            <p class="o_view_nocontent_smiling_face">
+                Request an Employee Transfer!
+            </p>
+            <p>
+                Employees can submit a transfer request to another branch or company.
+                Administrators can review, approve, and execute the transfer.
             </p>
         </field>
     </record>
 
-    <!-- Employee Transfer Menu -->
+    <!-- Top-level Root App Menu (App Icon on Home Screen for all employees) -->
+    <menuitem id="employee_transfer_menu_root"
+              name="Transfers"
+              web_icon="hr_employee_transfer,static/description/icon.png"
+              sequence="30"
+              groups="hr_employee_transfer.group_employee_transfer_user"/>
+
+    <!-- Sub-menu inside the Transfers App -->
+    <menuitem id="employee_transfer_menu_main"
+              name="Transfers"
+              parent="employee_transfer_menu_root"
+              sequence="10"/>
+
+    <menuitem id="employee_transfer_menu_requests"
+              name="Transfers"
+              parent="employee_transfer_menu_main"
+              action="employee_transfer_action"
+              sequence="10"/>
+
+    <!-- Also keep menu item inside Employees app for HR convenience -->
     <menuitem id="employee_transfer_menu_create_transfer"
               name="Transfers"
-              sequence="10"
+              parent="hr.menu_hr_root"
               action="employee_transfer_action"
-              groups="hr.group_hr_manager"
-              web_icon="hr_employee_transfer,static/description/transfer_icon.png"/>
+              sequence="30"/>
 </odoo>

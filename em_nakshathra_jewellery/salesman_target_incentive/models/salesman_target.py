@@ -1,5 +1,7 @@
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
+from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 
 
 class SalesmanTarget(models.Model):
@@ -33,6 +35,7 @@ class SalesmanTarget(models.Model):
         'res.branch',
         string='Branch',
         required=True,
+        default=lambda self: self.env.user.branch_id or (self.env.user.branch_ids[:1] if self.env.user.branch_ids else False),
     )
     branch_salesman_count = fields.Integer(
         string='Branch Salesmen Count',
@@ -205,8 +208,109 @@ class SalesmanTarget(models.Model):
     state = fields.Selection([
         ('draft', 'Draft'),
         ('confirmed', 'Confirmed'),
+        ('transferred', 'Transferred / Redeemed'),
+        ('closed', 'Closed'),
         ('paid', 'Paid'),
-    ], default='draft')
+    ], default='draft', tracking=True)
+
+    # Transfer Tracking Fields
+    is_transferred = fields.Boolean(
+        string='Is Transferred',
+        default=False,
+        readonly=True,
+        copy=False,
+        help="Indicates if the target period was closed early due to a branch transfer."
+    )
+    transfer_date = fields.Date(
+        string='Transfer Date',
+        readonly=True,
+        copy=False,
+    )
+    working_days = fields.Integer(
+        string='Working Days',
+        compute='_compute_period_days',
+        store=True,
+    )
+    total_period_days = fields.Integer(
+        string='Total Period Days',
+        compute='_compute_period_days',
+        store=True,
+    )
+    parent_target_id = fields.Many2one(
+        'salesman.target',
+        string='Predecessor Target',
+        readonly=True,
+        copy=False,
+        help="The original target from which this balance/successor target was created."
+    )
+    successor_target_ids = fields.One2many(
+        'salesman.target',
+        'parent_target_id',
+        string='Successor / Split Targets',
+        readonly=True,
+    )
+    orig_target_amount = fields.Monetary(
+        string='Original Target Amount',
+        currency_field='currency_id',
+        readonly=True,
+        copy=False,
+    )
+    orig_target_gms_22k = fields.Float(
+        string='Original Target 22K (GMS)',
+        digits=(16, 3),
+        readonly=True,
+        copy=False,
+    )
+    orig_target_gms_18ct = fields.Float(
+        string='Original Target 18CT (GMS)',
+        digits=(16, 3),
+        readonly=True,
+        copy=False,
+    )
+    orig_target_gms_22kt = fields.Float(
+        string='Original Target 22KT (GMS)',
+        digits=(16, 3),
+        readonly=True,
+        copy=False,
+    )
+    orig_target_diamond_ct = fields.Float(
+        string='Original Target 18 KTD (GMS)',
+        digits=(16, 3),
+        readonly=True,
+        copy=False,
+    )
+    orig_incentive_amount = fields.Monetary(
+        string='Original Fixed Incentive',
+        currency_field='currency_id',
+        readonly=True,
+        copy=False,
+    )
+
+    # Return Deductions Fields
+    deduction_ids = fields.One2many(
+        'salesman.incentive.deduction',
+        'target_id',
+        string='Return Deductions',
+    )
+    total_deductions = fields.Monetary(
+        string='Total Deductions',
+        currency_field='currency_id',
+        compute='_compute_deductions',
+        store=True,
+    )
+    gross_incentive = fields.Monetary(
+        string='Gross Incentive',
+        currency_field='currency_id',
+        compute='_compute_achievements',
+        store=True,
+    )
+    unabsorbed_deduction = fields.Monetary(
+        string='Unabsorbed Deduction',
+        currency_field='currency_id',
+        compute='_compute_achievements',
+        store=True,
+        help="Amount of deduction exceeding earned incentive to roll forward to the next month."
+    )
 
     payslip_id = fields.Many2one(
         'hr.payslip',
@@ -253,6 +357,43 @@ class SalesmanTarget(models.Model):
     incentive_add = fields.Float(string='Computed Incentive ',compute='_incentive_add', store=True)
 
     # EMPLOYEE
+    @api.depends('date_from', 'date_to', 'is_transferred', 'transfer_date')
+    def _compute_period_days(self):
+        for rec in self:
+            if rec.date_from and rec.date_to and rec.date_to >= rec.date_from:
+                rec.total_period_days = (rec.date_to - rec.date_from).days + 1
+            else:
+                rec.total_period_days = 0
+
+            if rec.is_transferred and rec.transfer_date and rec.date_from:
+                rec.working_days = max(0, (rec.transfer_date - rec.date_from).days + 1)
+            else:
+                rec.working_days = rec.total_period_days
+
+    @api.depends('salesman_id', 'date_from', 'date_to')
+    def _compute_deductions(self):
+        Deduction = self.env['salesman.incentive.deduction']
+        for rec in self:
+            if not rec.salesman_id or not rec.date_from or not rec.date_to:
+                rec.total_deductions = 0.0
+                continue
+
+            deductions = Deduction.search([
+                ('salesman_id', '=', rec.salesman_id.id),
+                ('state', 'in', ['pending', 'applied']),
+                '|',
+                ('target_id', '=', rec.id),
+                ('target_id', '=', False),
+            ])
+            rec_deductions = deductions.filtered(
+                lambda d: d.target_id == rec or (
+                    not d.target_id
+                    and d.deduction_month_start <= rec.date_to
+                    and d.deduction_month_end >= rec.date_from
+                )
+            )
+            rec.total_deductions = sum(rec_deductions.mapped('deduction_amount'))
+
     @api.depends('salesman_id')
     def _compute_employee_id(self):
         for rec in self:
@@ -289,9 +430,10 @@ class SalesmanTarget(models.Model):
                 rec.target_diamond_ct = rec.branch_target_diamond_ct / count
 
     @api.onchange('branch_id')
-    def _onchange_fetch_branch_targets(self):
+    def _onchange_branch_id(self):
         for rec in self:
             if rec.branch_id:
+                # 1. Fetch branch targets from existing record if any
                 existing = self.env['salesman.target'].search([
                     ('branch_id', '=', rec.branch_id.id),
                     ('id', '!=', rec._origin.id if rec._origin else False)
@@ -307,6 +449,23 @@ class SalesmanTarget(models.Model):
                     rec.date_from = existing.date_from
                     rec.date_to = existing.date_to
 
+                # Reset salesman if not belonging to newly selected branch
+                if rec.salesman_id and rec.branch_id not in rec.salesman_id.branch_ids:
+                    rec.salesman_id = False
+
+                return {
+                    'domain': {
+                        'salesman_id': [('branch_ids', 'in', rec.branch_id.id), ('share', '=', False)]
+                    }
+                }
+            else:
+                rec.salesman_id = False
+                return {
+                    'domain': {
+                        'salesman_id': [('id', '=', False)]
+                    }
+                }
+
     def action_view_branch_salesmen(self):
         self.ensure_one()
         return {
@@ -317,6 +476,47 @@ class SalesmanTarget(models.Model):
             'domain': [('branch_ids', 'in', self.branch_id.id), ('share', '=', False)],
             'context': {'default_branch_id': self.branch_id.id},
         }
+
+    def init(self):
+        super().init()
+        try:
+            self.env.cr.execute('''
+                INSERT INTO res_branch_res_users_rel (res_branch_id, res_users_id)
+                SELECT DISTINCT so.branch_id, so.user_id
+                FROM sale_order so
+                WHERE so.branch_id IS NOT NULL 
+                  AND so.user_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM res_branch_res_users_rel r
+                      WHERE r.res_branch_id = so.branch_id AND r.res_users_id = so.user_id
+                  )
+            ''')
+            self.env.cr.execute('''
+                INSERT INTO res_branch_res_users_rel (res_branch_id, res_users_id)
+                SELECT DISTINCT so.branch_id, sol.salesman_id
+                FROM sale_order_line sol
+                JOIN sale_order so ON sol.order_id = so.id
+                WHERE so.branch_id IS NOT NULL 
+                  AND sol.salesman_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM res_branch_res_users_rel r
+                      WHERE r.res_branch_id = so.branch_id AND r.res_users_id = sol.salesman_id
+                  )
+            ''')
+            self.env.cr.execute('''
+                UPDATE res_users u
+                SET branch_id = (
+                    SELECT res_branch_id FROM res_branch_res_users_rel r
+                    WHERE r.res_users_id = u.id
+                    ORDER BY res_branch_id LIMIT 1
+                )
+                WHERE u.branch_id IS NULL 
+                  AND EXISTS (
+                      SELECT 1 FROM res_branch_res_users_rel r WHERE r.res_users_id = u.id
+                  )
+            ''')
+        except Exception:
+            pass
 
     # ACHIEVEMENTS
     @api.depends(
@@ -508,11 +708,19 @@ class SalesmanTarget(models.Model):
 
             rec.is_achieved = personal_target_hit
 
-            rec.earned_incentive = (
-                rec.incentive_add
+            gross = (
+                rec.incentive_add + (rec.incentive_amount or 0.0)
                 if personal_target_hit
                 else 0.0
             )
+            rec.gross_incentive = gross
+            deductions = rec.total_deductions or 0.0
+            if personal_target_hit:
+                rec.earned_incentive = max(0.0, gross - deductions)
+                rec.unabsorbed_deduction = max(0.0, deductions - gross)
+            else:
+                rec.earned_incentive = 0.0
+                rec.unabsorbed_deduction = deductions
 
             # WRITE
             rec.achieved_amount = achieved_amount
@@ -552,7 +760,7 @@ class SalesmanTarget(models.Model):
             total_22kt += rec.target_gms_22kt
             total_diamond_ct += rec.target_diamond_ct
 
-            if total_22k > rec.branch_target_gms_22k:
+            if rec.branch_target_gms_22k and total_22k > rec.branch_target_gms_22k:
                 raise ValidationError(_(
                     'Total 22K target exceeds Branch Target.\n'
                     'Allowed: %s\n'
@@ -562,7 +770,7 @@ class SalesmanTarget(models.Model):
                     total_22k
                 ))
 
-            if total_18ct > rec.branch_target_gms_18ct:
+            if rec.branch_target_gms_18ct and total_18ct > rec.branch_target_gms_18ct:
                 raise ValidationError(_(
                     'Total 18CT target exceeds Branch Target.\n'
                     'Allowed: %s\n'
@@ -572,7 +780,7 @@ class SalesmanTarget(models.Model):
                     total_18ct
                 ))
 
-            if total_22kt > rec.branch_target_gms_22kt:
+            if rec.branch_target_gms_22kt and total_22kt > rec.branch_target_gms_22kt:
                 raise ValidationError(_(
                     'Total 22KT target exceeds Branch Target.\n'
                     'Allowed: %s\n'
@@ -582,7 +790,7 @@ class SalesmanTarget(models.Model):
                     total_22kt
                 ))
 
-            if total_diamond_ct > rec.branch_target_diamond_ct:
+            if rec.branch_target_diamond_ct and total_diamond_ct > rec.branch_target_diamond_ct:
                 raise ValidationError(_(
                     'Total Diamond CT target exceeds Branch Target.\n'
                     'Allowed: %s\n'
@@ -654,10 +862,80 @@ class SalesmanTarget(models.Model):
                     'Salesman target not achieved.'
                 ))
             rec.state = 'paid'
+            # Mark linked deductions as applied
+            for ded in rec.deduction_ids:
+                if ded.state == 'pending':
+                    ded.state = 'applied'
 
     def action_reset_draft(self):
         for rec in self:
             rec.state = 'draft'
+
+    def action_close_target(self):
+        for rec in self:
+            rec._compute_achievements()
+            rec._incentive_add()
+            rec.state = 'closed'
+
+    def action_open_transfer_wizard(self):
+        self.ensure_one()
+        if self.state not in ['confirmed', 'draft']:
+            raise ValidationError(_('You can only transfer an employee with a Draft or Confirmed target.'))
+        return {
+            'name': _('Transfer Employee & Reassign Target'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'salesman.target.transfer.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_target_id': self.id,
+                'default_transfer_date': fields.Date.today(),
+            }
+        }
+
+    @api.model
+    def cron_auto_close_targets(self):
+        """Automatically close expired confirmed/transferred targets and apply deductions."""
+        today = fields.Date.today()
+        expired_targets = self.search([
+            ('date_to', '<', today),
+            ('state', 'in', ['confirmed', 'transferred']),
+        ])
+        for target in expired_targets:
+            target._compute_achievements()
+            target._incentive_add()
+            target.write({'state': 'closed'})
+
+            # Associate pending deductions matching this target period
+            matching_deductions = self.env['salesman.incentive.deduction'].search([
+                ('salesman_id', '=', target.salesman_id.id),
+                ('state', '=', 'pending'),
+                ('deduction_month_start', '<=', target.date_to),
+                ('deduction_month_end', '>=', target.date_from),
+            ])
+            for ded in matching_deductions:
+                ded.write({
+                    'target_id': target.id,
+                    'state': 'applied',
+                })
+
+            # Roll forward unabsorbed deduction if any
+            if target.unabsorbed_deduction > 0:
+                next_month_start = (target.date_to + relativedelta(days=1)).replace(day=1)
+                next_month_end = next_month_start + relativedelta(months=1, days=-1)
+                self.env['salesman.incentive.deduction'].create({
+                    'salesman_id': target.salesman_id.id,
+                    'branch_id': target.branch_id.id,
+                    'deduction_amount': target.unabsorbed_deduction,
+                    'deduction_month_start': next_month_start,
+                    'deduction_month_end': next_month_end,
+                    'notes': _('Unabsorbed return deduction rolled forward from period %s to %s (Target %s)') % (
+                        target.date_from, target.date_to, target.name
+                    ),
+                    'state': 'pending',
+                })
+
+            target.message_post(body=_("Target period ended on %s. Automatically closed via scheduled cron.") % target.date_to)
 
     def action_refresh_achievements(self):
         """Manual refresh button to recompute achievements."""
@@ -719,7 +997,13 @@ class SalesmanTarget(models.Model):
             rec.mc_amount_22kt = mc_22kt
 
             if rec.is_achieved:
-                rec.earned_incentive = total_additional + (rec.incentive_amount or 0.0)
+                gross = total_additional + (rec.incentive_amount or 0.0)
+                rec.gross_incentive = gross
+                deductions = rec.total_deductions or 0.0
+                rec.earned_incentive = max(0.0, gross - deductions)
+                rec.unabsorbed_deduction = max(0.0, deductions - gross)
             else:
+                rec.gross_incentive = 0.0
                 rec.earned_incentive = 0.0
+                rec.unabsorbed_deduction = rec.total_deductions or 0.0
 

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_payslip_run" model="ir.actions.report">
+        <field name="name">Payslip Batch Summary</field>
+        <field name="model">hr.payslip.run</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">hr_payroll_community.report_payslip_run</field>
+        <field name="report_file">hr_payroll_community.report_payslip_run</field>
+        <field name="binding_model_id" ref="model_hr_payslip_run"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Payslip Batch - %s' % (object.name)</field>
+    </record>
+
+    <template id="report_payslip_run">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page" style="font-size: 12px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+                        <div class="row mb-4">
+                            <div class="col-12 text-center">
+                                <h2 style="font-weight: bold; color: #2C3E50; margin-bottom: 5px;">PAYSLIP BATCH SUMMARY</h2>
+                                <h4><span t-field="o.name"/></h4>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm table-bordered mb-4" style="width: 100%;">
+                            <tr>
+                                <td style="width: 25%; background-color: #f8f9fa; font-weight: bold;">Date From:</td>
+                                <td style="width: 25%;"><span t-field="o.date_start"/></td>
+                                <td style="width: 25%; background-color: #f8f9fa; font-weight: bold;">Date To:</td>
+                                <td style="width: 25%;"><span t-field="o.date_end"/></td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #f8f9fa; font-weight: bold;">Total Payslips:</td>
+                                <td><span t-esc="len(o.slip_ids)"/></td>
+                                <td style="background-color: #f8f9fa; font-weight: bold;">Credit Note:</td>
+                                <td><span t-field="o.credit_note"/></td>
+                            </tr>
+                        </table>
+
+                        <table class="table table-sm table-striped table-bordered" style="width: 100%; border-collapse: collapse;">
+                            <thead style="background-color: #2C3E50; color: #ffffff; text-align: center;">
+                                <tr>
+                                    <th style="padding: 6px;">#</th>
+                                    <th style="padding: 6px; text-align: left;">Employee</th>
+                                    <th style="padding: 6px; text-align: left;">Job Role</th>
+                                    <th style="padding: 6px; text-align: left;">Branch</th>
+                                    <th style="padding: 6px; text-align: center;">Working Days</th>
+                                    <th style="padding: 6px; text-align: right;">Basic</th>
+                                    <th style="padding: 6px; text-align: right;">Gross</th>
+                                    <th style="padding: 6px; text-align: right;">Loan Deduct.</th>
+                                    <th style="padding: 6px; text-align: right;">Sal. Advance</th>
+                                    <th style="padding: 6px; text-align: right;">Net Salary</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-set="total_working_days" t-value="0"/>
+                                <t t-set="total_basic" t-value="0"/>
+                                <t t-set="total_gross" t-value="0"/>
+                                <t t-set="total_loan" t-value="0"/>
+                                <t t-set="total_advance" t-value="0"/>
+                                <t t-set="total_net" t-value="0"/>
+                                <t t-set="counter" t-value="1"/>
+
+                                <t t-foreach="o.slip_ids" t-as="slip">
+                                    <t t-set="total_working_days" t-value="total_working_days + slip.worked_days"/>
+                                    <t t-set="total_basic" t-value="total_basic + slip.basic_amount"/>
+                                    <t t-set="total_gross" t-value="total_gross + slip.gross_amount"/>
+                                    <t t-set="total_loan" t-value="total_loan + slip.loan_amount"/>
+                                    <t t-set="total_advance" t-value="total_advance + slip.advance_amount"/>
+                                    <t t-set="total_net" t-value="total_net + slip.net_amount"/>
+
+                                    <tr>
+                                        <td style="text-align: center;"><span t-esc="counter"/></td>
+                                        <td><span t-field="slip.employee_id.name"/></td>
+                                        <td><span t-field="slip.job_id.name"/></td>
+                                        <td><span t-field="slip.branch_id.name"/></td>
+                                        <td style="text-align: center;"><span t-field="slip.worked_days"/></td>
+                                        <td style="text-align: right;">
+                                            <span t-esc="slip.basic_amount" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                        </td>
+                                        <td style="text-align: right;">
+                                            <span t-esc="slip.gross_amount" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                        </td>
+                                        <td style="text-align: right; color: #C0392B;">
+                                            <span t-esc="slip.loan_amount" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                        </td>
+                                        <td style="text-align: right; color: #C0392B;">
+                                            <span t-esc="slip.advance_amount" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                        </td>
+                                        <td style="text-align: right; font-weight: bold; color: #27AE60;">
+                                            <span t-esc="slip.net_amount" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                        </td>
+                                    </tr>
+                                    <t t-set="counter" t-value="counter + 1"/>
+                                </t>
+                                <tr style="background-color: #EAEDED; font-weight: bold; page-break-inside: avoid;">
+                                    <td colspan="4" style="text-align: right; padding: 6px;">TOTAL:</td>
+                                    <td style="text-align: center; padding: 6px;"><span t-esc="total_working_days"/></td>
+                                    <td style="text-align: right; padding: 6px;">
+                                        <span t-esc="total_basic" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                    </td>
+                                    <td style="text-align: right; padding: 6px;">
+                                        <span t-esc="total_gross" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                    </td>
+                                    <td style="text-align: right; padding: 6px; color: #C0392B;">
+                                        <span t-esc="total_loan" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                    </td>
+                                    <td style="text-align: right; padding: 6px; color: #C0392B;">
+                                        <span t-esc="total_advance" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                    </td>
+                                    <td style="text-align: right; padding: 6px; color: #27AE60;">
+                                        <span t-esc="total_net" t-options="{'widget': 'monetary', 'display_currency': res_company.currency_id}"/>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

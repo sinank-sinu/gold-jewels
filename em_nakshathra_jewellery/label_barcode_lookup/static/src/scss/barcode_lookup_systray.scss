@@ -1,0 +1,43 @@
+// Top Navbar Systray Icon
+.o_label_barcode_systray {
+    button {
+        color: rgba(255, 255, 255, 0.85);
+        transition: color 0.15s ease-in-out, transform 0.15s ease-in-out;
+        &:hover {
+            color: #ffffff;
+            transform: scale(1.08);
+        }
+        &:active {
+            transform: scale(0.96);
+        }
+        i.fa-barcode {
+            font-size: 1.25rem;
+        }
+    }
+}
+
+// Clean barcode search input in wizard
+.o_barcode_input_field {
+    input.o_input {
+        height: 46px !important;
+        font-size: 1.15rem !important;
+        font-weight: 600 !important;
+        border: 2px solid #2563eb !important;
+        border-radius: 6px !important;
+        padding: 0.4rem 0.85rem !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+        width: 100% !important;
+
+        &::placeholder {
+            font-size: 1rem !important;
+            font-weight: normal !important;
+            color: #64748b !important;
+        }
+
+        &:focus {
+            border-color: #1d4ed8 !important;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25) !important;
+            outline: none !important;
+        }
+    }
+}

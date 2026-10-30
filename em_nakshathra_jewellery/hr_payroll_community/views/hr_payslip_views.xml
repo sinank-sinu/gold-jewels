@@ -9,6 +9,14 @@
                   decoration-muted="state == 'cancel'" string="Payslips">
                 <field name="number"/>
                 <field name="employee_id"/>
+                <field name="job_id" string="Job Role"/>
+                <field name="branch_id" string="Branch"/>
+                <field name="worked_days" string="Working Days"/>
+                <field name="basic_amount" string="Basic Salary"/>
+                <field name="gross_amount" string="Gross Salary"/>
+                <field name="loan_amount" string="Loan Deduction"/>
+                <field name="advance_amount" string="Salary Advance"/>
+                <field name="net_amount" string="Net Salary"/>
                 <field name="name"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
