@@ -194,12 +194,25 @@ class PineLabsPaymentWizard(models.TransientModel):
 
         target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
 
+        terminal_domain = [('branch_id.company_id', '=', target_company_id)]
+        if branch:
+            terminal_domain.append(('branch_id', '=', branch.id))
+        terminal_journals = self.env['pinelabs.terminal'].with_context(
+            active_test=False,
+        ).search(terminal_domain)
+        terminal_payment_journals = (
+            terminal_journals.mapped('card_journal_id')
+            | terminal_journals.mapped('upi_journal_id')
+        )
+
         domain = [
             ('type', '=', 'bank'),
             ('company_id', '=', target_company_id),
             ('name', 'not ilike', 'suspense'),
             ('name', 'not ilike', 'suspence')
         ]
+        if terminal_payment_journals:
+            domain.append(('id', 'not in', terminal_payment_journals.ids))
         if branch:
             domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
 

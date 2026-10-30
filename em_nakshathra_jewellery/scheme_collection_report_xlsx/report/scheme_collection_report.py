@@ -17,7 +17,7 @@ class SchemeCollectionReportXlsx(models.AbstractModel):
         title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
 
         # Title
-        sheet.merge_range('A1:G1', 'Scheme Collection Report', title_format)
+        sheet.merge_range('A1:I1', 'Scheme Collection Report', title_format)
 
         # Filters
         start_date_str = data.get('start_date')
@@ -27,19 +27,23 @@ class SchemeCollectionReportXlsx(models.AbstractModel):
         end_date = fields.Date.to_date(end_date_str) if end_date_str else False
 
         date_range = f"Date Range: {start_date_str or 'All'} to {end_date_str or 'All'}"
-        sheet.merge_range('A2:G2', date_range, text_format)
+        sheet.merge_range('A2:I2', date_range, text_format)
 
         # Headers
         headers = [
-            'Date', 'Customer', 'Date of Joining', 'Phone Number',
-            'Which Installment Paid', 'Monthly Amount', 'Pending EMI'
+            'Date', 'Customer', 'Scheme Ticket Number', 'Branch',
+            'Date of Joining', 'Phone Number', 'Which Installment Paid',
+            'Monthly Amount', 'Pending EMI'
         ]
 
         for col, header in enumerate(headers):
             sheet.write(2, col, header, header_format)
 
         # Column Widths
-        column_widths = {'A': 15, 'B': 25, 'C': 15, 'D': 15, 'E': 25, 'F': 18, 'G': 15}
+        column_widths = {
+            'A': 15, 'B': 25, 'C': 22, 'D': 20, 'E': 15,
+            'F': 18, 'G': 25, 'H': 18, 'I': 15,
+        }
         for col_letter, width in column_widths.items():
             sheet.set_column(f'{col_letter}:{col_letter}', width)
 
@@ -85,6 +89,9 @@ class SchemeCollectionReportXlsx(models.AbstractModel):
             enrollment_insts = insts_by_enrollment.get(rec.id, [])
             
             for idx, inst in enumerate(enrollment_insts, start=1):
+                if not inst.date:
+                    continue
+
                 in_range = True
                 if start_date and inst.date < start_date:
                     in_range = False
@@ -103,9 +110,11 @@ class SchemeCollectionReportXlsx(models.AbstractModel):
             for idx_str, inst in paid_insts:
                 sheet.write(current_row, 0, inst.date, date_format)
                 sheet.write(current_row, 1, rec.partner_id.name or '', text_format)
-                sheet.write(current_row, 2, rec.date_of_joining or '', date_format)
-                sheet.write(current_row, 3, rec.phone or '', text_format)
-                sheet.write(current_row, 4, idx_str, text_format)
-                sheet.write(current_row, 5, rec.installment_amount, number_format)
-                sheet.write(current_row, 6, pending_emi, text_format)
+                sheet.write(current_row, 2, rec.ticket_number or '', text_format)
+                sheet.write(current_row, 3, rec.branch_id.name or '', text_format)
+                sheet.write(current_row, 4, rec.date_of_joining or '', date_format)
+                sheet.write(current_row, 5, rec.phone or '', text_format)
+                sheet.write(current_row, 6, idx_str, text_format)
+                sheet.write(current_row, 7, rec.installment_amount, number_format)
+                sheet.write(current_row, 8, pending_emi, text_format)
                 current_row += 1

@@ -26,7 +26,7 @@ class OldGoldBatch(models.Model):
         required=True
     )
 
-    total_grams = fields.Float(readonly=True,digits=(16, 3))
+    total_grams = fields.Float(digits=(16, 3))
     total_purchase_amount = fields.Float(readonly=True)
     refinery_issue_id = fields.Many2one(
             'old.gold.refinery.issue',
