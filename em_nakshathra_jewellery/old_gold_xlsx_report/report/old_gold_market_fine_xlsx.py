@@ -249,7 +249,7 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             batches = refinery_issues.mapped('batch_ids')
             batch_names = ", ".join(batches.mapped('name')) if batches else '-'
 
-            issued_wt = issue.total_net_weight or 0.0
+            issued_wt = sum(refinery_issues.mapped('total_issued_weight'))
             melting_loss = sum(refinery_issues.mapped('melting_loss'))
             output_wt = sum(refinery_issues.mapped('output_weight'))
             amount = sum(refinery_issues.mapped('total_purchase_amount'))
@@ -257,23 +257,7 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             # Use the same PO-line amounts and next-day rates as Purchase Details.
             market_fine = get_market_fine_for_batches(batches) if batches else 0.0
 
-            rcd_fine = (
-                sum(issue.line_ids.mapped('received_fine_weight'))
-                + sum(issue.line_ids.mapped('received_lab_fine_weight'))
-            )
-            if not rcd_fine:
-                rcd_fine = sum(
-                    line.refinery_fine_weight + line.lab_fine_weight
-                    for line in issue.line_ids
-                )
-            if not rcd_fine:
-                # Fallback to Lab Purity calculation if receipt voucher not yet created
-                rcd_fine = sum(
-                    refinery_issue.output_weight
-                    * (refinery_issue.lab_purity_percent or refinery_issue.expected_purity or 0.0)
-                    / 100.0
-                    for refinery_issue in refinery_issues
-                )
+            rcd_fine = sum(issue.line_ids.mapped('received_fine_weight'))
 
             # Gain / Loss (in grams) = Received Fine - Market Fine
             gain_loss_fine = rcd_fine - market_fine
