@@ -240,14 +240,21 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         tot_s1_market_fine = 0.0
         tot_s1_rcd_fine = 0.0
         tot_s1_gain_fine = 0.0
+        counted_refinery_issue_ids = set()
 
         for issue in issues:
             issue_date = issue.order_date
             voucher_no = issue.name or ''
             branch_name = issue.branch_id.name if issue.branch_id else ''
-            refinery_issues = issue.line_ids.mapped('refinery_issue_id')
+            linked_refinery_issues = issue.line_ids.mapped('refinery_issue_id')
+            batch_names = ", ".join(
+                linked_refinery_issues.mapped('batch_ids.name')
+            ) or '-'
+            refinery_issues = linked_refinery_issues.filtered(
+                lambda refinery_issue: refinery_issue.id not in counted_refinery_issue_ids
+            )
+            counted_refinery_issue_ids.update(refinery_issues.ids)
             batches = refinery_issues.mapped('batch_ids')
-            batch_names = ", ".join(batches.mapped('name')) if batches else '-'
 
             issued_wt = sum(refinery_issues.mapped('total_issued_weight'))
             melting_loss = sum(refinery_issues.mapped('melting_loss'))
