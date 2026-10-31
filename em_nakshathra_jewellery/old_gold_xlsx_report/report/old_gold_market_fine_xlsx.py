@@ -60,46 +60,70 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             if next_day in fine_rate_cache:
                 return fine_rate_cache[next_day]
 
-            fine_rate_rec = self.env['fine.rate.master'].search([
-                ('date', '=', next_day)
-            ], order='date desc', limit=1)
-
-            if not fine_rate_rec:
-                fine_rate_rec = self.env['fine.rate.master'].search([
-                    ('date', '<=', next_day)
-                ], order='date desc', limit=1)
-
             rate = 0.0
-            if fine_rate_rec:
+            rate_records = self.env['fine.rate.master'].search([
+                ('date', '<=', next_day)
+            ], order='date desc, id desc')
+            for fine_rate_rec in rate_records:
                 history_line = self.env['fine.rate.history'].search([
                     ('master_id', '=', fine_rate_rec.id)
-                ], order='id desc', limit=1)
-                if history_line and history_line.fine_rate:
-                    rate = history_line.fine_rate
-                else:
-                    rate = fine_rate_rec.fine_rate or 0.0
+                ], order='update_datetime desc, id desc', limit=1)
+                candidate_rate = (
+                    history_line.fine_rate
+                    if history_line and history_line.fine_rate > 0
+                    else fine_rate_rec.fine_rate or 0.0
+                )
+                if candidate_rate > 0:
+                    rate = candidate_rate
+                    break
 
             fine_rate_cache[next_day] = rate
             return rate
 
-        # Pre-cache batches for fast mapping
-        all_batches = self.env['old.gold.batch'].search([])
-        batch_by_date_branch_purity = {}
-        for b in all_batches:
-            key = (b.batch_date, b.branch_id.id, b.purity_id.id)
-            batch_by_date_branch_purity.setdefault(key, []).append(b)
+        issue_domain = [
+            ('order_date', '>=', wizard.date_from),
+            ('order_date', '<=', wizard.date_to),
+            ('is_refinery', '=', True),
+        ]
+        if wizard.branch_ids:
+            issue_domain.append(('branch_id', 'in', wizard.branch_ids.ids))
+        issues = self.env['jewellery.issue.voucher'].search(
+            issue_domain, order='order_date asc, id asc'
+        )
 
-        # Pre-cache old.gold.purchase by purchase_order_id and sale_id
-        og_purchases = self.env['old.gold.purchase'].search([
-            '|', ('purchase_order_id', '!=', False), ('sale_id', '!=', False)
-        ])
+        report_batches = issues.mapped('line_ids.refinery_issue_id.batch_ids')
+        report_batch_ids = set(report_batches.ids)
+
+        # Follow the exact relationship: report batch -> old-gold purchase -> PO.
+        report_og_purchases = report_batches.mapped(
+            'line_ids.old_gold_purchase_id'
+        )
         ogp_by_po = {}
         ogp_by_sale = {}
-        for ogp in og_purchases:
+        for ogp in report_og_purchases:
             if ogp.purchase_order_id:
                 ogp_by_po.setdefault(ogp.purchase_order_id.id, []).append(ogp)
             if ogp.sale_id:
                 ogp_by_sale.setdefault(ogp.sale_id.id, []).append(ogp)
+
+        purchase_report_batches = report_batches
+        if wizard.branch_ids:
+            branch_ids = set(wizard.branch_ids.ids)
+            purchase_report_batches = purchase_report_batches.filtered(
+                lambda batch: batch.branch_id.id in branch_ids
+            )
+        purchase_report_batch_ids = set(purchase_report_batches.ids)
+        purchase_report_ogps = purchase_report_batches.mapped(
+            'line_ids.old_gold_purchase_id'
+        )
+        purchase_report_po_ids = set(
+            purchase_report_ogps.mapped('purchase_order_id').ids
+        )
+        purchase_report_sale_ids = purchase_report_ogps.mapped('sale_id').ids
+        if purchase_report_sale_ids:
+            purchase_report_po_ids.update(self.env['purchase.order'].search([
+                ('sale_id', 'in', purchase_report_sale_ids),
+            ]).ids)
 
         def get_batches_for_po_line(rec):
             po = rec.order_id
@@ -110,75 +134,62 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
                 ogps.extend(ogp_by_sale.get(po.sale_id.id, []))
 
             purity_id = rec.purity_id.id if rec.purity_id else False
-            branch_id = po.branch_id.id if po.branch_id else False
 
             for ogp in ogps:
-                for line in ogp.old_gold_line_ids:
-                    line_purity_id = (line.verified_purity_id or line.purity_id).id if (line.verified_purity_id or line.purity_id) else purity_id
-                    line_branch_id = (line.branch_id or ogp.branch_id).id if (line.branch_id or ogp.branch_id) else branch_id
-
-                    if not purity_id or not line_purity_id or line_purity_id == purity_id:
+                for line in ogp.old_gold_line_ids.filtered(
+                    lambda purchase_line: purchase_line.batch_id.id in report_batch_ids
+                ):
+                    line_purity_ids = {
+                        line.purity_id.id,
+                        line.verified_purity_id.id,
+                    } - {False}
+                    if not purity_id or not line_purity_ids or purity_id in line_purity_ids:
                         if line.batch_id:
-                            matching_batches.add(line.batch_id)
-                        else:
-                            found = batch_by_date_branch_purity.get((ogp.date, line_branch_id, line_purity_id), [])
-                            for fb in found:
-                                matching_batches.add(fb)
-
-            # Fallback matching by (po_date, branch, purity)
-            if not matching_batches and purity_id and branch_id and po.date_order:
-                found = batch_by_date_branch_purity.get((po.date_order.date(), branch_id, purity_id), [])
-                for fb in found:
-                    matching_batches.add(fb)
+                            matching_batches.add(line.batch_id.id)
 
             return matching_batches
 
-        # Cache Market Fine per batch
-        batch_market_fine_cache = {}
+        # Cache PO-derived Market Fine per batch group
+        batch_group_market_fine_cache = {}
 
-        def get_market_fine_for_batch(batch):
-            if batch.id in batch_market_fine_cache:
-                return batch_market_fine_cache[batch.id]
+        def get_market_fine_for_batches(batches):
+            batch_ids = set(batches.ids)
+            cache_key = tuple(sorted(batch_ids))
+            if cache_key in batch_group_market_fine_cache:
+                return batch_group_market_fine_cache[cache_key]
 
-            lines = batch.line_ids
-            if not lines:
-                ogps = self.env['old.gold.purchase'].search([
-                    ('date', '=', batch.batch_date),
-                    ('branch_id', '=', batch.branch_id.id)
+            batch_og_purchases = batches.mapped('line_ids.old_gold_purchase_id')
+            purchase_orders = batch_og_purchases.mapped('purchase_order_id')
+            sale_ids = batch_og_purchases.mapped('sale_id').ids
+            if sale_ids:
+                purchase_orders |= self.env['purchase.order'].search([
+                    ('sale_id', 'in', sale_ids),
                 ])
-                lines = ogps.mapped('old_gold_line_ids').filtered(
-                    lambda l: (l.verified_purity_id or l.purity_id) == batch.purity_id
+            purchase_orders = purchase_orders.filtered(
+                lambda po: (
+                    po.state not in ('draft', 'cancel')
+                    and not po.is_sale_return_po
+                    and not po.is_sale_return_shop
+                    and not po.is_purchase_expense
+                    and (po.is_old_gold or po.sale_id.has_old_gold)
                 )
+            )
 
-            batch_po_lines = set()
-            for l in lines:
-                po = l.old_gold_purchase_id.purchase_order_id
-                if not po and l.old_gold_purchase_id.sale_id:
-                    po = self.env['purchase.order'].search([
-                        ('sale_id', '=', l.old_gold_purchase_id.sale_id.id)
-                    ], limit=1)
-                if po:
-                    pols = po.order_line.filtered(
-                        lambda pl: pl.purity_id == batch.purity_id or pl.is_old_gold
-                    )
-                    for pol in pols:
-                        batch_po_lines.add(pol)
+            matching_po_lines = {}
+            for po_line in purchase_orders.mapped('order_line'):
+                if (not po_line.purity_id and not po_line.is_old_gold) or po_line.price_subtotal <= 0:
+                    continue
+                if get_batches_for_po_line(po_line) & batch_ids:
+                    matching_po_lines[po_line.id] = po_line
 
             total_mf = 0.0
-            for pol in batch_po_lines:
-                po_date = pol.order_id.date_order.date() if pol.order_id.date_order else batch.batch_date
+            for po_line in matching_po_lines.values():
+                po_date = po_line.order_id.date_order.date() if po_line.order_id.date_order else False
                 rate = get_next_day_rate(po_date)
-                amt = pol.price_subtotal or 0.0
-                if amt > 0 and rate > 0:
-                    total_mf += (amt / rate)
-
-            # Fallback if no individual PO lines found
-            if not total_mf and batch.total_purchase_amount > 0:
-                rate = get_next_day_rate(batch.batch_date)
                 if rate > 0:
-                    total_mf = batch.total_purchase_amount / rate
+                    total_mf += po_line.price_subtotal / rate
 
-            batch_market_fine_cache[batch.id] = total_mf
+            batch_group_market_fine_cache[cache_key] = total_mf
             return total_mf
 
         # =============================================================
@@ -220,15 +231,6 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         for col, h in enumerate(summary_headers):
             sheet1.write(header_row1, col, h, header_format)
 
-        issue_domain = [
-            ('issue_date', '>=', wizard.date_from),
-            ('issue_date', '<=', wizard.date_to),
-        ]
-        if wizard.branch_ids:
-            issue_domain.append(('branch_id', 'in', wizard.branch_ids.ids))
-
-        issues = self.env['old.gold.refinery.issue'].search(issue_domain, order='issue_date asc, id asc')
-
         row1 = header_row1 + 1
 
         tot_s1_issued_wt = 0.0
@@ -240,40 +242,38 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         tot_s1_gain_fine = 0.0
 
         for issue in issues:
-            issue_date = issue.issue_date
+            issue_date = issue.order_date
             voucher_no = issue.name or ''
             branch_name = issue.branch_id.name if issue.branch_id else ''
-            batch_names = ", ".join(issue.batch_ids.mapped('name')) if issue.batch_ids else '-'
+            refinery_issues = issue.line_ids.mapped('refinery_issue_id')
+            batches = refinery_issues.mapped('batch_ids')
+            batch_names = ", ".join(batches.mapped('name')) if batches else '-'
 
-            issued_wt = issue.total_issued_weight or 0.0
-            melting_loss = issue.melting_loss or 0.0
-            output_wt = issue.output_weight or 0.0
-            amount = issue.total_purchase_amount or 0.0
+            issued_wt = issue.total_net_weight or 0.0
+            melting_loss = sum(refinery_issues.mapped('melting_loss'))
+            output_wt = sum(refinery_issues.mapped('output_weight'))
+            amount = sum(refinery_issues.mapped('total_purchase_amount'))
 
-            # Market Fine: Total market fine of all POs belonging to the batch(es) of this issue
-            if issue.batch_ids:
-                market_fine = sum(get_market_fine_for_batch(b) for b in issue.batch_ids)
-                if not market_fine and amount > 0:
-                    rate = get_next_day_rate(issue_date)
-                    market_fine = (amount / rate) if rate else 0.0
-            else:
-                next_day_rate = get_next_day_rate(issue_date)
-                market_fine = (amount / next_day_rate) if next_day_rate else 0.0
+            # Use the same PO-line amounts and next-day rates as Purchase Details.
+            market_fine = get_market_fine_for_batches(batches) if batches else 0.0
 
-            # Find matching Bullion Receipt Voucher(s)
-            receipts = self.env['old.gold.bullion.receipt'].search([
-                ('issue_id', '=', issue.id)
-            ])
-
-            if receipts:
+            rcd_fine = (
+                sum(issue.line_ids.mapped('received_fine_weight'))
+                + sum(issue.line_ids.mapped('received_lab_fine_weight'))
+            )
+            if not rcd_fine:
                 rcd_fine = sum(
-                    r.receive_weight * (r.purity_id.percentage / 100.0) if r.purity_id and r.purity_id.percentage
-                    else r.receive_weight for r in receipts
+                    line.refinery_fine_weight + line.lab_fine_weight
+                    for line in issue.line_ids
                 )
-            else:
+            if not rcd_fine:
                 # Fallback to Lab Purity calculation if receipt voucher not yet created
-                lab_purity = issue.lab_purity_percent or issue.expected_purity or 0.0
-                rcd_fine = output_wt * (lab_purity / 100.0)
+                rcd_fine = sum(
+                    refinery_issue.output_weight
+                    * (refinery_issue.lab_purity_percent or refinery_issue.expected_purity or 0.0)
+                    / 100.0
+                    for refinery_issue in refinery_issues
+                )
 
             # Gain / Loss (in grams) = Received Fine - Market Fine
             gain_loss_fine = rcd_fine - market_fine
@@ -322,7 +322,7 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         sheet2 = workbook.add_worksheet('Purchase Details')
 
         sheet2.write(0, 0, "Old Gold Purchase Details (PO Level)", title_format)
-        sheet2.write(1, 0, f"Period: {wizard.date_from.strftime('%d-%m-%Y')} to {wizard.date_to.strftime('%d-%m-%Y')}", sub_title)
+        sheet2.write(1, 0, "Batch-linked purchases (date range not applied)", sub_title)
 
         detail_headers = [
             'Date',
@@ -354,10 +354,8 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         sheet2.set_row(header_row2, 28)
         for col, h in enumerate(detail_headers):
             sheet2.write(header_row2, col, h, header_format)
-
         po_domain = [
-            ('order_id.date_order', '>=', wizard.date_from),
-            ('order_id.date_order', '<=', wizard.date_to),
+            ('order_id', 'in', list(purchase_report_po_ids)),
             ('order_id.state', 'not in', ('draft', 'cancel')),
             ('order_id.is_sale_return_po', '=', False),
             ('order_id.is_sale_return_shop', '=', False),
@@ -366,8 +364,6 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             ('order_id.is_old_gold', '=', True),
             ('order_id.sale_id.has_old_gold', '=', True),
         ]
-        if wizard.branch_ids:
-            po_domain.append(('order_id.branch_id', 'in', wizard.branch_ids.ids))
 
         po_lines = self.env['purchase.order.line'].search(po_domain)
         min_date = date.min
@@ -409,7 +405,8 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             amount = rec.price_subtotal or 0.0
 
             # Find batch number(s) linked to this PO line
-            batches = get_batches_for_po_line(rec)
+            batch_ids = get_batches_for_po_line(rec) & purchase_report_batch_ids
+            batches = self.env['old.gold.batch'].browse(batch_ids)
             if not batches:
                 # Skip unbatched purchase orders as requested
                 continue
