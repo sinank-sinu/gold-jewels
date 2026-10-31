@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_product_label_search_form" model="ir.ui.view">
+        <field name="name">product.label.search.form</field>
+        <field name="model">product.label.search</field>
+        <field name="arch" type="xml">
+            <form string="Label Search">
+                <sheet>
+                    <separator string="Scan Labels"/>
+                    <div class="label_search_scanner">
+                        <widget name="barcode_scanner" model="product.label.search"/>
+                    </div>
+                    <field name="line_ids">
+                        <tree create="0" delete="1">
+                            <field name="label_id" width="130px"/>
+                            <field name="purchase_order_id" width="130px"/>
+                            <field name="vendor_id" width="160px"/>
+                            <field name="barcode" width="130px"/>
+                            <field name="barcode2" width="130px" optional="hide"/>
+                            <field name="branch_id" width="130px"/>
+                            <field name="destination_id" width="160px"/>
+                            <field name="sale_gross_weight" string="Sale Gross Weight (g)" width="130px"/>
+                            <field name="sale_net_weight" string="Sale Net Weight (g)" width="130px" optional="hide"/>
+                            <field name="sale_stone_weight" string="Sale Stone Weight (g)" width="140px" optional="hide"/>
+                            <field name="sale_stone_weight_ct" string="Sale Stone Weight (ct)" width="140px" optional="hide"/>
+                            <field name="sale_diamond_weight_gm" string="Sale Diamond Weight (g)" width="150px" optional="hide"/>
+                            <field name="sale_diamond_weight_ct" string="Sale Diamond Weight (ct)" width="150px" optional="hide"/>
+                            <field name="tag_weight" string="Tag Weight (g)" width="120px" optional="hide"/>
+                            <field name="sale_making_charge_type" string="Sale MC Type" width="130px" optional="hide"/>
+                            <field name="sale_making_charge_value" string="Sale MC Value" width="130px" optional="hide"/>
+                            <field name="sale_making_charge_amount" string="Sale MC Amount" width="140px" optional="hide"/>
+                            <field name="purchase_gross_weight" string="Purchase Gross Weight (g)" width="160px" optional="hide"/>
+                            <field name="purchase_net_weight" string="Purchase Net Weight (g)" width="150px" optional="hide"/>
+                            <field name="purchase_stone_weight" string="Purchase Stone Weight (g)" width="160px" optional="hide"/>
+                            <field name="purchase_stone_weight_ct" string="Purchase Stone Weight (ct)" width="160px" optional="hide"/>
+                            <field name="purchase_diamond_weight_gm" string="Purchase Diamond Weight (g)" width="170px" optional="hide"/>
+                            <field name="purchase_diamond_weight_ct" string="Purchase Diamond Weight (ct)" width="170px" optional="hide"/>
+                            <field name="purchase_making_charge_type" string="Purchase MC Type" width="150px" optional="hide"/>
+                            <field name="purchase_making_charge_value" string="Purchase MC Value" width="160px" optional="hide"/>
+                            <field name="purchase_making_charge_amount" string="Purchase MC Amount" width="170px" optional="hide"/>
+                            <field name="mc_fine" width="110px" optional="hide"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_product_label_search" model="ir.actions.act_window">
+        <field name="name">Label Search</field>
+        <field name="res_model">product.label.search</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_product_label_search_form"/>
+        <field name="target">current</field>
+    </record>
+
+    <record id="ornament_label.menu_product_label_app" model="ir.ui.menu">
+        <field name="groups_id" eval="[
+            (4, ref('em_jewellery_management.group_jewellery_manager')),
+            (4, ref('em_jewellery_management.label_user_purchase'))
+        ]"/>
+    </record>
+
+    <menuitem id="menu_product_label_search"
+              name="Label Search"
+              parent="ornament_label.menu_product_label_app"
+              action="action_product_label_search"
+              sequence="40"
+              groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.label_user_purchase"/>
+
+</odoo>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="label_barcode_lookup.BarcodeLookupSystray">
+        <div class="o_label_barcode_systray d-flex align-items-center">
+            <button class="btn btn-link text-white opacity-75 opacity-100-hover d-flex align-items-center px-2 py-1 text-decoration-none border-0 shadow-none"
+                    type="button"
+                    title="Scan Barcode"
+                    aria-label="Scan Barcode"
+                    t-on-click="onClick">
+                <i class="fa fa-lg fa-barcode" role="img" aria-label="Scan Barcode"/>
+            </button>
+        </div>
+    </t>
+</templates>

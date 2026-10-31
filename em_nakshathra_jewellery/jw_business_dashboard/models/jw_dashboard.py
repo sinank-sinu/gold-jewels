@@ -119,6 +119,8 @@ class JwBusinessDashboard(models.Model):
             'expense_bullet_data': self._get_expense_bullet_data(d_from, d_to, b_id, essl),
             'schemes_kpis': self._get_schemes_kpis(d_from, d_to, b_id),
             'schemes_monthly_trend': self._get_schemes_monthly_trend(d_from, d_to, b_id),
+            'schemes_new_joinees_daily': self._get_schemes_new_joinees_daily(d_from, d_to, b_id),
+            'schemes_new_joinees': self._get_schemes_new_joinees(d_from, d_to, b_id),
             'schemes_running': self._get_schemes_by_state('running', d_from, d_to, b_id),
             'schemes_completed': self._get_schemes_by_state('completed', d_from, d_to, b_id),
             'schemes_redeemed': self._get_schemes_by_state('redeemed', d_from, d_to, b_id),
@@ -223,6 +225,7 @@ class JwBusinessDashboard(models.Model):
             SELECT COALESCE(SUM(amount_total), 0)
             FROM purchase_order
             WHERE state IN ('purchase','done')
+              AND (is_purchase_expense IS NOT TRUE)
               AND date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -238,6 +241,7 @@ class JwBusinessDashboard(models.Model):
             FROM purchase_order_line pol
             JOIN purchase_order po ON po.id = pol.order_id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -251,6 +255,7 @@ class JwBusinessDashboard(models.Model):
         q = """
             SELECT COUNT(id) FROM purchase_order
             WHERE state IN ('purchase','done')
+              AND (is_purchase_expense IS NOT TRUE)
               AND date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -305,22 +310,22 @@ class JwBusinessDashboard(models.Model):
         cr.execute(q, params)
         stock_qty = cr.fetchone()[0] or 0.0
 
-        # Expense total
+        # Expense total and count (from purchase orders where is_purchase_expense is True)
         q = """
-            SELECT COALESCE(SUM(hes.total_amount), 0)
-            FROM hr_expense_sheet hes
-            LEFT JOIN hr_employee emp ON emp.id = hes.employee_id
-            LEFT JOIN res_users u ON u.id = emp.user_id
-            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            WHERE hes.state IN ('post','done')
-              AND hes.accounting_date BETWEEN %s AND %s
+            SELECT COALESCE(SUM(po.amount_total), 0), COUNT(po.id)
+            FROM purchase_order po
+            WHERE po.state IN ('purchase','done')
+              AND po.is_purchase_expense = TRUE
+              AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
         if branch_id:
-            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
+            q += " AND po.branch_id = %s"
             params.append(branch_id)
         cr.execute(q, params)
-        expense_total = cr.fetchone()[0] or 0.0
+        exp_row = cr.fetchone()
+        expense_total = exp_row[0] or 0.0
+        expense_count = exp_row[1] or 0
 
         # Jewellery items (purity-classified products)
         jewellery_count = 0
@@ -368,6 +373,7 @@ class JwBusinessDashboard(models.Model):
             'stock_value': round(float(stock_value), 2),
             'stock_qty': round(float(stock_qty), 2),
             'expense_total': round(float(expense_total), 2),
+            'expense_count': int(expense_count),
             'jewellery_count': int(jewellery_count),
             'customer_count': int(customer_count),
             'net_profit': round(float(net_profit), 2),
@@ -427,6 +433,7 @@ class JwBusinessDashboard(models.Model):
             FROM purchase_order po
             LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE >= (%s::DATE - INTERVAL '12 months')
               AND po.date_order::DATE <= %s::DATE
         """
@@ -447,19 +454,17 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT
-                to_char(hes.accounting_date, 'Mon YYYY') AS month,
-                date_trunc('month', hes.accounting_date) AS month_start,
-                COALESCE(SUM(hes.total_amount), 0) AS total
-            FROM hr_expense_sheet hes
-            LEFT JOIN hr_employee emp ON emp.id = hes.employee_id
-            LEFT JOIN res_users u ON u.id = emp.user_id
-            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            WHERE hes.state IN ('post','done')
-              AND hes.accounting_date >= NOW() - INTERVAL '12 months'
+                to_char(po.date_order, 'Mon YYYY') AS month,
+                date_trunc('month', po.date_order) AS month_start,
+                COALESCE(SUM(po.amount_total), 0) AS total
+            FROM purchase_order po
+            WHERE po.state IN ('purchase','done')
+              AND po.is_purchase_expense = TRUE
+              AND po.date_order >= NOW() - INTERVAL '12 months'
         """
         params = []
         if branch_id:
-            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
+            q += " AND po.branch_id = %s"
             params.append(branch_id)
         q += " GROUP BY month, month_start ORDER BY month_start"
         cr.execute(q, params)
@@ -473,26 +478,29 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT 
-                he.id AS expense_id,
-                he.name AS expense_name,
-                COALESCE(pt.name->>'en_US', pt.name->>'en_US') AS category_name,
-                emp.name AS employee_name,
-                he.total_amount,
-                he.date
-            FROM hr_expense he
-            JOIN hr_employee emp ON emp.id = he.employee_id
-            LEFT JOIN res_users u ON u.id = emp.user_id
-            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            LEFT JOIN product_product pp ON pp.id = he.product_id
+                po.id AS expense_id,
+                CASE WHEN rp.name IS NOT NULL THEN po.name || ' - ' || rp.name ELSE po.name END AS expense_name,
+                COALESCE(string_agg(DISTINCT COALESCE(pt.name->>'en_US', pt.name::text), ', '), 'Expense') AS category_name,
+                COALESCE(emp.name, up.name, 'Admin') AS employee_name,
+                po.amount_total,
+                po.date_order::DATE AS expense_date
+            FROM purchase_order po
+            LEFT JOIN res_partner rp ON rp.id = po.partner_id
+            LEFT JOIN res_users u ON u.id = po.user_id
+            LEFT JOIN res_partner up ON up.id = u.partner_id
+            LEFT JOIN hr_employee emp ON emp.user_id = u.id
+            LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
+            LEFT JOIN product_product pp ON pp.id = pol.product_id
             LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
-            WHERE he.state IN ('reported', 'approved', 'done')
-              AND he.date BETWEEN %s AND %s
+            WHERE po.state IN ('purchase', 'done')
+              AND po.is_purchase_expense = TRUE
+              AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
         if branch_id:
-            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
+            q += " AND po.branch_id = %s"
             params.append(branch_id)
-        q += " ORDER BY he.total_amount DESC LIMIT 10"
+        q += " GROUP BY po.id, po.name, rp.name, emp.name, up.name, po.amount_total, po.date_order ORDER BY po.amount_total DESC LIMIT 10"
         cr.execute(q, params)
         rows = cr.fetchall()
         result = []
@@ -515,21 +523,20 @@ class JwBusinessDashboard(models.Model):
         q = """
             SELECT 
                 pt.id AS category_id,
-                COALESCE(pt.name->>'en_US', pt.name->>'en_US') AS category_name,
-                SUM(he.total_amount) AS total_amount,
-                COUNT(he.id) AS expense_count
-            FROM hr_expense he
-            LEFT JOIN product_product pp ON pp.id = he.product_id
-            LEFT JOIN product_template pt ON pt.id = pp.product_tmpl_id
-            LEFT JOIN hr_employee emp ON emp.id = he.employee_id
-            LEFT JOIN res_users u ON u.id = emp.user_id
-            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            WHERE he.state IN ('reported', 'approved', 'done')
-              AND he.date BETWEEN %s AND %s
+                COALESCE(pt.name->>'en_US', pt.name::text) AS category_name,
+                SUM(pol.price_total) AS total_amount,
+                COUNT(pol.id) AS expense_count
+            FROM purchase_order_line pol
+            JOIN purchase_order po ON po.id = pol.order_id
+            JOIN product_product pp ON pp.id = pol.product_id
+            JOIN product_template pt ON pt.id = pp.product_tmpl_id
+            WHERE po.state IN ('purchase', 'done')
+              AND po.is_purchase_expense = TRUE
+              AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
         if branch_id:
-            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
+            q += " AND po.branch_id = %s"
             params.append(branch_id)
         q += " GROUP BY pt.id, pt.name ORDER BY total_amount DESC"
         cr.execute(q, params)
@@ -542,7 +549,7 @@ class JwBusinessDashboard(models.Model):
             result.append({
                 'id': int(r[0]) if r[0] else None,
                 'category': str(name or 'Other'),
-                'amount': round(float(r[2]), 3),
+                'amount': round(float(r[2]), 2),
                 'count': int(r[3])
             })
         return result
@@ -551,30 +558,31 @@ class JwBusinessDashboard(models.Model):
         cr = self._cr
         q = """
             SELECT 
-                emp.id AS employee_id,
-                emp.name AS employee_name,
-                SUM(he.total_amount) AS total_amount,
-                COUNT(he.id) AS expense_count
-            FROM hr_expense he
-            JOIN hr_employee emp ON emp.id = he.employee_id
-            LEFT JOIN res_users u ON u.id = emp.user_id
-            LEFT JOIN stock_location sl ON sl.id = emp.label_location_id
-            WHERE he.state IN ('reported', 'approved', 'done')
-              AND he.date BETWEEN %s AND %s
+                COALESCE(emp.id, u.id) AS employee_id,
+                COALESCE(emp.name, up.name, 'Admin') AS employee_name,
+                SUM(po.amount_total) AS total_amount,
+                COUNT(po.id) AS expense_count
+            FROM purchase_order po
+            LEFT JOIN res_users u ON u.id = po.user_id
+            LEFT JOIN res_partner up ON up.id = u.partner_id
+            LEFT JOIN hr_employee emp ON emp.user_id = u.id
+            WHERE po.state IN ('purchase', 'done')
+              AND po.is_purchase_expense = TRUE
+              AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
         if branch_id:
-            q += f" AND {self._emp_branch_sql(essl, 'emp', 'u', 'sl')} = %s"
+            q += " AND po.branch_id = %s"
             params.append(branch_id)
-        q += " GROUP BY emp.id, emp.name ORDER BY total_amount DESC"
+        q += " GROUP BY COALESCE(emp.id, u.id), COALESCE(emp.name, up.name, 'Admin') ORDER BY total_amount DESC"
         cr.execute(q, params)
         rows = cr.fetchall()
         result = []
         for r in rows:
             result.append({
-                'id': int(r[0]),
+                'id': int(r[0]) if r[0] else None,
                 'employee': r[1],
-                'amount': round(float(r[2]), 3),
+                'amount': round(float(r[2]), 2),
                 'count': int(r[3])
             })
         return result
@@ -586,14 +594,18 @@ class JwBusinessDashboard(models.Model):
             cat = c['category']
             amt = c['amount']
             # Determine target dynamically based on category name
-            target = 3000.0
+            target = max(3000.0, round(amt * 1.25, 2))
             cat_lower = cat.lower()
             if 'travel' in cat_lower or 'car' in cat_lower or 'air' in cat_lower:
-                target = 5000.0
+                target = max(5000.0, round(amt * 1.25, 2))
             elif 'hotel' in cat_lower or 'lodging' in cat_lower or 'stay' in cat_lower:
-                target = 8000.0
+                target = max(8000.0, round(amt * 1.25, 2))
             elif 'lunch' in cat_lower or 'meal' in cat_lower or 'food' in cat_lower or 'pizza' in cat_lower or 'drink' in cat_lower:
-                target = 2000.0
+                target = max(2000.0, round(amt * 1.25, 2))
+            elif 'hallmark' in cat_lower or 'cert' in cat_lower:
+                target = max(2000.0, round(amt * 1.25, 2))
+            elif 'design' in cat_lower:
+                target = max(1500.0, round(amt * 1.25, 2))
             
             result.append({
                 'category': cat,
@@ -1115,6 +1127,7 @@ class JwBusinessDashboard(models.Model):
             JOIN res_partner rp ON rp.id = po.partner_id
             LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -1134,6 +1147,7 @@ class JwBusinessDashboard(models.Model):
             JOIN purchase_order_line pol ON pol.order_id = po.id
             JOIN res_partner rp ON rp.id = po.partner_id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -1154,6 +1168,7 @@ class JwBusinessDashboard(models.Model):
             JOIN res_users ru ON ru.id = po.user_id
             JOIN res_partner rp ON rp.id = ru.partner_id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -1173,6 +1188,7 @@ class JwBusinessDashboard(models.Model):
             JOIN res_partner rp ON rp.id = po.partner_id
             LEFT JOIN purchase_order_line pol ON pol.order_id = po.id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -1192,6 +1208,7 @@ class JwBusinessDashboard(models.Model):
             JOIN purchase_order_line pol ON pol.order_id = po.id
             JOIN res_partner rp ON rp.id = po.partner_id
             WHERE po.state IN ('purchase','done')
+              AND (po.is_purchase_expense IS NOT TRUE)
               AND po.date_order::DATE BETWEEN %s AND %s
         """
         params = [d_from, d_to]
@@ -1549,23 +1566,43 @@ class JwBusinessDashboard(models.Model):
 
     def _get_schemes_kpis(self, d_from, d_to, branch_id=None):
         cr = self._cr
-        q = """
+
+        # New Scheme Joinees in chosen date range
+        q_new = """
             SELECT 
-                state,
                 COUNT(*),
                 COALESCE(SUM(total_paid), 0)
             FROM jewellery_scheme_enrollment
             WHERE date_of_joining BETWEEN %s AND %s
         """
-        params = [d_from, d_to]
+        p_new = [d_from, d_to]
         if branch_id:
-            q += " AND branch_id = %s"
-            params.append(branch_id)
-        q += " GROUP BY state"
-        cr.execute(q, params)
+            q_new += " AND branch_id = %s"
+            p_new.append(branch_id)
+        cr.execute(q_new, p_new)
+        r_new = cr.fetchone()
+        new_joinee_count = int(r_new[0] or 0)
+        new_joinee_paid = round(float(r_new[1] or 0.0), 2)
+
+        # Status breakdown up to chosen date_to for the branch
+        q_status = """
+            SELECT 
+                state,
+                COUNT(*),
+                COALESCE(SUM(total_paid), 0)
+            FROM jewellery_scheme_enrollment
+            WHERE date_of_joining <= %s
+        """
+        p_status = [d_to]
+        if branch_id:
+            q_status += " AND branch_id = %s"
+            p_status.append(branch_id)
+        q_status += " GROUP BY state"
+        cr.execute(q_status, p_status)
         rows = cr.fetchall()
         
         kpis = {
+            'new_joinee': {'count': new_joinee_count, 'total_paid': new_joinee_paid},
             'running': {'count': 0, 'total_paid': 0.0},
             'completed': {'count': 0, 'total_paid': 0.0},
             'redeemed': {'count': 0, 'total_paid': 0.0},
@@ -1604,7 +1641,48 @@ class JwBusinessDashboard(models.Model):
         rows = cr.fetchall()
         return [{'label': r[0], 'value': int(r[2] or 0)} for r in rows]
 
-    def _get_schemes_by_state(self, state, d_from, d_to, branch_id=None):
+    def _get_schemes_new_joinees_daily(self, d_from, d_to, branch_id=None):
+        cr = self._cr
+        days_diff = (d_to - d_from).days if hasattr(d_to - d_from, 'days') else 30
+        if days_diff <= 62:
+            q = """
+                SELECT 
+                    to_char(date_of_joining, 'DD Mon') AS label,
+                    date_of_joining AS sort_date,
+                    COUNT(*) AS count
+                FROM jewellery_scheme_enrollment
+                WHERE date_of_joining BETWEEN %s AND %s
+            """
+            params = [d_from, d_to]
+            if branch_id:
+                q += " AND branch_id = %s"
+                params.append(branch_id)
+            q += """
+                GROUP BY to_char(date_of_joining, 'DD Mon'), date_of_joining
+                ORDER BY sort_date ASC
+            """
+        else:
+            q = """
+                SELECT 
+                    to_char(date_of_joining, 'Mon YYYY') AS label,
+                    date_trunc('month', date_of_joining) AS sort_date,
+                    COUNT(*) AS count
+                FROM jewellery_scheme_enrollment
+                WHERE date_of_joining BETWEEN %s AND %s
+            """
+            params = [d_from, d_to]
+            if branch_id:
+                q += " AND branch_id = %s"
+                params.append(branch_id)
+            q += """
+                GROUP BY to_char(date_of_joining, 'Mon YYYY'), date_trunc('month', date_of_joining)
+                ORDER BY sort_date ASC
+            """
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{'label': r[0], 'value': int(r[2] or 0)} for r in rows]
+
+    def _get_schemes_new_joinees(self, d_from, d_to, branch_id=None):
         cr = self._cr
         q = """
             SELECT 
@@ -1616,14 +1694,47 @@ class JwBusinessDashboard(models.Model):
                 COALESCE(e.balance_amount, 0) AS balance_amount
             FROM jewellery_scheme_enrollment e
             LEFT JOIN res_partner rp ON rp.id = e.partner_id
-            WHERE e.state = %s 
-              AND e.date_of_joining BETWEEN %s AND %s
+            WHERE e.date_of_joining BETWEEN %s AND %s
         """
-        params = [state, d_from, d_to]
+        params = [d_from, d_to]
         if branch_id:
             q += " AND e.branch_id = %s"
             params.append(branch_id)
-        q += " ORDER BY e.date_of_joining DESC LIMIT 10"
+        q += " ORDER BY e.date_of_joining DESC, e.id DESC LIMIT 10"
+        cr.execute(q, params)
+        rows = cr.fetchall()
+        return [{
+            'id': r[0],
+            'ref': r[1],
+            'customer': r[2],
+            'date': str(r[3]),
+            'total_paid': round(float(r[4]), 2),
+            'balance': round(float(r[5]), 2)
+        } for r in rows]
+
+    def _get_schemes_by_state(self, state, d_from=None, d_to=None, branch_id=None):
+        if d_to is None and branch_id is None and d_from is not None and not isinstance(d_from, (str, datetime, date)):
+            branch_id = d_from
+            d_from = None
+        cr = self._cr
+        order_col = "e.write_date" if state in ('completed', 'redeemed') else "e.date_of_joining"
+        q = f"""
+            SELECT 
+                e.id,
+                e.name,
+                COALESCE(rp.name, 'Unknown') AS customer,
+                e.date_of_joining,
+                COALESCE(e.total_paid, 0) AS total_paid,
+                COALESCE(e.balance_amount, 0) AS balance_amount
+            FROM jewellery_scheme_enrollment e
+            LEFT JOIN res_partner rp ON rp.id = e.partner_id
+            WHERE e.state = %s
+        """
+        params = [state]
+        if branch_id:
+            q += " AND e.branch_id = %s"
+            params.append(branch_id)
+        q += f" ORDER BY {order_col} DESC, e.id DESC LIMIT 10"
         cr.execute(q, params)
         rows = cr.fetchall()
         return [{

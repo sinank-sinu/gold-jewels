@@ -7,6 +7,21 @@
             <form>
                 <header>
                     <button
+                            name="action_enable_admin_edit"
+                            type="object"
+                            string="Enable Admin Edit"
+                            class="btn-primary"
+                            groups="base.group_system"
+                            invisible="admin_edit_mode"
+                    />
+                    <button
+                            name="action_disable_admin_edit"
+                            type="object"
+                            string="Disable Admin Edit"
+                            groups="base.group_system"
+                            invisible="not admin_edit_mode"
+                    />
+                    <button
                             name="action_set_active"
                             type="object"
                             string="Set Active"
@@ -21,6 +36,7 @@
                             invisible="is_stocked_in"
                     />
                     <field name="active" widget="boolean_toggle"/>
+                    <field name="admin_edit_mode" invisible="1"/>
                     <field name="is_stocked_in" invisible="1"/>
                     <field name="picking_id" invisible="1"/>
                 </header>
@@ -45,11 +61,11 @@
                     </div>
                     <group>
                         <field name="age" readonly="1"/>
-                        <field name="product_id" readonly="is_stocked_in"/>
+                        <field name="product_id" readonly="not admin_edit_mode"/>
                         <field name="branch_id" readonly="is_stocked_in"/>
                         <field name="source_location_id" required="1" readonly="is_stocked_in"/>
                         <field name="branch_location_id" required="1" readonly="is_stocked_in"/>
-                        <field name="tag_weight" readonly="is_stocked_in"/>
+                        <field name="tag_weight" readonly="not admin_edit_mode"/>
                         <field name="purity_id" readonly="active"/>
 
                     </group>
@@ -57,8 +73,8 @@
                     <notebook>
                         <page name="Details">
                             <group string="Barcode">
-                                <field name="barcode" readonly="active" />
-                                <field name="barcode2" readonly="active" />
+                                <field name="barcode" readonly="not admin_edit_mode" />
+                                <field name="barcode2" readonly="not admin_edit_mode" />
                             </group>
                             <group>
                                 <field name="job_work_id"
@@ -89,11 +105,11 @@
                                 </group>
 
                                 <group string="Weights">
-                                    <field name="sale_gross_weight" readonly="is_stocked_in"/>
-                                    <field name="sale_stone_weight" readonly="is_stocked_in"/>
-                                    <field name="sale_stone_weight_ct" readonly="is_stocked_in"/>
-                                    <field name="sale_diamond_weight_gm" readonly="is_stocked_in"/>
-                                    <field name="sale_diamond_weight_ct" readonly="is_stocked_in"/>
+                                    <field name="sale_gross_weight" readonly="not admin_edit_mode"/>
+                                    <field name="sale_stone_weight" readonly="not admin_edit_mode"/>
+                                    <field name="sale_stone_weight_ct" readonly="not admin_edit_mode"/>
+                                    <field name="sale_diamond_weight_gm" readonly="not admin_edit_mode"/>
+                                    <field name="sale_diamond_weight_ct" readonly="not admin_edit_mode"/>
                                     <field name="sale_net_weight" readonly="1"/>
                                 </group>
 
@@ -127,11 +143,11 @@
                                 </group>
 
                                 <group string="Weights">
-                                    <field name="purchase_gross_weight" readonly="is_stocked_in"/>
-                                    <field name="purchase_stone_weight"/>
-                                    <field name="purchase_stone_weight_ct"/>
-                                    <field name="purchase_diamond_weight_gm"/>
-                                    <field name="purchase_diamond_weight_ct"/>
+                                    <field name="purchase_gross_weight" readonly="not admin_edit_mode"/>
+                                    <field name="purchase_stone_weight" readonly="not admin_edit_mode"/>
+                                    <field name="purchase_stone_weight_ct" readonly="not admin_edit_mode"/>
+                                    <field name="purchase_diamond_weight_gm" readonly="not admin_edit_mode"/>
+                                    <field name="purchase_diamond_weight_ct" readonly="not admin_edit_mode"/>
                                     <field name="purchase_net_weight" readonly="1"/>
                                 </group>
 

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- FORM VIEW: Label Barcode Lookup Wizard -->
+    <record id="view_label_barcode_lookup_wizard_form" model="ir.ui.view">
+        <field name="name">label.barcode.lookup.wizard.form</field>
+        <field name="model">label.barcode.lookup.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Scan Barcode">
+                <field name="label_id" invisible="1"/>
+
+                <sheet>
+                    <!-- BARCODE INPUT (FULL WIDTH, SEARCH BUTTON REMOVED) -->
+                    <div class="mb-3 o_barcode_input_field">
+                        <field name="barcode_search"
+                               widget="barcode_auto_search"
+                               placeholder="Scan Barcode"
+                               default_focus="1"
+                               nolabel="1"/>
+                        <button name="action_search_barcode"
+                                type="object"
+                                class="d-none"
+                                invisible="1"
+                                aria-hidden="true"/>
+                    </div>
+
+                    <!-- LABEL DETAILS SECTION (Visible when matched) -->
+                    <div invisible="not label_id" class="o_label_details_panel mt-2">
+                        <field name="image" widget="image" class="oe_avatar" readonly="1"/>
+                        <div class="oe_title">
+                            <span class="text-muted text-uppercase fw-semibold fs-7">Ornament Label</span>
+                            <h1 class="mb-1 text-primary">
+                                <field name="label_name" readonly="1"/>
+                            </h1>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <span class="badge rounded-pill bg-warning text-dark px-2 py-1 fs-6">
+                                    <i class="fa fa-certificate me-1" title="Purity"/>
+                                    <field name="purity_id" readonly="1" nolabel="1"/>
+                                </span>
+                                <span class="badge rounded-pill bg-secondary px-2 py-1 fs-6">
+                                    <field name="stock_status" readonly="1" nolabel="1"/>
+                                </span>
+                                <span class="badge rounded-pill bg-light text-dark border px-2 py-1 fs-6" invisible="not barcode">
+                                    <i class="fa fa-barcode me-1" title="Barcode"/>
+                                    <field name="barcode" readonly="1" nolabel="1"/>
+                                </span>
+                            </div>
+                        </div>
+
+                        <group col="4" class="mt-3">
+                            <field name="product_id" readonly="1"/>
+                            <field name="product_tmpl_id" readonly="1"/>
+                            <field name="categ_id" readonly="1"/>
+                            <field name="branch_id" readonly="1"/>
+                            <field name="current_location_id" readonly="1"/>
+                            <field name="source_location_id" readonly="1"/>
+                            <field name="age" readonly="1"/>
+                            <field name="company_id" readonly="1"/>
+                        </group>
+
+                        <notebook class="mt-3">
+                            <!-- TAB: WEIGHTS -->
+                            <page name="weights" string="Weights &amp; Metals">
+                                <group>
+                                    <group string="Weight Overview (Grams)">
+                                        <field name="sale_gross_weight" readonly="1"/>
+                                        <field name="sale_net_weight" readonly="1"/>
+                                        <field name="sale_fine_weight" readonly="1"/>
+                                        <field name="tag_weight" readonly="1"/>
+                                    </group>
+                                    <group string="Stones &amp; Diamonds">
+                                        <field name="sale_stone_weight" readonly="1"/>
+                                        <field name="sale_stone_weight_ct" readonly="1"/>
+                                        <field name="sale_diamond_weight_gm" readonly="1"/>
+                                        <field name="sale_diamond_weight_ct" readonly="1"/>
+                                        <field name="other_weight_g" readonly="1"/>
+                                        <field name="other_weight_amount" readonly="1"/>
+                                    </group>
+                                </group>
+                            </page>
+
+                            <!-- TAB: PRICING -->
+                            <page name="pricing" string="Pricing &amp; Making Charges">
+                                <group>
+                                    <group string="Sale Rates">
+                                        <field name="sale_price_per_gram" readonly="1"/>
+                                        <field name="sale_metal_rate" readonly="1"/>
+                                        <field name="sale_stone_rate" readonly="1"/>
+                                        <field name="sale_diamond_rate" readonly="1"/>
+                                    </group>
+                                    <group string="Making Charge Details">
+                                        <field name="sale_making_charge_type" readonly="1"/>
+                                        <field name="sale_making_charge_value" readonly="1"/>
+                                        <field name="sale_making_charge_min" readonly="1"/>
+                                        <field name="sale_making_charge_amount" readonly="1"/>
+                                    </group>
+                                </group>
+                            </page>
+
+                            <!-- TAB: TRACEABILITY & ORIGIN -->
+                            <page name="origin" string="Origin &amp; History">
+                                <group>
+                                    <group string="Documents">
+                                        <field name="purchase_id" readonly="1"/>
+                                        <field name="job_work_id" readonly="1"/>
+                                        <field name="requisition_id" readonly="1"/>
+                                    </group>
+                                    <group string="Stock Status">
+                                        <field name="is_stocked_in" readonly="1"/>
+                                        <field name="active" readonly="1"/>
+                                        <field name="barcode2" readonly="1" invisible="not barcode2"/>
+                                    </group>
+                                </group>
+                            </page>
+                        </notebook>
+                    </div>
+                </sheet>
+
+                <!-- FOOTER BUTTONS: No Save button, strictly inspection & close -->
+                <footer>
+                    <button name="action_close"
+                            string="Close"
+                            type="object"
+                            class="btn-secondary"
+                            icon="fa-times"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- ACTION WINDOW: Label Barcode Lookup Wizard -->
+    <record id="action_label_barcode_lookup_wizard" model="ir.actions.act_window">
+        <field name="name">Scan Barcode</field>
+        <field name="res_model">label.barcode.lookup.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>
