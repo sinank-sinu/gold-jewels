@@ -203,6 +203,7 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         summary_headers = [
             'Issue Date',
             'Issue Voucher',
+            'Vendor',
             'Batch No(s)',
             'Branch',
             'Issued Wt (g)',
@@ -216,15 +217,16 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
 
         sheet1.set_column(0, 0, 14)   # Issue Date
         sheet1.set_column(1, 1, 16)   # Issue Voucher
-        sheet1.set_column(2, 2, 24)   # Batch No(s)
-        sheet1.set_column(3, 3, 16)   # Branch
-        sheet1.set_column(4, 4, 15)   # Issued Wt
-        sheet1.set_column(5, 5, 15)   # Melting Loss
-        sheet1.set_column(6, 6, 15)   # Output Wt
-        sheet1.set_column(7, 7, 18)   # Purchase Amount
-        sheet1.set_column(8, 8, 16)   # Market Fine (g)
-        sheet1.set_column(9, 9, 16)   # Received Fine (g)
-        sheet1.set_column(10, 10, 16) # Gain / Loss (g)
+        sheet1.set_column(2, 2, 24)   # Vendor / Refinery
+        sheet1.set_column(3, 3, 24)   # Batch No(s)
+        sheet1.set_column(4, 4, 16)   # Branch
+        sheet1.set_column(5, 5, 15)   # Issued Wt
+        sheet1.set_column(6, 6, 15)   # Melting Loss
+        sheet1.set_column(7, 7, 15)   # Output Wt
+        sheet1.set_column(8, 8, 18)   # Purchase Amount
+        sheet1.set_column(9, 9, 16)   # Market Fine (g)
+        sheet1.set_column(10, 10, 16) # Received Fine (g)
+        sheet1.set_column(11, 11, 16) # Gain / Loss (g)
 
         header_row1 = 3
         sheet1.set_row(header_row1, 28)
@@ -245,6 +247,7 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         for issue in issues:
             issue_date = issue.order_date
             voucher_no = issue.name or ''
+            refinery_name = issue.refinery_id.display_name or '' if issue.refinery_id else ''
             branch_name = issue.branch_id.name if issue.branch_id else ''
             linked_refinery_issues = issue.line_ids.mapped('refinery_issue_id')
             batch_names = ", ".join(
@@ -281,15 +284,16 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
             # Write row
             sheet1.write(row1, 0, issue_date, date_format)
             sheet1.write(row1, 1, voucher_no, text_center)
-            sheet1.write(row1, 2, batch_names, text_left)
-            sheet1.write(row1, 3, branch_name, text_left)
-            sheet1.write(row1, 4, issued_wt, num_format_3)
-            sheet1.write(row1, 5, melting_loss, num_format_3)
-            sheet1.write(row1, 6, output_wt, num_format_3)
-            sheet1.write(row1, 7, amount, num_format_2)
-            sheet1.write(row1, 8, market_fine, num_format_3)
-            sheet1.write(row1, 9, rcd_fine, num_format_3)
-            sheet1.write(row1, 10, gain_loss_fine, num_format_3)
+            sheet1.write(row1, 2, refinery_name, text_left)
+            sheet1.write(row1, 3, batch_names, text_left)
+            sheet1.write(row1, 4, branch_name, text_left)
+            sheet1.write(row1, 5, issued_wt, num_format_3)
+            sheet1.write(row1, 6, melting_loss, num_format_3)
+            sheet1.write(row1, 7, output_wt, num_format_3)
+            sheet1.write(row1, 8, amount, num_format_2)
+            sheet1.write(row1, 9, market_fine, num_format_3)
+            sheet1.write(row1, 10, rcd_fine, num_format_3)
+            sheet1.write(row1, 11, gain_loss_fine, num_format_3)
 
             row1 += 1
 
@@ -299,13 +303,14 @@ class OldGoldMarketFineXlsx(models.AbstractModel):
         sheet1.write(row1, 1, "Total", bold_center)
         sheet1.write(row1, 2, "", bold_center)
         sheet1.write(row1, 3, "", bold_center)
-        sheet1.write(row1, 4, tot_s1_issued_wt, bold_num_3)
-        sheet1.write(row1, 5, tot_s1_loss, bold_num_3)
-        sheet1.write(row1, 6, tot_s1_output_wt, bold_num_3)
-        sheet1.write(row1, 7, tot_s1_amount, bold_num_2)
-        sheet1.write(row1, 8, tot_s1_market_fine, bold_num_3)
-        sheet1.write(row1, 9, tot_s1_rcd_fine, bold_num_3)
-        sheet1.write(row1, 10, tot_s1_gain_fine, bold_num_3)
+        sheet1.write(row1, 4, "", bold_center)
+        sheet1.write(row1, 5, tot_s1_issued_wt, bold_num_3)
+        sheet1.write(row1, 6, tot_s1_loss, bold_num_3)
+        sheet1.write(row1, 7, tot_s1_output_wt, bold_num_3)
+        sheet1.write(row1, 8, tot_s1_amount, bold_num_2)
+        sheet1.write(row1, 9, tot_s1_market_fine, bold_num_3)
+        sheet1.write(row1, 10, tot_s1_rcd_fine, bold_num_3)
+        sheet1.write(row1, 11, tot_s1_gain_fine, bold_num_3)
 
         # =============================================================
         # SHEET 2: PURCHASE DETAILS (PO LEVEL)
