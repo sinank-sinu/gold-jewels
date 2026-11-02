@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-from odoo import models, fields, api, _
-from odoo.tools.float_utils import float_compare
+from odoo import models, api
 
 
 class StockPicking(models.Model):
@@ -8,10 +6,17 @@ class StockPicking(models.Model):
 
     def _auto_allocate_available_stock(self):
         """Ensure jewellery labels in internal transfers always allocate their full gross weight,
-        guaranteeing zero weight loss across all location transfers."""
+        guaranteeing zero weight loss across all location transfers.
+        Guards prevent overriding sold cut pieces or customer delivery quantities."""
         super()._auto_allocate_available_stock()
         for picking in self:
+            # Only run auto allocation on internal transfers, never on customer deliveries
+            if picking.picking_type_id.code != 'internal':
+                continue
             for move in picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel') and m.label_id):
+                # Never override sold cut piece quantities linked to sale order lines
+                if move.sale_line_id:
+                    continue
                 target_weight = (
                     move.label_id.purchase_gross_weight
                     or move.label_id.sale_gross_weight
@@ -54,6 +59,9 @@ class StockMove(models.Model):
     @api.onchange('label_id')
     def _onchange_label_id_full_weight(self):
         if self.label_id:
+            # Do not override weight on customer delivery moves or sale order lines
+            if self.sale_line_id or (self.picking_id and self.picking_id.picking_type_id.code == 'outgoing'):
+                return
             weight = (
                 self.label_id.purchase_gross_weight
                 or self.label_id.sale_gross_weight

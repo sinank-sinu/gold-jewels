@@ -3,31 +3,83 @@
     <record id="view_order_form_inherit_transfer_custom" model="ir.ui.view">
         <field name="name">sale.order.form.inherit.transfer.custom</field>
         <field name="model">sale.order</field>
-        <!-- We can inherit from the base sale.order view -->
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='has_gold_bullion']" position="after">
-                <field name="is_transfer_remaining" widget="boolean_toggle"/>
+            <!-- Smart Button in Header -->
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_cutpiece_transfers"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-scissors"
+                        invisible="cutpiece_picking_count == 0">
+                    <field name="cutpiece_picking_count" widget="statinfo" string="Cut Transfers"/>
+                </button>
             </xpath>
+
+            <!-- Toggle Switch after payment_term_id in basic sale form -->
+            <xpath expr="//field[@name='payment_term_id']" position="after">
+                <field name="is_transfer_remaining" widget="boolean_toggle"/>
+                <field name="is_transferred" invisible="1"/>
+                <field name="has_active_transfers" invisible="1"/>
+            </xpath>
+
+            <!-- Transfer Remaining Notebook Tab -->
             <xpath expr="//notebook" position="inside">
-                <page string="Transfer Remaining">
+                <page string="Transfer Remaining" name="page_transfer_remaining" invisible="not is_transfer_remaining">
                     <group>
                         <group>
-                            <field name="available_transfer_label_ids" invisible="1"/>
-                            <field name="transfer_label_id" invisible="not is_transfer_remaining" options="{'no_create': True, 'no_open': True}" domain="[('id', 'in', available_transfer_label_ids)]"/>
-                        </group>
-                        <group>
-                            <field name="cutpiece_location_dest_id" invisible="not is_transfer_remaining" required="is_transfer_remaining" options="{'no_create': True, 'no_open': True, 'no_create_edit': True}"/>
-                            <field name="dest_location_weight" invisible="not is_transfer_remaining"/>
-                            <field name="transfer_weight" invisible="not is_transfer_remaining"/>
-                            <field name="is_transferred" invisible="1"/>
+                            <field name="cutpiece_location_dest_id" 
+                                   required="is_transfer_remaining" 
+                                   options="{'no_create': True, 'no_open': True, 'no_create_edit': True}"/>
                         </group>
                     </group>
-                    <div class="oe_right" invisible="not is_transfer_remaining or is_transferred">
+
+                    <field name="cutpiece_line_ids" mode="tree" readonly="0">
+                        <tree string="Cutpiece Lines" create="false" delete="false" editable="bottom">
+                            <field name="label_id" readonly="1" force_save="1" options="{'no_open': False}"/>
+                            <field name="product_id" readonly="1" force_save="1"/>
+                            <field name="original_weight" sum="Total Gross" readonly="1" force_save="1"/>
+                            <field name="sold_weight" sum="Total Sold" readonly="1" force_save="1"/>
+                            <field name="transfer_weight" sum="Total Remaining" readonly="1" force_save="1"/>
+                            <field name="cutpiece_location_dest_id" options="{'no_create': True, 'no_open': True}" force_save="1"/>
+                            <field name="dest_location_weight" readonly="1"/>
+                            <field name="picking_id" widget="many2one" readonly="1" invisible="not picking_id"/>
+                            <field name="return_picking_id" widget="many2one" readonly="1" invisible="not return_picking_id"/>
+                            <field name="state" widget="badge" 
+                                   decoration-success="state == 'done'" 
+                                   decoration-warning="state == 'draft'" 
+                                   decoration-muted="state == 'reverted'"/>
+                            <button name="action_revert_single_cutpiece" 
+                                    type="object" 
+                                    string="Revert" 
+                                    icon="fa-undo" 
+                                    class="btn-sm btn-outline-danger" 
+                                    invisible="state != 'done'"
+                                    confirm="Are you sure you want to revert this cut piece transfer? Scrap gold will be returned to branch stock and the original label weight will be restored."/>
+                        </tree>
+                    </field>
+
+                    <div class="mt-3 d-flex gap-2">
+                        <button name="action_populate_cutpiece_lines"
+                                type="object"
+                                string="Refresh Cut Pieces"
+                                icon="fa-refresh"
+                                class="btn btn-secondary"
+                                invisible="state not in ('draft', 'sent')"/>
+
+                        <button name="action_revert_cutpiece_transfers"
+                                type="object"
+                                string="Revert All Cut Transfers"
+                                icon="fa-undo"
+                                class="btn btn-danger"
+                                invisible="not has_active_transfers"
+                                confirm="Are you sure you want to revert all active cut piece transfers on this order? All scrap gold will be returned to branch stock and original label weights will be restored."/>
+
                         <button name="action_transfer_remaining_stock"
                                 type="object"
-                                string="Transfer Remaining"
-                                class="btn-primary"/>
+                                string="Transfer Remaining Now"
+                                class="btn btn-primary"
+                                invisible="is_transferred or state not in ('draft', 'sent')"/>
                     </div>
                 </page>
             </xpath>
