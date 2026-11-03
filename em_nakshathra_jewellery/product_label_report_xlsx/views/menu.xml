@@ -5,6 +5,6 @@
         name="Label Closing Stock Report"
         parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
         action="action_product_label_report_wizard"
-        groups="em_jewellery_management.group_jewellery_manager"
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.label_user_purchase"
         sequence="110"/>
 </odoo>

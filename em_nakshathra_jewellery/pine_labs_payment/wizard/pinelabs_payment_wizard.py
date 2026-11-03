@@ -55,22 +55,8 @@ class PineLabsPaymentWizard(models.TransientModel):
     @api.onchange('payment_method_type')
     def _onchange_payment_method_type(self):
         if self.payment_method_type == 'cash' and not self.cash_account_id:
-            branch = None
-            if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
-                branch = self.invoice_id.branch_id
-            if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
-                branch = self.sale_order_id.branch_id
-            if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
-                branch = self.scheme_installment_id.enrollment_id.branch_id
-            if not branch:
-                branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
-
-            target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
-            domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
-            if branch:
-                domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
-
-            cash_journal = self.env['account.journal'].search(domain, limit=1)
+            branch = self._get_payment_branch()
+            cash_journal = self._get_branch_journal('cash', branch)
             if cash_journal and cash_journal.default_account_id:
                 self.cash_account_id = cash_journal.default_account_id
 
@@ -110,6 +96,115 @@ class PineLabsPaymentWizard(models.TransientModel):
             domain.append(('branch_id', '=', branch.id))
         return self.env['pinelabs.terminal'].search(domain, limit=2)
 
+    def _get_payment_branch(self):
+        self.ensure_one()
+        branch = False
+        branch_sources = (
+            (self.payment_id, 'branch_id'),
+            (self.invoice_id, 'branch_id'),
+            (self.sale_order_id, 'branch_id'),
+        )
+        for record, field_name in branch_sources:
+            if record and field_name in record._fields:
+                branch = record[field_name]
+                if branch:
+                    break
+        if (
+            not branch
+            and self.scheme_installment_id
+            and 'branch_id' in self.scheme_installment_id.enrollment_id._fields
+        ):
+            branch = self.scheme_installment_id.enrollment_id.branch_id
+        if (
+            not branch
+            and self.scheme_installment_id
+            and self.scheme_installment_id.journal_id.branch_id
+        ):
+            branch = self.scheme_installment_id.journal_id.branch_id
+        if not branch and 'branch_id' in self.env.user._fields:
+            branch = self.env.user.branch_id
+        if (
+            branch
+            and 'branch_ids' in self.env.user._fields
+            and branch not in self.env.user.branch_ids
+        ):
+            raise UserError(
+                _('You are not allowed to register payments for branch %s.') % branch.name
+            )
+        return branch
+
+    def _get_branch_journal(self, journal_type, branch, excluded_journal_ids=None):
+        company = branch.company_id if branch else self.env.company
+        domain = [
+            ('type', '=', journal_type),
+            ('company_id', '=', company.id),
+            ('name', 'not ilike', 'suspense'),
+            ('name', 'not ilike', 'suspence'),
+        ]
+        if excluded_journal_ids:
+            domain.append(('id', 'not in', excluded_journal_ids))
+        journals = self.env['account.journal']
+        if branch:
+            branch_journal = journals.search(
+                domain + [('branch_id', '=', branch.id)], limit=1
+            )
+            if branch_journal:
+                return branch_journal
+            return journals.search(domain + [('branch_id', '=', False)], limit=1)
+        return journals.search(domain, limit=1)
+
+    def _get_installment_journal(self, journal_type):
+        self.ensure_one()
+        installment = self.scheme_installment_id
+        journal = installment.journal_id
+        if not journal:
+            return journal
+
+        if journal.type != journal_type:
+            raise UserError(_(
+                "The journal selected on this installment (%(journal)s) is %(actual_type)s, "
+                "but %(expected_type)s is required for this payment.",
+                journal=journal.display_name,
+                actual_type=journal.type,
+                expected_type=journal_type,
+            ))
+
+        enrollment_branch = installment.enrollment_id.branch_id
+        if enrollment_branch and journal.branch_id and journal.branch_id != enrollment_branch:
+            raise UserError(_(
+                "The installment journal %(journal)s belongs to %(journal_branch)s, "
+                "but this scheme belongs to %(scheme_branch)s.",
+                journal=journal.display_name,
+                journal_branch=journal.branch_id.display_name,
+                scheme_branch=enrollment_branch.display_name,
+            ))
+
+        payment_branch = self._get_payment_branch()
+        if payment_branch and journal.branch_id and journal.branch_id != payment_branch:
+            raise UserError(_(
+                "The installment journal %(journal)s belongs to %(journal_branch)s, "
+                "but this payment belongs to %(payment_branch)s.",
+                journal=journal.display_name,
+                journal_branch=journal.branch_id.display_name,
+                payment_branch=payment_branch.display_name,
+            ))
+
+        if journal.branch_id and 'branch_ids' in self.env.user._fields:
+            if journal.branch_id not in self.env.user.branch_ids:
+                raise UserError(_(
+                    "You are not allowed to use journal %(journal)s from branch %(branch)s.",
+                    journal=journal.display_name,
+                    branch=journal.branch_id.display_name,
+                ))
+
+        expected_company = payment_branch.company_id if payment_branch else self.env.company
+        if journal.company_id != expected_company:
+            raise UserError(_(
+                "The installment journal %(journal)s belongs to a different company.",
+                journal=journal.display_name,
+            ))
+        return journal
+
     # ─────────────────────────────────────────────────────────────────
     # Payment mode toggle buttons (Card / UPI / Bank)
     # ─────────────────────────────────────────────────────────────────
@@ -118,22 +213,8 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Set payment_method_type and re-open the wizard to show selection."""
         self.payment_method_type = mode
         if mode == 'cash' and not self.cash_account_id:
-            branch = None
-            if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
-                branch = self.invoice_id.branch_id
-            if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
-                branch = self.sale_order_id.branch_id
-            if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
-                branch = self.scheme_installment_id.enrollment_id.branch_id
-            if not branch:
-                branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
-
-            target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
-            domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
-            if branch:
-                domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
-
-            cash_journal = self.env['account.journal'].search(domain, limit=1)
+            branch = self._get_payment_branch()
+            cash_journal = self._get_branch_journal('cash', branch)
             if cash_journal and cash_journal.default_account_id:
                 self.cash_account_id = cash_journal.default_account_id
                 
@@ -182,17 +263,8 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Open Odoo's standard Register Payment wizard for bank/cash."""
         self.ensure_one()
 
-        branch = None
-        if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
-            branch = self.invoice_id.branch_id
-        if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
-            branch = self.sale_order_id.branch_id
-        if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
-            branch = self.scheme_installment_id.enrollment_id.branch_id
-        if not branch:
-            branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
-
-        target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
+        branch = self._get_payment_branch()
+        target_company_id = branch.company_id.id if branch else self.env.company.id
 
         terminal_domain = [('branch_id.company_id', '=', target_company_id)]
         if branch:
@@ -205,21 +277,11 @@ class PineLabsPaymentWizard(models.TransientModel):
             | terminal_journals.mapped('upi_journal_id')
         )
 
-        domain = [
-            ('type', '=', 'bank'),
-            ('company_id', '=', target_company_id),
-            ('name', 'not ilike', 'suspense'),
-            ('name', 'not ilike', 'suspence')
-        ]
-        if terminal_payment_journals:
-            domain.append(('id', 'not in', terminal_payment_journals.ids))
-        if branch:
-            domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
-
-        bank_journal = self.env['account.journal'].search(domain, limit=1)
-        
-        if self.scheme_installment_id and self.scheme_installment_id.journal_id:
-            bank_journal = self.scheme_installment_id.journal_id
+        bank_journal = self._get_installment_journal('bank')
+        if not bank_journal:
+            bank_journal = self._get_branch_journal(
+                'bank', branch, terminal_payment_journals.ids
+            )
             
         if not bank_journal:
             if branch:
@@ -342,25 +404,11 @@ class PineLabsPaymentWizard(models.TransientModel):
         """Open Odoo's standard Register Payment wizard for cash with journal preset."""
         self.ensure_one()
 
-        branch = None
-        if self.invoice_id and hasattr(self.invoice_id, 'branch_id'):
-            branch = self.invoice_id.branch_id
-        if not branch and self.sale_order_id and hasattr(self.sale_order_id, 'branch_id'):
-            branch = self.sale_order_id.branch_id
-        if not branch and self.scheme_installment_id and self.scheme_installment_id.enrollment_id.branch_id:
-            branch = self.scheme_installment_id.enrollment_id.branch_id
-        if not branch:
-            branch = self.env.user.branch_id if hasattr(self.env.user, 'branch_id') else None
-
-        target_company_id = branch.company_id.id if branch and hasattr(branch, 'company_id') and branch.company_id else self.env.company.id
-        domain = [('type', '=', 'cash'), ('company_id', '=', target_company_id)]
-        if branch:
-            domain.extend(['|', ('branch_id', '=', branch.id), ('branch_id', '=', False)])
-
-        cash_journal = self.env['account.journal'].search(domain, limit=1)
-        
-        if self.scheme_installment_id and self.scheme_installment_id.journal_id:
-            cash_journal = self.scheme_installment_id.journal_id
+        branch = self._get_payment_branch()
+        target_company_id = branch.company_id.id if branch else self.env.company.id
+        cash_journal = self._get_installment_journal('cash')
+        if not cash_journal:
+            cash_journal = self._get_branch_journal('cash', branch)
             
         if not cash_journal:
             if branch:
