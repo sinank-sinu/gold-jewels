@@ -1,2 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_sale_order_cutpiece_line,sale.order.cutpiece.line,model_sale_order_cutpiece_line,base.group_user,1,1,1,1
+access_sale_order_cutpiece_line_all,sale.order.cutpiece.line.all,model_sale_order_cutpiece_line,,1,1,1,1
+access_sale_order_cutpiece_line_user,sale.order.cutpiece.line.user,model_sale_order_cutpiece_line,base.group_user,1,1,1,1
+access_sale_order_cutpiece_line_salesman,sale.order.cutpiece.line.salesman,model_sale_order_cutpiece_line,sales_team.group_sale_salesman,1,1,1,1
+access_sale_order_cutpiece_line_manager,sale.order.cutpiece.line.manager,model_sale_order_cutpiece_line,sales_team.group_sale_manager,1,1,1,1

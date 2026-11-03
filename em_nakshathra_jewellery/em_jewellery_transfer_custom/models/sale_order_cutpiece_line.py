@@ -98,4 +98,4 @@ class SaleOrderCutpieceLine(models.Model):
     def action_revert_single_cutpiece(self):
         """Action button to revert a single cut piece line"""
         self.ensure_one()
-        return self.order_id._revert_cutpiece_line(self)
+        return self.order_id._revert_single_cutpiece_action(self)
