@@ -108,3 +108,58 @@ class AccountPayment(models.Model):
                             payment.sale_id = invoice.sale_id.id
 
         return res
+
+    def _get_display_payment_method(self):
+        """Determine a clean, descriptive payment method label for receipts and invoices.
+        Prioritizes Pine Labs transaction details (UPI / Card type) when available."""
+        self.ensure_one()
+        txn = getattr(self, 'pinelabs_transaction_id', False)
+        if not txn and 'pinelabs.transaction' in self.env:
+            txn = self.env['pinelabs.transaction'].search([
+                ('payment_id', '=', self.id),
+                ('state', '=', 'success'),
+            ], limit=1)
+            if not txn and self.sale_id:
+                txn = self.env['pinelabs.transaction'].search([
+                    ('sale_order_id', '=', self.sale_id.id),
+                    ('state', '=', 'success'),
+                ], limit=1)
+
+        if txn:
+            mode = (txn.payment_mode or '').strip().upper()
+            card_type = (txn.card_type or '').strip().upper()
+            if mode == 'UPI' or card_type == 'UPI':
+                return 'UPI'
+            elif card_type in ('CREDIT', 'DEBIT'):
+                return f"Card ({card_type.title()})"
+            elif mode == 'CARD':
+                return 'Card'
+            elif txn.payment_mode:
+                return txn.payment_mode.title()
+
+        if self.journal_id:
+            j_type = (self.journal_id.type or '').lower()
+            j_name = self.journal_id.name or ''
+            j_name_lower = j_name.lower()
+
+            if j_type == 'cash' or 'cash' in j_name_lower:
+                return 'Cash'
+            if any(k in j_name_lower for k in ['upi', 'gpay', 'google pay', 'phonepe', 'paytm', 'bhim']):
+                return 'UPI'
+            if any(k in j_name_lower for k in ['card', 'pos', 'pine', 'credit', 'debit', 'visa', 'mastercard']):
+                return 'Card'
+
+            ref_lower = (self.ref or '').lower()
+            if any(k in ref_lower for k in ['upi', 'gpay', 'phonepe', 'paytm']):
+                return 'UPI'
+            if any(k in ref_lower for k in ['card', 'pos', 'pine']):
+                return 'Card'
+
+            pml_name = self.payment_method_line_id.name if self.payment_method_line_id else ''
+            if pml_name and pml_name.lower() not in ('manual', ''):
+                return pml_name
+
+            return j_name
+
+        return (self.payment_method_id.name if self.payment_method_id else '') or 'Manual'
+

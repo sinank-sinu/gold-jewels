@@ -30,41 +30,54 @@ class AccountMove(models.Model):
     _inherit = "account.move"
 
     def _search_default_journal(self):
-        if len(self.env.user.branch_ids) == 1:
-            if self.is_sale_document(include_receipts=True):
-                journal_types = ['sale']
-            elif self.is_purchase_document(include_receipts=True):
-                journal_types = ['purchase']
-            elif self.payment_id or self.env.context.get('is_payment'):
-                journal_types = ['bank', 'cash']
-            else:
-                journal_types = ['general']
-            branch_id = self.env.user.branch_id.id
-            domain = [('branch_id', '=', branch_id), ('type', 'in', journal_types)]
-            journal = None
-            currency_id = self.currency_id.id or self._context.get('default_currency_id')
-            if currency_id and currency_id != self.company_id.currency_id.id:
-                currency_domain = domain + [('currency_id', '=', currency_id)]
-                journal = self.env['account.journal'].search(currency_domain, limit=1)
+        self.ensure_one()
+        branch = self.branch_id
+        company = self.company_id or self.env.company
+        default_branch = self.env.user.branch_id
+        if (
+            not branch
+            and default_branch
+            and default_branch in self.env.user.branch_ids
+            and default_branch.company_id == company
+        ):
+            branch = default_branch
+        if not branch:
+            allowed_branches = self.env.user.branch_ids.filtered(
+                lambda item: item.company_id == company
+            )
+            if len(allowed_branches) == 1:
+                branch = allowed_branches
+        if not branch:
+            return super()._search_default_journal()
 
-            if not journal:
-                journal = self.env['account.journal'].search(domain, limit=1)
-            if not journal:
-                domain = [('type', 'in', journal_types),
-                          ('branch_id', '=', False)]
-                journal = self.env['account.journal'].search(domain, limit=1)
-            if not journal:
-                branch = self.env.user.branch_id
-
-                error_msg = _(
-                    "No journal could be found in branch %(branch_name)s for any of those types: %(journal_types)s",
-                    branch_name=branch.name,
-                    journal_types=', '.join(journal_types),
-                )
-                raise UserError(error_msg)
-        else:
-            journal = super(AccountMove, self)._search_default_journal()
-            return journal
+        journal_types = self._get_valid_journal_types()
+        journal_model = self.env['account.journal']
+        domain = [
+            *journal_model._check_company_domain(company),
+            ('branch_id', '=', branch.id),
+            ('type', 'in', journal_types),
+        ]
+        currency_id = self.currency_id.id or self._context.get('default_currency_id')
+        journal = None
+        if currency_id and currency_id != company.currency_id.id:
+            journal = journal_model.search(
+                domain + [('currency_id', '=', currency_id)], limit=1)
+        if not journal:
+            journal = journal_model.search(domain, limit=1)
+        if not journal:
+            shared_domain = [
+                *journal_model._check_company_domain(company),
+                ('branch_id', '=', False),
+                ('type', 'in', journal_types),
+            ]
+            journal = journal_model.search(shared_domain, limit=1)
+        if not journal:
+            raise UserError(_(
+                "No journal could be found in branch %(branch_name)s for any of those types: %(journal_types)s",
+                branch_name=branch.name,
+                journal_types=', '.join(journal_types),
+            ))
+        return journal
 
     def _get_default_branch(self):
         if len(self.env.user.branch_ids) == 1:

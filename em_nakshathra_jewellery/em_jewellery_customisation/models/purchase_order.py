@@ -13,7 +13,7 @@ class PurchaseOrder(models.Model):
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
-        if self.is_old_gold or self.is_sale_return_po:
+        if self.is_sale_return_po and not (self.is_old_gold or getattr(self, 'is_diamond_og', False)):
             vals.update({
                 'amount_rounding': self.amount_rounding,
             })
@@ -37,7 +37,7 @@ class PurchaseOrder(models.Model):
             if not order.tax_totals:
                 continue
 
-            if not (order.is_old_gold or order.is_sale_return_po):
+            if not (order.is_old_gold or order.is_sale_return_po or getattr(order, 'is_diamond_og', False)):
                 continue
 
             tax_totals = dict(order.tax_totals)
@@ -72,7 +72,7 @@ class PurchaseOrder(models.Model):
     def _amount_all(self):
         super()._amount_all()
         for order in self:
-            if not (order.is_old_gold or order.is_sale_return_po):
+            if not (order.is_old_gold or order.is_sale_return_po or getattr(order, 'is_diamond_og', False)):
                 continue
             if not order.amount_rounding:
                 continue

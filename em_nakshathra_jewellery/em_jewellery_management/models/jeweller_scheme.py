@@ -1,5 +1,5 @@
 from odoo import models, fields, api, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_is_zero
 from markupsafe import Markup
 
@@ -101,6 +101,13 @@ class JewellerySchemeEnrollment(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            if not vals.get('ticket_number'):
+                vals['ticket_number'] = self.env['ir.sequence'].next_by_code(
+                    'jewellery.scheme.enrollment'
+                )
+                if not vals['ticket_number']:
+                    raise UserError(_("The scheme ticket number sequence is not configured."))
+
             if vals.get('partner_id'):
                 partner = self.env['res.partner'].browse(vals['partner_id'])
                 if vals.get('phone') and not partner.phone:

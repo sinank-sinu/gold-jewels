@@ -329,7 +329,8 @@ class StockMove(models.Model):
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
             weight = self.label_id.purchase_gross_weight or self.label_id.sale_gross_weight or self.label_id.tag_weight or 1.0
-            self.product_uom_qty = weight
+            if not self.sale_line_id and not (self.picking_id and self.picking_id.picking_type_id.code == 'outgoing'):
+                self.product_uom_qty = weight
             self.label_weight = weight
             self.pieces = 1
         else:

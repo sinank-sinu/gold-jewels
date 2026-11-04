@@ -1,0 +1,24 @@
+.o_form_view .label_search_scanner {
+    width: 100%;
+    min-width: 0;
+}
+
+.o_form_view .label_search_scanner .em_barcode_scanner_container {
+    width: 100%;
+    max-width: 720px;
+    box-sizing: border-box;
+}
+
+.o_form_view .label_search_scanner .em_barcode_scanner_input_row {
+    width: 100%;
+}
+
+.o_form_view .label_search_scanner .em_barcode_scanner_input {
+    width: 100%;
+}
+
+.o_form_view .label_search_scanner .em_barcode_scanner_result {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}

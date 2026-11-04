@@ -130,6 +130,16 @@
         <field name="company_id" eval="False"/>
     </record>
 
+    <record id="seq_jewellery_scheme_enrollment" model="ir.sequence">
+        <field name="name">Jewellery Scheme Ticket</field>
+        <field name="code">jewellery.scheme.enrollment</field>
+        <field name="prefix">SWSMB-1-M-</field>
+        <field name="padding">5</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
      <record id="seq_jewellery_job_work" model="ir.sequence">
         <field name="name">Jewellery Job Work</field>
         <field name="code">jewellery.job.work</field>

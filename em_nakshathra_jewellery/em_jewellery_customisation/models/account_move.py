@@ -395,10 +395,16 @@ class AccountMove(models.Model):
         if not pay_term_lines:
             return self.env['account.move.line']
 
+        target_partners = self.commercial_partner_id | self.partner_id
+        if hasattr(self, 'customer_schemes') and self.customer_schemes:
+            for s in self.customer_schemes:
+                if s.partner_id:
+                    target_partners |= s.partner_id | getattr(s.partner_id, 'commercial_partner_id', s.partner_id)
+
         domain = [
             ('account_id', 'in', pay_term_lines.account_id.ids),
             ('parent_state', '=', 'posted'),
-            ('partner_id', '=', self.commercial_partner_id.id),
+            ('partner_id', 'in', target_partners.ids),
             ('reconciled', '=', False),
             ('balance', '<', 0.0),
             '|', ('amount_residual', '!=', 0.0), ('amount_residual_currency', '!=', 0.0),
@@ -612,7 +618,9 @@ class AccountMove(models.Model):
             has_so_scheme = any(so.apply_scheme for so in sale_orders)
             has_inv_scheme = bool(hasattr(move, 'customer_schemes') and move.customer_schemes)
             has_transfers = bool(self.env['account.move'].sudo().search([
+                '|',
                 ('invoice_origin', '=like', f"SchemeTransfer:{move.id}%"),
+                ('invoice_origin', '=like', f"SchemeTransferSameComp:{move.id}%"),
                 ('state', '!=', 'cancel'),
             ], limit=1))
 
@@ -655,6 +663,10 @@ class AccountMove(models.Model):
                 ('invoice_origin', '=like', f"SchemeTransferOut:{move.id}:%"),
                 ('state', '!=', 'cancel'),
             ])
+            all_existing_same_transfers = self.env['account.move'].sudo().search([
+                ('invoice_origin', '=like', f"SchemeTransferSameComp:{move.id}:%"),
+                ('state', '!=', 'cancel'),
+            ])
             allowed_scheme_ids = set(schemes.ids)
             for t_move in all_existing_transfers:
                 # CRITICAL: NEVER cancel or un-reconcile transfer moves that are already reconciled!
@@ -686,20 +698,45 @@ class AccountMove(models.Model):
                         except Exception as e:
                             _logger.warning("Failed to cancel scheme transfer out move %s: %s", t_out.name, e)
 
-            # 4. Collect paid installments that physically belong to another company
+            for t_same in all_existing_same_transfers:
+                if any(line.reconciled for line in t_same.line_ids.filtered(lambda l: l.credit > 0)):
+                    continue
+                parts = t_same.invoice_origin.split(':')
+                inst_id = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else False
+                if inst_id:
+                    inst = self.env['jewellery.scheme.installment'].sudo().browse(inst_id)
+                    if not inst.exists() or inst.enrollment_id.id not in allowed_scheme_ids:
+                        try:
+                            t_same.line_ids.remove_move_reconcile()
+                            t_same.button_draft()
+                            t_same.button_cancel()
+                        except Exception as e:
+                            _logger.warning("Failed to cancel scheme same-comp transfer move %s: %s", t_same.name, e)
+
+            # 4. Collect paid installments that physically belong to another company OR another partner
             transfer_installments = []
+            same_comp_other_partner_installments = []
+
             for scheme in schemes.sudo():
+                scheme_owner = scheme.partner_id or self.env['res.partner']
+                is_other_partner = bool(
+                    scheme_owner and
+                    scheme_owner.id != move.partner_id.id and
+                    getattr(scheme_owner, 'commercial_partner_id', scheme_owner).id != getattr(move.partner_id, 'commercial_partner_id', move.partner_id).id
+                )
                 for inst in scheme.scheme_line_ids.sudo():
                     if inst.state != 'paid' or inst.amount <= 0:
                         continue
                     inst_move = inst.move_id.sudo() if inst.move_id else False
                     comp = inst_move.company_id if inst_move else (scheme.branch_id.company_id if scheme.branch_id else False)
                     if comp and comp.id != move.company_id.id:
-                        transfer_installments.append((scheme, inst, comp))
+                        transfer_installments.append((scheme, inst, comp, scheme_owner))
+                    elif is_other_partner:
+                        same_comp_other_partner_installments.append((scheme, inst, comp or move.company_id, scheme_owner))
 
-            if transfer_installments:
+            if transfer_installments or same_comp_other_partner_installments:
                 sale_order = sale_orders[0] if sale_orders else False
-                entry_date = fields.Date.to_date(sale_order.date_order) if sale_order and sale_order.date_order else fields.Date.today()
+                entry_date = fields.Date.to_date(sale_order.date_order) if sale_order and sale_order.date_order else (move.invoice_date or fields.Date.today())
 
                 journal = self.env['account.journal'].search([
                     ('company_id', '=', move.company_id.id),
@@ -745,7 +782,8 @@ class AccountMove(models.Model):
 
                 partner_cache = {}
 
-                for scheme, inst, comp in transfer_installments:
+                # A. Process Cross-Company Scheme Transfers
+                for scheme, inst, comp, scheme_owner in transfer_installments:
                     ticket = scheme.ticket_number or scheme.name or 'Scheme'
                     inst_move = inst.move_id.sudo() if inst.move_id else False
                     move_ref_name = inst_move.name if inst_move else f"Inst-{inst.id}"
@@ -809,7 +847,7 @@ class AccountMove(models.Model):
                             new_transfer_move.action_post()
 
                     # 2. Origin company entry (Miscellaneous Journal):
-                    # Debit: Debtors (Partner: Customer)
+                    # Debit: Debtors (Partner: Scheme Owner / Customer A)
                     # Credit: Debtors (Partner: Redeeming Company)
                     out_origin = f"SchemeTransferOut:{move.id}:{inst.id}"
                     existing_out = self.env['account.move'].sudo().search([
@@ -864,8 +902,9 @@ class AccountMove(models.Model):
                                     ('company_id', '=', comp.id),
                                     ('account_type', '=', 'asset_receivable'),
                                 ], limit=1)
+                            owner_partner = scheme_owner or move.partner_id
                             if not comp_debtors:
-                                comp_debtors = move.partner_id.with_company(comp).property_account_receivable_id
+                                comp_debtors = owner_partner.with_company(comp).property_account_receivable_id
                             if not comp_debtors:
                                 raise UserError(_("Debtors/Receivable account not found in company %s.", comp.name))
 
@@ -877,12 +916,12 @@ class AccountMove(models.Model):
                                 'ref': f"Scheme Transfer Out: {ticket} ({move_ref_name}) to {move.company_id.name}",
                                 'invoice_origin': out_origin,
                                 'company_id': comp.id,
-                                'partner_id': move.partner_id.id,
+                                'partner_id': owner_partner.id,
                                 'branch_id': inst_move.branch_id.id if inst_move and hasattr(inst_move, 'branch_id') and inst_move.branch_id else False,
                                 'line_ids': [
                                     (0, 0, {
                                         'account_id': comp_debtors.id,
-                                        'partner_id': move.partner_id.id,
+                                        'partner_id': owner_partner.id,
                                         'name': f"Scheme Transfer Out: {ticket} to {move.company_id.name}",
                                         'debit': inst_amount,
                                         'credit': 0.0,
@@ -905,17 +944,98 @@ class AccountMove(models.Model):
                             if not orig_payment_aml:
                                 orig_payment_aml = self.env['account.move.line'].sudo().search([
                                     ('company_id', '=', comp.id),
-                                    ('partner_id', '=', move.partner_id.id),
+                                    ('partner_id', 'in', [owner_partner.id, getattr(owner_partner, 'commercial_partner_id', owner_partner).id]),
                                     ('account_id', '=', comp_debtors.id),
                                     ('reconciled', '=', False),
                                     ('credit', '>=', inst_amount),
                                 ], limit=1)
-                            dr_line = new_out_move.line_ids.filtered(lambda l: l.account_id == comp_debtors and l.debit > 0 and l.partner_id == move.partner_id)
+                            dr_line = new_out_move.line_ids.filtered(lambda l: l.account_id == comp_debtors and l.debit > 0 and l.partner_id.id in (owner_partner.id, getattr(owner_partner, 'commercial_partner_id', owner_partner).id))
                             if dr_line and orig_payment_aml:
                                 try:
                                     (dr_line + orig_payment_aml).reconcile()
                                 except Exception as e:
                                     _logger.warning("Failed to reconcile SchemeTransferOut debit line: %s", e)
+
+                # B. Process Same-Company Other Person Scheme Transfers
+                # (Debtors Customer A Debit, Debtors Customer B Credit)
+                for scheme, inst, comp, scheme_owner in same_comp_other_partner_installments:
+                    ticket = scheme.ticket_number or scheme.name or 'Scheme'
+                    inst_move = inst.move_id.sudo() if inst.move_id else False
+                    move_ref_name = inst_move.name if inst_move else f"Inst-{inst.id}"
+                    label = f"Scheme Transfer: {ticket} ({scheme_owner.name} to {move.partner_id.name})"
+                    inst_amount = inst.amount
+
+                    same_origin = f"SchemeTransferSameComp:{move.id}:{inst.id}"
+
+                    existing_same = self.env['account.move'].sudo().search([
+                        ('invoice_origin', '=', same_origin),
+                        ('company_id', '=', move.company_id.id),
+                        ('state', '=', 'posted'),
+                    ], limit=1)
+
+                    if not existing_same:
+                        cancelled_same = self.env['account.move'].sudo().search([
+                            ('invoice_origin', '=', same_origin),
+                            ('company_id', '=', move.company_id.id),
+                            ('state', '=', 'cancel'),
+                        ])
+                        if cancelled_same:
+                            cancelled_same.button_draft()
+                            cancelled_same.action_post()
+                        else:
+                            same_move_vals = {
+                                'journal_id': journal.id,
+                                'date': entry_date,
+                                'ref': label,
+                                'invoice_origin': same_origin,
+                                'company_id': move.company_id.id,
+                                'partner_id': move.partner_id.id,
+                                'branch_id': move.branch_id.id if hasattr(move, 'branch_id') and move.branch_id else False,
+                                'line_ids': [
+                                    (0, 0, {
+                                        'account_id': debtors_account.id,
+                                        'partner_id': scheme_owner.id,
+                                        'name': f"Scheme Transfer from {scheme_owner.name}: {ticket}",
+                                        'debit': inst_amount,
+                                        'credit': 0.0,
+                                    }),
+                                    (0, 0, {
+                                        'account_id': debtors_account.id,
+                                        'partner_id': move.partner_id.id,
+                                        'name': f"Scheme Transfer to {move.partner_id.name}: {ticket}",
+                                        'debit': 0.0,
+                                        'credit': inst_amount,
+                                    })
+                                ]
+                            }
+                            new_same_move = self.env['account.move'].with_context(
+                                default_move_type='entry',
+                                default_journal_id=journal.id,
+                            ).create(same_move_vals)
+                            new_same_move.action_post()
+
+                            # Reconcile debit line with scheme_owner's original installment payment
+                            orig_payment_aml = self.env['account.move.line']
+                            if inst_move and inst_move.company_id.id == move.company_id.id:
+                                orig_payment_aml = inst_move.line_ids.filtered(
+                                    lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled and l.credit > 0
+                                )[:1]
+                            if not orig_payment_aml:
+                                orig_payment_aml = self.env['account.move.line'].sudo().search([
+                                    ('company_id', '=', move.company_id.id),
+                                    ('partner_id', 'in', [scheme_owner.id, getattr(scheme_owner, 'commercial_partner_id', scheme_owner).id]),
+                                    ('account_id', '=', debtors_account.id),
+                                    ('reconciled', '=', False),
+                                    ('credit', '>=', inst_amount),
+                                ], limit=1)
+                            dr_line = new_same_move.line_ids.filtered(
+                                lambda l: l.account_id == debtors_account and l.debit > 0 and l.partner_id.id == scheme_owner.id
+                            )
+                            if dr_line and orig_payment_aml:
+                                try:
+                                    (dr_line + orig_payment_aml).reconcile()
+                                except Exception as e:
+                                    _logger.warning("Failed to reconcile SchemeTransferSameComp debit line: %s", e)
 
     def action_post(self):
         for move in self:

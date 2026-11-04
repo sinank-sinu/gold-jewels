@@ -20,7 +20,8 @@
 #
 #############################################################################
 
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
 
 
 class AccountPaymentRegister(models.TransientModel):
@@ -34,28 +35,30 @@ class AccountPaymentRegister(models.TransientModel):
                                         "('type', 'in', ('bank', 'cash')), ('branch_id', '=', branch_id)]")
 
     def _compute_journal_id(self):
-        """methode to compute journal id based on current branch"""
-        self.ensure_one()
-        lines = self.line_ids._origin
-        branch = lines.branch_id
-        if branch:
-            for wizard in self:
-                if wizard.journal_id:
-                    wizard.branch_id = branch.id
-                    continue
+        """Choose a payment journal from the invoice's branch."""
+        for wizard in self:
+            branches = wizard.line_ids.move_id.branch_id
+            if len(branches) > 1:
+                raise UserError(_("A payment cannot combine journal items from different branches."))
+            branch = branches[:1]
+            if not branch:
+                super(AccountPaymentRegister, wizard)._compute_journal_id()
+                continue
 
-                domain = [
-                    ('type', 'in', ('bank', 'cash')),
-                    ('branch_id', '=', branch.id),
-                ]
-
-                journal = self.env['account.journal'].search(
-                    domain, limit=1)
-                wizard.journal_id = journal
-                wizard.branch_id = branch.id
-        else:
-            res = super(AccountPaymentRegister, self)._compute_journal_id()
-            return res
+            wizard.branch_id = branch
+            domain = [
+                ('company_id', '=', branch.company_id.id),
+                ('type', 'in', ('bank', 'cash')),
+                ('branch_id', '=', branch.id),
+                ('id', 'in', wizard.available_journal_ids.ids),
+            ]
+            journal = self.env['account.journal'].search(domain, limit=1)
+            if not journal:
+                raise UserError(_(
+                    "No available bank or cash journal is configured for branch %s.",
+                    branch.name,
+                ))
+            wizard.journal_id = journal
 
     def action_create_payments(self):
         from odoo.exceptions import ValidationError
