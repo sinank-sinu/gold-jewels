@@ -56,23 +56,41 @@ class ProductLabelReportWizard(models.TransientModel):
             ('product_id.product_tmpl_id.is_vault_item', '=', True)
         ])
 
-        # Get all sale order lines for labels sold after start_datetime
-        sold_after_datetime_lines = self.env['sale.order.line'].sudo().search([
-            ('label_id', '!=', False),
-            ('state', '=', 'sale'),
-            ('order_id.date_order', '>', self.start_datetime)
-        ])
-        sold_after_label_ids = sold_after_datetime_lines.mapped('label_id').ids
-
         import pytz
         local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
-        # Get all labels created before/at start_datetime that are active or sold after
+        # Include inactive labels too; stock moves determine their location at the cutoff.
         labels_domain = [
             ('create_date', '<=', self.start_datetime),
-            ('active', '=', True),
-            # ('id', 'in', sold_after_label_ids) hiding for the label correct report
         ]
-        candidates = self.env['product.label'].sudo().search(labels_domain)
+        candidates = self.env['product.label'].sudo().with_context(active_test=False).search(labels_domain)
+        active_at_cutoff = {}
+        tracking_model = self.env['mail.tracking.value'].sudo()
+        tracking_domain = [
+            ('field_id.model', '=', 'product.label'),
+            ('field_id.name', '=', 'active'),
+            ('mail_message_id.model', '=', 'product.label'),
+            ('mail_message_id.res_id', 'in', candidates.ids),
+        ]
+        tracking_values = tracking_model.search(tracking_domain)
+        tracking_values = tracking_values.sorted(
+            key=lambda tracking: (
+                tracking.mail_message_id.date or datetime.min,
+                tracking.mail_message_id.id,
+                tracking.id,
+            )
+        )
+        active_before_cutoff = {}
+        for tracking in tracking_values:
+            label_id = tracking.mail_message_id.res_id
+            message_date = tracking.mail_message_id.date
+            if message_date and message_date <= self.start_datetime:
+                active_before_cutoff[label_id] = bool(tracking.new_value_integer)
+            elif message_date:
+                active_at_cutoff.setdefault(
+                    label_id,
+                    bool(tracking.old_value_integer),
+                )
+        active_at_cutoff.update(active_before_cutoff)
 
         # Get all stock moves for these candidate labels
         label_moves = self.env['stock.move'].sudo().search([
@@ -95,6 +113,9 @@ class ProductLabelReportWizard(models.TransientModel):
         label_branches = {}
 
         for label in candidates:
+            if not active_at_cutoff.get(label.id, label.active):
+                continue
+
             # Find the last move of this label done before or at start_datetime
             last_move = last_move_before_by_label.get(label.id)
             if last_move:
