@@ -95,6 +95,8 @@
             </xpath>
         </field>
     </record>
-
+      <record id="stock.menu_stock_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(4, ref('em_jewellery_management.label_user_purchase'))]"/>
+    </record>
 
 </odoo>
