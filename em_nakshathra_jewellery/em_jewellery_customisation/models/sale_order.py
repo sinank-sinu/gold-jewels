@@ -180,6 +180,8 @@ class SaleOrder(models.Model):
         })
         if hasattr(self, 'customer_schemes') and self.customer_schemes:
             vals['customer_schemes'] = [(6, 0, self.customer_schemes.ids)]
+        if hasattr(self, 'other_person_phone') and self.other_person_phone:
+            vals['other_person_phone'] = self.other_person_phone
         return vals
 
 

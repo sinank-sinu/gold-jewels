@@ -56,6 +56,7 @@
                                     icon="fa-undo" 
                                     class="btn-sm btn-outline-danger" 
                                     invisible="state != 'done' or parent.state not in ('draft', 'sent')"
+                                    groups="base.group_system"
                                     confirm="Are you sure you want to revert this cut piece transfer? Scrap gold will be returned to branch stock and the original label weight will be restored."/>
                         </tree>
                     </field>

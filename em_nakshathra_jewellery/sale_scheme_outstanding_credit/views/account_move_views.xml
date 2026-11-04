@@ -7,8 +7,11 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='l10n_in_gst_treatment']" position="after">
                 <field name="is_scheme_redeemed" invisible="1"/>
+                <field name="other_person_phone"
+                       readonly="is_scheme_redeemed"
+                       invisible="move_type not in ('out_invoice', 'out_refund')"/>
                 <field name="customer_schemes" widget="many2many_tags"
-                       domain="['&amp;', ('partner_id', 'child_of', commercial_partner_id), ('is_redeemed', '=', False)]"
+                       domain="[('state', 'in', ('running', 'completed')), ('phone', '!=', False), '|', ('phone', '=', phone), ('phone', '=', other_person_phone)]"
                        readonly="is_scheme_redeemed"
                        invisible="move_type not in ('out_invoice', 'out_refund')"/>
                 <field name="scheme_amount" string="Customer Paid" readonly="1"
