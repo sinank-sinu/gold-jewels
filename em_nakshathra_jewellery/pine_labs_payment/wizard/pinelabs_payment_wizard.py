@@ -175,14 +175,14 @@ class PineLabsPaymentWizard(models.TransientModel):
                 journal=journal.display_name,
             ))
 
-        if branch and journal.branch_id and journal.branch_id != branch:
-            raise UserError(_(
-                "The selected payment journal %(journal)s belongs to branch %(journal_branch)s, "
-                "not payment branch %(payment_branch)s.",
-                journal=journal.display_name,
-                journal_branch=journal.branch_id.display_name,
-                payment_branch=branch.display_name,
-            ))
+        # if branch and journal.branch_id and journal.branch_id != branch:
+        #     raise UserError(_(
+        #         "The selected payment journal %(journal)s belongs to branch %(journal_branch)s, "
+        #         "not payment branch %(payment_branch)s.",
+        #         journal=journal.display_name,
+        #         journal_branch=journal.branch_id.display_name,
+        #         payment_branch=branch.display_name,
+        #     ))
 
         return journal
 
