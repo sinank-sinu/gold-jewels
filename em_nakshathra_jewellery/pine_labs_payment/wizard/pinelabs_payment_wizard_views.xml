@@ -7,6 +7,10 @@
             <form string="Pay via Pine Labs">
                 <field name="state" invisible="1"/>
                 <field name="payment_method_type" invisible="1"/>
+                <field name="payment_id" invisible="1"/>
+                <field name="invoice_id" invisible="1"/>
+                <field name="sale_order_id" invisible="1"/>
+                <field name="scheme_installment_id" invisible="1"/>
                 <sheet>
 
                     <!-- ══════════════════════════════════════════════

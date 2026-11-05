@@ -153,6 +153,39 @@ class PineLabsPaymentWizard(models.TransientModel):
             return journals.search(domain + [('branch_id', '=', False)], limit=1)
         return journals.search(domain, limit=1)
 
+    def _get_selected_payment_journal(self, journal_type, branch):
+        self.ensure_one()
+        if not self.payment_id:
+            return self.env['account.journal']
+
+        journal = self.payment_id.move_id.journal_id
+        if journal.type != journal_type:
+            raise UserError(_(
+                "The selected payment journal %(journal)s is %(actual_type)s, "
+                "but %(expected_type)s is required.",
+                journal=journal.display_name,
+                actual_type=journal.type,
+                expected_type=journal_type,
+            ))
+
+        company = branch.company_id if branch else self.payment_id.company_id
+        if journal.company_id != company:
+            raise UserError(_(
+                "The selected payment journal %(journal)s belongs to a different company.",
+                journal=journal.display_name,
+            ))
+
+        if branch and journal.branch_id and journal.branch_id != branch:
+            raise UserError(_(
+                "The selected payment journal %(journal)s belongs to branch %(journal_branch)s, "
+                "not payment branch %(payment_branch)s.",
+                journal=journal.display_name,
+                journal_branch=journal.branch_id.display_name,
+                payment_branch=branch.display_name,
+            ))
+
+        return journal
+
     def _get_installment_journal(self, journal_type):
         self.ensure_one()
         installment = self.scheme_installment_id
@@ -277,7 +310,9 @@ class PineLabsPaymentWizard(models.TransientModel):
             | terminal_journals.mapped('upi_journal_id')
         )
 
-        bank_journal = self._get_installment_journal('bank')
+        bank_journal = self._get_selected_payment_journal('bank', branch)
+        if not bank_journal:
+            bank_journal = self._get_installment_journal('bank')
         if not bank_journal:
             bank_journal = self._get_branch_journal(
                 'bank', branch, terminal_payment_journals.ids
@@ -406,7 +441,9 @@ class PineLabsPaymentWizard(models.TransientModel):
 
         branch = self._get_payment_branch()
         target_company_id = branch.company_id.id if branch else self.env.company.id
-        cash_journal = self._get_installment_journal('cash')
+        cash_journal = self._get_selected_payment_journal('cash', branch)
+        if not cash_journal:
+            cash_journal = self._get_installment_journal('cash')
         if not cash_journal:
             cash_journal = self._get_branch_journal('cash', branch)
             
@@ -856,7 +893,13 @@ class PineLabsPaymentWizard(models.TransientModel):
         if self.invoice_id and self.invoice_id.state == 'draft':
             self.invoice_id.action_post()
 
-        if self.invoice_id and self.invoice_id.state == 'posted':
+        payment = txn.payment_id or self.payment_id
+
+        if (
+            self.invoice_id
+            and self.invoice_id.state == 'posted'
+            and not payment
+        ):
             journal = False
             if self.payment_method_type == 'card':
                 journal = txn.pinelabs_terminal_id.card_journal_id
