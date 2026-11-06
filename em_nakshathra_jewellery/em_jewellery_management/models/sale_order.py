@@ -1897,10 +1897,25 @@ class SaleOrder(models.Model):
 
     def action_advance_payment(self):
         self.ensure_one()
-        journal = self.env['account.journal'].search([
+        company = self.branch_id.company_id or self.company_id or self.env.company
+        journal_domain = [
             ('type', 'in', ('bank', 'cash')),
-            ('company_id', '=', self.env.company.id)
-        ], limit=1)
+            ('company_id', '=', company.id),
+        ]
+        journals = self.env['account.journal']
+        journal = journals.browse()
+        if self.branch_id:
+            journal = journals.search(
+                journal_domain + [('branch_id', '=', self.branch_id.id)],
+                limit=1,
+            )
+            if not journal:
+                journal = journals.search(
+                    journal_domain + [('branch_id', '=', False)],
+                    limit=1,
+                )
+        else:
+            journal = journals.search(journal_domain, limit=1)
 
         payment = self.env['account.payment'].create({
             'payment_type': 'inbound',
