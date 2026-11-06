@@ -47,3 +47,9 @@ class HrEmployee(models.Model):
             payslip_data)
         for employee in self:
             employee.payslip_count = result.get(employee.id, 0)
+
+
+class HrEmployeePublic(models.Model):
+    _inherit = 'hr.employee.public'
+
+    branch_id = fields.Many2one('res.branch', string='Branch', readonly=True)

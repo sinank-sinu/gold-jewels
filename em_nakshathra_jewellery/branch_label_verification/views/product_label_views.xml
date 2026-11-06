@@ -20,17 +20,15 @@
                 </button>
             </xpath>
 
-            <!-- Add Audit Info into Details notebook or group -->
-            <xpath expr="//notebook" position="inside">
-                <page string="Stock Verification" name="page_verification_audit">
-                    <group string="Last Branch Verification Audit">
-                        <group>
-                            <field name="last_verification_id"/>
-                            <field name="last_verification_date"/>
-                            <field name="last_verified_by"/>
-                        </group>
+            <!-- Add Audit Info into Details group -->
+            <xpath expr="//sheet" position="inside">
+                <group string="Stock Verification">
+                    <group>
+                        <field name="last_verification_id"/>
+                        <field name="last_verification_date"/>
+                        <field name="last_verified_by"/>
                     </group>
-                </page>
+                </group>
             </xpath>
         </field>
     </record>

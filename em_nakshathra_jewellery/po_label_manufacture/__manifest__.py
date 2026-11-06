@@ -14,7 +14,7 @@ Adds a 1-click Manufacture button on Product Label form:
 - Displays celebratory interactive animation (Rainbow Man) upon manufacture.
 - Disables the button and shows Manufactured status badge.
     """,
-    'author': 'Antigravity',
+    'author': 'Sinan K Ahammed',
     'depends': [
         'mrp',
         'stock',
@@ -27,6 +27,7 @@ Adds a 1-click Manufacture button on Product Label form:
     ],
     'data': [
         'views/product_label_views.xml',
+        'views/res_company_views.xml',
     ],
     'installable': True,
     'application': False,

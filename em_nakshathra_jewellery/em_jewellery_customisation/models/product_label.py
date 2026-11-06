@@ -17,7 +17,7 @@ class ProductLabel(models.Model):
     purchase_id = fields.Many2one(
         'purchase.order',
         string="Purchase Order",
-        domain="[('state', 'in', ['purchase', 'done']), ('picking_ids.state', '=', 'done'), ('order_line.product_template_id', '=', product_template_id)]"
+        domain="[('state', '=', 'purchase'), ('order_line.product_template_id', '=', product_template_id)]"
     )
     fine_rate_id = fields.Many2one('fine.rate.master')
     product_template_attribute_value_ids = fields.Many2many(
@@ -140,19 +140,11 @@ class ProductLabel(models.Model):
     def _onchange_product_template(self):
         if self.product_template_id:
             self.product_id = False
-            self.product_template_attribute_value_ids = (
-                self.product_template_id.attribute_line_ids
-                .mapped('product_template_value_ids')
-                ._only_active()
-                .filtered(lambda ptav: ptav.name.strip().casefold() == 'none')
-            )
             if self.purchase_id and self.product_template_id not in self.purchase_id.order_line.product_template_id:
                 self.purchase_id = False
-        else:
-            self.product_template_attribute_value_ids = False
         self._compute_unlabelled_weight()
         return self._onchange_check_unlabelled_weight_limit()
-          
+
 
     @api.model
     def create(self, vals):

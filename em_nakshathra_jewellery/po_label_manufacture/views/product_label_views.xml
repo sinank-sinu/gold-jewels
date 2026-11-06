@@ -14,6 +14,12 @@
                         class="btn-primary"
                         icon="fa-cogs"
                         invisible="not product_template_id or not product_id or not purchase_id or not sale_gross_weight or sale_gross_weight &lt;= 0 or is_manufactured or is_stocked_in"/>
+                <button name="action_create_mrp_production_transfer"
+                        type="object"
+                        string="Manufacture"
+                        class="btn-primary"
+                        icon="fa-cogs"
+                        invisible="not product_template_id or not product_id or not internal_transfer_id or not sale_gross_weight or sale_gross_weight &lt;= 0 or is_manufactured or is_stocked_in"/>
                 <button name="action_manufactured_done"
                         type="object"
                         string="Manufactured"
@@ -28,9 +34,9 @@
                 <field name="is_manufactured" invisible="1"/>
             </xpath>
 
-            <!-- Only enable Transfer button after manufacturing for PO labels -->
+            <!-- Only enable Transfer button after manufacturing for PO or Transfer labels -->
             <xpath expr="//header/button[@name='action_stock_in']" position="attributes">
-                <attribute name="invisible">is_stocked_in or (purchase_id and not is_manufactured)</attribute>
+                <attribute name="invisible">is_stocked_in or ((purchase_id or internal_transfer_id) and not is_manufactured)</attribute>
             </xpath>
 
             <!-- Stat button for quick navigation to Manufacturing Order -->
@@ -40,7 +46,7 @@
                         class="oe_stat_button"
                         icon="fa-cogs"
                         invisible="not production_id"
-                        groups="mrp.group_mrp_user,base.group_system">
+                        groups="stock.group_stock_manager">
                     <div class="o_stat_info">
                         <span class="o_stat_text">Manufacturing</span>
                     </div>
@@ -51,6 +57,31 @@
             <!-- Display is_manufactured under Purchase Order group in Details tab -->
             <xpath expr="//field[@name='purchase_id']" position="after">
                 <field name="is_manufactured" readonly="1" widget="boolean_toggle"/>
+            </xpath>
+
+            <!-- Internal Transfer, Transfer Item, and Unlabelled Weight under Manufacturing Order -->
+            <xpath expr="//field[@name='unlabelled_weight_mrp']" position="after">
+                <field name="available_transfer_move_ids" invisible="1"/>
+                <field name="transfer_manufacture_location_ids" invisible="1"/>
+                <field name="internal_transfer_id"
+                       domain="transfer_manufacture_location_ids and [('picking_type_code', '=', 'internal'), ('state', 'in', ['assigned', 'done']), ('location_dest_id', 'child_of', transfer_manufacture_location_ids)] or [('picking_type_code', '=', 'internal'), ('state', 'in', ['assigned', 'done'])]"
+                       options="{'no_create': True, 'no_create_edit': True}"/>
+                <field name="transfer_move_id"
+                       string="Product"
+                       domain="[('id', 'in', available_transfer_move_ids)]"
+                       context="{'show_transfer_item_details': True}"
+                       options="{'no_create': True, 'no_create_edit': True}"
+                       invisible="not internal_transfer_id"/>
+                <field name="unlabelled_weight_transfer"
+                       string="Unlabelled Weight"
+                       readonly="1"
+                       invisible="not transfer_move_id"/>
+                <field name="manufacture_location_id"
+                       string="Manufactured Location"
+                       required="internal_transfer_id"
+                       domain="[('usage', '=', 'internal'), ('company_id', '=', company_id)]"
+                       options="{'no_create': True, 'no_create_edit': True}"
+                       invisible="not internal_transfer_id"/>
             </xpath>
         </field>
     </record>

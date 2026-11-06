@@ -1,6 +1,7 @@
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_is_zero
+from odoo.osv import expression
 from markupsafe import Markup
 
 class JewellerySchemeEnrollment(models.Model):
@@ -157,6 +158,36 @@ class JewellerySchemeEnrollment(models.Model):
     ], default='running', tracking=True)
 
     ticket_number = fields.Char(string="Ticket Number", tracking=True)
+
+    @api.depends('name', 'ticket_number', 'partner_id', 'phone')
+    def _compute_display_name(self):
+        for rec in self:
+            parts = []
+            if rec.ticket_number:
+                parts.append(f"[{rec.ticket_number}]")
+            parts.append(rec.name or "New")
+            if rec.partner_id:
+                parts.append(f"- {rec.partner_id.name}")
+            if rec.phone:
+                parts.append(f"({rec.phone})")
+            rec.display_name = " ".join(parts)
+
+    @api.model
+    def _name_search(self, name, domain=None, operator='ilike', limit=None, order=None):
+        domain = domain or []
+        if name:
+            clean_digits = ''.join(filter(str.isdigit, name))
+            name_domain = [
+                '|', '|', '|',
+                ('name', operator, name),
+                ('ticket_number', operator, name),
+                ('partner_id.name', operator, name),
+                ('phone', operator, name),
+            ]
+            if clean_digits:
+                name_domain = ['|'] + name_domain + [('phone', 'ilike', clean_digits)]
+            domain = expression.AND([domain, name_domain])
+        return self._search(domain, limit=limit, order=order)
 
     def action_set_active_rate(self):
         self.ensure_one()

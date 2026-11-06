@@ -133,14 +133,49 @@ class SaleOrder(models.Model):
         for order in self:
             order.old_gold_po_ids = order._get_old_gold_pos()
 
-    @api.depends('old_gold_line_ids.amount')
+    old_gold_amount_rounding = fields.Monetary(
+        string="Round Off",
+        currency_field='currency_id',
+        default=0.0,
+    )
+    old_gold_subtotal = fields.Monetary(
+        string="Old Gold Subtotal",
+        compute='_compute_old_gold_totals',
+        store=True,
+        currency_field='currency_id',
+    )
+    old_gold_total_amount = fields.Monetary(
+        string="Total Old Gold Amount",
+        compute='_compute_old_gold_totals',
+        store=True,
+        currency_field='currency_id',
+    )
+
+    @api.depends('old_gold_line_ids.amount', 'old_gold_amount_rounding', 'old_gold_bill_id.amount_total', 'old_gold_bill_id.state', 'is_editing_old_gold')
+    def _compute_old_gold_totals(self):
+        for order in self:
+            subtotal = sum(order.old_gold_line_ids.mapped('amount'))
+            order.old_gold_subtotal = subtotal
+            if order.old_gold_bill_id and order.old_gold_bill_id.state == 'posted' and not order.is_editing_old_gold:
+                order.old_gold_total_amount = order.old_gold_bill_id.amount_total
+            else:
+                order.old_gold_total_amount = subtotal + (order.old_gold_amount_rounding or 0.0)
+
+    @api.onchange('old_gold_amount_rounding')
+    def _onchange_old_gold_amount_rounding(self):
+        for order in self:
+            subtotal = sum(order.old_gold_line_ids.mapped('amount'))
+            order.old_gold_subtotal = subtotal
+            order.old_gold_total_amount = subtotal + (order.old_gold_amount_rounding or 0.0)
+
+    @api.depends('old_gold_line_ids.amount', 'old_gold_amount_rounding', 'old_gold_bill_id.amount_total')
     def _compute_old_gold_bill_amount(self):
         for order in self:
             bills = order._get_old_gold_bills()
             if bills:
                 order.old_gold_bill_amount = sum(bills.mapped('amount_total'))
             elif order.old_gold_line_ids:
-                order.old_gold_bill_amount = sum(order.old_gold_line_ids.mapped('amount'))
+                order.old_gold_bill_amount = sum(order.old_gold_line_ids.mapped('amount')) + (order.old_gold_amount_rounding or 0.0)
             elif order.old_gold_bill_id:
                 order.old_gold_bill_amount = order.old_gold_bill_id.amount_total
             else:
@@ -190,15 +225,13 @@ class SaleOrder(models.Model):
         currency_field='currency_id',
     )
 
-    @api.depends('sale_return_line_ids.amount', 'sale_return_amount_rounding', 'sale_return_bill_id.amount_total', 'sale_return_bill_id.state')
+    @api.depends('sale_return_line_ids.amount', 'sale_return_amount_rounding', 'sale_return_bill_id.amount_total', 'sale_return_bill_id.state', 'is_editing_sale_return')
     def _compute_sale_return_totals(self):
         for order in self:
             subtotal = sum(order.sale_return_line_ids.mapped('amount'))
             order.sale_return_subtotal = subtotal
-            if order.sale_return_bill_id and order.sale_return_bill_id.state == 'posted':
+            if order.sale_return_bill_id and order.sale_return_bill_id.state == 'posted' and not order.is_editing_sale_return:
                 order.sale_return_total_amount = order.sale_return_bill_id.amount_total
-                if hasattr(order.sale_return_bill_id, 'amount_rounding') and order.sale_return_bill_id.amount_rounding and not order.sale_return_amount_rounding:
-                    order.sale_return_amount_rounding = order.sale_return_bill_id.amount_rounding
             else:
                 order.sale_return_total_amount = subtotal + (order.sale_return_amount_rounding or 0.0)
 
@@ -207,8 +240,7 @@ class SaleOrder(models.Model):
         for order in self:
             subtotal = sum(order.sale_return_line_ids.mapped('amount'))
             order.sale_return_subtotal = subtotal
-            if not (order.sale_return_bill_id and order.sale_return_bill_id.state == 'posted'):
-                order.sale_return_total_amount = subtotal + (order.sale_return_amount_rounding or 0.0)
+            order.sale_return_total_amount = subtotal + (order.sale_return_amount_rounding or 0.0)
 
 
     @api.onchange('branch_id', 'old_gold_line_ids')
@@ -307,6 +339,7 @@ class SaleOrder(models.Model):
         }
 
     phone = fields.Char(string="Phone Number", copy=False, tracking=True)
+    other_person_phone = fields.Char(string="Other Person Phone", copy=False)
     customer_schemes = fields.Many2many(
         'jewellery.scheme.enrollment',
         'sale_order_customer_schemes_rel',
@@ -414,6 +447,8 @@ class SaleOrder(models.Model):
                 )[:1] or schemes[:1]
 
                 rec.partner_id = target_scheme.partner_id.id
+                if target_scheme.phone:
+                    rec.phone = target_scheme.phone
                 default_schemes = rec._get_customer_default_schemes() if rec.partner_id else schemes.filtered(lambda s: not s.is_redeemed)
                 rec.customer_schemes = [(6, 0, default_schemes.ids)] if default_schemes else [(6, 0, [])]
                 rec.active_scheme_id = default_schemes[:1].id if default_schemes else False
@@ -457,6 +492,7 @@ class SaleOrder(models.Model):
             rec.apply_scheme = False
             rec.active_scheme_id = False
             rec.customer_schemes = [(6, 0, [])]
+            rec.other_person_phone = False
 
             if not rec.partner_id:
                 rec.phone = False
@@ -484,8 +520,10 @@ class SaleOrder(models.Model):
                 rec.apply_scheme = True
                 rec.customer_schemes = [(6, 0, schemes.ids)]
                 rec.active_scheme_id = schemes[0].id
-                if not rec.phone and schemes[0].phone:
+                if schemes[0].phone:
                     rec.phone = schemes[0].phone
+                elif not rec.phone:
+                    rec.phone = rec.partner_id.phone or rec.partner_id.mobile
 
     @api.onchange('apply_scheme')
     def _onchange_apply_scheme(self):
@@ -507,6 +545,65 @@ class SaleOrder(models.Model):
                 rec.active_scheme_id = rec.customer_schemes[:1].id
             else:
                 rec.active_scheme_id = False
+
+    @api.onchange('other_person_phone')
+    def _onchange_other_person_phone(self):
+        for rec in self:
+            if not rec.other_person_phone:
+                continue
+
+            phone_input = rec.other_person_phone.strip()
+            digits = ''.join(filter(str.isdigit, phone_input))
+            search_digits = digits[-10:] if len(digits) >= 10 else digits
+
+            if not search_digits:
+                continue
+
+            # 1. Search in jewellery.scheme.enrollment by normalized phone
+            sql = """
+                SELECT id FROM jewellery_scheme_enrollment 
+                WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                  AND state IN ('running', 'completed')
+            """
+            if 'is_redeemed' in self.env['jewellery.scheme.enrollment']._fields:
+                sql += " AND NOT COALESCE(is_redeemed, FALSE)"
+            sql += " ORDER BY (state = 'completed') DESC, create_date ASC"
+            self.env.cr.execute(sql, (f"%{search_digits}%",))
+            matched_ids = [r[0] for r in self.env.cr.fetchall()]
+
+            # 2. Search in res.partner for contacts matching this phone / mobile
+            self.env.cr.execute("""
+                SELECT id FROM res_partner 
+                WHERE (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                    OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            partner_res = [r[0] for r in self.env.cr.fetchall()]
+
+            if partner_res:
+                p_domain = [
+                    ('partner_id', 'in', partner_res),
+                    ('state', 'in', ('running', 'completed')),
+                ]
+                if 'is_redeemed' in self.env['jewellery.scheme.enrollment']._fields:
+                    p_domain.append(('is_redeemed', '=', False))
+                p_schemes = self.env['jewellery.scheme.enrollment'].sudo().search(p_domain)
+                matched_ids = list(dict.fromkeys(matched_ids + p_schemes.ids))
+
+            if matched_ids:
+                other_schemes = self.env['jewellery.scheme.enrollment'].browse(matched_ids)
+                if other_schemes[0].phone:
+                    rec.other_person_phone = other_schemes[0].phone
+                rec.customer_schemes = rec.customer_schemes | other_schemes
+                rec.apply_scheme = True
+                if not rec.active_scheme_id:
+                    rec.active_scheme_id = rec.customer_schemes[:1].id
+            else:
+                return {
+                    'warning': {
+                        'title': _("No Active Scheme Found"),
+                        'message': _("No unredeemed running or completed scheme found for phone number: %s") % rec.other_person_phone
+                    }
+                }
 
     def action_apply_old_gold(self):
         PurchaseOrder = self.env['purchase.order']
@@ -628,7 +725,7 @@ class SaleOrder(models.Model):
             created_bills = []
             target_date = self.env.context.get('old_gold_invoice_date') or fields.Date.context_today(self)
 
-            for grp in groups:
+            for grp_idx, grp in enumerate(groups):
                 is_dog = grp['is_diamond_og']
                 grp_lines = grp['lines']
                 grp_product = grp['product']
@@ -647,6 +744,10 @@ class SaleOrder(models.Model):
                         }
                     purity_map[purity]['weight'] += line.net_weight
                     purity_map[purity]['amount'] += line.amount
+
+                if grp_idx == 0 and order.old_gold_amount_rounding and purity_map:
+                    first_purity = next(iter(purity_map))
+                    purity_map[first_purity]['amount'] += order.old_gold_amount_rounding
 
                 # ------------------------------------------------
                 # 3️⃣ CREATE PURCHASE ORDER
@@ -671,6 +772,8 @@ class SaleOrder(models.Model):
                 for purity, vals in purity_map.items():
                     total_weight = vals['weight']
                     total_amount = vals['amount']
+                    if not total_weight and is_dog:
+                        total_weight = 1.0
                     if not total_weight:
                         continue
                     rate = total_amount / total_weight
@@ -716,6 +819,9 @@ class SaleOrder(models.Model):
                     purchase_line = bill_line.purchase_line_id
                     if purchase_line and purchase_line.purity_id:
                         bill_line.purity_id = purchase_line.purity_id.id
+
+                bill.amount_rounding = 0.0
+                bill.line_ids.filtered(lambda l: l.display_type == 'rounding').unlink()
 
                 bill.with_context(check_move_validity=False).write({
                     'name': '/',
@@ -808,20 +914,24 @@ class SaleOrder(models.Model):
             creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
             debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
             if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': total_bill_amount,
-                    'credit': 0.0,
+                entry.with_context(check_move_validity=False).write({
+                    'line_ids': [
+                        (1, creditors_move_line[0].id, {
+                            'account_id': creditors_account.id,
+                            'debit': total_bill_amount,
+                            'credit': 0.0,
+                            'amount_currency': total_bill_amount,
+                        }),
+                        (1, debtors_move_line[0].id, {
+                            'account_id': debtors_account.id,
+                            'debit': 0.0,
+                            'credit': total_bill_amount,
+                            'amount_currency': -total_bill_amount,
+                        }),
+                    ],
+                    'date': entry_date,
+                    'ref': f"Old Gold - {self.name}",
                 })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': total_bill_amount,
-                })
-            entry.write({
-                'date': entry_date,
-                'ref': f"Old Gold - {self.name}",
-            })
             entry.action_post()
         else:
             entry_vals = {
@@ -1256,6 +1366,10 @@ class SaleOrder(models.Model):
             purity_map[purity]['weight'] += line.net_weight
             purity_map[purity]['amount'] += line.amount
 
+        if self.old_gold_amount_rounding and purity_map:
+            first_purity = next(iter(purity_map))
+            purity_map[first_purity]['amount'] += self.old_gold_amount_rounding
+
         is_dog = bool(po and po.is_diamond_og) or any(
             l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
             for l in self.old_gold_line_ids
@@ -1278,6 +1392,7 @@ class SaleOrder(models.Model):
 
         # ─ 2. Update PO lines in-place via write() ─────────────────────────────────
         if po:
+            po.amount_rounding = 0.0
             # Enable silent SQL update mode for the PO if em_purchase_edit is installed
             if hasattr(po, 'is_editing_main_po'):
                 po.is_editing_main_po = True
@@ -1287,10 +1402,19 @@ class SaleOrder(models.Model):
 
             for i, (purity, vals) in enumerate(purity_list):
                 qty = vals['weight']
+                if not qty and is_dog:
+                    qty = 1.0
                 rate = vals['amount'] / qty if qty else 0.0
                 p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
                 
                 if i < len(existing_po_lines):
+                    # If reducing quantity below received quantity, sync done moves first to avoid UserError
+                    if existing_po_lines[i].qty_received > qty:
+                        existing_po_lines[i].move_ids.filtered(lambda m: m.state == 'done').write({
+                            'product_uom_qty': qty,
+                            'quantity': qty,
+                        })
+                        existing_po_lines[i].invalidate_recordset(['qty_received'])
                     # Update existing PO line (triggers our SQL logic in PurchaseOrderLine.write)
                     existing_po_lines[i].write({
                         'product_id': product.id,
@@ -1359,6 +1483,8 @@ class SaleOrder(models.Model):
 
             for i, (purity, vals) in enumerate(purity_list):
                 qty = vals['weight']
+                if not qty and is_dog:
+                    qty = 1.0
                 rate = vals['amount'] / qty if qty else 0.0
                 po_line = po_lines[i] if i < len(po_lines) else False
 
@@ -1393,6 +1519,9 @@ class SaleOrder(models.Model):
                 surplus = existing_list[len(purity_list):]
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
+
+            bill.amount_rounding = 0.0
+            bill.line_ids.filtered(lambda l: l.display_type == 'rounding').unlink()
 
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
@@ -1506,12 +1635,14 @@ class SaleOrder(models.Model):
         if not self.sale_return_line_ids:
             raise ValidationError(_("No Sale Return lines to update."))
 
+        total_sr_round_off = (self.sale_return_amount_rounding or 0.0) + sum(self.sale_return_line_ids.mapped('round_off'))
         po = self.sale_return_po_id
 
         # ─ 1. Update PO lines in-place via write() – safe with done stock moves ─
         #      write() only updates the line record, and our custom PurchaseOrderLine.write 
         #      SQL interceptor will handle the stock and valuation updates silently.
         if po:
+            po.amount_rounding = total_sr_round_off
             # Enable silent SQL update mode for the PO if em_purchase_edit is installed
             if hasattr(po, 'is_editing_main_po'):
                 po.is_editing_main_po = True
@@ -1521,7 +1652,8 @@ class SaleOrder(models.Model):
 
             for i, sr_line in enumerate(sale_return_lines):
                 gross_wt = sr_line.gross_weight or 1.0
-                unit_price = round(sr_line.amount / gross_wt, 4) if gross_wt else sr_line.rate
+                base_amt = sr_line.amount - (sr_line.round_off or 0.0)
+                unit_price = round(base_amt / gross_wt, 4) if gross_wt else sr_line.rate
                 mc_pct = sr_line.mc_percent_actual or sr_line.mc_percent or 0.0
                 mc_amt = sr_line.mc_amount_actual or sr_line.mc_amount or 0.0
                 line_vals = {
@@ -1540,10 +1672,17 @@ class SaleOrder(models.Model):
                     'stone_rate': sr_line.sale_stone_rate or 0.0,
                     'diamond_rate': sr_line.sale_diamond_rate or 0.0,
                     'price_unit': unit_price,
-                    'price_subtotal': sr_line.amount,
+                    'price_subtotal': base_amt,
                     'taxes_id': [(6, 0, [])],
                 }
                 if i < len(existing_po_lines):
+                    # If reducing quantity below received quantity, sync done moves first to avoid UserError
+                    if existing_po_lines[i].qty_received > gross_wt:
+                        existing_po_lines[i].move_ids.filtered(lambda m: m.state == 'done').write({
+                            'product_uom_qty': gross_wt,
+                            'quantity': gross_wt,
+                        })
+                        existing_po_lines[i].invalidate_recordset(['qty_received'])
                     # Update the existing PO line in place (triggers our SQL logic)
                     existing_po_lines[i].write(line_vals)
                     existing_po_lines[i].qty_received = gross_wt
@@ -1653,10 +1792,8 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
-            if hasattr(bill, 'amount_rounding'):
-                bill.amount_rounding = self.sale_return_amount_rounding or 0.0
-                if hasattr(bill, '_recompute_cash_rounding_lines'):
-                    bill._recompute_cash_rounding_lines()
+            bill.amount_rounding = 0.0
+            bill.line_ids.filtered(lambda l: l.display_type == 'rounding').unlink()
 
             bill.invoice_date = fields.Date.context_today(self)
             bill.is_sale_return = True
@@ -1665,7 +1802,7 @@ class SaleOrder(models.Model):
 
     def _prepare_invoice(self):
         vals = super()._prepare_invoice()
-        og_amt = self.old_gold_bill_amount or sum(self.old_gold_line_ids.mapped('amount'))
+        og_amt = self.old_gold_bill_amount or self.old_gold_total_amount or (sum(self.old_gold_line_ids.mapped('amount')) + (self.old_gold_amount_rounding or 0.0))
         vals['old_gold_price'] = og_amt
         vals['unfix'] = self.unfix
         vals['sale_return_price'] = self.sale_return_bill_amount or self.sale_return_total_amount or (sum(self.sale_return_line_ids.mapped('amount')) + (self.sale_return_amount_rounding or 0.0))
@@ -1701,10 +1838,7 @@ class SaleOrder(models.Model):
                 'branch_id': order.branch_id.id,
                 'sale_id': order.id,
                 'is_sale_return_po': True,
-                'amount_rounding': order.sale_return_amount_rounding or 0.0,
             })
-
-
 
             for line in order.sale_return_line_ids:
                 gross_wt = line.gross_weight or 1.0
@@ -1771,22 +1905,23 @@ class SaleOrder(models.Model):
             # Create & Post Vendor Bill
             bill_action = po.action_create_invoice()
             bill = AccountMove.browse(bill_action['res_id'])
-            if order.sale_return_amount_rounding:
-                bill.amount_rounding = order.sale_return_amount_rounding
-                if hasattr(bill, '_recompute_cash_rounding_lines'):
-                    bill._recompute_cash_rounding_lines()
             for bill_line in bill.invoice_line_ids.filtered(lambda l: l.display_type == 'product'):
                 po_line = bill_line.purchase_line_id
                 if po_line:
                     bill_line.purity_id = po_line.purity_id.id if po_line.purity_id else False
                     gw = po_line.gross_weight or bill_line.quantity or 1.0
-                    sr_amt = po_line.sale_return_line_id.amount if po_line.sale_return_line_id else po_line.price_subtotal
+                    sr_line = po_line.sale_return_line_id
+                    sr_amt = sr_line.amount if sr_line else po_line.price_subtotal
                     u_price = round(sr_amt / gw, 4) if gw else po_line.price_unit
                     bill_line.with_context(check_move_validity=False).write({
                         'quantity': gw,
                         'price_unit': u_price,
                         'tax_ids': [(5, 0, 0)],
                     })
+
+            bill.amount_rounding = 0.0
+            bill.line_ids.filtered(lambda l: l.display_type == 'rounding').unlink()
+
             bill.invoice_date = fields.Date.context_today(self)
             bill.action_post()
             order.sale_return_bill_id = bill.id
@@ -1839,20 +1974,24 @@ class SaleOrder(models.Model):
             creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
             debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
             if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': bill.amount_total,
-                    'credit': 0.0,
+                entry.with_context(check_move_validity=False).write({
+                    'line_ids': [
+                        (1, creditors_move_line[0].id, {
+                            'account_id': creditors_account.id,
+                            'debit': bill.amount_total,
+                            'credit': 0.0,
+                            'amount_currency': bill.amount_total,
+                        }),
+                        (1, debtors_move_line[0].id, {
+                            'account_id': debtors_account.id,
+                            'debit': 0.0,
+                            'credit': bill.amount_total,
+                            'amount_currency': -bill.amount_total,
+                        }),
+                    ],
+                    'date': entry_date,
+                    'ref': f"Sale Return - {self.name}",
                 })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': bill.amount_total,
-                })
-            entry.write({
-                'date': entry_date,
-                'ref': f"Sale Return - {self.name}",
-            })
             entry.action_post()
         else:
             entry_vals = {
