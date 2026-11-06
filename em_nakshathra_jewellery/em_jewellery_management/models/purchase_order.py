@@ -10,6 +10,11 @@ class PurchaseOrder(models.Model):
         string='Related Sale Order'
     )
     pricelist_id = fields.Many2one('product.pricelist', string='Pricelist', help="Pricelist for current order.")
+    phone = fields.Char(
+        string="Phone Number",
+        copy=False,
+        tracking=True,
+    )
 
     is_old_gold = fields.Boolean(
         string='Old Gold Purchase',
@@ -62,6 +67,59 @@ class PurchaseOrder(models.Model):
         'purchase_id',
         string="Labels"
     )
+
+    @api.onchange('phone')
+    def _onchange_phone_set_partner(self):
+        for rec in self:
+            if not rec.phone:
+                continue
+
+            phone_input = rec.phone.strip()
+            digits = ''.join(filter(str.isdigit, phone_input))
+            search_digits = digits[-10:] if len(digits) >= 10 else digits
+
+            if not search_digits or len(search_digits) < 4:
+                continue
+
+            # Search in res_partner by normalized phone or mobile
+            self.env.cr.execute("""
+                SELECT id FROM res_partner 
+                WHERE (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                    OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+                ORDER BY supplier_rank DESC, id DESC
+                LIMIT 1
+            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            partner_res = self.env.cr.fetchone()
+
+            if partner_res:
+                partner = self.env['res.partner'].browse(partner_res[0])
+                rec.partner_id = partner.id
+            else:
+                if not rec.partner_id:
+                    return {
+                        'warning': {
+                            'title': _("New Vendor"),
+                            'message': _("No existing vendor found with phone number: %s. Please enter or select the vendor in the Vendor field.") % rec.phone
+                        }
+                    }
+
+    @api.onchange('partner_id')
+    def _onchange_partner_id_set_phone(self):
+        for rec in self:
+            if not rec.partner_id:
+                rec.phone = False
+                continue
+
+            current_phone = ''.join(filter(str.isdigit, rec.phone or ''))[-10:] if rec.phone else ''
+            valid_phones = []
+            if rec.partner_id.phone:
+                valid_phones.append(''.join(filter(str.isdigit, rec.partner_id.phone))[-10:])
+            if rec.partner_id.mobile:
+                valid_phones.append(''.join(filter(str.isdigit, rec.partner_id.mobile))[-10:])
+            valid_phones = [p for p in valid_phones if p]
+
+            if not current_phone or current_phone not in valid_phones:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile
 
     @api.onchange('is_old_gold')
     def _onchange_is_old_gold(self):
@@ -216,7 +274,24 @@ class PurchaseOrder(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             self._clean_exclusive_type_flags(vals)
-        return super(PurchaseOrder, self).create(vals_list)
+            if vals.get('partner_id') and not vals.get('phone'):
+                partner = self.env['res.partner'].browse(vals['partner_id'])
+                vals['phone'] = partner.phone or partner.mobile or False
+        orders = super(PurchaseOrder, self).create(vals_list)
+        for order in orders:
+            if order.partner_id and order.phone:
+                partner = order.partner_id
+                vals_to_write = {}
+                if not partner.phone:
+                    vals_to_write['phone'] = order.phone
+                if not partner.mobile:
+                    vals_to_write['mobile'] = order.phone
+                if vals_to_write:
+                    try:
+                        partner.sudo().write(vals_to_write)
+                    except Exception:
+                        pass
+        return orders
 
     def write(self, vals):
         self._clean_exclusive_type_flags(vals)
@@ -231,7 +306,22 @@ class PurchaseOrder(models.Model):
                 for order in self:
                     if order.order_line and getattr(order, flag) != vals[flag]:
                         raise ValidationError(_('You cannot change the %s flag while order lines exist. Please remove existing lines first.') % label)
-        return super(PurchaseOrder, self).write(vals)
+        res = super(PurchaseOrder, self).write(vals)
+        if 'phone' in vals or 'partner_id' in vals:
+            for order in self:
+                if order.partner_id and order.phone:
+                    partner = order.partner_id
+                    vals_to_write = {}
+                    if not partner.phone:
+                        vals_to_write['phone'] = order.phone
+                    if not partner.mobile:
+                        vals_to_write['mobile'] = order.phone
+                    if vals_to_write:
+                        try:
+                            partner.sudo().write(vals_to_write)
+                        except Exception:
+                            pass
+        return res
 
 
     def action_create_sale_order(self):
@@ -278,6 +368,7 @@ class PurchaseOrder(models.Model):
             'purchase_order_id': self.id,
             'origin': self.name,
             'partner_id': self.partner_id.id,
+            'phone': self.phone,
             'order_line': order_lines,
             'unfix': self.unfix,
         })
@@ -299,7 +390,7 @@ class PurchaseOrder(models.Model):
     def _compute_totals(self):
         for order in self:
             order.total_weight = sum(
-                order.order_line.mapped('qty_received')
+                order.order_line.filtered(lambda l: l.product_id.detailed_type == 'product').mapped('qty_received')
             )
 
     @api.depends('label_ids.sale_gross_weight')
