@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from datetime import timedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 from odoo.tools import formatLang
@@ -747,23 +748,62 @@ class AccountMove(models.Model):
                 continue
             if 'Scheme' in name or 'Scheme' in ref or 'Scheme' in journal_name:
                 continue
-            if 'Sale Return' in name or 'Sale Return' in ref or (journal_name == 'Miscellaneous Operations' and 'Sale Return' in ref):
+
+            c_move = self.env['account.move'].browse(item.get('move_id')) if item.get('move_id') else False
+            is_credit_note = bool(c_move and c_move.move_type in ('out_refund', 'in_refund'))
+
+            # Exclude Sale Return only if already deducted as sale_return_price in invoice totals
+            has_sr_deduction = bool(getattr(self, 'sale_return_price', 0.0) > 0)
+            if has_sr_deduction and ('Sale Return' in name or 'Sale Return' in ref or (journal_name == 'Miscellaneous Operations' and 'Sale Return' in ref)):
+                continue
+            elif not has_sr_deduction and (journal_name == 'Miscellaneous Operations' and 'Sale Return' in ref):
                 continue
 
             pay_id = item.get('account_payment_id')
-            if pay_id:
-                seen_ids.add(pay_id)
-                pay = self.env['account.payment'].browse(pay_id)
-                pay_method, pay_ref = _classify_payment(pay=pay, journal=pay.journal_id, item_data=item)
+            pay = self.env['account.payment'].browse(pay_id) if pay_id else False
+
+            is_outstanding = False
+            if is_credit_note:
+                is_outstanding = True
+            elif pay:
+                seen_ids.add(pay.id)
+                # Check if payment was an outstanding credit / advance added to this invoice
+                inv_name = self.name or ''
+                has_inv_ref = bool(inv_name and ((inv_name in (pay.ref or '')) or (inv_name in (ref or ''))))
+                created_before = bool(pay.create_date and self.create_date and pay.create_date < (self.create_date - timedelta(seconds=10)))
+                date_before = bool(pay.date and self.invoice_date and pay.date < self.invoice_date)
+                is_so_advance = bool(pay.sale_id and not has_inv_ref)
+                if is_so_advance or (not has_inv_ref) or created_before or date_before:
+                    is_outstanding = True
             else:
-                journal = self.env['account.journal'].search([('name', '=', journal_name)], limit=1)
-                pay_method, pay_ref = _classify_payment(pay=None, journal=journal, item_data=item)
+                is_outstanding = True
+
+            journal = pay.journal_id if pay else self.env['account.journal'].search([('name', '=', journal_name)], limit=1)
+            pay_method, pay_ref = _classify_payment(pay=pay, journal=journal, item_data=item)
+
+            if is_credit_note:
+                pay_method = 'Sale Return Amt'
+                cn_name = c_move.name or (item.get('ref') or '').split(' ')[0]
+                cn_ref = c_move.ref or ''
+                if cn_ref and cn_ref != cn_name and not any(p in cn_ref for p in ['/202', 'PCSH', 'PBNK', 'MISC/']) and not cn_ref.startswith('Reversal of:'):
+                    pay_ref = f"{cn_name} ({cn_ref})"
+                else:
+                    pay_ref = cn_name
+            elif is_outstanding:
+                if pay and getattr(pay, 'sale_id', False) and not pay_ref:
+                    pay_ref = pay.sale_id.name or ''
+                if pay_method and pay_method != 'Payment':
+                    pay_method = f"Outstanding Added ({pay_method})"
+                else:
+                    pay_method = "Outstanding Added"
 
             payments_info.append({
                 'method': pay_method,
                 'ref': pay_ref,
                 'amount': item.get('amount', 0.0),
                 'date': item.get('date'),
+                'is_outstanding': is_outstanding,
+                'is_credit_note': is_credit_note,
             })
 
         if hasattr(self, 'payment_to_id') and self.payment_to_id and self.payment_to_id.id not in seen_ids:
