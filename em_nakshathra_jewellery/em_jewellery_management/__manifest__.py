@@ -48,8 +48,8 @@
         'views/mrp_production_view.xml',
         'report/label_template.xml',
         'report/label_report.xml',
-        'report/payment_receipt_template.xml',
         'report/invoice_report_template.xml',
+        'report/payment_receipt_template.xml',
 
     ],
     'assets': {
