@@ -183,6 +183,13 @@
                 <field name="sale_return_line_ids" no_label="1" invisible="is_sale_return == False"
                        readonly="sale_return_bill_id != False and not is_editing_sale_return">
                     <tree editable="bottom">
+                        <field name="customer_invoice_id"
+                               domain="[('move_type', '=', 'out_invoice'), ('state', '=', 'posted')]"
+                               options="{'no_create': True, 'no_create_edit': True, 'no_open': True, 'no_quick_create': True}"/>
+                        <field name="label_id"
+                               domain="[('invoice_line_ids.move_id', '=', customer_invoice_id)]"
+                               context="{'active_test': False}"
+                               options="{'no_create': True, 'no_create_edit': True, 'no_open': True, 'no_quick_create': True}"/>
                         <field name="product_template_id" string="Product"
                                options="{'no_open': True, 'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
                         <field name="product_id" string="Variety"
@@ -194,7 +201,7 @@
                                string="Purity"/>
                         <field name="product_uom" string="UOM" optional="show"/>
                         <field name="gross_weight" string="Gross Weight"/>
-                        <field name="sale_stone_weight" string="Stone Weight (g)" optional="hide"/>
+                        <field name="sale_stone_weight" string="Stone Weight (g)" optional="show"/>
                         <field name="sale_stone_weight_ct" string="Stone Weight (ct)" optional="hide"/>
                         <field name="sale_diamond_weight_gm" string="Diamond Weight (g)" optional="show"/>
                         <field name="sale_diamond_weight_ct" string="Diamond Weight (ct)" optional="show"/>

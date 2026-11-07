@@ -1490,6 +1490,7 @@ class SaleOrder(models.Model):
                     'product_id': sr_line.product_id.id,
                     'name': f'Sale Return ({sr_line.product_id.name})',
                     'sale_return_line_id': sr_line.id,
+                    'label_id': sr_line.label_id.id if sr_line.label_id else False,
                     'product_qty': gross_wt,
                     'gross_weight': gross_wt,
                     'stone_weight': sr_line.sale_stone_weight or sr_line.stone_weight or 0.0,
@@ -1747,6 +1748,12 @@ class SaleOrder(models.Model):
             # CREATE & POST CONTRA JOURNAL ENTRY (CREDITORS -> DEBTORS)
             # ------------------------------------------------
             order._create_or_update_sale_return_journal_entry(bill)
+
+            returned_labels = order.sale_return_line_ids.mapped('label_id')
+            label_vals = {'active': True}
+            if dest_loc:
+                label_vals['branch_location_id'] = dest_loc.id
+            returned_labels.write(label_vals)
 
         return True
 
