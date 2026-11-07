@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_label_intercompany_transfer_admin,access.label.intercompany.transfer.admin,model_label_intercompany_transfer,base.group_system,1,1,1,1
+access_label_intercompany_transfer_user,access.label.intercompany.transfer.user,model_label_intercompany_transfer,base.group_user,1,1,1,1
+access_label_intercompany_transfer_line_admin,access.label.intercompany.transfer.line.admin,model_label_intercompany_transfer_line,base.group_system,1,1,1,1
+access_label_intercompany_transfer_line_user,access.label.intercompany.transfer.line.user,model_label_intercompany_transfer_line,base.group_user,1,1,1,1
+access_label_intercompany_transfer_wizard_admin,access.label.intercompany.transfer.wizard.admin,model_label_intercompany_transfer_wizard,base.group_system,1,1,1,1
+access_label_intercompany_transfer_wizard_user,access.label.intercompany.transfer.wizard.user,model_label_intercompany_transfer_wizard,base.group_user,1,1,1,1

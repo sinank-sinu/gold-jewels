@@ -94,9 +94,9 @@ class AccountMove(models.Model):
         return [('id', 'in', branch.ids)]
 
     branch_id = fields.Many2one('res.branch', string='Branch', store=True,
-                                readonly=False,
-                                default=lambda self: self.env.user.branch_id.id,
-                                domain=_get_branch_domain)
+                                readonly=False,  domain=_get_branch_domain,
+                                default=lambda self: self.env.user.branch_id.id)
+
 
 
     @api.onchange('branch_id')

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Action Binding on Product Label List View -->
+    <record id="action_product_label_intercompany_transfer" model="ir.actions.act_window">
+        <field name="name">Inter-Company Label Transfer</field>
+        <field name="res_model">label.intercompany.transfer.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="em_jewellery_management.model_product_label"/>
+        <field name="binding_view_types">list</field>
+        <field name="groups_id" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+
+    <!-- Inherit Product Label Form to display transfer information if transferred -->
+    <record id="view_product_label_form_inherit_intercompany" model="ir.ui.view">
+        <field name="name">product.label.form.inherit.intercompany</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="before">
+                <field name="is_transferred" invisible="1"/>
+                <div class="alert alert-warning d-flex align-items-center mb-2" role="alert" invisible="not is_transferred">
+                    <i class="fa fa-exchange fa-2x me-3"/>
+                    <div>
+                        <strong>This label has been transferred to another sister company.</strong><br/>
+                        <field name="transfer_notes" readonly="1"/>
+                    </div>
+                </div>
+            </xpath>
+            <xpath expr="//field[@name='branch_location_id']" position="after">
+                <field name="transfer_dest_company_id" invisible="not is_transferred" readonly="1"/>
+                <field name="transfer_dest_label_id" invisible="not is_transferred" readonly="1"/>
+                <field name="transfer_date" invisible="not is_transferred" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Product Label Search View to add Transferred Filter -->
+    <record id="view_product_label_search_inherit_intercompany" model="ir.ui.view">
+        <field name="name">product.label.search.inherit.intercompany</field>
+        <field name="model">product.label</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_product_label_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='inactive']" position="after">
+                <separator/>
+                <filter string="Transferred to Sister Company" name="filter_transferred" 
+                        domain="['&amp;', ('is_transferred', '=', True), '|', ('active', '=', True), ('active', '=', False)]"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Tree View -->
+    <record id="view_label_intercompany_transfer_tree" model="ir.ui.view">
+        <field name="name">label.intercompany.transfer.tree</field>
+        <field name="model">label.intercompany.transfer</field>
+        <field name="arch" type="xml">
+            <tree string="Inter-Company Transfers" sample="1" decoration-muted="state == 'cancel'" decoration-success="state == 'transferred'">
+                <field name="name"/>
+                <field name="transfer_date"/>
+                <field name="source_company_id"/>
+                <field name="source_branch_id"/>
+                <field name="dest_company_id"/>
+                <field name="dest_branch_id"/>
+                <field name="total_labels" sum="Total Labels"/>
+                <field name="total_gross_weight" sum="Total Gross Wt (g)"/>
+                <field name="total_cost" sum="Total Value (₹)"/>
+                <field name="result_so_id" optional="show"/>
+                <field name="result_po_id" optional="show"/>
+                <field name="result_bill_id" optional="show"/>
+                <field name="state" widget="badge" 
+                       decoration-info="state == 'draft'" 
+                       decoration-success="state == 'transferred'" 
+                       decoration-muted="state == 'cancel'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_label_intercompany_transfer_form" model="ir.ui.view">
+        <field name="name">label.intercompany.transfer.form</field>
+        <field name="model">label.intercompany.transfer</field>
+        <field name="arch" type="xml">
+            <form string="Inter-Company Label Transfer">
+                <header>
+                    <button name="action_transfer" string="Transfer Labels" type="object" class="oe_highlight"
+                            invisible="state != 'draft'" confirm="Are you sure you want to execute this inter-company transfer? This will relieve stock from the source company, generate a purchase order, bill, and create active labels in the destination company."/>
+                    <button name="action_print_challan" string="Print Delivery Challan" type="object" class="btn-secondary" icon="fa-print"
+                            invisible="state == 'draft'"/>
+                    <button name="action_cancel" string="Cancel" type="object"
+                            invisible="state != 'draft'"/>
+                    <button name="action_draft" string="Reset to Draft" type="object"
+                            invisible="state != 'cancel'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,transferred"/>
+                </header>
+                <sheet>
+                    <field name="transferred_label_ids" invisible="1"/>
+                    <field name="result_so_id" invisible="1"/>
+                    <field name="result_invoice_id" invisible="1"/>
+                    <field name="result_po_id" invisible="1"/>
+                    <field name="result_bill_id" invisible="1"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_created_labels" type="object" class="oe_stat_button" icon="fa-tags"
+                                invisible="not transferred_label_ids">
+                            <field name="total_labels" widget="statinfo" string="Labels (Dest)"/>
+                        </button>
+                        <button name="action_view_created_so" type="object" class="oe_stat_button" icon="fa-shopping-cart"
+                                invisible="not result_so_id">
+                            <span class="o_stat_text">Sale</span>
+                            <span class="o_stat_text">Order (Src)</span>
+                        </button>
+                        <button name="action_view_created_invoice" type="object" class="oe_stat_button" icon="fa-file-text-o"
+                                invisible="not result_invoice_id">
+                            <span class="o_stat_text">Customer</span>
+                            <span class="o_stat_text">Invoice</span>
+                        </button>
+                        <button name="action_view_created_po" type="object" class="oe_stat_button" icon="fa-credit-card"
+                                invisible="not result_po_id">
+                            <span class="o_stat_text">Purchase</span>
+                            <span class="o_stat_text">Order (Dest)</span>
+                        </button>
+                        <button name="action_view_created_bill" type="object" class="oe_stat_button" icon="fa-file-text-o"
+                                invisible="not result_bill_id">
+                            <span class="o_stat_text">Vendor</span>
+                            <span class="o_stat_text">Bill</span>
+                        </button>
+                    </div>
+
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Source Details">
+                            <field name="source_company_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="source_branch_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="source_location_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="transfer_date" readonly="state != 'draft'"/>
+                            <field name="sale_tax_id" readonly="state != 'draft'" options="{'no_create': True, 'no_open': True}"/>
+                        </group>
+                        <group string="Destination Details">
+                            <field name="dest_company_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="dest_branch_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="dest_location_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="user_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="purchase_tax_id" readonly="state != 'draft'" options="{'no_create': True, 'no_open': True}"/>
+                        </group>
+                    </group>
+
+
+                    <!-- Barcode Scanner input -->
+                    <group string="Scan or Enter Label" invisible="state != 'draft'">
+                        <field name="scan_barcode" placeholder="Scan Barcode or Type Label Number and press Enter to add..." widget="char"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Labels to Transfer" name="transfer_lines">
+                            <field name="line_ids" readonly="state != 'draft'">
+                                <tree editable="bottom" string="Transfer Lines">
+                                    <field name="label_id" options="{'no_create': True}"/>
+                                    <field name="barcode"/>
+                                    <field name="product_id"/>
+                                    <field name="categ_id"/>
+                                    <field name="purity_id"/>
+                                    <field name="gross_weight" sum="Gross Wt (g)"/>
+                                    <field name="net_weight" sum="Net Wt (g)"/>
+                                    <field name="fine_weight" sum="Fine Wt (g)"/>
+                                    <field name="rate_per_gram"/>
+                                    <field name="stone_diamond_amount" optional="show" sum="Total Stone/Dia (₹)"/>
+                                    <field name="subtotal" sum="Taxable Value (₹)"/>
+                                    <field name="dest_label_id" optional="show" column_invisible="parent.state == 'draft'"/>
+                                </tree>
+                            </field>
+                            <group class="oe_subtotal_footer oe_right" colspan="2">
+                                <field name="total_labels"/>
+                                <field name="total_gross_weight"/>
+                                <field name="total_net_weight"/>
+                                <field name="total_fine_weight"/>
+                                <field name="total_cost"/>
+                                <field name="total_tax"/>
+                                <field name="total_amount_with_tax" class="oe_subtotal_footer_separator"/>
+                            </group>
+                        </page>
+                        <page string="Notes &amp; Details" name="notes">
+                            <field name="notes" placeholder="Internal remarks or transfer reason..."/>
+                        </page>
+                    </notebook>
+
+                    <!-- Chatter at bottom of sheet for full-width layout -->
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids" groups="base.group_user"/>
+                        <field name="activity_ids"/>
+                        <field name="message_ids" options="{'post_refresh': 'always'}"/>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_label_intercompany_transfer_search" model="ir.ui.view">
+        <field name="name">label.intercompany.transfer.search</field>
+        <field name="model">label.intercompany.transfer</field>
+        <field name="arch" type="xml">
+            <search string="Search Inter-Company Transfers">
+                <field name="name" string="Reference"/>
+                <field name="source_company_id"/>
+                <field name="dest_company_id"/>
+                <field name="result_po_id"/>
+                <separator/>
+                <filter string="Draft" name="filter_draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Transferred" name="filter_transferred" domain="[('state', '=', 'transferred')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Source Company" name="group_source_company" context="{'group_by': 'source_company_id'}"/>
+                    <filter string="Destination Company" name="group_dest_company" context="{'group_by': 'dest_company_id'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Transfer Date" name="group_date" context="{'group_by': 'transfer_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_label_intercompany_transfer" model="ir.actions.act_window">
+        <field name="name">Inter-Company Transfers</field>
+        <field name="res_model">label.intercompany.transfer</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_label_intercompany_transfer_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new Inter-Company Label Transfer!
+            </p>
+            <p>
+                Transfer product labels seamlessly between sister companies. Stock is relieved from the source company, and a Purchase Order, Stock Receipt, Vendor Bill, and new Labels are automatically created in the destination company with preserved barcodes and label numbers.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Item under Jewellery -> Ornaments (Admin only) -->
+    <menuitem id="menu_label_intercompany_transfer"
+              name="Inter-Company Transfers"
+              parent="em_jewellery_management.menu_jewellery_products_root"
+              action="action_label_intercompany_transfer"
+              sequence="62"
+              groups="base.group_system"/>
+
+</odoo>

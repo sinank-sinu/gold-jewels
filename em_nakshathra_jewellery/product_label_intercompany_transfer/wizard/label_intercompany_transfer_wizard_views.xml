@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_label_intercompany_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">label.intercompany.transfer.wizard.form</field>
+        <field name="model">label.intercompany.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Inter-Company Label Transfer">
+                <field name="state" invisible="1"/>
+                
+                <!-- Information Alert when in draft -->
+                <div class="alert alert-info d-flex align-items-center mb-3" role="alert" invisible="state == 'done'">
+                    <i class="fa fa-info-circle fa-2x me-3"/>
+                    <div>
+                        <strong>Inter-Company Stock Transfer &amp; Label Creation</strong><br/>
+                        This action will deduct physical stock and archive the selected labels in the source company, generate &amp; confirm a Purchase Order and stock receipt in the destination company, post the Vendor Bill, and create active labels in the destination company preserving the exact barcodes and attributes.
+                    </div>
+                </div>
+
+                <!-- Success Alert when completed -->
+                <div class="alert alert-success d-flex align-items-center mb-3" role="alert" invisible="state != 'done'">
+                    <i class="fa fa-check-circle fa-2x me-3"/>
+                    <div>
+                        <strong>Transfer Completed Successfully!</strong><br/>
+                        The Purchase Order, Stock Receipt, Vendor Bill, and new Product Labels have been created in the destination company.
+                    </div>
+                </div>
+
+                <sheet>
+                    <!-- Settings Grid -->
+                    <group invisible="state == 'done'">
+                        <group string="Origin (Source Company)">
+                            <field name="source_company_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="transfer_date"/>
+                        </group>
+                        <group string="Destination Details">
+                            <field name="dest_company_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="dest_branch_id" options="{'no_open': True, 'no_create': True}"/>
+                            <field name="dest_location_id" options="{'no_open': True, 'no_create': True}"/>
+                        </group>
+                    </group>
+
+                    <!-- Summary Stats Cards -->
+                    <div class="row text-center mb-3 p-2 bg-light border rounded">
+                        <div class="col-md-3 border-end">
+                            <small class="text-muted d-block text-uppercase fw-bold">Labels Selected</small>
+                            <span class="fs-4 fw-bold text-primary"><field name="label_count" readonly="1"/></span>
+                        </div>
+                        <div class="col-md-3 border-end">
+                            <small class="text-muted d-block text-uppercase fw-bold">Total Gross Weight</small>
+                            <span class="fs-4 fw-bold text-success"><field name="total_gross_weight" readonly="1"/> g</span>
+                        </div>
+                        <div class="col-md-3 border-end">
+                            <small class="text-muted d-block text-uppercase fw-bold">Total Net Weight</small>
+                            <span class="fs-4 fw-bold text-info"><field name="total_net_weight" readonly="1"/> g</span>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block text-uppercase fw-bold">Total Fine Weight</small>
+                            <span class="fs-4 fw-bold text-warning"><field name="total_fine_weight" readonly="1"/> g</span>
+                        </div>
+                    </div>
+
+                    <!-- Notebook -->
+                    <notebook>
+                        <page string="Selected Labels to Transfer" invisible="state == 'done'">
+                            <field name="label_ids" readonly="1">
+                                <tree create="0" delete="0">
+                                    <field name="barcode"/>
+                                    <field name="name" string="Label Ref"/>
+                                    <field name="product_id"/>
+                                    <field name="branch_id"/>
+                                    <field name="branch_location_id" string="Current Location"/>
+                                    <field name="sale_gross_weight" string="Gross Wt (g)" sum="Total Gross"/>
+                                    <field name="sale_net_weight" string="Net Wt (g)" sum="Total Net"/>
+                                    <field name="purity_id" string="Purity"/>
+                                    <field name="purchase_price_per_gram" string="Cost/Rate" optional="show"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="Transfer Results" invisible="state != 'done'">
+                            <group>
+                                <group string="Generated Documents in Destination Company">
+                                    <field name="result_po_id" readonly="1"/>
+                                    <field name="result_bill_id" readonly="1"/>
+                                </group>
+                            </group>
+                            <separator string="Newly Created Product Labels"/>
+                            <field name="transferred_label_ids" readonly="1">
+                                <tree create="0" delete="0">
+                                    <field name="barcode"/>
+                                    <field name="name" string="New Label Ref"/>
+                                    <field name="product_id"/>
+                                    <field name="company_id"/>
+                                    <field name="branch_id"/>
+                                    <field name="branch_location_id"/>
+                                    <field name="sale_gross_weight" string="Gross Wt (g)"/>
+                                    <field name="sale_net_weight" string="Net Wt (g)"/>
+                                    <field name="purchase_id"/>
+                                    <field name="is_stocked_in" widget="boolean_toggle"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Footer Actions -->
+                <footer>
+                    <button name="action_process_transfer"
+                            string="Confirm &amp; Transfer Labels"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state == 'done'"/>
+                    <button name="action_view_created_labels"
+                            string="Open Transferred Labels"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'done'"/>
+                    <button string="Close"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
+
