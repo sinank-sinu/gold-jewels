@@ -1940,6 +1940,14 @@ class SaleOrder(models.Model):
             }
         }
 
+    def action_print_advance_receipt(self):
+        """Prints consolidated Advance Payment Receipt for the sale order."""
+        self.ensure_one()
+        payments = self.advance_payment_ids.filtered(lambda p: p.state != 'cancel')
+        if not payments:
+            raise UserError(_("No active advance payments found for this Sale Order."))
+        return self.env.ref('account.action_report_payment_receipt').report_action(payments)
+
 
 
 

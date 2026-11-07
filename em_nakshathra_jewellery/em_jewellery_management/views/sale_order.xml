@@ -28,6 +28,11 @@
                         class="btn-primary"
                         groups="base.group_system"
                         invisible="is_editing_main_so == False"/>
+                <button name="action_print_advance_receipt"
+                        type="object"
+                        string="Print Advance Receipt"
+                        class="btn-secondary"
+                        invisible="advance_payment_count == 0"/>
             </xpath>
             <xpath expr="//sheet/group" position="before">
                 <field name="is_editing_main_so" invisible="1"/>
@@ -280,6 +285,18 @@
                         <field name="message_ids" options="{'post_refresh': 'always'}"/>
                     </div>
             </xpath>
+        </field>
+    </record>
+
+    <!-- Print Menu Action for Advance Payment Receipt on Sale Orders -->
+    <record id="action_report_sale_advance_payment_receipt" model="ir.actions.server">
+        <field name="name">Advance Payment Receipt</field>
+        <field name="model_id" ref="sale.model_sale_order"/>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_type">report</field>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_print_advance_receipt()
         </field>
     </record>
 
