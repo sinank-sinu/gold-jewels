@@ -1753,6 +1753,9 @@ class SaleOrder(models.Model):
             label_vals = {'active': True}
             if dest_loc:
                 label_vals['branch_location_id'] = dest_loc.id
+            returned_branch = (dest_loc.branch_id if dest_loc else False) or order.branch_id
+            if returned_branch:
+                label_vals['branch_id'] = returned_branch.id
             returned_labels.write(label_vals)
 
         return True
@@ -1954,7 +1957,6 @@ class SaleOrder(models.Model):
         if not payments:
             raise UserError(_("No active advance payments found for this Sale Order."))
         return self.env.ref('account.action_report_payment_receipt').report_action(payments)
-
 
 
 
