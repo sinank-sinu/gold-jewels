@@ -184,7 +184,7 @@
                 Create a new Inter-Company Label Transfer!
             </p>
             <p>
-                Transfer product labels seamlessly between sister companies. Stock is relieved from the source company, and a Purchase Order, Stock Receipt, Vendor Bill, and new Labels are automatically created in the destination company with preserved barcodes and label numbers.
+                Transfer product labels seamlessly between other companies. Stock is relieved from the source company, and a Purchase Order, Stock Receipt, Vendor Bill, and new Labels are automatically created in the destination company with preserved barcodes and label numbers.
             </p>
         </field>
     </record>

@@ -2,7 +2,7 @@
 {
     'name': 'Jewellery Inter-Company Label Transfer',
     'version': '17.0.1.0.0',
-    'summary': 'Dedicated document and workflow to transfer product labels directly between sister companies with automated stock movements, purchase order, vendor bill, and label creation.',
+    'summary': 'Dedicated document and workflow to transfer product labels directly between other companies with automated stock movements, purchase order, vendor bill, and label creation.',
     'description': """
 Jewellery Inter-Company Label Transfer
 ======================================

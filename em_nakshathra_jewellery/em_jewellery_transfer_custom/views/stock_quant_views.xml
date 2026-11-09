@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Restrict Inventory Adjustments menu to Administrator only -->
+    <!-- Restrict Inventory Adjustments menu to Inventory Administrator and System Administrator -->
     <record id="stock.menu_action_inventory_tree" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('stock.group_stock_manager'), ref('base.group_system')])]"/>
     </record>
 
-    <!-- Restrict Update Quantity / Inventory Adjustment actions to Administrator only -->
+    <!-- Restrict Update Quantity / Inventory Adjustment actions to Inventory Administrator and System Administrator -->
     <record id="stock.action_view_inventory_tree" model="ir.actions.server">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('stock.group_stock_manager'), ref('base.group_system')])]"/>
     </record>
     
+    <!-- Allow Locations reporting for Inventory Users and Administrators -->
     <record id="stock.action_view_quants" model="ir.actions.server">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('stock.group_stock_user'), ref('stock.group_stock_manager'), ref('base.group_system')])]"/>
     </record>
 
     <!-- Custom Tree View for Branch Cutpiece Location Stock -->

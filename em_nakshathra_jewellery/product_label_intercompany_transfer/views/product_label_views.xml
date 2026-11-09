@@ -22,7 +22,7 @@
                 <div class="alert alert-warning d-flex align-items-center mb-2" role="alert" invisible="not is_transferred">
                     <i class="fa fa-exchange fa-2x me-3"/>
                     <div>
-                        <strong>This label has been transferred to another sister company.</strong><br/>
+                        <strong>This label has been transferred to another company.</strong><br/>
                         <field name="transfer_notes" readonly="1"/>
                     </div>
                 </div>
@@ -43,7 +43,7 @@
         <field name="arch" type="xml">
             <xpath expr="//filter[@name='inactive']" position="after">
                 <separator/>
-                <filter string="Transferred to Sister Company" name="filter_transferred" 
+                <filter string="Transferred to Other Company" name="filter_transferred" 
                         domain="['&amp;', ('is_transferred', '=', True), '|', ('active', '=', True), ('active', '=', False)]"/>
             </xpath>
         </field>
