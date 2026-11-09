@@ -793,22 +793,26 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': total_bill_amount,
-                    'credit': 0.0,
-                })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': total_bill_amount,
-                })
-            entry.write({
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
                 'date': entry_date,
                 'ref': f"Old Gold - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Old Gold Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': total_bill_amount,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Old Gold Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': total_bill_amount,
+                    }),
+                ],
             })
             entry.action_post()
         else:
@@ -1853,22 +1857,26 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': bill.amount_total,
-                    'credit': 0.0,
-                })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': bill.amount_total,
-                })
-            entry.write({
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
                 'date': entry_date,
                 'ref': f"Sale Return - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Sale Return Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': bill.amount_total,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Sale Return Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': bill.amount_total,
+                    }),
+                ],
             })
             entry.action_post()
         else:
