@@ -103,9 +103,11 @@ class LabelIntercompanyTransferWizard(models.TransientModel):
     @api.model
     def default_get(self, fields_list):
         res = super().default_get(fields_list)
-        active_ids = self.env.context.get('active_ids', [])
+        active_ids = self.env.context.get('active_ids')
+        if not active_ids and self.env.context.get('active_id'):
+            active_ids = [self.env.context.get('active_id')]
         active_model = self.env.context.get('active_model')
-        if active_model == 'product.label' and active_ids:
+        if (not active_model or active_model == 'product.label') and active_ids:
             labels = self.env['product.label'].browse(active_ids)
             res['label_ids'] = [(6, 0, labels.ids)]
             res['source_company_id'] = self.env.company.id
