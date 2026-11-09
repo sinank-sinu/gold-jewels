@@ -604,11 +604,19 @@ class SaleOrder(models.Model):
                     purity = line.purity_id
                     if purity not in purity_map:
                         purity_map[purity] = {
+                            'gross_weight': 0.0,
+                            'stone_weight': 0.0,
                             'weight': 0.0,
+                            'diamond_amount': 0.0,
+                            'metal_amount': 0.0,
                             'amount': 0.0,
                         }
-                    purity_map[purity]['weight'] += line.net_weight
-                    purity_map[purity]['amount'] += line.amount
+                    purity_map[purity]['gross_weight'] += line.gross_weight or 0.0
+                    purity_map[purity]['stone_weight'] += line.stone_weight or 0.0
+                    purity_map[purity]['weight'] += line.net_weight or 0.0
+                    purity_map[purity]['diamond_amount'] += line.diamond_amount or 0.0
+                    purity_map[purity]['metal_amount'] += (line.net_weight or 0.0) * (line.rate or 0.0)
+                    purity_map[purity]['amount'] += line.amount or 0.0
 
                 # ------------------------------------------------
                 # 3️⃣ CREATE PURCHASE ORDER
@@ -632,23 +640,41 @@ class SaleOrder(models.Model):
 
                 for purity, vals in purity_map.items():
                     total_weight = vals['weight']
+                    total_gross = vals['gross_weight']
+                    total_stone = vals['stone_weight']
                     total_amount = vals['amount']
-                    if not total_weight:
+                    total_diamond = vals['diamond_amount']
+                    total_metal = vals['metal_amount']
+                    if not total_weight and not total_gross:
                         continue
-                    rate = total_amount / total_weight
 
                     p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
-                    PurchaseLine.create({
+                    line_qty = total_gross if (total_stone > 0 or total_gross > total_weight) else total_weight
+
+                    fine_percentage = purity.percentage if (purity and purity.percentage) else 100.0
+                    fine_wt = total_weight * (fine_percentage / 100.0)
+                    if fine_wt > 0 and (total_diamond > 0 or is_dog):
+                        line_gold_rate = total_metal / fine_wt
+                    else:
+                        line_gold_rate = total_amount / total_weight if total_weight else 0.0
+
+                    line_price_unit = total_amount / line_qty if line_qty else 0.0
+
+                    line_create_vals = {
                         'order_id': po.id,
                         'product_id': grp_product.id,
                         'name': p_name,
                         'purity_id': purity.id,
-                        'product_qty': total_weight,
-                        'gold_rate': rate,
-                        'price_unit': rate,
+                        'product_qty': line_qty,
+                        'gross_weight': total_gross,
+                        'stone_weight': total_stone,
+                        'diamond_rate': total_diamond,
+                        'gold_rate': line_gold_rate,
+                        'price_unit': line_price_unit,
                         'product_uom': grp_product.uom_po_id.id or grp_product.uom_id.id,
                         'taxes_id': [(6, 0, [])],
-                    })
+                    }
+                    PurchaseLine.create(line_create_vals)
 
                 # ------------------------------------------------
                 # 4️⃣ CONFIRM PO
@@ -1214,9 +1240,20 @@ class SaleOrder(models.Model):
         for line in self.old_gold_line_ids:
             purity = line.purity_id
             if purity not in purity_map:
-                purity_map[purity] = {'weight': 0.0, 'amount': 0.0}
-            purity_map[purity]['weight'] += line.net_weight
-            purity_map[purity]['amount'] += line.amount
+                purity_map[purity] = {
+                    'gross_weight': 0.0,
+                    'stone_weight': 0.0,
+                    'weight': 0.0,
+                    'diamond_amount': 0.0,
+                    'metal_amount': 0.0,
+                    'amount': 0.0,
+                }
+            purity_map[purity]['gross_weight'] += line.gross_weight or 0.0
+            purity_map[purity]['stone_weight'] += line.stone_weight or 0.0
+            purity_map[purity]['weight'] += line.net_weight or 0.0
+            purity_map[purity]['diamond_amount'] += line.diamond_amount or 0.0
+            purity_map[purity]['metal_amount'] += (line.net_weight or 0.0) * (line.rate or 0.0)
+            purity_map[purity]['amount'] += line.amount or 0.0
 
         is_dog = bool(po and po.is_diamond_og) or any(
             l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
@@ -1248,33 +1285,51 @@ class SaleOrder(models.Model):
             purity_list = list(purity_map.items())
 
             for i, (purity, vals) in enumerate(purity_list):
-                qty = vals['weight']
-                rate = vals['amount'] / qty if qty else 0.0
+                total_weight = vals['weight']
+                total_gross = vals['gross_weight']
+                total_stone = vals['stone_weight']
+                total_amount = vals['amount']
+                total_diamond = vals['diamond_amount']
+                total_metal = vals['metal_amount']
+
+                line_qty = total_gross if (total_stone > 0 or total_gross > total_weight) else total_weight
                 p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
+                
+                fine_percentage = purity.percentage if (purity and purity.percentage) else 100.0
+                fine_wt = total_weight * (fine_percentage / 100.0)
+                if fine_wt > 0 and (total_diamond > 0 or is_dog):
+                    line_gold_rate = total_metal / fine_wt
+                else:
+                    line_gold_rate = total_amount / total_weight if total_weight else 0.0
+
+                line_price_unit = total_amount / line_qty if line_qty else 0.0
+
+                po_line_vals = {
+                    'product_id': product.id,
+                    'name': p_name,
+                    'purity_id': purity.id,
+                    'product_qty': line_qty,
+                    'gross_weight': total_gross,
+                    'stone_weight': total_stone,
+                    'diamond_rate': total_diamond,
+                    'gold_rate': line_gold_rate,
+                    'price_unit': line_price_unit,
+                }
                 
                 if i < len(existing_po_lines):
                     # Update existing PO line (triggers our SQL logic in PurchaseOrderLine.write)
-                    existing_po_lines[i].write({
-                        'product_id': product.id,
-                        'name': p_name,
-                        'product_qty': qty,
-                        'price_unit': rate,
-                        'gold_rate': rate,
-                    })
-                    existing_po_lines[i].qty_received = qty
+                    existing_po_lines[i].write(po_line_vals)
+                    existing_po_lines[i].qty_received = line_qty
                 else:
                     # Create new PO line
-                    new_line = self.env['purchase.order.line'].create({
+                    new_line_vals = dict(po_line_vals)
+                    new_line_vals.update({
                         'order_id': po.id,
-                        'product_id': product.id,
-                        'name': p_name,
-                        'product_qty': qty,
-                        'price_unit': rate,
-                        'gold_rate': rate,
                         'product_uom': product.uom_po_id.id or product.uom_id.id,
                         'taxes_id': [(6, 0, [])],
                     })
-                    new_line.qty_received = qty
+                    new_line = self.env['purchase.order.line'].create(new_line_vals)
+                    new_line.qty_received = line_qty
 
             # ─ 3. Create fresh pickings for any NEW PO lines ─────────
             # Temporarily disable edit mode so _create_picking functions normally
@@ -1490,6 +1545,7 @@ class SaleOrder(models.Model):
                     'product_id': sr_line.product_id.id,
                     'name': f'Sale Return ({sr_line.product_id.name})',
                     'sale_return_line_id': sr_line.id,
+                    'label_id': sr_line.label_id.id if sr_line.label_id else False,
                     'product_qty': gross_wt,
                     'gross_weight': gross_wt,
                     'stone_weight': sr_line.sale_stone_weight or sr_line.stone_weight or 0.0,
@@ -1748,6 +1804,15 @@ class SaleOrder(models.Model):
             # ------------------------------------------------
             order._create_or_update_sale_return_journal_entry(bill)
 
+            returned_labels = order.sale_return_line_ids.mapped('label_id')
+            label_vals = {'active': True}
+            if dest_loc:
+                label_vals['branch_location_id'] = dest_loc.id
+            returned_branch = (dest_loc.branch_id if dest_loc else False) or order.branch_id
+            if returned_branch:
+                label_vals['branch_id'] = returned_branch.id
+            returned_labels.write(label_vals)
+
         return True
 
     def _create_or_update_sale_return_journal_entry(self, bill, target_date=None):
@@ -1940,6 +2005,13 @@ class SaleOrder(models.Model):
             }
         }
 
+    def action_print_advance_receipt(self):
+        """Prints consolidated Advance Payment Receipt for the sale order."""
+        self.ensure_one()
+        payments = self.advance_payment_ids.filtered(lambda p: p.state != 'cancel')
+        if not payments:
+            raise UserError(_("No active advance payments found for this Sale Order."))
+        return self.env.ref('account.action_report_payment_receipt').report_action(payments)
 
 
 
