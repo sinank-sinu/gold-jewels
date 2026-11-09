@@ -1415,7 +1415,6 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
-            bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
             bill.action_post()
             all_bills = self._get_old_gold_bills() or bill
@@ -1549,7 +1548,6 @@ class SaleOrder(models.Model):
                     'product_id': sr_line.product_id.id,
                     'name': f'Sale Return ({sr_line.product_id.name})',
                     'sale_return_line_id': sr_line.id,
-                    'label_id': sr_line.label_id.id if sr_line.label_id else False,
                     'product_qty': gross_wt,
                     'gross_weight': gross_wt,
                     'stone_weight': sr_line.sale_stone_weight or sr_line.stone_weight or 0.0,
@@ -1675,7 +1673,6 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
-            bill.invoice_date = fields.Date.context_today(self)
             bill.is_sale_return = True
             bill.action_post()
             self._create_or_update_sale_return_journal_entry(bill)
@@ -2020,6 +2017,4 @@ class SaleOrder(models.Model):
         if not payments:
             raise UserError(_("No active advance payments found for this Sale Order."))
         return self.env.ref('account.action_report_payment_receipt').report_action(payments)
-
-
 
