@@ -31,7 +31,7 @@
         <field name="name">jewellery.weekly.stock.check.form</field>
         <field name="model">jewellery.weekly.stock.check</field>
         <field name="arch" type="xml">
-            <form string="Weekly Stock Check">
+            <form string="Weekly Stock Check" class="wsc_full_screen_form">
                 <header>
                     <!-- Load products button: only visible in draft -->
                     <button name="action_load_products"
@@ -274,13 +274,13 @@
                             </field>
                         </page>
                     </notebook>
-                </sheet>
 
-                <div class="oe_chatter">
-                    <field name="message_follower_ids"/>
-                    <field name="activity_ids"/>
-                    <field name="message_ids"/>
-                </div>
+                    <div class="oe_chatter mt-4 pt-3 border-top">
+                        <field name="message_follower_ids"/>
+                        <field name="activity_ids"/>
+                        <field name="message_ids"/>
+                    </div>
+                </sheet>
             </form>
         </field>
     </record>

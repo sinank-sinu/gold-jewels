@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Client Action for Branch Payment Balance Dashboard -->
+        <record id="action_branch_payment_balance_dashboard" model="ir.actions.client">
+            <field name="name">Treasury &amp; Payment Balances</field>
+            <field name="tag">branch_payment_balance_dashboard</field>
+            <field name="target">current</field>
+        </record>
+
+        <!-- Menu ONLY in Billing Module -->
+        <menuitem
+            id="menu_billing_staff_payment_balance"
+            name="Payment Balances (Bank / Cash / Card / UPI)"
+            parent="em_jewellery_management.menu_billing_staff_root"
+            action="action_branch_payment_balance_dashboard"
+            sequence="1"
+            groups="em_jewellery_management.group_jewellery_billing_staff,em_jewellery_management.group_jewellery_manager,base.group_system"
+        />
+    </data>
+</odoo>

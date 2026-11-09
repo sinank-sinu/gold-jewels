@@ -1,24 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Branch Label Verification Menu Item under Product Labels App -->
-    <menuitem
-        id="menu_branch_label_verification"
-        name="Branch Label Verification"
-        parent="ornament_label.menu_product_label_app"
-        action="action_branch_label_verification"
-        sequence="36"
-        groups="custom_label_user.group_product_label_user,base.group_user,base.group_system"
-    />
+    <!-- ============================================== -->
+    <!-- Top-Level App Menu (Home Screen & App Switcher)-->
+    <!-- ============================================== -->
+    <record id="menu_branch_label_verification_root" model="ir.ui.menu">
+        <field name="name">Branch Label Verification</field>
+        <field name="web_icon">branch_label_verification,static/description/icon.png</field>
+        <field name="sequence">25</field>
+        <field name="groups_id" eval="[(6, 0, [ref('branch_label_verification.group_branch_label_verification_billing')])]"/>
+    </record>
 
-    <!-- Quick Check Branch Labels Menu Item -->
-    <menuitem
-        id="menu_branch_label_checker"
-        name="Check Branch Labels"
-        parent="ornament_label.menu_product_label_app"
-        action="action_branch_label_checker"
-        sequence="37"
-        groups="custom_label_user.group_product_label_user,base.group_user,base.group_system"
-    />
+    <!-- Sub-menu inside the App: Branch Label Verification Sessions -->
+    <record id="menu_branch_label_verification_app" model="ir.ui.menu">
+        <field name="name">Branch Label Verification</field>
+        <field name="parent_id" ref="menu_branch_label_verification_root"/>
+        <field name="action" ref="action_branch_label_verification"/>
+        <field name="sequence">10</field>
+        <field name="groups_id" eval="[(6, 0, [ref('branch_label_verification.group_branch_label_verification_billing')])]"/>
+    </record>
 
 </odoo>

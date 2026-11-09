@@ -78,6 +78,56 @@
                             </div>
                         </div>
 
+                        <!-- Product Template Summary Section -->
+                        <t t-if="doc.template_summary_ids">
+                            <h5 style="color: #1E293B; font-weight: bold; margin-top: 15px; border-bottom: 2px solid #0284C7; padding-bottom: 4px;">
+                                📊 Product Template Summary
+                            </h5>
+                            <table class="table table-sm table-striped" style="font-size: 10px; width: 100%;">
+                                <thead style="background-color: #F1F5F9;">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Product Template</th>
+                                        <th class="text-end">Total Labels</th>
+                                        <th class="text-end">Total Weight</th>
+                                        <th class="text-end">System Total Wt</th>
+                                        <th class="text-end">Counted Labels</th>
+                                        <th class="text-end">Counted Weight</th>
+                                        <th class="text-end">Counted Total Wt</th>
+                                        <th class="text-end">Diff Labels</th>
+                                        <th class="text-end">Diff Total Wt</th>
+                                        <th class="text-center">Matched</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-set="sl" t-value="1"/>
+                                    <t t-foreach="doc.template_summary_ids" t-as="sm">
+                                        <tr>
+                                            <td><t t-esc="sl"/></td>
+                                            <td><strong><t t-esc="sm.product_tmpl_id.display_name"/></strong></td>
+                                            <td class="text-end"><t t-esc="'%.0f' % sm.system_qty"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % sm.system_weight"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % sm.system_total_weight"/></td>
+                                            <td class="text-end"><t t-esc="'%.0f' % sm.manual_qty"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % sm.manual_weight"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % sm.manual_total_weight"/></td>
+                                            <td class="text-end" t-att-style="'color: #059669;' if sm.is_qty_matched else 'color: #DC2626; font-weight: bold;'"><t t-esc="'%.0f' % sm.difference_qty"/></td>
+                                            <td class="text-end" t-att-style="'color: #059669;' if sm.is_total_weight_matched else 'color: #DC2626; font-weight: bold;'"><t t-esc="'%.3f' % sm.difference_total_weight"/></td>
+                                            <td class="text-center">
+                                                <t t-if="sm.is_matched">
+                                                    <span style="color: #059669; font-weight: bold;">MATCHED</span>
+                                                </t>
+                                                <t t-else="">
+                                                    <span style="color: #DC2626; font-weight: bold;">MISMATCH</span>
+                                                </t>
+                                            </td>
+                                        </tr>
+                                        <t t-set="sl" t-value="sl + 1"/>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </t>
+
                         <!-- Missing Labels Section (Critical Audit Finding) -->
                         <t t-set="missing_items" t-value="doc.line_ids.filtered(lambda l: l.status == 'missing')"/>
                         <t t-if="missing_items">

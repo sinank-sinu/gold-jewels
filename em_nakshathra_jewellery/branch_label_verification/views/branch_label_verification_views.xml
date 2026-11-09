@@ -109,15 +109,29 @@
         <field name="name">branch.label.verification.form</field>
         <field name="model">branch.label.verification</field>
         <field name="arch" type="xml">
-            <form string="Branch Label Verification &amp; Stock Audit">
+            <form string="Branch Label Verification &amp; Stock Audit" class="blv_full_screen_form">
                 <header>
-                    <!-- Load Branch Labels -->
+                    <!-- Draft / In Progress actions -->
+                    <button name="action_start_verification"
+                            string="Start Verification"
+                            type="object"
+                            class="oe_highlight btn-success"
+                            icon="fa-play"
+                            invisible="state != 'draft' or not line_ids"/>
+
                     <button name="action_load_branch_labels"
                             string="Load Branch Labels"
                             type="object"
                             class="oe_highlight"
                             icon="fa-refresh"
-                            invisible="state != 'draft'"/>
+                            invisible="state != 'draft' or line_ids"/>
+
+                    <button name="action_load_branch_labels"
+                            string="Reload Labels"
+                            type="object"
+                            icon="fa-refresh"
+                            confirm="Reloading will reset existing scan lines. Are you sure?"
+                            invisible="state != 'draft' or not line_ids"/>
 
                     <button name="action_load_branch_labels"
                             string="Reload Labels"
@@ -126,7 +140,7 @@
                             confirm="Reloading will reset existing scan lines. Are you sure?"
                             invisible="state != 'in_progress'"/>
 
-                    <!-- Missing and Complete actions -->
+
                     <button name="action_mark_remaining_missing"
                             string="Mark Pending as Missing"
                             type="object"
@@ -143,6 +157,13 @@
                             confirm="Are you sure you want to finalize this audit? Any unverified items will be marked as missing."
                             invisible="state != 'in_progress'"/>
 
+                    <button name="action_check_match"
+                            string="Check Match"
+                            type="object"
+                            class="btn-primary"
+                            icon="fa-check-square-o"
+                            invisible="state != 'in_progress'"/>
+
                     <!-- Reports & Tools -->
                     <button name="action_export_excel"
                             string="Export Excel"
@@ -155,17 +176,22 @@
                             type="object"
                             icon="fa-undo"
                             confirm="This will reset verified counts back to pending and remove extra lines. Proceed?"
+                            groups="branch_label_verification.group_branch_label_verification_branch_manager"
                             invisible="state != 'in_progress'"/>
 
                     <button name="action_cancel"
                             string="Cancel"
                             type="object"
+                            groups="branch_label_verification.group_branch_label_verification_branch_manager"
                             invisible="state in ('done', 'cancel')"/>
 
                     <button name="action_draft"
-                            string="Set to Draft"
+                            string="Reset to Draft"
                             type="object"
-                            invisible="state != 'cancel'"/>
+                            class="btn-secondary"
+                            icon="fa-undo"
+                            groups="branch_label_verification.group_branch_label_verification_branch_manager"
+                            invisible="state not in ('done', 'cancel')"/>
 
                     <field name="state" widget="statusbar" statusbar_visible="draft,in_progress,done"/>
                 </header>
@@ -245,98 +271,224 @@
                     <notebook>
                         <!-- Tab 1: All Labels -->
                         <page string="All Labels" name="page_all_lines">
-                            <field name="line_ids" readonly="state == 'done'">
-                                <tree string="All Labels" decoration-success="status == 'verified'" decoration-warning="status == 'pending'" decoration-danger="status == 'missing'" decoration-info="status == 'extra'">
-                                    <field name="status" widget="badge"
+                            <field name="line_ids" domain="[('is_vault_item', '=', False)]" readonly="state == 'done'">
+                                <tree editable="bottom" create="0" delete="0" string="All Labels" decoration-success="status == 'verified'" decoration-warning="status == 'pending'" decoration-danger="status == 'missing'" decoration-info="status == 'extra'">
+                                    <header>
+                                        <button name="action_verify_selected" string="Verify Selected" type="object" class="btn-success" icon="fa-check"/>
+                                        <button name="action_unverify_selected" string="Undo Selected" type="object" class="btn-secondary" icon="fa-undo"/>
+                                    </header>
+                                    <field name="status" widget="badge" readonly="1"
                                            decoration-success="status == 'verified'"
                                            decoration-warning="status == 'pending'"
                                            decoration-danger="status == 'missing'"
                                            decoration-info="status == 'extra'"/>
-                                    <field name="name" string="Label Ref"/>
-                                    <field name="barcode"/>
-                                    <field name="product_id"/>
-                                    <field name="categ_id" optional="show"/>
-                                    <field name="purity_id" optional="show"/>
-                                    <field name="location_id" optional="show"/>
-                                    <field name="sale_gross_weight" sum="Total Gross"/>
-                                    <field name="sale_net_weight" sum="Total Net" optional="show"/>
-                                    <field name="verified_datetime" optional="hide"/>
-                                    <field name="verified_by" optional="hide"/>
+                                    <field name="name" string="Label Ref" readonly="1"/>
+                                    <field name="barcode" readonly="1"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="purity_id" optional="show" readonly="1"/>
+                                    <field name="branch_id" optional="show" readonly="1"/>
+                                    <field name="location_id" optional="show" readonly="1"/>
+                                    <field name="manual_qty" string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and (status == 'missing' or manual_qty != 0)"/>
+                                    <field name="is_qty_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and (status == 'missing' or manual_qty != 0)"/>
+                                    <field name="manual_weight" string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and (status == 'missing' or manual_weight != 0)"/>
+                                    <field name="is_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and (status == 'missing' or manual_weight != 0)"/>
+                                    <field name="manual_tag_weight" string="Counted Tag Weight" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and (status == 'missing' or manual_tag_weight != 0)"/>
+                                    <field name="is_tag_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and (status == 'missing' or manual_tag_weight != 0)"/>
+                                    <field name="manual_total_weight" string="Counted Total Wt" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and (status == 'missing' or manual_total_weight != 0)"/>
+                                    <field name="is_total_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and (status == 'missing' or manual_total_weight != 0)"/>
+                                    <field name="sale_gross_weight" sum="Total Gross" readonly="1"/>
+                                    <field name="sale_net_weight" sum="Total Net" optional="show" readonly="1"/>
+                                    <field name="verified_datetime" optional="hide" readonly="1"/>
+                                    <field name="verified_by" optional="hide" readonly="1"/>
                                     <field name="notes" optional="show"/>
-                                    <!-- One-click Verify / Undo -->
-                                    <button name="action_verify_line"
-                                            string="Verify"
+                                 </tree>
+                            </field>
+                        </page>
+
+                        <!-- Tab: Product Template Summary -->
+                        <page string="Product Template Summary" name="template_summary">
+                            <div class="mb-2 d-flex justify-content-between align-items-center">
+                                <div class="d-flex gap-2">
+                                    <button name="action_refresh_template_summary"
+                                            string="Refresh Summary"
                                             type="object"
-                                            icon="fa-check text-success"
-                                            invisible="status == 'verified'"/>
-                                    <button name="action_unverify_line"
-                                            string="Undo"
-                                            type="object"
-                                            icon="fa-undo text-muted"
-                                            invisible="status != 'verified'"/>
-                                    <button name="action_view_label"
-                                            string="Open"
-                                            type="object"
-                                            icon="fa-external-link text-primary"/>
+                                            class="btn btn-sm btn-secondary"
+                                            icon="fa-refresh"/>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <span class="badge rounded-pill bg-success text-white px-3 py-2" style="font-size: 0.95rem; color: #ffffff !important;">
+                                        <i class="fa fa-check me-1" style="color: #ffffff !important;"/> Matched: <field name="matched_templates_count" class="text-white" style="color: #ffffff !important;"/>
+                                    </span>
+                                    <span class="badge rounded-pill bg-danger text-white px-3 py-2" style="font-size: 0.95rem; color: #ffffff !important;">
+                                        <i class="fa fa-exclamation-triangle me-1" style="color: #ffffff !important;"/> Mismatched: <field name="mismatched_templates_count" class="text-white" style="color: #ffffff !important;"/>
+                                    </span>
+                                </div>
+                            </div>
+                            <field name="template_summary_ids" readonly="state in ('done', 'cancel')">
+                                <tree editable="bottom" create="0" delete="1"
+                                      decoration-success="is_matched == True"
+                                      decoration-danger="is_matched == False and (verification_state == 'done' or is_missing == True or manual_qty != 0 or manual_total_weight != 0.0)">
+                                    <field name="product_tmpl_id" readonly="1" options="{'no_create': True}"/>
+                                    <field name="is_vault_item" string="Vault Item" widget="boolean_toggle" readonly="1" optional="show"/>
+                                    <field name="is_old_gold" string="Old Gold" widget="boolean_toggle" readonly="1" optional="show"/>
+                                    <field name="is_diamond_og" string="Diamond OG" widget="boolean_toggle" readonly="1" optional="show"/>
+                                    <field name="system_qty" string="Total Labels" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1"/>
+                                    <field name="system_weight" string="Total Weight" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1"/>
+                                    <field name="system_tag_weight" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1" optional="hide"/>
+                                    <field name="system_total_weight" string="System Total Wt" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1" optional="show"/>
+
+                                    <field name="manual_qty" string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and (verification_state == 'done' or is_missing == True or manual_qty != 0)"/>
+                                    <field name="is_qty_matched" column_invisible="1"/>
+                                    
+                                    <field name="manual_weight" string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and (verification_state == 'done' or is_missing == True or manual_weight != 0.0)"/>
+                                    <field name="manual_tag_weight" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1" optional="hide"/>
+                                    <field name="manual_total_weight" string="Counted Total Wt"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and (verification_state == 'done' or is_missing == True or manual_total_weight != 0.0)"
+                                           optional="show"/>
+                                    <field name="is_total_weight_matched" column_invisible="1"/>
+
+                                    <field name="is_weight_matched" column_invisible="1"/>
+
+                                    <field name="difference_qty" string="Diff Labels" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1"
+                                           decoration-danger="is_qty_matched == False"
+                                           decoration-success="is_qty_matched == True"/>
+                                    <field name="difference_weight" string="Diff Weight" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1"
+                                           decoration-danger="is_weight_matched == False"
+                                           decoration-success="is_weight_matched == True"/>
+                                    <field name="difference_tag_weight" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1" optional="hide"/>
+                                    <field name="difference_total_weight" string="Diff Total Wt" groups="branch_label_verification.group_branch_label_verification_branch_manager" readonly="1" optional="show"/>
+
+                                    <field name="is_matched" column_invisible="1"/>
+                                    <field name="is_missing" column_invisible="1"/>
+                                    <field name="verification_state" column_invisible="1"/>
                                 </tree>
                             </field>
                         </page>
 
                         <!-- Tab 2: Pending (Awaiting Scan) -->
                         <page string="Pending Verification" name="page_pending_lines">
-                            <field name="line_ids" domain="[('status', '=', 'pending')]" readonly="state == 'done'">
-                                <tree string="Pending Labels" decoration-warning="1 == 1">
-                                    <field name="name" string="Label Ref"/>
-                                    <field name="barcode"/>
-                                    <field name="product_id"/>
-                                    <field name="categ_id"/>
-                                    <field name="purity_id"/>
-                                    <field name="location_id"/>
-                                    <field name="sale_gross_weight" sum="Pending Gross Wt"/>
-                                    <field name="sale_net_weight" sum="Pending Net Wt" optional="show"/>
+                            <field name="line_ids" domain="[('status', '=', 'pending'), ('is_vault_item', '=', False)]" readonly="state == 'done'">
+                                <tree editable="bottom" create="0" delete="0" string="Pending Labels" decoration-warning="1 == 1">
+                                    <header>
+                                        <button name="action_verify_selected" string="Verify Selected" type="object" class="btn-success" icon="fa-check"/>
+                                    </header>
+                                    <field name="name" string="Label Ref" readonly="1"/>
+                                    <field name="barcode" readonly="1"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="purity_id" readonly="1"/>
+                                    <field name="branch_id" optional="show" readonly="1"/>
+                                    <field name="location_id" readonly="1"/>
+                                    <field name="manual_qty" string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="is_qty_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="manual_weight" string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+                                    <field name="is_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+                                    <field name="manual_tag_weight" string="Counted Tag Weight" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
+                                    <field name="is_tag_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
+                                    <field name="manual_total_weight" string="Counted Total Wt" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"/>
+                                    <field name="is_total_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"/>
+                                    <field name="sale_gross_weight" sum="Pending Gross Wt" readonly="1"/>
+                                    <field name="sale_net_weight" sum="Pending Net Wt" optional="show" readonly="1"/>
                                     <button name="action_verify_line"
                                             string="Verify Now"
                                             type="object"
                                             icon="fa-check text-success"
                                             class="btn-sm btn-outline-success"/>
-                                    <button name="action_view_label"
-                                            string="Open"
-                                            type="object"
-                                            icon="fa-external-link"/>
                                 </tree>
                             </field>
                         </page>
 
                         <!-- Tab 3: Verified -->
                         <page string="Verified Labels" name="page_verified_lines">
-                            <field name="line_ids" domain="[('status', '=', 'verified')]" readonly="state == 'done'">
-                                <tree string="Verified Labels" decoration-success="1 == 1">
-                                    <field name="name" string="Label Ref"/>
-                                    <field name="barcode"/>
-                                    <field name="product_id"/>
-                                    <field name="categ_id"/>
-                                    <field name="purity_id"/>
-                                    <field name="location_id"/>
-                                    <field name="sale_gross_weight" sum="Verified Gross Wt"/>
-                                    <field name="sale_net_weight" sum="Verified Net Wt" optional="show"/>
-                                    <field name="verified_datetime"/>
-                                    <field name="verified_by"/>
-                                    <button name="action_unverify_line"
-                                            string="Undo"
-                                            type="object"
-                                            icon="fa-undo text-muted"/>
+                            <field name="line_ids" domain="[('status', '=', 'verified'), ('is_vault_item', '=', False)]" readonly="state == 'done'">
+                                <tree editable="bottom" create="0" delete="0" string="Verified Labels" decoration-success="1 == 1">
+                                    <header>
+                                        <button name="action_unverify_selected" string="Undo Selected" type="object" class="btn-secondary" icon="fa-undo"/>
+                                    </header>
+                                    <field name="name" string="Label Ref" readonly="1"/>
+                                    <field name="barcode" readonly="1"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="purity_id" readonly="1"/>
+                                    <field name="branch_id" optional="show" readonly="1"/>
+                                    <field name="location_id" readonly="1"/>
+                                    <field name="manual_qty" string="Counted Labels"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="is_qty_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_qty_matched == True"
+                                           decoration-danger="is_qty_matched == False and manual_qty != 0"/>
+                                    <field name="manual_weight" string="Counted Weight"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+                                    <field name="is_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1"
+                                           decoration-success="is_weight_matched == True"
+                                           decoration-danger="is_weight_matched == False and manual_weight != 0"/>
+                                    <field name="manual_tag_weight" string="Counted Tag Weight" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
+                                    <field name="is_tag_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_tag_weight_matched == True"
+                                           decoration-danger="is_tag_weight_matched == False and manual_tag_weight != 0"/>
+                                    <field name="manual_total_weight" string="Counted Total Wt" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"/>
+                                    <field name="is_total_weight_matched" widget="boolean_toggle" readonly="1" nolabel="1" optional="show"
+                                           decoration-success="is_total_weight_matched == True"
+                                           decoration-danger="is_total_weight_matched == False and manual_total_weight != 0"/>
+                                    <field name="sale_gross_weight" sum="Verified Gross Wt" readonly="1"/>
+                                    <field name="sale_net_weight" sum="Verified Net Wt" optional="show" readonly="1"/>
+                                    <field name="verified_datetime" readonly="1"/>
+                                    <field name="verified_by" readonly="1"/>
                                 </tree>
                             </field>
                         </page>
 
                         <!-- Tab 4: Missing -->
                         <page string="Missing Labels" name="page_missing_lines">
-                            <field name="line_ids" domain="[('status', '=', 'missing')]" readonly="state == 'done'">
+                            <field name="line_ids" domain="[('status', '=', 'missing'), ('is_vault_item', '=', False)]" readonly="state == 'done'">
                                 <tree string="Missing Labels" decoration-danger="1 == 1">
+                                    <header>
+                                        <button name="action_verify_selected" string="Found &amp; Verify Selected" type="object" class="btn-success" icon="fa-check"/>
+                                    </header>
                                     <field name="name" string="Label Ref"/>
                                     <field name="barcode"/>
                                     <field name="product_id"/>
-                                    <field name="categ_id"/>
                                     <field name="location_id"/>
                                     <field name="sale_gross_weight" sum="Missing Gross Wt"/>
                                     <field name="sale_net_weight" sum="Missing Net Wt" optional="show"/>
@@ -352,7 +504,7 @@
 
                         <!-- Tab 5: Extra / Foreign Branch -->
                         <page string="Extra / Mismatch Labels" name="page_extra_lines">
-                            <field name="line_ids" domain="[('status', '=', 'extra')]" readonly="state == 'done'">
+                            <field name="line_ids" domain="[('status', '=', 'extra'), ('is_vault_item', '=', False)]" readonly="state == 'done'">
                                 <tree string="Extra / Mismatched Labels" decoration-info="1 == 1">
                                     <field name="name" string="Label Ref"/>
                                     <field name="barcode"/>
@@ -372,13 +524,14 @@
                             <field name="notes" placeholder="Enter any notes, discrepancy explanations, or audit observations here..."/>
                         </page>
                     </notebook>
+
+                    <!-- Chatter for Audit Trail (Down / Bottom) -->
+                    <div class="oe_chatter mt-4 pt-3 border-top">
+                        <field name="message_follower_ids" widget="mail_followers"/>
+                        <field name="activity_ids" widget="mail_activity"/>
+                        <field name="message_ids" widget="mail_thread"/>
+                    </div>
                 </sheet>
-                <!-- Chatter for Audit Trail -->
-                <div class="oe_chatter">
-                    <field name="message_follower_ids" widget="mail_followers"/>
-                    <field name="activity_ids" widget="mail_activity"/>
-                    <field name="message_ids" widget="mail_thread"/>
-                </div>
             </form>
         </field>
     </record>
@@ -391,6 +544,7 @@
         <field name="res_model">branch.label.verification</field>
         <field name="view_mode">tree,kanban,form</field>
         <field name="context">{'search_default_filter_in_progress': 1}</field>
+        <field name="groups_id" eval="[(6, 0, [ref('branch_label_verification.group_branch_label_verification_billing')])]"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create a new Branch Label Verification Audit!

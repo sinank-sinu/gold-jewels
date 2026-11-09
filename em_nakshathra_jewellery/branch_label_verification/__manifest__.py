@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Branch Label Verification & Stock Audit',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.0.2',
     'category': 'Jewellery',
     'summary': 'Check label counts in the default branch and verify each label individually via barcode scanner or audit check',
     'description': """
@@ -16,7 +16,7 @@ Branch Label Verification & Stock Audit
 - Exports styled Excel reports (.xlsx) and printable sign-off PDF audit reports.
 - Integrates seamlessly with Odoo 17, Product Labels App, and em_jewellery_management.
     """,
-    'author': 'Antigravity',
+    'author': 'Sinan k Ahammed',
     'depends': [
         'base',
         'stock',
@@ -25,15 +25,16 @@ Branch Label Verification & Stock Audit
         'em_jewellery_management',
         'ornament_label',
         'custom_label_user',
+        'jewellery_weekly_stock_check',
     ],
     'data': [
+        'security/branch_label_verification_security.xml',
         'security/ir.model.access.csv',
         'data/ir_sequence_data.xml',
+        'data/ir_cron_data.xml',
         'report/report_actions.xml',
         'report/label_verification_report_template.xml',
         'views/branch_label_verification_views.xml',
-        'views/branch_label_checker_views.xml',
-        'views/product_label_views.xml',
         'views/menu_views.xml',
     ],
     'assets': {

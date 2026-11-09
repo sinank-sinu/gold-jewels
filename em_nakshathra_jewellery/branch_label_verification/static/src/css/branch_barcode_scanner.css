@@ -75,3 +75,66 @@
     color: #FECACA;
     border: 1px solid #DC2626;
 }
+
+/* =========================================================
+   Full Screen Form View & Bottom Chatter Layout
+   (Branch Label Verification & Weekly Stock Check)
+   ========================================================= */
+
+.o_form_view.blv_full_screen_form,
+.o_form_view.wsc_full_screen_form {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-flow: column nowrap !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_view_container,
+.o_form_view.wsc_full_screen_form .o_form_view_container {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_sheet_bg,
+.o_form_view.wsc_full_screen_form .o_form_sheet_bg {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_sheet,
+.o_form_view.wsc_full_screen_form .o_form_sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 1.75rem 2rem !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border-radius: 8px !important;
+}
+
+/* Ensure Chatter spans full width cleanly at the bottom (down) */
+.o_form_view.blv_full_screen_form .oe_chatter,
+.o_form_view.blv_full_screen_form .o-mail-Form-chatter,
+.o_form_view.wsc_full_screen_form .oe_chatter,
+.o_form_view.wsc_full_screen_form .o-mail-Form-chatter {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2rem !important;
+    padding-top: 1.5rem !important;
+    display: block !important;
+}
+
+/* Disable XXL layout from forcing side-by-side flex */
+.o_form_view.blv_full_screen_form.o_xxl_form_view,
+.o_form_view.wsc_full_screen_form.o_xxl_form_view {
+    flex-flow: column nowrap !important;
+}
+
+.o_form_view.blv_full_screen_form.o_xxl_form_view .o_form_sheet_bg,
+.o_form_view.wsc_full_screen_form.o_xxl_form_view .o_form_sheet_bg {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+}
