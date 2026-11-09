@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- User Group -->
+    <record id="group_intercompany_transfer_user" model="res.groups">
+        <field name="name">Inter-Company Transfer User</field>
+        <field name="category_id" ref="base.module_category_hidden"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="comment">Can access Inter-Company Transfers, prepare transfers, scan barcodes, and view transferred labels.</field>
+    </record>
+
+    <!-- Administrator Group -->
+    <record id="group_intercompany_transfer_manager" model="res.groups">
+        <field name="name">Inter-Company Transfer Administrator</field>
+        <field name="category_id" ref="base.module_category_hidden"/>
+        <field name="implied_ids" eval="[(4, ref('group_intercompany_transfer_user'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+        <field name="comment">Full access to manage, validate, cancel, and configure Inter-Company Transfers.</field>
+    </record>
+
+    <!-- Automatically grant Manager access to existing Jewellery Managers -->
+    <record id="em_jewellery_management.group_jewellery_manager" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_intercompany_transfer_manager'))]"/>
+    </record>
+</odoo>

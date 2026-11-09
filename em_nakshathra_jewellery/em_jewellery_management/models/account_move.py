@@ -522,8 +522,11 @@ class AccountMove(models.Model):
 
     def _get_report_sale_return_details(self):
         self.ensure_one()
+        if self.move_type in ('in_invoice', 'in_refund'):
+            return []
         details = []
         seen_bills = set()
+        seen_bills.add(self.id)
         seen_sos = set()
 
         # 1. Search linked Sale Orders
@@ -840,6 +843,27 @@ class AccountMove(models.Model):
             salesmen.append(self.user_id.name)
         return ', '.join(salesmen)
 
+    def _get_report_sale_order_number(self):
+        """ Return linked sale order number for report header """
+        self.ensure_one()
+        sos = self.line_ids.mapped('sale_line_ids.order_id')
+        if not sos and self.invoice_origin:
+            sos = self.env['sale.order'].sudo().search([('name', '=', self.invoice_origin)])
+        if not sos:
+            pos = (self.invoice_line_ids | self.line_ids).mapped('purchase_line_id.order_id')
+            for po in pos:
+                if getattr(po, 'sale_id', False):
+                    sos |= po.sale_id
+                elif po.origin:
+                    matching_so = self.env['sale.order'].sudo().search([('name', '=', po.origin)], limit=1)
+                    if matching_so:
+                        sos |= matching_so
+        if not sos:
+            sos = self.env['sale.order'].sudo().search([('sale_return_bill_id', '=', self.id)])
+        if sos:
+            return ', '.join(sos.mapped('name'))
+        return False
+
     def _get_report_gold_rates(self):
         """ Return list of dicts [{'label': '18CT Gold Rate:', 'rate': '₹ 11,400.00'}] for report """
         self.ensure_one()
@@ -989,6 +1013,11 @@ class AccountMove(models.Model):
     def _get_report_visible_columns(self):
         """ Return dictionary of boolean flags indicating which table columns have values """
         self.ensure_one()
+        is_og = bool(
+            getattr(self, 'is_old_gold', False)
+            or getattr(self, 'is_old_gold_bill', False)
+            or any(po.is_old_gold for po in (self.invoice_line_ids | self.line_ids).mapped('purchase_line_id.order_id'))
+        )
         cols = {
             'crt': False,
             'gr_wt': False,
@@ -1055,10 +1084,11 @@ class AccountMove(models.Model):
             if gr and gr > 0:
                 cols['gold_rate'] = True
 
-            # Metal Amt
-            ma = (sale_line and getattr(sale_line, 'metal_amount', 0.0)) or (purchase_line and getattr(purchase_line, 'metal_amount', 0.0)) or 0.0
-            if ma and ma > 0:
-                cols['metal_amt'] = True
+            # Metal Amt (Excluded from Old Gold bills per requirement; included in Sale Return / Sale)
+            if not is_og:
+                ma = (sale_line and getattr(sale_line, 'metal_amount', 0.0)) or (purchase_line and getattr(purchase_line, 'metal_amount', 0.0)) or getattr(line, 'metal_amount', 0.0) or 0.0
+                if ma and ma > 0:
+                    cols['metal_amt'] = True
 
             # St.Amt
             st_amt = (sale_line and getattr(sale_line, 'sale_stone_rate', 0.0)) or (sale_line and sale_line.label_id and getattr(sale_line.label_id, 'sale_stone_rate', 0.0)) or (line.label_id and getattr(line.label_id, 'sale_stone_rate', 0.0)) or (purchase_line and getattr(purchase_line, 'stone_rate', 0.0)) or 0.0

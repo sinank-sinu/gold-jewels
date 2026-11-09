@@ -50,6 +50,11 @@ class ProductLabel(models.Model):
         ondelete='cascade',
         tracking=True
     )
+    invoice_line_ids = fields.One2many(
+        'account.move.line',
+        'label_id',
+        string='Invoice Lines',
+    )
     product_tmpl_id = fields.Many2one(
         'product.template',
         string="Product",

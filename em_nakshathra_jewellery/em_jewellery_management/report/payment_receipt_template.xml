@@ -5,6 +5,18 @@
         <field name="paperformat_id" ref="em_jewellery_management.paperformat_jewellery_invoice"/>
     </record>
 
+    <!-- Grouping Template Override: Groups multiple selected payments per Sales Order / Partner into a single consolidated receipt -->
+    <template id="report_payment_receipt_inherit_grouping" inherit_id="account.report_payment_receipt">
+        <xpath expr="//t[@t-foreach='docs']" position="replace">
+            <t t-set="groups_to_render" t-value="payment_groups if payment_groups else [{'main_payment': o, 'payments': o, 'total_amount': o.amount, 'sale_id': o.sale_id, 'partner_id': o.partner_id, 'disp_pay_method': False, 'disp_payment_ref': False, 'date': o.date, 'is_consolidated': False} for o in docs]"/>
+            <t t-foreach="groups_to_render" t-as="group">
+                <t t-set="o" t-value="group['main_payment']"/>
+                <t t-set="lang" t-value="o.partner_id.lang or o.company_id.partner_id.lang"/>
+                <t t-call="account.report_payment_receipt_document" t-lang="lang"/>
+            </t>
+        </xpath>
+    </template>
+
     <template id="report_payment_receipt_document_inherit_sale" inherit_id="account.report_payment_receipt_document">
         <xpath expr="//div[hasclass('page')]" position="replace">
             <div class="page jewellery-receipt">
@@ -63,7 +75,7 @@
                     </h3>
                 </div>
 
-                <!-- Resolve dynamic Payment Method strictly as Bank, Cash, UPI, or Card -->
+                <!-- Resolve dynamic Payment Method strictly as Bank, Cash, UPI, or Card for single payment fallback -->
                 <t t-set="disp_pay_method" t-value="'Bank'"/>
                 <t t-if="o.journal_id">
                     <t t-if="o.journal_id.type == 'cash' or 'cash' in (o.journal_id.name or '').lower()">
@@ -109,7 +121,8 @@
                                         <strong>Phone: </strong><span t-esc="o.partner_id.mobile or o.partner_id.phone or (o.sale_id.phone if (o.sale_id and 'phone' in o.sale_id) else '')"/>
                                     </div>
                                 </t>
-                                <div><strong>Date: </strong> <span t-esc="o.date.strftime('%d/%m/%Y') if o.date else ''"/></div>
+                                <t t-set="receipt_date" t-value="group.get('date') if (group and group.get('date')) else o.date"/>
+                                <div><strong>Date: </strong> <span t-esc="receipt_date.strftime('%d/%m/%Y') if receipt_date else ''"/></div>
                                 <t t-if="o.sale_id">
                                     <div><strong>Sales Order: </strong> <span t-field="o.sale_id.name"/></div>
                                     <t t-if="o.sale_id.user_id">
@@ -123,10 +136,13 @@
                         </td>
                         <td style="width: 45%; vertical-align: top; border: none; padding: 0;">
                             <div class="jewellery-info-box">
-                                <div><strong>Payment Method: </strong> <span t-esc="disp_pay_method"/></div>
+                                <div>
+                                    <strong>Payment Method: </strong>
+                                    <span t-esc="group['disp_pay_method'] if (group and group.get('disp_pay_method')) else disp_pay_method"/>
+                                </div>
                                 <div>
                                     <strong>Payment Reference: </strong>
-                                    <span t-esc="o.bank_reference if ('bank_reference' in o and o.bank_reference) else (o.name or '-')"/>
+                                    <span t-esc="group['disp_payment_ref'] if (group and group.get('disp_payment_ref')) else (o.bank_reference if ('bank_reference' in o and o.bank_reference) else (o.name or '-'))"/>
                                 </div>
                                 <div>
                                     <strong>Due Date: </strong>
@@ -148,7 +164,12 @@
                 <!-- Highlighted Amount Received Block -->
                 <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 18px; margin-bottom: 16px; text-align: center;">
                     <span style="font-size: 1.1em; font-weight: bold; color: #2C3E50;">Amount Received: </span>
-                    <span style="font-size: 1.3em; font-weight: bold; color: #27AE60;" t-field="o.amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                    <t t-if="group and 'total_amount' in group">
+                        <span style="font-size: 1.3em; font-weight: bold; color: #27AE60;" t-out="group['total_amount']" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                    </t>
+                    <t t-else="">
+                        <span style="font-size: 1.3em; font-weight: bold; color: #27AE60;" t-field="o.amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                    </t>
                 </div>
 
                 <!-- Advance Items Table from Sales Order Products -->

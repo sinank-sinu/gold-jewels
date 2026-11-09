@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ class LabelIntercompanyTransfer(models.Model):
     source_location_id = fields.Many2one(
         'stock.location',
         string="Source Location",
-        domain="[('company_id', 'in', [source_company_id, False]), ('usage', '=', 'internal')]"
+        required=True,
+        domain="[('company_id', 'in', [source_company_id, False]), ('usage', '=', 'internal')]",
+        tracking=True
     )
     dest_company_id = fields.Many2one(
         'res.company',
@@ -206,6 +208,22 @@ class LabelIntercompanyTransfer(models.Model):
             ], limit=1)
             if branch:
                 vals['source_branch_id'] = branch.id
+        if not vals.get('source_location_id') and vals.get('source_company_id'):
+            src_branch_id = vals.get('source_branch_id')
+            loc = False
+            if src_branch_id:
+                loc = self.env['stock.location'].search([
+                    ('company_id', '=', vals['source_company_id']),
+                    ('branch_id', '=', src_branch_id),
+                    ('usage', '=', 'internal')
+                ], limit=1)
+            if not loc:
+                loc = self.env['stock.location'].search([
+                    ('company_id', '=', vals['source_company_id']),
+                    ('usage', '=', 'internal')
+                ], limit=1)
+            if loc:
+                vals['source_location_id'] = loc.id
         if not vals.get('sale_tax_id') and vals.get('source_company_id'):
             src_comp = self.env['res.company'].browse(vals['source_company_id'])
             dest_comp = self.env['res.company'].browse(vals['dest_company_id']) if vals.get('dest_company_id') else False
@@ -328,12 +346,24 @@ class LabelIntercompanyTransfer(models.Model):
             ], limit=1)
             if branch:
                 self.source_branch_id = branch.id
+                self._onchange_source_branch_id()
+
+    @api.onchange('source_branch_id')
+    def _onchange_source_branch_id(self):
+        self.source_location_id = False
+        if self.source_branch_id and self.source_company_id:
+            loc = self.env['stock.location'].search([
+                ('company_id', '=', self.source_company_id.id),
+                ('branch_id', '=', self.source_branch_id.id),
+                ('usage', '=', 'internal')
+            ], limit=1)
+            if not loc:
                 loc = self.env['stock.location'].search([
                     ('company_id', '=', self.source_company_id.id),
-                    ('branch_id', '=', branch.id),
                     ('usage', '=', 'internal')
                 ], limit=1)
-                self.source_location_id = loc.id if loc else False
+            if loc:
+                self.source_location_id = loc.id
 
     @api.onchange('dest_company_id')
     def _onchange_dest_company_id(self):
@@ -383,9 +413,17 @@ class LabelIntercompanyTransfer(models.Model):
                 }
             }
 
+        if not self.source_location_id:
+            return {
+                'warning': {
+                    'title': _('Source Location Missing'),
+                    'message': _('Please select the Source Location before scanning labels.')
+                }
+            }
+
         domain = [
             ('company_id', '=', self.source_company_id.id),
-            '|', ('barcode', '=', code), ('name', '=', code),
+            '|', '|', ('barcode', '=', code), ('barcode2', '=', code), ('name', '=', code),
             ('active', '=', True)
         ]
         label = self.env['product.label'].search(domain, limit=1)
@@ -408,7 +446,27 @@ class LabelIntercompanyTransfer(models.Model):
                 }
             }
 
-        existing_label_ids = self.line_ids.mapped('label_id.id')
+        # Validate that the label physically resides in the chosen Source Location (or child locations)
+        label_loc = label.branch_location_id or label.source_location_id
+        allowed_locations = self.env['stock.location'].search([
+            ('id', 'child_of', self.source_location_id.id)
+        ])
+        if not label_loc or label_loc not in allowed_locations:
+            return {
+                'warning': {
+                    'title': _('Location Mismatch'),
+                    'message': _(
+                        'Label %(label)s is currently in location "%(curr_loc)s". '
+                        'It cannot be scanned because the Source Location for this transfer is "%(src_loc)s".'
+                    ) % {
+                        'label': label.name,
+                        'curr_loc': label_loc.display_name if label_loc else _('Unknown Location'),
+                        'src_loc': self.source_location_id.display_name,
+                    }
+                }
+            }
+
+        existing_label_ids = [line.label_id.id for line in self.line_ids if line.label_id]
         if label.id in existing_label_ids:
             return {
                 'warning': {
@@ -417,11 +475,18 @@ class LabelIntercompanyTransfer(models.Model):
                 }
             }
 
-        new_line = self.env['label.intercompany.transfer.line'].new({
-            'transfer_id': self.id,
-            'label_id': label.id,
-        })
-        self.line_ids += new_line
+        # If an empty line exists (e.g. user clicked "Add a line" before scanning), reuse it
+        empty_lines = self.line_ids.filtered(lambda l: not l.label_id)
+        if empty_lines:
+            target_line = empty_lines[0]
+            target_line.label_id = label.id
+            target_line._compute_line_fields()
+        else:
+            new_line = self.env['label.intercompany.transfer.line'].new({
+                'label_id': label.id,
+            })
+            self.line_ids += new_line
+            new_line._compute_line_fields()
 
     def action_cancel(self):
         for rec in self:
@@ -443,6 +508,9 @@ class LabelIntercompanyTransfer(models.Model):
         if not self.line_ids:
             raise UserError(_("Please add at least one label to transfer."))
 
+        if not self.source_location_id:
+            raise UserError(_("Please select a Source Location."))
+
         if not self.dest_company_id:
             raise UserError(_("Please select a Destination Company."))
 
@@ -454,6 +522,20 @@ class LabelIntercompanyTransfer(models.Model):
 
         if self.source_company_id == self.dest_company_id:
             raise UserError(_("Source and Destination Companies must be different."))
+
+        allowed_locations = self.env['stock.location'].search([
+            ('id', 'child_of', self.source_location_id.id)
+        ])
+        for line in self.line_ids:
+            loc = line.label_id.branch_location_id or line.label_id.source_location_id
+            if not loc or loc not in allowed_locations:
+                raise UserError(_(
+                    "Label '%(label)s' is in location '%(curr_loc)s', not in Source Location '%(src_loc)s'."
+                ) % {
+                    'label': line.label_id.name,
+                    'curr_loc': loc.display_name if loc else _('Unknown Location'),
+                    'src_loc': self.source_location_id.display_name,
+                })
 
         source_company = self.source_company_id
         source_branch = self.source_branch_id
@@ -1022,33 +1104,97 @@ class LabelIntercompanyTransfer(models.Model):
                 'purchase_making_charge_amount': label.purchase_making_charge_amount,
             }
 
-            new_label = self.env['product.label'].sudo().with_company(dest_company).create(label_vals)
+            # Check if an existing archived label with this exact name or barcode already exists in destination company (e.g. return transfer)
+            existing_domain = [
+                ('company_id', '=', dest_company.id),
+                '|', ('name', '=', label.name),
+                '|', ('barcode', '=', label.barcode),
+                ('barcode2', '=', label.barcode2) if label.barcode2 else ('barcode', '=', label.barcode)
+            ]
+            existing_label = self.env['product.label'].sudo().with_company(dest_company).with_context(active_test=False).search(
+                existing_domain, order='id desc', limit=1
+            )
 
-            # Ensure exact label name, barcode, and original vendor
-            update_vals = {}
-            if new_label.name != label.name:
-                update_vals['name'] = label.name
-            if label.barcode and new_label.barcode != label.barcode:
-                update_vals['barcode'] = label.barcode
-            if label.barcode2 and new_label.barcode2 != label.barcode2:
-                update_vals['barcode2'] = label.barcode2
-            if orig_vendor and new_label.partner_id != orig_vendor:
-                update_vals['partner_id'] = orig_vendor.id
-                update_vals['original_vendor_id'] = orig_vendor.id
-            if update_vals:
-                new_label.sudo().write(update_vals)
+            if existing_label:
+                # Reactivate and update existing label in destination company
+                reactivate_vals = {
+                    'active': True,
+                    'is_transferred': False,
+                    'transfer_dest_company_id': False,
+                    'transfer_dest_label_id': False,
+                    'transfer_notes': f"Returned from {self.source_company_id.name} via {self.name}",
+                    'branch_id': dest_branch.id if dest_branch else False,
+                    'branch_location_id': dest_location.id if dest_location else False,
+                    'source_location_id': dest_lot_stock.id if dest_lot_stock else False,
+                    'purchase_id': po.id,
+                    'product_id': dest_prod.id,
+                    'product_template_id': dest_prod.product_tmpl_id.id,
+                    'purchase_price_per_gram': board_rate,
+                    'purchase_metal_rate': metal_val,
+                    'sale_price_per_gram': label.sale_price_per_gram or board_rate,
+                    'sale_metal_rate': label.sale_metal_rate or metal_val,
+                    'tag_weight': label.tag_weight,
+                    'sale_gross_weight': gross_wt,
+                    'purchase_gross_weight': gross_wt,
+                    'sale_net_weight': net_wt,
+                    'purchase_net_weight': net_wt,
+                    'sale_stone_rate': label.sale_stone_rate,
+                    'purchase_stone_rate': stone_rate,
+                    'sale_diamond_rate': label.sale_diamond_rate,
+                    'purchase_diamond_rate': diamond_rate,
+                    'other_weight_g': label.other_weight_g,
+                    'other_weight_amount': label.other_weight_amount,
+                }
+                if orig_vendor:
+                    reactivate_vals['partner_id'] = orig_vendor.id
+                    reactivate_vals['original_vendor_id'] = orig_vendor.id
+                if label.image and not existing_label.image:
+                    reactivate_vals['image'] = label.image
 
-            created_labels |= new_label
+                existing_label.sudo().write(reactivate_vals)
+
+                # Ensure exact name, barcode, and barcode2
+                extra_updates = {}
+                if existing_label.name != label.name:
+                    extra_updates['name'] = label.name
+                if label.barcode and existing_label.barcode != label.barcode:
+                    extra_updates['barcode'] = label.barcode
+                if label.barcode2 and existing_label.barcode2 != label.barcode2:
+                    extra_updates['barcode2'] = label.barcode2
+                if extra_updates:
+                    existing_label.sudo().write(extra_updates)
+
+                target_label = existing_label
+            else:
+                new_label = self.env['product.label'].sudo().with_company(dest_company).create(label_vals)
+
+                # Ensure exact label name, barcode, and original vendor
+                update_vals = {}
+                if new_label.name != label.name:
+                    update_vals['name'] = label.name
+                if label.barcode and new_label.barcode != label.barcode:
+                    update_vals['barcode'] = label.barcode
+                if label.barcode2 and new_label.barcode2 != label.barcode2:
+                    update_vals['barcode2'] = label.barcode2
+                if orig_vendor and new_label.partner_id != orig_vendor:
+                    update_vals['partner_id'] = orig_vendor.id
+                    update_vals['original_vendor_id'] = orig_vendor.id
+                if update_vals:
+                    new_label.sudo().write(update_vals)
+
+                target_label = new_label
+
+            created_labels |= target_label
 
             # Trigger Stock In
-            if new_label.source_location_id and new_label.branch_location_id and new_label.source_location_id != new_label.branch_location_id:
+            if target_label.source_location_id and target_label.branch_location_id and target_label.source_location_id != target_label.branch_location_id:
                 try:
-                    new_label.with_company(dest_company).action_stock_in()
+                    target_label.with_company(dest_company).action_stock_in()
                 except Exception as stock_err:
-                    _logger.warning("action_stock_in bypassed on label %s: %s", new_label.id, stock_err)
-                    new_label.write({'is_stocked_in': True, 'active': True})
+                    _logger.warning("action_stock_in bypassed on label %s: %s", target_label.id, stock_err)
+                    target_label.write({'is_stocked_in': True, 'active': True})
             else:
-                new_label.write({'is_stocked_in': True, 'active': True})
+                target_label.write({'is_stocked_in': True, 'active': True})
 
         return created_labels
 
@@ -1262,3 +1408,20 @@ class LabelIntercompanyTransferLine(models.Model):
                 line.rate_per_gram = 0.0
                 line.stone_diamond_amount = 0.0
                 line.subtotal = 0.0
+
+    @api.constrains('label_id', 'transfer_id')
+    def _check_label_source_location(self):
+        for line in self:
+            if line.transfer_id and line.transfer_id.source_location_id and line.label_id:
+                loc = line.label_id.branch_location_id or line.label_id.source_location_id
+                allowed_locations = self.env['stock.location'].search([
+                    ('id', 'child_of', line.transfer_id.source_location_id.id)
+                ])
+                if not loc or loc not in allowed_locations:
+                    raise ValidationError(_(
+                        "Label '%(label)s' is in location '%(curr_loc)s', not in Source Location '%(src_loc)s'."
+                    ) % {
+                        'label': line.label_id.name,
+                        'curr_loc': loc.display_name if loc else _('Unknown Location'),
+                        'src_loc': line.transfer_id.source_location_id.display_name,
+                    })

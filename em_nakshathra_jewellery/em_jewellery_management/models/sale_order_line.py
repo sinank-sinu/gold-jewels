@@ -2,7 +2,9 @@ from email.policy import default
 
 from numpy.f2py.rules import defmod_rules
 
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import ValidationError
+from odoo.tools.float_utils import float_compare, float_round
 
 class SaleOrderLine(models.Model):
     _inherit = 'sale.order.line'
@@ -44,17 +46,138 @@ class SaleOrderLine(models.Model):
     )
     sale_gross_weight = fields.Float(string="Gross Weight (g)", digits=(16, 3))
     price_unit = fields.Float(
-        string='Unit Price', required=True, digits='Product Price',
+        string='Unit Price', required=True, digits=(16, 3),
         compute="_compute_price_unit", readonly=False, store=True, precompute=True)
     price_subtotal = fields.Monetary(string='Subtotal', compute='_compute_subtotal', readonly=False, store=True, precompute=True)
     price_subtotal_actual = fields.Monetary(compute='_compute_subtotal', string='MRP', store=True, precompute=True)
-    mc_percent_actual = fields.Float(string="MC%",readonly=False)
-    mc_amount_actual = fields.Float(string="MC", compute="_compute_mc_amount_actual", inverse="_inverse_mc_amount_actual", store=True, readonly=False, precompute=True)
+    total_amount_round_off = fields.Monetary(
+        string="Round off",
+        compute="_compute_tax_included_amount",
+        inverse="_inverse_total_amount_round_off",
+    )
+    mc_percent_actual = fields.Float(string="MC%", digits=(16, 6), readonly=False)
+    mc_amount_actual = fields.Float(
+        string="MC",
+        compute="_compute_mc_amount_actual",
+        inverse="_inverse_mc_amount_actual",
+        store=True,
+        readonly=False,
+        precompute=True,
+        digits=(16, 3),
+    )
     mc_discount = fields.Float(string="Discount", compute="_compute_mc_discount")
     sale_making_charge_min = fields.Float(string="Sale Making Charge Min")
     sale_making_charge_fixed_amount_min = fields.Float(string="Sale Fixed Making Charge Min")
     other_weight_g = fields.Float(string="Other Weight (g)", digits=(16, 3))
     other_weight_amount = fields.Float(string="Other Weight Amount")
+
+    @api.depends('price_total')
+    def _compute_tax_included_amount(self):
+        for line in self:
+            line.total_amount_round_off = line.price_total
+
+    @api.onchange('total_amount_round_off')
+    def _onchange_total_amount_round_off(self):
+        self._inverse_total_amount_round_off()
+
+    def _inverse_total_amount_round_off(self):
+        for line in self:
+            if getattr(line, 'is_scheme_line', False):
+                raise ValidationError(_("The tax-included amount cannot be changed on a scheme line."))
+            if not line.product_uom_qty:
+                raise ValidationError(_("Set a non-zero quantity before editing the tax-included amount."))
+
+            quantity = line.product_uom_qty
+            currency = line.currency_id
+            target_total = line.total_amount_round_off
+
+            def total_for_mc_amount(mc_amount):
+                subtotal = (
+                    line.metal_amount
+                    + mc_amount
+                    + line.sale_stone_rate
+                    + line.sale_diamond_rate
+                    + line.other_weight_amount
+                )
+                base_line = line.env['account.tax']._convert_to_tax_base_line_dict(
+                    line,
+                    partner=line.order_id.partner_id,
+                    currency=line.order_id.currency_id,
+                    product=line.product_id,
+                    taxes=line.tax_id,
+                    price_unit=float_round(subtotal / quantity, precision_digits=3),
+                    quantity=quantity,
+                    discount=line.discount,
+                    price_subtotal=subtotal,
+                )
+                tax_results = line.env['account.tax'].with_company(line.company_id)._compute_taxes([base_line])
+                totals = next(iter(tax_results['totals'].values()), {})
+                return totals.get('amount_untaxed', 0.0) + totals.get('amount_tax', 0.0)
+
+            has_actual_mc_amount = not currency.is_zero(line.mc_amount_actual)
+            current_mc_amount = max((
+                line.mc_amount_actual if has_actual_mc_amount else line.mc_amount
+            ) or 0.0, 0.0)
+            current_total = total_for_mc_amount(current_mc_amount)
+            difference = current_total - target_total
+            if float_compare(difference, 0.0, precision_rounding=currency.rounding) == 0:
+                continue
+
+            if difference > 0.0:
+                low = 0.0
+                high = current_mc_amount
+                minimum_total = total_for_mc_amount(low)
+                if float_compare(
+                    target_total,
+                    minimum_total,
+                    precision_rounding=currency.rounding,
+                ) < 0:
+                    raise ValidationError(_(
+                        "The tax-included amount cannot be lower than the line total with zero making charge."
+                    ))
+            else:
+                low = current_mc_amount
+                high = max(current_mc_amount + 1.0, 1.0)
+                step = high - current_mc_amount
+                for _attempt in range(64):
+                    if float_compare(
+                        total_for_mc_amount(high),
+                        target_total,
+                        precision_rounding=currency.rounding,
+                    ) >= 0:
+                        break
+                    step *= 2.0
+                    high = current_mc_amount + step
+                else:
+                    raise ValidationError(_("Unable to calculate a making charge for this tax-included amount."))
+
+            for _attempt in range(64):
+                middle = (low + high) / 2.0
+                if float_compare(
+                    total_for_mc_amount(middle),
+                    target_total,
+                    precision_rounding=currency.rounding,
+                ) < 0:
+                    low = middle
+                else:
+                    high = middle
+
+            required_mc_amount = min(
+                (low, high),
+                key=lambda mc_amount: abs(total_for_mc_amount(mc_amount) - target_total),
+            )
+            if not currency.is_zero(required_mc_amount) and not line.metal_amount:
+                raise ValidationError(_("A making charge cannot be set when the metal amount is zero."))
+
+            if line.label_id and line.label_id.sale_making_charge_type == 'percent':
+                line.mc_percent_actual = (
+                    required_mc_amount / line.metal_amount * 100.0
+                    if line.metal_amount else 0.0
+                )
+            else:
+                line.mc_amount_actual = required_mc_amount
+                line._inverse_mc_amount_actual()
+
 
     def _inverse_mc_amount_actual(self):
         for rec in self:
@@ -322,6 +445,3 @@ class SaleOrderLine(models.Model):
             return True
             
         return super(SaleOrderLine, self)._update_line_quantity(values)
-
-
-

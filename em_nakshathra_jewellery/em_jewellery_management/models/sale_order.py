@@ -739,11 +739,19 @@ class SaleOrder(models.Model):
                     purity = line.purity_id
                     if purity not in purity_map:
                         purity_map[purity] = {
+                            'gross_weight': 0.0,
+                            'stone_weight': 0.0,
                             'weight': 0.0,
+                            'diamond_amount': 0.0,
+                            'metal_amount': 0.0,
                             'amount': 0.0,
                         }
-                    purity_map[purity]['weight'] += line.net_weight
-                    purity_map[purity]['amount'] += line.amount
+                    purity_map[purity]['gross_weight'] += line.gross_weight or 0.0
+                    purity_map[purity]['stone_weight'] += line.stone_weight or 0.0
+                    purity_map[purity]['weight'] += line.net_weight or 0.0
+                    purity_map[purity]['diamond_amount'] += line.diamond_amount or 0.0
+                    purity_map[purity]['metal_amount'] += (line.net_weight or 0.0) * (line.rate or 0.0)
+                    purity_map[purity]['amount'] += line.amount or 0.0
 
                 if grp_idx == 0 and order.old_gold_amount_rounding and purity_map:
                     first_purity = next(iter(purity_map))
@@ -771,25 +779,43 @@ class SaleOrder(models.Model):
 
                 for purity, vals in purity_map.items():
                     total_weight = vals['weight']
+                    total_gross = vals['gross_weight']
+                    total_stone = vals['stone_weight']
                     total_amount = vals['amount']
+                    total_diamond = vals['diamond_amount']
+                    total_metal = vals['metal_amount']
                     if not total_weight and is_dog:
                         total_weight = 1.0
-                    if not total_weight:
+                    if not total_weight and not total_gross:
                         continue
-                    rate = total_amount / total_weight
 
                     p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
-                    PurchaseLine.create({
+                    line_qty = total_gross if (total_stone > 0 or total_gross > total_weight) else total_weight
+
+                    fine_percentage = purity.percentage if (purity and purity.percentage) else 100.0
+                    fine_wt = total_weight * (fine_percentage / 100.0)
+                    if fine_wt > 0 and (total_diamond > 0 or is_dog):
+                        line_gold_rate = total_metal / fine_wt
+                    else:
+                        line_gold_rate = total_amount / total_weight if total_weight else 0.0
+
+                    line_price_unit = total_amount / line_qty if line_qty else 0.0
+
+                    line_create_vals = {
                         'order_id': po.id,
                         'product_id': grp_product.id,
                         'name': p_name,
                         'purity_id': purity.id,
-                        'product_qty': total_weight,
-                        'gold_rate': rate,
-                        'price_unit': rate,
+                        'product_qty': line_qty,
+                        'gross_weight': total_gross,
+                        'stone_weight': total_stone,
+                        'diamond_rate': total_diamond,
+                        'gold_rate': line_gold_rate,
+                        'price_unit': line_price_unit,
                         'product_uom': grp_product.uom_po_id.id or grp_product.uom_id.id,
                         'taxes_id': [(6, 0, [])],
-                    })
+                    }
+                    PurchaseLine.create(line_create_vals)
 
                 # ------------------------------------------------
                 # 4️⃣ CONFIRM PO
@@ -911,27 +937,27 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                entry.with_context(check_move_validity=False).write({
-                    'line_ids': [
-                        (1, creditors_move_line[0].id, {
-                            'account_id': creditors_account.id,
-                            'debit': total_bill_amount,
-                            'credit': 0.0,
-                            'amount_currency': total_bill_amount,
-                        }),
-                        (1, debtors_move_line[0].id, {
-                            'account_id': debtors_account.id,
-                            'debit': 0.0,
-                            'credit': total_bill_amount,
-                            'amount_currency': -total_bill_amount,
-                        }),
-                    ],
-                    'date': entry_date,
-                    'ref': f"Old Gold - {self.name}",
-                })
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
+                'date': entry_date,
+                'ref': f"Old Gold - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Old Gold Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': total_bill_amount,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Old Gold Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': total_bill_amount,
+                    }),
+                ],
+            })
             entry.action_post()
         else:
             entry_vals = {
@@ -1362,9 +1388,20 @@ class SaleOrder(models.Model):
         for line in self.old_gold_line_ids:
             purity = line.purity_id
             if purity not in purity_map:
-                purity_map[purity] = {'weight': 0.0, 'amount': 0.0}
-            purity_map[purity]['weight'] += line.net_weight
-            purity_map[purity]['amount'] += line.amount
+                purity_map[purity] = {
+                    'gross_weight': 0.0,
+                    'stone_weight': 0.0,
+                    'weight': 0.0,
+                    'diamond_amount': 0.0,
+                    'metal_amount': 0.0,
+                    'amount': 0.0,
+                }
+            purity_map[purity]['gross_weight'] += line.gross_weight or 0.0
+            purity_map[purity]['stone_weight'] += line.stone_weight or 0.0
+            purity_map[purity]['weight'] += line.net_weight or 0.0
+            purity_map[purity]['diamond_amount'] += line.diamond_amount or 0.0
+            purity_map[purity]['metal_amount'] += (line.net_weight or 0.0) * (line.rate or 0.0)
+            purity_map[purity]['amount'] += line.amount or 0.0
 
         if self.old_gold_amount_rounding and purity_map:
             first_purity = next(iter(purity_map))
@@ -1401,42 +1438,63 @@ class SaleOrder(models.Model):
             purity_list = list(purity_map.items())
 
             for i, (purity, vals) in enumerate(purity_list):
-                qty = vals['weight']
-                if not qty and is_dog:
-                    qty = 1.0
-                rate = vals['amount'] / qty if qty else 0.0
+                total_weight = vals['weight']
+                total_gross = vals['gross_weight']
+                total_stone = vals['stone_weight']
+                total_amount = vals['amount']
+                total_diamond = vals['diamond_amount']
+                total_metal = vals['metal_amount']
+
+                if not total_weight and is_dog:
+                    total_weight = 1.0
+
+                line_qty = total_gross if (total_stone > 0 or total_gross > total_weight) else total_weight
+                if not line_qty and is_dog:
+                    line_qty = 1.0
                 p_name = f'Diamond Old Gold Purchase ({purity.name})' if is_dog else f'Old Gold Purchase ({purity.name})'
+                
+                fine_percentage = purity.percentage if (purity and purity.percentage) else 100.0
+                fine_wt = total_weight * (fine_percentage / 100.0)
+                if fine_wt > 0 and (total_diamond > 0 or is_dog):
+                    line_gold_rate = total_metal / fine_wt
+                else:
+                    line_gold_rate = total_amount / total_weight if total_weight else 0.0
+
+                line_price_unit = total_amount / line_qty if line_qty else 0.0
+
+                po_line_vals = {
+                    'product_id': product.id,
+                    'name': p_name,
+                    'purity_id': purity.id,
+                    'product_qty': line_qty,
+                    'gross_weight': total_gross,
+                    'stone_weight': total_stone,
+                    'diamond_rate': total_diamond,
+                    'gold_rate': line_gold_rate,
+                    'price_unit': line_price_unit,
+                }
                 
                 if i < len(existing_po_lines):
                     # If reducing quantity below received quantity, sync done moves first to avoid UserError
-                    if existing_po_lines[i].qty_received > qty:
+                    if existing_po_lines[i].qty_received > line_qty:
                         existing_po_lines[i].move_ids.filtered(lambda m: m.state == 'done').write({
-                            'product_uom_qty': qty,
-                            'quantity': qty,
+                            'product_uom_qty': line_qty,
+                            'quantity': line_qty,
                         })
                         existing_po_lines[i].invalidate_recordset(['qty_received'])
                     # Update existing PO line (triggers our SQL logic in PurchaseOrderLine.write)
-                    existing_po_lines[i].write({
-                        'product_id': product.id,
-                        'name': p_name,
-                        'product_qty': qty,
-                        'price_unit': rate,
-                        'gold_rate': rate,
-                    })
-                    existing_po_lines[i].qty_received = qty
+                    existing_po_lines[i].write(po_line_vals)
+                    existing_po_lines[i].qty_received = line_qty
                 else:
                     # Create new PO line
-                    new_line = self.env['purchase.order.line'].create({
+                    new_line_vals = dict(po_line_vals)
+                    new_line_vals.update({
                         'order_id': po.id,
-                        'product_id': product.id,
-                        'name': p_name,
-                        'product_qty': qty,
-                        'price_unit': rate,
-                        'gold_rate': rate,
                         'product_uom': product.uom_po_id.id or product.uom_id.id,
                         'taxes_id': [(6, 0, [])],
                     })
-                    new_line.qty_received = qty
+                    new_line = self.env['purchase.order.line'].create(new_line_vals)
+                    new_line.qty_received = line_qty
 
             # ─ 3. Create fresh pickings for any NEW PO lines ─────────
             # Temporarily disable edit mode so _create_picking functions normally
@@ -1931,6 +1989,15 @@ class SaleOrder(models.Model):
             # ------------------------------------------------
             order._create_or_update_sale_return_journal_entry(bill)
 
+            returned_labels = order.sale_return_line_ids.mapped('label_id')
+            label_vals = {'active': True}
+            if dest_loc:
+                label_vals['branch_location_id'] = dest_loc.id
+            returned_branch = (dest_loc.branch_id if dest_loc else False) or order.branch_id
+            if returned_branch:
+                label_vals['branch_id'] = returned_branch.id
+            returned_labels.write(label_vals)
+
         return True
 
     def _create_or_update_sale_return_journal_entry(self, bill, target_date=None):
@@ -1971,27 +2038,27 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                entry.with_context(check_move_validity=False).write({
-                    'line_ids': [
-                        (1, creditors_move_line[0].id, {
-                            'account_id': creditors_account.id,
-                            'debit': bill.amount_total,
-                            'credit': 0.0,
-                            'amount_currency': bill.amount_total,
-                        }),
-                        (1, debtors_move_line[0].id, {
-                            'account_id': debtors_account.id,
-                            'debit': 0.0,
-                            'credit': bill.amount_total,
-                            'amount_currency': -bill.amount_total,
-                        }),
-                    ],
-                    'date': entry_date,
-                    'ref': f"Sale Return - {self.name}",
-                })
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
+                'date': entry_date,
+                'ref': f"Sale Return - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Sale Return Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': bill.amount_total,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Sale Return Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': bill.amount_total,
+                    }),
+                ],
+            })
             entry.action_post()
         else:
             entry_vals = {
@@ -2084,10 +2151,25 @@ class SaleOrder(models.Model):
 
     def action_advance_payment(self):
         self.ensure_one()
-        journal = self.env['account.journal'].search([
+        company = self.branch_id.company_id or self.company_id or self.env.company
+        journal_domain = [
             ('type', 'in', ('bank', 'cash')),
-            ('company_id', '=', self.env.company.id)
-        ], limit=1)
+            ('company_id', '=', company.id),
+        ]
+        journals = self.env['account.journal']
+        journal = journals.browse()
+        if self.branch_id:
+            journal = journals.search(
+                journal_domain + [('branch_id', '=', self.branch_id.id)],
+                limit=1,
+            )
+            if not journal:
+                journal = journals.search(
+                    journal_domain + [('branch_id', '=', False)],
+                    limit=1,
+                )
+        else:
+            journal = journals.search(journal_domain, limit=1)
 
         payment = self.env['account.payment'].create({
             'payment_type': 'inbound',
@@ -2112,6 +2194,11 @@ class SaleOrder(models.Model):
             }
         }
 
-
-
+    def action_print_advance_receipt(self):
+        """Prints consolidated Advance Payment Receipt for the sale order."""
+        self.ensure_one()
+        payments = self.advance_payment_ids.filtered(lambda p: p.state != 'cancel')
+        if not payments:
+            raise UserError(_("No active advance payments found for this Sale Order."))
+        return self.env.ref('account.action_report_payment_receipt').report_action(payments)
 

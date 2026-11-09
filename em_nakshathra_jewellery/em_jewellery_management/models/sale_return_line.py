@@ -9,6 +9,12 @@ class SaleReturnLine(models.Model):
 
     sale_id = fields.Many2one('sale.order', ondelete='cascade')
     currency_id = fields.Many2one(related='sale_id.currency_id', store=True, readonly=True)
+    customer_invoice_id = fields.Many2one(
+        'account.move',
+        string="Customer Invoice",
+        domain="[('move_type', '=', 'out_invoice'), ('state', '=', 'posted')]",
+    )
+    label_id = fields.Many2one('product.label', string="Label")
 
     product_template_id = fields.Many2one(
         'product.template',
@@ -168,11 +174,42 @@ class SaleReturnLine(models.Model):
     @api.onchange('product_id')
     def _onchange_product_id(self):
         if self.product_id:
+            label_product = (
+                self.label_id.product_id
+                or self.label_id.product_tmpl_id.product_variant_id
+            ) if self.label_id else False
+            if self.label_id and label_product != self.product_id:
+                self.label_id = False
             self.product_template_id = self.product_id.product_tmpl_id
             self.product_uom = self.product_id.uom_id
             self.name = self.product_id.display_name or self.product_id.name
             if hasattr(self.product_id, 'purity_id') and self.product_id.purity_id:
                 self.purity_id = self.product_id.purity_id.id
+
+    @api.onchange('label_id')
+    def _onchange_label_id(self):
+        if not self.label_id:
+            return
+
+        label = self.label_id
+        product = label.product_id or label.product_tmpl_id.product_variant_id
+        if product:
+            self.product_id = product
+            self.product_template_id = product.product_tmpl_id
+            self.product_uom = product.uom_id
+            self.name = label.name or product.display_name or product.name
+
+        self.gross_weight = label.sale_gross_weight or 0.0
+        self.stone_weight = label.sale_stone_weight or 0.0
+        self.sale_stone_weight = label.sale_stone_weight or 0.0
+        self.sale_stone_weight_ct = label.sale_stone_weight_ct or 0.0
+        self.sale_diamond_weight_gm = label.sale_diamond_weight_gm or 0.0
+        self.sale_diamond_weight_ct = label.sale_diamond_weight_ct or 0.0
+        self.purity_id = label.purity_id or label.sale_purity_id
+        # self.sale_stone_rate = label.sale_stone_rate or 0.0
+        # self.sale_diamond_rate = label.sale_diamond_rate or 0.0
+        # self.mc_percent = label.sale_making_charge_value or 0.0
+        # self.mc_percent_actual = label.sale_making_charge_value or 0.0
 
 
     @api.onchange('purity_id')

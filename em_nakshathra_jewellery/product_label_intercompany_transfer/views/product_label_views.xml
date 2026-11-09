@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Action Binding on Product Label List View -->
+    <!-- Action Binding on Product Label List and Form Views -->
     <record id="action_product_label_intercompany_transfer" model="ir.actions.act_window">
         <field name="name">Inter-Company Label Transfer</field>
         <field name="res_model">label.intercompany.transfer.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
         <field name="binding_model_id" ref="em_jewellery_management.model_product_label"/>
-        <field name="binding_view_types">list</field>
-        <field name="groups_id" eval="[(4, ref('base.group_system'))]"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="groups_id" eval="[(4, ref('product_label_intercompany_transfer.group_intercompany_transfer_user')), (4, ref('product_label_intercompany_transfer.group_intercompany_transfer_manager'))]"/>
     </record>
 
     <!-- Inherit Product Label Form to display transfer information if transferred -->
@@ -22,7 +22,7 @@
                 <div class="alert alert-warning d-flex align-items-center mb-2" role="alert" invisible="not is_transferred">
                     <i class="fa fa-exchange fa-2x me-3"/>
                     <div>
-                        <strong>This label has been transferred to another sister company.</strong><br/>
+                        <strong>This label has been transferred to another company.</strong><br/>
                         <field name="transfer_notes" readonly="1"/>
                     </div>
                 </div>
@@ -43,7 +43,7 @@
         <field name="arch" type="xml">
             <xpath expr="//filter[@name='inactive']" position="after">
                 <separator/>
-                <filter string="Transferred to Sister Company" name="filter_transferred" 
+                <filter string="Transferred to Other Company" name="filter_transferred" 
                         domain="['&amp;', ('is_transferred', '=', True), '|', ('active', '=', True), ('active', '=', False)]"/>
             </xpath>
         </field>

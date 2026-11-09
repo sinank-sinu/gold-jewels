@@ -194,6 +194,15 @@
                             </td>
                             <td style="width: 42%; vertical-align: top; border: none; padding: 0;">
                                 <table style="width: 100%; border: none; font-size: 0.85em; line-height: 1.5; border-collapse: collapse;">
+                                    <t t-set="report_so_no" t-value="', '.join((o.line_ids.sale_line_ids.order_id | (o.invoice_line_ids | o.line_ids).purchase_line_id.order_id.sale_id).mapped('name')) or o.invoice_origin or False"/>
+                                    <tr t-if="report_so_no" style="border: none;">
+                                        <td style="border: none; padding: 1px 0; text-align: left; width: 45%;">
+                                            <strong>Sale Order No:</strong>
+                                        </td>
+                                        <td style="border: none; padding: 1px 0; text-align: right; width: 55%;">
+                                            <strong><span t-esc="report_so_no"/></strong>
+                                        </td>
+                                    </tr>
                                     <tr style="border: none;">
                                         <td style="border: none; padding: 1px 0; text-align: left; width: 45%;">
                                             <strong>
@@ -425,9 +434,9 @@
                     <!-- Totals -->
                     <div class="clearfix jewellery-totals-wrapper">
                         <div style="float: left; width: 55%; margin-top: 8px;">
-                            <!-- Sale Return Details Table (Separate small table on the left if Sale Return exists) -->
-                            <t t-set="report_sr_details" t-value="o._get_report_sale_return_details()"/>
-                            <div t-if="report_sr_details" style="margin-bottom: 8px;">
+                            <!-- Sale Return Details Table (Rendered only on Customer Invoices where a return deduction exists) -->
+                            <t t-set="report_sr_details" t-value="o._get_report_sale_return_details() if o.move_type not in ('in_invoice', 'in_refund') else []"/>
+                            <div t-if="report_sr_details and o.move_type not in ('in_invoice', 'in_refund')" style="margin-bottom: 8px;">
                                 <div style="margin-bottom: 4px; font-weight: bold; color: #2C3E50; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px;">
                                     Sale Return Details
                                 </div>

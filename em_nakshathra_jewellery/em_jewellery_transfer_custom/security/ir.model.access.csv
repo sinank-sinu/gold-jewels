@@ -3,3 +3,5 @@ access_sale_order_cutpiece_line_all,sale.order.cutpiece.line.all,model_sale_orde
 access_sale_order_cutpiece_line_user,sale.order.cutpiece.line.user,model_sale_order_cutpiece_line,base.group_user,1,1,1,1
 access_sale_order_cutpiece_line_salesman,sale.order.cutpiece.line.salesman,model_sale_order_cutpiece_line,sales_team.group_sale_salesman,1,1,1,1
 access_sale_order_cutpiece_line_manager,sale.order.cutpiece.line.manager,model_sale_order_cutpiece_line,sales_team.group_sale_manager,1,1,1,1
+access_stock_cutpiece_transfer_wizard_user,stock.cutpiece.transfer.wizard.user,model_stock_cutpiece_transfer_wizard,base.group_user,1,1,1,1
+access_stock_cutpiece_transfer_wizard_line_user,stock.cutpiece.transfer.wizard.line.user,model_stock_cutpiece_transfer_wizard_line,base.group_user,1,1,1,1

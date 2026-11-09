@@ -5,10 +5,10 @@ class ProductLabel(models.Model):
     _inherit = 'product.label'
 
     is_transferred = fields.Boolean(
-        string="Transferred to Sister Company",
+        string="Transferred to Other Company",
         default=False,
         copy=False,
-        help="Indicates whether this label was transferred to another sister company."
+        help="Indicates whether this label was transferred to another company."
     )
     transfer_dest_company_id = fields.Many2one(
         'res.company',
