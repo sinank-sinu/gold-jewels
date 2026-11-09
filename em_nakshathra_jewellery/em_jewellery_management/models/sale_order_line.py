@@ -76,6 +76,10 @@ class SaleOrderLine(models.Model):
         for line in self:
             line.total_amount_round_off = line.price_total
 
+    @api.onchange('total_amount_round_off')
+    def _onchange_total_amount_round_off(self):
+        self._inverse_total_amount_round_off()
+
     def _inverse_total_amount_round_off(self):
         for line in self:
             if getattr(line, 'is_scheme_line', False):
