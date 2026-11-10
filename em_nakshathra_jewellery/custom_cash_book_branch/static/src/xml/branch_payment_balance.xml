@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="custom_cash_book_branch.BranchPaymentBalanceDashboard" owl="1">
+        <div class="o-bpb-container">
+
+            <!-- ── Unified Control & Filter Bar (Single Line) ── -->
+            <div class="o-bpb-filter-panel">
+                <div class="o-bpb-filters-left">
+                    <!-- Bank Logo -->
+                    <div class="o-bpb-breadcrumb-icon">
+                        <i class="fa fa-university"/>
+                    </div>
+
+                    <!-- Branch Selector -->
+                    <div class="o-bpb-field-box">
+                        <span class="o-bpb-field-label"><i class="fa fa-map-marker text-danger"/> Branch</span>
+                        <t t-if="state.isBranchEditable">
+                            <div class="o-bpb-select-wrapper">
+                                <select class="o-bpb-native-select" t-model="state.selectedBranchId" t-on-change="onBranchChange">
+                                    <option value="all">All Branches</option>
+                                    <t t-foreach="state.branches" t-as="b" t-key="b.id">
+                                        <option t-att-value="b.id" t-esc="b.name"/>
+                                    </t>
+                                </select>
+                                <i class="fa fa-chevron-down o-bpb-select-chevron"/>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            <div class="o-bpb-select-wrapper o-bpb-readonly-wrapper" title="Branch is locked to your assigned branch">
+                                <div class="o-bpb-native-select o-bpb-select-locked">
+                                    <span class="o-bpb-locked-text" t-esc="selectedBranchName"/>
+                                    <i class="fa fa-lock o-bpb-locked-icon"/>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+
+                    <!-- Date Range: Filter Preset Dropdown + Custom Date Picker -->
+                    <div class="o-bpb-field-box">
+                        <span class="o-bpb-field-label"><i class="fa fa-calendar text-primary"/> Date Range</span>
+                        <div class="o-bpb-select-wrapper">
+                            <select class="o-bpb-native-select o-bpb-select-period" t-model="state.activePreset" t-on-change="onPresetSelectChange">
+                                <option value="today">Today</option>
+                                <option value="yesterday">Yesterday</option>
+                                <option value="week">This Week</option>
+                                <option value="month">This Month</option>
+                                <option value="last_month">Last Month</option>
+                                <option value="quarter">This Quarter</option>
+                                <option value="fy">This Financial Year</option>
+                                <option value="last_fy">Last Financial Year</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+                            <i class="fa fa-chevron-down o-bpb-select-chevron"/>
+                        </div>
+
+                        <!-- Custom Date Picker Pill (only visible when Custom Range is selected) -->
+                        <t t-if="state.activePreset === 'custom'">
+                            <div class="o-bpb-date-pill">
+                                <input type="date" class="o-bpb-date-input" t-model="state.dateFrom" t-on-change="onCustomDateChange"/>
+                                <i class="fa fa-arrow-right o-bpb-date-arrow"/>
+                                <input type="date" class="o-bpb-date-input" t-model="state.dateTo" t-on-change="onCustomDateChange"/>
+                            </div>
+                        </t>
+                        <!-- Computed Active Date Range Badge for Presets -->
+                        <t t-else="">
+                            <span class="o-bpb-date-display-badge" title="Active Filter Date Range">
+                                <t t-esc="formatDate(state.dateFrom)"/>
+                                <t t-if="state.dateFrom !== state.dateTo">
+                                    <span class="text-muted mx-1">→</span>
+                                    <t t-esc="formatDate(state.dateTo)"/>
+                                </t>
+                            </span>
+                        </t>
+                    </div>
+                </div>
+
+                <div class="o-bpb-filters-right">
+                    <div class="o-bpb-top-actions">
+                        <button type="button" class="o-bpb-btn o-bpb-btn-outline" t-on-click="fetchDashboardData" title="Refresh Dashboard">
+                            <i class="fa fa-refresh" t-att-class="{'fa-spin': state.loading}"/>
+                            <span>Refresh</span>
+                        </button>
+                        <button type="button" class="o-bpb-btn o-bpb-btn-primary" t-on-click="exportExcel" title="Download Excel Report">
+                            <i class="fa fa-file-excel-o"/>
+                            <span>Export XLSX</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <t t-if="state.loading">
+                <div class="o-bpb-loader">
+                    <div class="o-bpb-spinner-ring"/>
+                    <span class="o-bpb-loader-text">Loading branch payment balances...</span>
+                </div>
+            </t>
+
+            <!-- Dashboard Content: 4 Master Cards -->
+            <t t-else="">
+                <div class="o-bpb-kpi-row">
+
+                    <!-- ════ 1. BANK CARD ════ -->
+                    <div class="o-bpb-card o-bpb-card-bank" t-att-class="{'o-bpb-card-active': state.selectedCategory === 'bank'}" t-on-click="() => this.toggleCategoryJournals('bank')" title="Click to view bank journals">
+                        <div class="o-bpb-card-accent-bar"/>
+                        <div class="o-bpb-card-body">
+                            <!-- Card Header -->
+                            <div class="o-bpb-card-header">
+                                <div class="o-bpb-icon-title-group">
+                                    <div class="o-bpb-3d-icon o-bpb-3d-bank">
+                                        <i class="fa fa-university"/>
+                                    </div>
+                                    <h3 class="o-bpb-card-title">Bank Balance</h3>
+                                </div>
+                                <div class="o-bpb-header-right-badges">
+                                    <span class="o-bpb-count-chip o-bpb-chip-bank">
+                                        <t t-esc="state.data.categories.bank.journals_list.length"/> Accounts
+                                    </span>
+                                    <span class="o-bpb-card-expand-icon">
+                                        <i class="fa" t-att-class="state.selectedCategory === 'bank' ? 'fa-chevron-up' : 'fa-chevron-down'"/>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Main Closing Balance Hero -->
+                            <div class="o-bpb-card-val-block">
+                                <div class="o-bpb-val-label-row">
+                                    <span class="o-bpb-val-label">CLOSING NET BALANCE</span>
+                                </div>
+                                <div class="o-bpb-main-number">
+                                    <span class="o-bpb-curr-sym"><t t-esc="state.currencySymbol"/></span>
+                                    <t t-esc="formatMoney(state.data.categories.bank.closing)"/>
+                                </div>
+                            </div>
+
+                            <!-- 3 Bold Metric Stat Tiles -->
+                            <div class="o-bpb-card-stat-tiles">
+                                <div class="o-bpb-tile-col o-bpb-col-open">
+                                    <span class="o-bpb-col-lbl">OPENING</span>
+                                    <span class="o-bpb-col-val"><t t-esc="formatMoney(state.data.categories.bank.opening)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-debit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-down me-1"/>INFLOW (DR)</span>
+                                    <span class="o-bpb-col-val">+<t t-esc="formatMoney(state.data.categories.bank.debit)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-credit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-up me-1"/>OUTFLOW (CR)</span>
+                                    <span class="o-bpb-col-val">-<t t-esc="formatMoney(state.data.categories.bank.credit)"/></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ════ 2. CASH CARD ════ -->
+                    <div class="o-bpb-card o-bpb-card-cash" t-att-class="{'o-bpb-card-active': state.selectedCategory === 'cash'}" t-on-click="() => this.toggleCategoryJournals('cash')" title="Click to view cash journals">
+                        <div class="o-bpb-card-accent-bar"/>
+                        <div class="o-bpb-card-body">
+                            <!-- Card Header -->
+                            <div class="o-bpb-card-header">
+                                <div class="o-bpb-icon-title-group">
+                                    <div class="o-bpb-3d-icon o-bpb-3d-cash">
+                                        <i class="fa fa-money"/>
+                                    </div>
+                                    <h3 class="o-bpb-card-title">Cash Balance</h3>
+                                </div>
+                                <div class="o-bpb-header-right-badges">
+                                    <span class="o-bpb-count-chip o-bpb-chip-cash">
+                                        <t t-esc="state.data.categories.cash.journals_list.length"/> Registers
+                                    </span>
+                                    <span class="o-bpb-card-expand-icon">
+                                        <i class="fa" t-att-class="state.selectedCategory === 'cash' ? 'fa-chevron-up' : 'fa-chevron-down'"/>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Main Closing Balance Hero -->
+                            <div class="o-bpb-card-val-block">
+                                <div class="o-bpb-val-label-row">
+                                    <span class="o-bpb-val-label">CLOSING NET BALANCE</span>
+                                </div>
+                                <div class="o-bpb-main-number">
+                                    <span class="o-bpb-curr-sym"><t t-esc="state.currencySymbol"/></span>
+                                    <t t-esc="formatMoney(state.data.categories.cash.closing)"/>
+                                </div>
+                            </div>
+
+                            <!-- 3 Bold Metric Stat Tiles -->
+                            <div class="o-bpb-card-stat-tiles">
+                                <div class="o-bpb-tile-col o-bpb-col-open">
+                                    <span class="o-bpb-col-lbl">OPENING</span>
+                                    <span class="o-bpb-col-val"><t t-esc="formatMoney(state.data.categories.cash.opening)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-debit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-down me-1"/>INFLOW (DR)</span>
+                                    <span class="o-bpb-col-val">+<t t-esc="formatMoney(state.data.categories.cash.debit)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-credit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-up me-1"/>OUTFLOW (CR)</span>
+                                    <span class="o-bpb-col-val">-<t t-esc="formatMoney(state.data.categories.cash.credit)"/></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ════ 3. CARD CARD ════ -->
+                    <div class="o-bpb-card o-bpb-card-card" t-att-class="{'o-bpb-card-active': state.selectedCategory === 'card'}" t-on-click="() => this.toggleCategoryJournals('card')" title="Click to view card terminals">
+                        <div class="o-bpb-card-accent-bar"/>
+                        <div class="o-bpb-card-body">
+                            <!-- Card Header -->
+                            <div class="o-bpb-card-header">
+                                <div class="o-bpb-icon-title-group">
+                                    <div class="o-bpb-3d-icon o-bpb-3d-card">
+                                        <i class="fa fa-credit-card"/>
+                                    </div>
+                                    <h3 class="o-bpb-card-title">Card Balance</h3>
+                                </div>
+                                <div class="o-bpb-header-right-badges">
+                                    <span class="o-bpb-count-chip o-bpb-chip-card">
+                                        <t t-esc="state.data.categories.card.journals_list.length"/> Terminals
+                                    </span>
+                                    <span class="o-bpb-card-expand-icon">
+                                        <i class="fa" t-att-class="state.selectedCategory === 'card' ? 'fa-chevron-up' : 'fa-chevron-down'"/>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Main Closing Balance Hero -->
+                            <div class="o-bpb-card-val-block">
+                                <div class="o-bpb-val-label-row">
+                                    <span class="o-bpb-val-label">CLOSING NET BALANCE</span>
+                                </div>
+                                <div class="o-bpb-main-number">
+                                    <span class="o-bpb-curr-sym"><t t-esc="state.currencySymbol"/></span>
+                                    <t t-esc="formatMoney(state.data.categories.card.closing)"/>
+                                </div>
+                            </div>
+
+                            <!-- 3 Bold Metric Stat Tiles -->
+                            <div class="o-bpb-card-stat-tiles">
+                                <div class="o-bpb-tile-col o-bpb-col-open">
+                                    <span class="o-bpb-col-lbl">OPENING</span>
+                                    <span class="o-bpb-col-val"><t t-esc="formatMoney(state.data.categories.card.opening)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-debit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-down me-1"/>INFLOW (DR)</span>
+                                    <span class="o-bpb-col-val">+<t t-esc="formatMoney(state.data.categories.card.debit)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-credit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-up me-1"/>OUTFLOW (CR)</span>
+                                    <span class="o-bpb-col-val">-<t t-esc="formatMoney(state.data.categories.card.credit)"/></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ════ 4. UPI CARD ════ -->
+                    <div class="o-bpb-card o-bpb-card-upi" t-att-class="{'o-bpb-card-active': state.selectedCategory === 'upi'}" t-on-click="() => this.toggleCategoryJournals('upi')" title="Click to view UPI channels">
+                        <div class="o-bpb-card-accent-bar"/>
+                        <div class="o-bpb-card-body">
+                            <!-- Card Header -->
+                            <div class="o-bpb-card-header">
+                                <div class="o-bpb-icon-title-group">
+                                    <div class="o-bpb-3d-icon o-bpb-3d-upi">
+                                        <i class="fa fa-qrcode"/>
+                                    </div>
+                                    <h3 class="o-bpb-card-title">UPI Balance</h3>
+                                </div>
+                                <div class="o-bpb-header-right-badges">
+                                    <span class="o-bpb-count-chip o-bpb-chip-upi">
+                                        <t t-esc="state.data.categories.upi.journals_list.length"/> Channels
+                                    </span>
+                                    <span class="o-bpb-card-expand-icon">
+                                        <i class="fa" t-att-class="state.selectedCategory === 'upi' ? 'fa-chevron-up' : 'fa-chevron-down'"/>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Main Closing Balance Hero -->
+                            <div class="o-bpb-card-val-block">
+                                <div class="o-bpb-val-label-row">
+                                    <span class="o-bpb-val-label">CLOSING NET BALANCE</span>
+                                </div>
+                                <div class="o-bpb-main-number">
+                                    <span class="o-bpb-curr-sym"><t t-esc="state.currencySymbol"/></span>
+                                    <t t-esc="formatMoney(state.data.categories.upi.closing)"/>
+                                </div>
+                            </div>
+
+                            <!-- 3 Bold Metric Stat Tiles -->
+                            <div class="o-bpb-card-stat-tiles">
+                                <div class="o-bpb-tile-col o-bpb-col-open">
+                                    <span class="o-bpb-col-lbl">OPENING</span>
+                                    <span class="o-bpb-col-val"><t t-esc="formatMoney(state.data.categories.upi.opening)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-debit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-down me-1"/>INFLOW (DR)</span>
+                                    <span class="o-bpb-col-val">+<t t-esc="formatMoney(state.data.categories.upi.debit)"/></span>
+                                </div>
+                                <div class="o-bpb-tile-col o-bpb-col-credit">
+                                    <span class="o-bpb-col-lbl"><i class="fa fa-arrow-up me-1"/>OUTFLOW (CR)</span>
+                                    <span class="o-bpb-col-val">-<t t-esc="formatMoney(state.data.categories.upi.credit)"/></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ── Selected Category Journals Drilldown Panel ── -->
+                <t t-if="state.selectedCategory &amp;&amp; getSelectedCategoryData()">
+                    <div class="o-bpb-journals-panel" t-att-class="'o-bpb-panel-' + state.selectedCategory">
+                        <div class="o-bpb-panel-header">
+                            <div class="o-bpb-panel-title-group">
+                                <div class="o-bpb-panel-icon" t-att-class="'o-bpb-icon-' + state.selectedCategory">
+                                    <i t-att-class="'fa ' + getSelectedCategoryData().icon"/>
+                                </div>
+                                <div>
+                                    <div class="o-bpb-panel-title-row">
+                                        <h4 class="o-bpb-panel-title">
+                                            <t t-esc="getSelectedCategoryData().name"/> — Journals Breakdown
+                                        </h4>
+                                        <span class="o-bpb-panel-badge">
+                                            <t t-esc="getSelectedCategoryData().journals_list.length"/> Journals
+                                        </span>
+                                    </div>
+                                    <div class="o-bpb-panel-subtitle">
+                                        <span>Date Range: <strong><t t-esc="formatDate(state.dateFrom)"/></strong> to <strong><t t-esc="formatDate(state.dateTo)"/></strong></span>
+                                        <span class="o-bpb-sep">•</span>
+                                        <span>Branch: <strong><t t-esc="state.data ? state.data.selected_branch_name : ''"/></strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="o-bpb-panel-close-btn" t-on-click="closeCategoryJournals" title="Close journals breakdown">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+
+                        <!-- Journals Table -->
+                        <div class="o-bpb-panel-table-wrap">
+                            <table class="o-bpb-panel-table">
+                                <thead>
+                                    <tr>
+                                        <th>CODE</th>
+                                        <th>JOURNAL / ACCOUNT</th>
+                                        <th>BRANCH</th>
+                                        <th class="text-end">OPENING</th>
+                                        <th class="text-end">INFLOW (DR)</th>
+                                        <th class="text-end">OUTFLOW (CR)</th>
+                                        <th class="text-end">CLOSING BALANCE</th>
+                                        <th class="text-center">ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="getSelectedCategoryData().journals_list.length === 0">
+                                        <tr>
+                                            <td colspan="8" class="text-center py-4 text-muted">
+                                                No journals found for this category and branch.
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-foreach="getSelectedCategoryData().journals_list" t-as="j" t-key="j.id">
+                                            <tr class="o-bpb-panel-tr">
+                                                <td><span class="o-bpb-code-pill"><t t-esc="j.code"/></span></td>
+                                                <td>
+                                                    <span class="o-bpb-j-name" t-esc="j.name"/>
+                                                </td>
+                                                <td>
+                                                    <span class="o-bpb-j-branch" t-esc="j.branch_name"/>
+                                                </td>
+                                                <td class="text-end o-bpb-num">
+                                                    <t t-esc="formatMoney(j.opening)"/>
+                                                </td>
+                                                <td class="text-end o-bpb-num text-success">
+                                                    <t t-if="j.debit &gt; 0">+</t><t t-esc="formatMoney(j.debit)"/>
+                                                </td>
+                                                <td class="text-end o-bpb-num text-danger">
+                                                    <t t-if="j.credit &gt; 0">-</t><t t-esc="formatMoney(j.credit)"/>
+                                                </td>
+                                                <td class="text-end o-bpb-num o-bpb-closing-cell">
+                                                    <t t-esc="state.currencySymbol"/> <t t-esc="formatMoney(j.closing)"/>
+                                                </td>
+                                                <td class="text-center">
+                                                    <button type="button" class="o-bpb-btn-ledger" t-on-click="() => this.openJournalLedger(j.id)" title="View transaction lines for this journal in this date range">
+                                                        <i class="fa fa-book me-1"/> View Ledger
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </t>
+            </t>
+
+        </div>
+    </t>
+
+</templates>
