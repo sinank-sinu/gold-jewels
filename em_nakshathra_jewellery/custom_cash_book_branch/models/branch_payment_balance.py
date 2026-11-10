@@ -166,12 +166,18 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 COALESCE(SUM(aml.debit - aml.credit), 0) as opening
             FROM account_move_line aml
             JOIN account_journal aj ON aml.journal_id = aj.id
+            JOIN account_account aa ON aml.account_id = aa.id
             LEFT JOIN account_move am ON aml.move_id = am.id
             LEFT JOIN res_branch rb ON COALESCE(aml.branch_id, am.branch_id, aj.branch_id) = rb.id
             WHERE aml.parent_state = 'posted'
               AND aml.account_id IN %s
               AND aj.type IN ('bank', 'cash')
               AND aml.date < %s
+              AND (
+                  aa.account_type = 'asset_cash'
+                  OR aa.id = aj.default_account_id
+                  OR aml.reconciled = false
+              )
               {branch_clause}
             GROUP BY cat, aj.id, journal_name, aj.code, branch_name
         """
@@ -191,12 +197,18 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 COUNT(aml.id) as line_count
             FROM account_move_line aml
             JOIN account_journal aj ON aml.journal_id = aj.id
+            JOIN account_account aa ON aml.account_id = aa.id
             LEFT JOIN account_move am ON aml.move_id = am.id
             LEFT JOIN res_branch rb ON COALESCE(aml.branch_id, am.branch_id, aj.branch_id) = rb.id
             WHERE aml.parent_state = 'posted'
               AND aml.account_id IN %s
               AND aj.type IN ('bank', 'cash')
               AND aml.date >= %s AND aml.date <= %s
+              AND (
+                  aa.account_type = 'asset_cash'
+                  OR aa.id = aj.default_account_id
+                  OR aml.reconciled = false
+              )
               {branch_clause}
             GROUP BY cat, aj.id, journal_name, aj.code, branch_name
         """
@@ -399,6 +411,7 @@ class BranchPaymentBalanceReport(models.TransientModel):
             "aj.type IN ('bank', 'cash')",
             "aml.date >= %s",
             "aml.date <= %s",
+            "(aa.account_type = 'asset_cash' OR aa.id = aj.default_account_id OR aml.reconciled = false)",
         ]
         params = [tuple(liquidity_acc_ids), date_from, date_to]
 
@@ -446,6 +459,7 @@ class BranchPaymentBalanceReport(models.TransientModel):
             SELECT COUNT(aml.id)
             FROM account_move_line aml
             JOIN account_journal aj ON aml.journal_id = aj.id
+            JOIN account_account aa ON aml.account_id = aa.id
             LEFT JOIN account_move am ON aml.move_id = am.id
             LEFT JOIN res_partner rp ON aml.partner_id = rp.id
             WHERE {where_sql}
@@ -471,6 +485,7 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 aml.credit
             FROM account_move_line aml
             JOIN account_journal aj ON aml.journal_id = aj.id
+            JOIN account_account aa ON aml.account_id = aa.id
             LEFT JOIN account_move am ON aml.move_id = am.id
             LEFT JOIN res_branch rb ON COALESCE(aml.branch_id, am.branch_id, aj.branch_id) = rb.id
             LEFT JOIN res_partner rp ON aml.partner_id = rp.id
