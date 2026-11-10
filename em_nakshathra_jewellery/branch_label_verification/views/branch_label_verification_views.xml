@@ -283,7 +283,7 @@
                                            decoration-danger="status == 'missing'"
                                            decoration-info="status == 'extra'"/>
                                     <field name="name" string="Label Ref" readonly="1"/>
-                                    <field name="barcode" readonly="1"/>
+                                    <field name="barcode" readonly="1" column_invisible="1"/>
                                     <field name="product_id" readonly="1"/>
                                     <field name="purity_id" optional="show" readonly="1"/>
                                     <field name="branch_id" optional="show" readonly="1"/>
