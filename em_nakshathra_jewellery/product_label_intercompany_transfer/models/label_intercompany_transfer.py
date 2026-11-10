@@ -1205,33 +1205,142 @@ class LabelIntercompanyTransfer(models.Model):
 
         source_tmpl = source_product.product_tmpl_id
         tmpl_name = source_tmpl.name
+        default_code = source_product.default_code or source_tmpl.default_code
 
-        dest_tmpl = self.env['product.template'].sudo().with_company(dest_company).search([
+        def _search_template(domain):
+            tmpls = self.env['product.template'].sudo().with_company(dest_company).search(domain)
+            if not tmpls:
+                return self.env['product.template']
+            # Prioritize destination company-specific templates over shared (company_id=False)
+            return tmpls.sorted(key=lambda t: (0 if t.company_id and t.company_id == dest_company else 1, t.id))[0]
+
+        # 1. Exact match by name
+        dest_tmpl = _search_template([
             ('name', '=', tmpl_name),
             ('company_id', 'in', [dest_company.id, False])
-        ], limit=1)
+        ])
 
+        # 2. Case-insensitive trimmed match by name
         if not dest_tmpl:
-            dest_tmpl = self.env['product.template'].sudo().with_company(dest_company).search([
+            dest_tmpl = _search_template([
                 ('name', '=ilike', tmpl_name.strip()),
                 ('company_id', 'in', [dest_company.id, False])
-            ], limit=1)
+            ])
+
+        # 3. Fallback match by internal reference (default_code)
+        if not dest_tmpl and default_code:
+            dest_tmpl = _search_template([
+                ('default_code', '=', default_code.strip()),
+                ('company_id', 'in', [dest_company.id, False])
+            ])
 
         if not dest_tmpl:
             raise UserError(_("Product Template '%s' does not exist in destination company '%s'.") % (
                 tmpl_name, dest_company.name
             ))
 
-        if len(dest_tmpl.product_variant_ids) == 1:
-            return dest_tmpl.product_variant_ids[0]
+        source_ptavs = source_product.product_template_attribute_value_ids
 
-        source_attr_vals = source_product.product_template_attribute_value_ids.mapped('product_attribute_value_id')
+        # Case A: Source product has no attributes (simple single product)
+        if not source_ptavs:
+            if dest_tmpl.product_variant_ids:
+                return dest_tmpl.product_variant_ids[0]
+            # Try activating or creating variant
+            dest_tmpl.sudo().with_company(dest_company)._create_variant_ids()
+            dest_tmpl.invalidate_recordset(['product_variant_ids'])
+            if dest_tmpl.product_variant_ids:
+                return dest_tmpl.product_variant_ids[0]
+            archived = dest_tmpl.with_context(active_test=False).product_variant_ids
+            if archived:
+                archived[0].sudo().write({'active': True})
+                return archived[0]
+            raise UserError(_("Product Template '%s' exists in destination company '%s', but has no active product variants configured.") % (
+                dest_tmpl.name, dest_company.name
+            ))
+
+        # Case B: Source product has variant attributes
+        # 1. Match each source attribute value to a PTAV on dest_tmpl
+        dest_all_ptavs = dest_tmpl.attribute_line_ids.mapped('product_template_value_ids')
+        dest_matched_ptavs = self.env['product.template.attribute.value']
+        missing_attrs = []
+
+        for s_ptav in source_ptavs:
+            attr = s_ptav.attribute_id
+            val = s_ptav.product_attribute_value_id
+            d_ptav = dest_all_ptavs.filtered(
+                lambda p: p.attribute_id.id == attr.id and p.product_attribute_value_id.id == val.id
+            )
+            if d_ptav:
+                dest_matched_ptavs |= d_ptav[:1]
+            else:
+                missing_attrs.append(f"{attr.name}: {val.name}")
+
+        if missing_attrs:
+            raise UserError(_(
+                "Product Template '%s' in destination company '%s' is missing attribute value(s): %s.\n"
+                "Please add these value(s) to the template's 'Attributes & Variants' tab in %s."
+            ) % (
+                dest_tmpl.name,
+                dest_company.name,
+                ", ".join(missing_attrs),
+                dest_company.name
+            ))
+
+        target_ptav_set = set(dest_matched_ptavs.ids)
+
+        # 2. Check existing active variants on dest_tmpl
         for var in dest_tmpl.product_variant_ids:
-            var_attr_vals = var.product_template_attribute_value_ids.mapped('product_attribute_value_id')
-            if set(var_attr_vals.ids) == set(source_attr_vals.ids):
+            if set(var.product_template_attribute_value_ids.ids) == target_ptav_set:
                 return var
 
-        return dest_tmpl.product_variant_ids[0]
+        # 3. Check archived variants and reactivate if found
+        for var in dest_tmpl.with_context(active_test=False).product_variant_ids:
+            if set(var.product_template_attribute_value_ids.ids) == target_ptav_set:
+                var.sudo().write({'active': True})
+                return var
+
+        # 4. Auto-generate the variant using Odoo's standard mechanism
+        try:
+            created_var = dest_tmpl.sudo().with_company(dest_company)._create_product_variant(dest_matched_ptavs)
+            if created_var:
+                return created_var
+        except Exception as e:
+            _logger.warning("_create_product_variant failed on %s: %s", dest_tmpl.name, e)
+
+        # 5. Trigger standard _create_variant_ids and re-check
+        try:
+            dest_tmpl.sudo().with_company(dest_company)._create_variant_ids()
+            dest_tmpl.invalidate_recordset(['product_variant_ids'])
+            for var in dest_tmpl.product_variant_ids:
+                if set(var.product_template_attribute_value_ids.ids) == target_ptav_set:
+                    return var
+        except Exception as e:
+            _logger.warning("_create_variant_ids failed on %s: %s", dest_tmpl.name, e)
+
+        # 6. Direct creation of product.product for this combination
+        try:
+            ptav_to_assign = dest_matched_ptavs._without_no_variant_attributes() if hasattr(dest_matched_ptavs, '_without_no_variant_attributes') else dest_matched_ptavs
+            new_var = self.env['product.product'].sudo().with_company(dest_company).create({
+                'product_tmpl_id': dest_tmpl.id,
+                'product_template_attribute_value_ids': [(6, 0, ptav_to_assign.ids)],
+            })
+            if new_var:
+                dest_tmpl.invalidate_recordset(['product_variant_ids'])
+                return new_var
+        except Exception as e:
+            _logger.warning("Direct product.product create failed on %s: %s", dest_tmpl.name, e)
+
+        # 7. Fallback if a single variant exists or raise UserError
+        if dest_tmpl.product_variant_ids:
+            return dest_tmpl.product_variant_ids[0]
+
+        raise UserError(_(
+            "Could not resolve or generate product variant for template '%s' in destination company '%s' with attributes [%s]."
+        ) % (
+            dest_tmpl.name,
+            dest_company.name,
+            ", ".join(source_ptavs.mapped('display_name'))
+        ))
 
     def action_view_created_so(self):
         self.ensure_one()
