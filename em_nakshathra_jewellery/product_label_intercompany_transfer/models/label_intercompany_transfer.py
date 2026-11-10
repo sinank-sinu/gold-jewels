@@ -480,13 +480,18 @@ class LabelIntercompanyTransfer(models.Model):
         if empty_lines:
             target_line = empty_lines[0]
             target_line.label_id = label.id
+            target_line.transfer_id = self
             target_line._compute_line_fields()
         else:
             new_line = self.env['label.intercompany.transfer.line'].new({
                 'label_id': label.id,
+                'transfer_id': self,
             })
             self.line_ids += new_line
             new_line._compute_line_fields()
+
+        # Immediately update summary totals (count, weights, values) on screen
+        self._compute_totals()
 
     def action_cancel(self):
         for rec in self:
