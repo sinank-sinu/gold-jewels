@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Branch Treasury & Payment Balances (Bank, Cash, Card, UPI)',
-    'version': '17.0.2.0.16',
+    'version': '17.0.2.0.17',
     'summary': 'Beautiful Treasury & Payment Balance UI for Bank, Cash, Card and UPI by Branch and Date',
     'category': 'Accounting',
     'depends': ['base', 'account', 'dynamic_accounts_report', 'multi_branch_base', 'em_jewellery_management'],
