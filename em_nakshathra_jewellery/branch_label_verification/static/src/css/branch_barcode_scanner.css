@@ -1,0 +1,140 @@
+/* Branch Barcode Scanner Console Styles */
+
+.blv_scanner_console {
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    border: 1px solid #334155;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    transition: all 0.2s ease-in-out;
+}
+
+.blv_laser_dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #10B981;
+}
+
+.pulse-dot {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: blvPulse 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes blvPulse {
+    to {
+        box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+}
+
+.blv_scanner_input {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 2px solid #E2E8F0 !important;
+    font-size: 1.15rem !important;
+    padding: 0.65rem 1rem !important;
+    border-radius: 8px !important;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.blv_scanner_input:focus {
+    border-color: #F59E0B !important;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25) !important;
+    outline: none !important;
+}
+
+.blv_feedback_pill {
+    animation: blvSlideIn 0.2s ease-out;
+    font-size: 1rem;
+}
+
+@keyframes blvSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.blv_feedback_success {
+    background-color: #064E3B;
+    color: #A7F3D0;
+    border: 1px solid #059669;
+}
+
+.blv_feedback_warning {
+    background-color: #78350F;
+    color: #FDE68A;
+    border: 1px solid #D97706;
+}
+
+.blv_feedback_danger {
+    background-color: #7F1D1D;
+    color: #FECACA;
+    border: 1px solid #DC2626;
+}
+
+/* =========================================================
+   Full Screen Form View & Bottom Chatter Layout
+   (Branch Label Verification & Weekly Stock Check)
+   ========================================================= */
+
+.o_form_view.blv_full_screen_form,
+.o_form_view.wsc_full_screen_form {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-flow: column nowrap !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_view_container,
+.o_form_view.wsc_full_screen_form .o_form_view_container {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_sheet_bg,
+.o_form_view.wsc_full_screen_form .o_form_sheet_bg {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+}
+
+.o_form_view.blv_full_screen_form .o_form_sheet,
+.o_form_view.wsc_full_screen_form .o_form_sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 1.75rem 2rem !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border-radius: 8px !important;
+}
+
+/* Ensure Chatter spans full width cleanly at the bottom (down) */
+.o_form_view.blv_full_screen_form .oe_chatter,
+.o_form_view.blv_full_screen_form .o-mail-Form-chatter,
+.o_form_view.wsc_full_screen_form .oe_chatter,
+.o_form_view.wsc_full_screen_form .o-mail-Form-chatter {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2rem !important;
+    padding-top: 1.5rem !important;
+    display: block !important;
+}
+
+/* Disable XXL layout from forcing side-by-side flex */
+.o_form_view.blv_full_screen_form.o_xxl_form_view,
+.o_form_view.wsc_full_screen_form.o_xxl_form_view {
+    flex-flow: column nowrap !important;
+}
+
+.o_form_view.blv_full_screen_form.o_xxl_form_view .o_form_sheet_bg,
+.o_form_view.wsc_full_screen_form.o_xxl_form_view .o_form_sheet_bg {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+}

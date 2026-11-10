@@ -173,7 +173,7 @@
         </field>
     </record>
 
-    <!-- Window Action -->
+    <!-- Window Action: Inter-Company Transfers -->
     <record id="action_label_intercompany_transfer" model="ir.actions.act_window">
         <field name="name">Inter-Company Transfers</field>
         <field name="res_model">label.intercompany.transfer</field>
@@ -184,17 +184,71 @@
                 Create a new Inter-Company Label Transfer!
             </p>
             <p>
-                Transfer product labels seamlessly between sister companies. Stock is relieved from the source company, and a Purchase Order, Stock Receipt, Vendor Bill, and new Labels are automatically created in the destination company with preserved barcodes and label numbers.
+                Transfer product labels seamlessly between other companies. Stock is relieved from the source company, and a Purchase Order, Stock Receipt, Vendor Bill, and new Labels are automatically created in the destination company with preserved barcodes and label numbers.
             </p>
         </field>
     </record>
 
-    <!-- Menu Item under Jewellery -> Ornaments (Admin only) -->
+    <!-- Window Action: Transferred Labels -->
+    <record id="action_transferred_product_labels" model="ir.actions.act_window">
+        <field name="name">Transferred Labels</field>
+        <field name="res_model">product.label</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('is_transferred', '=', True), '|', ('active', '=', True), ('active', '=', False)]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No transferred labels found!
+            </p>
+            <p>
+                Product labels that have been transferred to another company will appear here.
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- Application Menus                                            -->
+    <!-- ============================================================ -->
+
+    <!-- Top-level Application Root Menu -->
+    <menuitem id="menu_intercompany_transfer_root"
+              name="Inter-Company Transfer"
+              web_icon="product_label_intercompany_transfer,static/description/icon.png"
+              sequence="25"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
+
+    <!-- Category: Transfers -->
+    <menuitem id="menu_intercompany_transfers_category"
+              name="Transfers"
+              parent="menu_intercompany_transfer_root"
+              sequence="10"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
+
     <menuitem id="menu_label_intercompany_transfer"
               name="Inter-Company Transfers"
-              parent="em_jewellery_management.menu_jewellery_products_root"
+              parent="menu_intercompany_transfers_category"
               action="action_label_intercompany_transfer"
-              sequence="62"
-              groups="base.group_system"/>
+              sequence="10"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
+
+    <!-- Category: Labels -->
+    <menuitem id="menu_intercompany_labels_category"
+              name="Labels"
+              parent="menu_intercompany_transfer_root"
+              sequence="20"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
+
+    <menuitem id="menu_intercompany_transferred_labels"
+              name="Transferred Labels"
+              parent="menu_intercompany_labels_category"
+              action="action_transferred_product_labels"
+              sequence="10"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
+
+    <menuitem id="menu_intercompany_all_labels"
+              name="All Ornament Labels"
+              parent="menu_intercompany_labels_category"
+              action="em_jewellery_management.action_product_label"
+              sequence="20"
+              groups="product_label_intercompany_transfer.group_intercompany_transfer_user,product_label_intercompany_transfer.group_intercompany_transfer_manager"/>
 
 </odoo>

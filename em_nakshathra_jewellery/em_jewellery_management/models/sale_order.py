@@ -793,22 +793,26 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': total_bill_amount,
-                    'credit': 0.0,
-                })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': total_bill_amount,
-                })
-            entry.write({
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
                 'date': entry_date,
                 'ref': f"Old Gold - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Old Gold Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': total_bill_amount,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Old Gold Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': total_bill_amount,
+                    }),
+                ],
             })
             entry.action_post()
         else:
@@ -1411,7 +1415,6 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
-            bill.invoice_date = fields.Date.context_today(self)
             bill.is_old_gold_bill = True
             bill.action_post()
             all_bills = self._get_old_gold_bills() or bill
@@ -1545,7 +1548,6 @@ class SaleOrder(models.Model):
                     'product_id': sr_line.product_id.id,
                     'name': f'Sale Return ({sr_line.product_id.name})',
                     'sale_return_line_id': sr_line.id,
-                    'label_id': sr_line.label_id.id if sr_line.label_id else False,
                     'product_qty': gross_wt,
                     'gross_weight': gross_wt,
                     'stone_weight': sr_line.sale_stone_weight or sr_line.stone_weight or 0.0,
@@ -1671,7 +1673,6 @@ class SaleOrder(models.Model):
                 for old_line in surplus:
                     old_line.with_context(check_move_validity=False).unlink()
 
-            bill.invoice_date = fields.Date.context_today(self)
             bill.is_sale_return = True
             bill.action_post()
             self._create_or_update_sale_return_journal_entry(bill)
@@ -1853,22 +1854,26 @@ class SaleOrder(models.Model):
         if entry:
             if entry.state == 'posted':
                 entry.button_draft()
-            creditors_move_line = entry.line_ids.filtered(lambda l: l.account_id == creditors_account or l.debit > 0)
-            debtors_move_line = entry.line_ids.filtered(lambda l: l.account_id == debtors_account or l.credit > 0)
-            if creditors_move_line and debtors_move_line:
-                creditors_move_line.write({
-                    'account_id': creditors_account.id,
-                    'debit': bill.amount_total,
-                    'credit': 0.0,
-                })
-                debtors_move_line.write({
-                    'account_id': debtors_account.id,
-                    'debit': 0.0,
-                    'credit': bill.amount_total,
-                })
-            entry.write({
+            entry.line_ids.with_context(check_move_validity=False).unlink()
+            entry.with_context(check_move_validity=False).write({
                 'date': entry_date,
                 'ref': f"Sale Return - {self.name}",
+                'line_ids': [
+                    (0, 0, {
+                        'name': f"Sale Return Creditors Adjustment - {self.name}",
+                        'account_id': creditors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': bill.amount_total,
+                        'credit': 0.0,
+                    }),
+                    (0, 0, {
+                        'name': f"Sale Return Debtors Adjustment - {self.name}",
+                        'account_id': debtors_account.id,
+                        'partner_id': self.partner_id.id,
+                        'debit': 0.0,
+                        'credit': bill.amount_total,
+                    }),
+                ],
             })
             entry.action_post()
         else:
@@ -2012,6 +2017,4 @@ class SaleOrder(models.Model):
         if not payments:
             raise UserError(_("No active advance payments found for this Sale Order."))
         return self.env.ref('account.action_report_payment_receipt').report_action(payments)
-
-
 

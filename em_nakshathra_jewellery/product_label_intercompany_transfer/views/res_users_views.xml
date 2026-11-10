@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_users_form_inherit_intercompany_transfer" model="ir.ui.view">
+        <field name="name">res.users.form.inherit.intercompany.transfer</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="em_jewellery_management.view_users_form_inherit_jewellery_backorder"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='old_gold_department']" position="after">
+                <field name="allow_intercompany_transfers" widget="boolean_toggle"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

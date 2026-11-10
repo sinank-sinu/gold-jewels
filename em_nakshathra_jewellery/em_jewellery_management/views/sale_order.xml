@@ -50,6 +50,15 @@
             </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='price_subtotal']" position="replace">
             </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='price_total']" position="after">
+                <field name="total_amount_round_off" string="Round off" readonly="0" force_save="1" optional="hide"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/tree//field[@name='price_unit']" position="attributes">
+                <attribute name="digits">[16, 3]</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/form//field[@name='price_unit']" position="attributes">
+                <attribute name="digits">[16, 3]</attribute>
+            </xpath>
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom'][2]" position="replace">
             </xpath>
 
@@ -85,8 +94,8 @@
                     <field name="price_subtotal_actual" optional="hide"/>
                     <field name="price_subtotal"/>
                     <field name="mc_discount" optional="hide"/>
-                    <field name="mc_amount_actual" readonly="0" force_save="1"/>
-                    <field name="mc_percent_actual"/>
+                    <field name="mc_amount_actual" readonly="0" force_save="1" digits="[16, 3]"/>
+                    <field name="mc_percent_actual" digits="[16, 5]"/>
                     <field name="tag_weight" column_invisible="1"/>
 
 
@@ -184,7 +193,7 @@
                        readonly="sale_return_bill_id != False and not is_editing_sale_return">
                     <tree editable="bottom">
                         <field name="customer_invoice_id"
-                               domain="[('move_type', '=', 'out_invoice'), ('state', '=', 'posted')]"
+                               domain="[('move_type', '=', 'out_invoice'), ('state', '=', 'posted'), ('company_id', '=', parent.company_id)]"
                                options="{'no_create': True, 'no_create_edit': True, 'no_open': True, 'no_quick_create': True}"/>
                         <field name="label_id"
                                domain="[('invoice_line_ids.move_id', '=', customer_invoice_id)]"
