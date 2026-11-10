@@ -6,27 +6,59 @@
         <field name="arch" type="xml">
             <form string="Import Purchase Expenses">
                 <group>
-                    <field name="company_id" invisible="1"/>
-                    <field name="file" filename="file_name"/>
-                    <field name="file_name" invisible="1"/>
-                    <field name="payment_journal_id"
-                           domain="[('type', '=', 'bank'), ('company_id', '=', company_id)]"
-                           options="{'no_create': True}"/>
+                    <field name="import_completed" invisible="1"/>
+                    <group invisible="import_completed">
+                        <field name="company_id" options="{'no_create': True}"/>
+                        <field name="file" filename="file_name"/>
+                        <field name="file_name" invisible="1"/>
+                        <field name="payment_journal_id"
+                               domain="[('type', 'in', ['bank', 'cash']), ('company_id', '=', company_id)]"
+                               options="{'no_create': True}"/>
+                    </group>
                 </group>
-                <group>
+                <group invisible="import_completed">
                     <div class="text-muted">
                         Upload an .xlsx file with Vendor, Bill Reference, Product,
-                        Quantity and Unit Price columns. Bill Date and Tax are
-                        optional. Rows are grouped by vendor and bill reference.
-                        Odoo calculates taxes and subtotals. Imported bills are
-                        posted and paid using the selected bank journal.
+                        Quantity, Unit Price, Company and Branch columns. The
+                        selected company must match the workbook, and all rows
+                        must use one company and one branch. Choose a bank or
+                        cash payment journal configured for that branch.
+                        Narration, Bill Date, Tax and Subtotal are optional.
+                        Rows are grouped by vendor and bill reference; row
+                        narrations are added to the Purchase Order notes.
+                        Missing vendors are created from the Vendor name in the
+                        workbook; duplicate contact names must be resolved first.
+                        One Purchase Expense order is created for each vendor
+                        and bill reference. Odoo calculates taxes and subtotals;
+                        the related bills are posted and paid using the selected
+                        bank or cash journal.
                     </div>
+                </group>
+                <group string="Import Complete" invisible="not import_completed">
+                    <field name="import_result" nolabel="1"/>
+                    <field name="imported_purchase_order_ids" nolabel="1"
+                           readonly="1" options="{'no_create': True}">
+                        <tree create="0" delete="0" edit="0">
+                            <field name="name"/>
+                            <field name="partner_id"/>
+                            <field name="partner_ref"/>
+                            <field name="branch_id"/>
+                            <field name="amount_total"/>
+                            <field name="state"/>
+                        </tree>
+                    </field>
+                    <button name="action_view_purchase_orders"
+                            string="Open Purchase Orders" type="object"
+                            class="btn-secondary"/>
                 </group>
                 <footer>
                     <button name="action_import" string="Import and Pay"
-                            type="object" class="btn-primary"/>
+                            type="object" class="btn-primary"
+                            invisible="import_completed"/>
                     <button string="Cancel" special="cancel"
-                            class="btn-secondary"/>
+                            class="btn-secondary" invisible="import_completed"/>
+                    <button string="Done" special="cancel"
+                            class="btn-primary" invisible="not import_completed"/>
                 </footer>
             </form>
         </field>
