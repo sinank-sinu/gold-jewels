@@ -57,6 +57,10 @@ class PurchaseOrderLine(models.Model):
         string="Diamond Weight (g)",
         digits=(16, 3)
     )
+    diamond_weight_ct = fields.Float(
+        string="Diamond Weight (ct)",
+        digits=(16, 3)
+    )
     mc_amount = fields.Float(
         string="MC Amount",
         compute="_compute_purchase_mc_amount",
@@ -220,6 +224,11 @@ class PurchaseOrderLine(models.Model):
             if variant:
                 vals['product_id'] = variant.id
         return super().write(vals)
+
+    @api.onchange('diamond_weight_ct')
+    def _onchange_diamond_weight_ct(self):
+        for line in self:
+            line.diamond_weight_gm = line.diamond_weight_ct * 0.2
 
     @api.onchange('product_template_id')
     def _onchange_product_template_id(self):
