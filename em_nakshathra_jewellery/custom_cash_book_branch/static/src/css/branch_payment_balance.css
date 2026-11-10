@@ -282,6 +282,40 @@
     font-size: 0.75rem;
 }
 
+/* Locked (Read-Only) Branch Pill for Non-Admin Users */
+.o-bpb-select-locked {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: var(--o-bpb-text-primary);
+    cursor: not-allowed;
+    user-select: none;
+    padding: 0.45rem 0.85rem 0.45rem 0.85rem;
+    box-shadow: none;
+}
+
+.o-bpb-select-locked:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+}
+
+.o-bpb-locked-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+    font-weight: 600;
+}
+
+.o-bpb-locked-icon {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+}
+
 /* Date Pill Wrapper */
 .o-bpb-date-pill {
     display: inline-flex;

@@ -10,28 +10,41 @@ class BranchPaymentBalanceReport(models.TransientModel):
     _name = 'branch.payment.balance.report'
     _description = 'Branch Treasury & Payment Balance Report (Bank, Cash, Card, UPI)'
 
+    def _is_admin_user(self):
+        """
+        Check if current user belongs to Administration (Admin / Settings or Access Rights).
+        """
+        user = self.env.user
+        return (
+            user._is_admin()
+            or user.has_group('base.group_system')
+            or user.has_group('base.group_erp_manager')
+        )
+
     def _get_allowed_branch_ids(self):
         """
         Returns allowed branch IDs for current user.
-        If user is restricted (e.g. Billing Staff), returns their assigned branch(es).
-        If manager / admin, returns None (all branches allowed).
+        If admin user group, returns None (all branches allowed and editable).
+        For all other user groups, strictly returns the user's assigned branch(es) (non-editable).
         """
-        user = self.env.user
-        is_billing_staff = user.has_group('em_jewellery_management.group_jewellery_billing_staff')
-        is_manager = user.has_group('em_jewellery_management.group_jewellery_manager') or user.has_group('base.group_system')
+        if self._is_admin_user():
+            return None
 
-        if is_billing_staff and not is_manager:
-            if hasattr(user, 'branch_ids') and user.branch_ids:
-                return user.branch_ids.ids
-            elif hasattr(user, 'branch_id') and user.branch_id:
-                return [user.branch_id.id]
-            return [-1]
-        return None
+        user = self.env.user
+        if hasattr(user, 'branch_ids') and user.branch_ids:
+            return user.branch_ids.ids
+        elif hasattr(user, 'branch_id') and user.branch_id:
+            return [user.branch_id.id]
+        elif hasattr(user, 'allowed_branch_ids') and user.allowed_branch_ids:
+            return user.allowed_branch_ids.ids
+        return [-1]
 
     @api.model
     def get_initial_data(self):
-        """Returns metadata for initial view loading: branches, default dates, currency."""
+        """Returns metadata for initial view loading: branches, default dates, currency, editability."""
+        is_admin = self._is_admin_user()
         allowed_branch_ids = self._get_allowed_branch_ids()
+
         branch_domain = []
         if allowed_branch_ids is not None:
             branch_domain = [('id', 'in', allowed_branch_ids)]
@@ -41,17 +54,39 @@ class BranchPaymentBalanceReport(models.TransientModel):
         today = fields.Date.today()
         
         default_branch = False
-        if allowed_branch_ids and len(allowed_branch_ids) == 1:
-            default_branch = allowed_branch_ids[0]
-        elif hasattr(self.env.user, 'branch_id') and self.env.user.branch_id:
-            default_branch = self.env.user.branch_id.id
+        if not is_admin:
+            # Non-admin user: strictly default to their assigned branch
+            if allowed_branch_ids and len(allowed_branch_ids) > 0 and allowed_branch_ids[0] != -1:
+                default_branch = allowed_branch_ids[0]
+            elif hasattr(self.env.user, 'branch_id') and self.env.user.branch_id:
+                default_branch = self.env.user.branch_id.id
+            elif branches:
+                default_branch = branches[0]['id']
+            else:
+                default_branch = 'all'
+        else:
+            # Admin user: can select any branch or 'all'
+            if hasattr(self.env.user, 'branch_id') and self.env.user.branch_id:
+                default_branch = self.env.user.branch_id.id
+            else:
+                default_branch = 'all'
 
         company = self.env.company
         currency_symbol = company.currency_id.symbol or '₹'
 
+        default_branch_name = 'All Branches'
+        if default_branch and default_branch != 'all':
+            b_rec = self.env['res.branch'].browse(int(default_branch))
+            if b_rec.exists():
+                default_branch_name = b_rec.name
+        elif branches and len(branches) == 1:
+            default_branch_name = branches[0]['name']
+
         return {
             'branches': branches,
             'default_branch_id': default_branch or 'all',
+            'default_branch_name': default_branch_name,
+            'is_branch_editable': is_admin,
             'date_from': today.strftime('%Y-%m-%d'),
             'date_to': today.strftime('%Y-%m-%d'),
             'currency_symbol': currency_symbol,
@@ -368,6 +403,7 @@ class BranchPaymentBalanceReport(models.TransientModel):
             'total': total,
             'selected_branch_id': branch_id or 'all',
             'selected_branch_name': selected_branch_name,
+            'is_branch_editable': self._is_admin_user(),
             'date_from': date_from,
             'date_to': date_to,
             'currency_symbol': self.env.company.currency_id.symbol or '₹',

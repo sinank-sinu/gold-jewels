@@ -15,15 +15,25 @@
                     <!-- Branch Selector -->
                     <div class="o-bpb-field-box">
                         <span class="o-bpb-field-label"><i class="fa fa-map-marker text-danger"/> Branch</span>
-                        <div class="o-bpb-select-wrapper">
-                            <select class="o-bpb-native-select" t-model="state.selectedBranchId" t-on-change="onBranchChange">
-                                <option value="all">All Branches</option>
-                                <t t-foreach="state.branches" t-as="b" t-key="b.id">
-                                    <option t-att-value="b.id" t-esc="b.name"/>
-                                </t>
-                            </select>
-                            <i class="fa fa-chevron-down o-bpb-select-chevron"/>
-                        </div>
+                        <t t-if="state.isBranchEditable">
+                            <div class="o-bpb-select-wrapper">
+                                <select class="o-bpb-native-select" t-model="state.selectedBranchId" t-on-change="onBranchChange">
+                                    <option value="all">All Branches</option>
+                                    <t t-foreach="state.branches" t-as="b" t-key="b.id">
+                                        <option t-att-value="b.id" t-esc="b.name"/>
+                                    </t>
+                                </select>
+                                <i class="fa fa-chevron-down o-bpb-select-chevron"/>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            <div class="o-bpb-select-wrapper o-bpb-readonly-wrapper" title="Branch is locked to your assigned branch">
+                                <div class="o-bpb-native-select o-bpb-select-locked">
+                                    <span class="o-bpb-locked-text" t-esc="selectedBranchName"/>
+                                    <i class="fa fa-lock o-bpb-locked-icon"/>
+                                </div>
+                            </div>
+                        </t>
                     </div>
 
                     <!-- Date Range: Filter Preset Dropdown + Custom Date Picker -->

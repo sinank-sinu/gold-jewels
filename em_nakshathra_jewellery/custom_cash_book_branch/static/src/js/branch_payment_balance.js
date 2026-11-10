@@ -22,6 +22,8 @@ class BranchPaymentBalanceDashboard extends Component {
         this.state = useState({
             loading: true,
             branches: [],
+            isBranchEditable: true,
+            defaultBranchName: '',
             selectedBranchId: 'all',
             dateFrom: todayStr,
             dateTo: todayStr,
@@ -55,6 +57,8 @@ class BranchPaymentBalanceDashboard extends Component {
             const meta = await this.orm.call("branch.payment.balance.report", "get_initial_data", []);
             if (meta) {
                 this.state.branches = meta.branches || [];
+                this.state.isBranchEditable = !!meta.is_branch_editable;
+                this.state.defaultBranchName = meta.default_branch_name || '';
                 if (meta.default_branch_id) {
                     this.state.selectedBranchId = meta.default_branch_id;
                 }
@@ -85,6 +89,12 @@ class BranchPaymentBalanceDashboard extends Component {
             this.state.data = res;
             if (res.currency_symbol) {
                 this.state.currencySymbol = res.currency_symbol;
+            }
+            if (res.is_branch_editable !== undefined) {
+                this.state.isBranchEditable = res.is_branch_editable;
+            }
+            if (res.selected_branch_name) {
+                this.state.defaultBranchName = res.selected_branch_name;
             }
 
             // If currently on transactions tab, refresh transactions as well
@@ -126,6 +136,9 @@ class BranchPaymentBalanceDashboard extends Component {
 
     // ── Filter Handlers ──
     async onBranchChange() {
+        if (!this.state.isBranchEditable) {
+            return;
+        }
         this.state.txOffset = 0;
         await this.fetchDashboardData();
     }
@@ -333,6 +346,20 @@ class BranchPaymentBalanceDashboard extends Component {
 
     getTxEndIndex() {
         return Math.min(this.state.txOffset + this.state.txLimit, this.state.txTotalCount);
+    }
+
+    get selectedBranchName() {
+        if (!this.state.selectedBranchId || this.state.selectedBranchId === 'all') {
+            return 'All Branches';
+        }
+        const b = this.state.branches.find(br => String(br.id) === String(this.state.selectedBranchId));
+        if (b) {
+            return b.name;
+        }
+        if (this.state.data && this.state.data.selected_branch_name) {
+            return this.state.data.selected_branch_name;
+        }
+        return this.state.defaultBranchName || 'Assigned Branch';
     }
 
     // ── Number & Date Helpers ──
