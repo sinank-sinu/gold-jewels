@@ -332,6 +332,36 @@ class MaterialPurchaseRequisition(models.Model):
 class MaterialPurchaseRequisitionLine(models.Model):
     _inherit = 'material.purchase.requisition.line'
 
+    @api.onchange('product_template_id', 'product_id')
+    def _onchange_requisition_product_template_id(self):
+        for line in self:
+            none_values = line.product_template_id.valid_product_template_attribute_line_ids.mapped(
+                'product_template_value_ids'
+            ).filtered(
+                lambda ptav: ptav.ptav_active
+                and (ptav.name or '').strip().casefold() == 'none'
+            )
+            if line.product_id and line.product_id.product_tmpl_id == line.product_template_id:
+                line.product_template_attribute_value_ids = (
+                    line.product_id.product_template_attribute_value_ids
+                )
+                no_variant_values = line.product_no_variant_attribute_value_ids.filtered(
+                    lambda ptav: ptav.product_tmpl_id == line.product_template_id
+                )
+                line.product_no_variant_attribute_value_ids = (
+                    no_variant_values
+                    or none_values.filtered(
+                        lambda ptav: ptav.attribute_id.create_variant == 'no_variant'
+                    )
+                )
+            else:
+                line.product_template_attribute_value_ids = none_values.filtered(
+                    lambda ptav: ptav.attribute_id.create_variant != 'no_variant'
+                )
+                line.product_no_variant_attribute_value_ids = none_values.filtered(
+                    lambda ptav: ptav.attribute_id.create_variant == 'no_variant'
+                )
+
     product_template_id = fields.Many2one(
         related='product_id.product_tmpl_id',
         string="Product Template",
