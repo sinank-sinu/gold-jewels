@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Sequence adjustments: ensure GOLD is 9, DIAMOND is 10, Schemes is 11, Customer Payments is 12 -->
+    <record id="em_jewellery_management.menu_gold_main" model="ir.ui.menu">
+        <field name="sequence">9</field>
+    </record>
+    <record id="em_jewellery_management.menu_scheme_enrollment_category" model="ir.ui.menu">
+        <field name="sequence">11</field>
+    </record>
+    <record id="em_jewellery_management.menu_jewellery_customer_payments" model="ir.ui.menu">
+        <field name="sequence">12</field>
+    </record>
+
+    <!-- Top-level DIAMOND tab directly after the GOLD tab -->
+    <menuitem
+        id="menu_diamond_main"
+        name="DIAMOND"
+        parent="em_jewellery_management.menu_jewellery_root"
+        action="action_diamond_rate_master"
+        sequence="10"
+        groups="em_jewellery_management.group_jewellery_manager,base.group_system"
+    />
+
+    <!-- Also accessible under GOLD dropdown -->
+    <menuitem
+        id="menu_gold_diamond_rate"
+        name="Diamond Rate"
+        parent="em_jewellery_management.menu_gold_main"
+        action="action_diamond_rate_master"
+        sequence="30"
+        groups="em_jewellery_management.group_jewellery_manager,base.group_system"
+    />
+
+    <!-- Diamond Rate Updates under Jewellery Configuration -->
+    <menuitem
+        id="menu_diamond_rate_update_log"
+        name="Diamond Rate Updates"
+        parent="em_jewellery_management.menu_jewellery_configuration_root"
+        action="action_diamond_rate_update_log"
+        sequence="40"
+        groups="em_jewellery_management.group_jewellery_manager,base.group_system"
+    />
+</odoo>
+
