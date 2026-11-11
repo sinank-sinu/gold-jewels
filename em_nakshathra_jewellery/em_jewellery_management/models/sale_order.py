@@ -1193,6 +1193,56 @@ class SaleOrder(models.Model):
         self.is_editing_old_gold = False
         self.with_context(mail_notrack=True, tracking_disable=True).env.flush_all()
 
+    def _get_old_gold_edit_product(self, is_diamond_og):
+        self.ensure_one()
+        company = self.branch_id.company_id or self.company_id or self.env.company
+        Product = self.env['product.product'].sudo().with_company(company)
+        branch_id = self.branch_id.id
+        branch_domains = (
+            [[('branch_id', '=', branch_id)], [('branch_id', '=', False)]]
+            if branch_id else [[('branch_id', '=', False)]]
+        )
+        product_flag = 'is_diamond_og' if is_diamond_og else 'is_old_gold'
+
+        for company_id in (company.id, False):
+            for branch_domain in branch_domains:
+                product = Product.search(
+                    [('company_id', '=', company_id), (product_flag, '=', True)] + branch_domain,
+                    limit=1,
+                )
+                if product:
+                    return product
+
+        if is_diamond_og:
+            for company_id in (company.id, False):
+                for branch_domain in branch_domains:
+                    product = Product.search(
+                        [('company_id', '=', company_id), ('name', 'ilike', 'Diamond OG')] + branch_domain,
+                        limit=1,
+                    )
+                    if product:
+                        return product
+        else:
+            product = self.env.ref(
+                'em_jewellery_management.product_old_gold',
+                raise_if_not_found=False,
+            ).sudo()
+            if (
+                product
+                and product.is_old_gold
+                and not product.is_diamond_og
+                and (not product.company_id or product.company_id == company)
+            ):
+                if not product.branch_id or product.branch_id == self.branch_id:
+                    return product
+
+        kind = _("Diamond Old Gold") if is_diamond_og else _("Old Gold")
+        raise ValidationError(_("No %s product is configured for branch %s and company %s.") % (
+            kind,
+            self.branch_id.display_name or _("(none)"),
+            company.display_name,
+        ))
+
     def _safe_reverse_or_cancel_picking(self, picking):
         """Reverse a picking via return-wizard if it has done moves; otherwise cancel it."""
         has_done_moves = any(m.state == 'done' for m in picking.move_ids)
@@ -1263,21 +1313,24 @@ class SaleOrder(models.Model):
             l.is_diamond_og or (l.diamond_amount and l.diamond_amount > 0) or (l.purity_id and l.purity_id.is_diamond_og)
             for l in self.old_gold_line_ids
         )
-        if is_dog:
-            comp_id = self.branch_id.company_id.id or self.company_id.id or self.env.company.id
-            product = self.env['product.product'].sudo().search([
-                ('is_diamond_og', '=', True),
-                ('company_id', 'in', [comp_id, False])
-            ], limit=1)
-            if not product:
-                product = self.env['product.product'].sudo().search([
-                    ('is_diamond_og', '=', True)
-                ], limit=1)
-        else:
-            product = self.env.ref('em_jewellery_management.product_old_gold', raise_if_not_found=False)
+        product = self._get_old_gold_edit_product(is_dog)
 
-        if not product:
-            raise ValidationError(_("Old Gold product not configured."))
+        if po and po.order_line:
+            current_product = po.order_line[:1].product_id.sudo()
+            company = self.branch_id.company_id or self.company_id or self.env.company
+            if (
+                current_product
+                and (
+                    not current_product.company_id
+                    or current_product.company_id == company
+                )
+                and (not current_product.branch_id or current_product.branch_id == self.branch_id)
+                and (
+                    current_product.is_diamond_og
+                    if is_dog else current_product.is_old_gold and not current_product.is_diamond_og
+                )
+            ):
+                product = current_product
 
         # ─ 2. Update PO lines in-place via write() ─────────────────────────────────
         if po:
@@ -1540,13 +1593,14 @@ class SaleOrder(models.Model):
             sale_return_lines = list(self.sale_return_line_ids)
 
             for i, sr_line in enumerate(sale_return_lines):
+                product = sr_line.product_id.sudo()
                 gross_wt = sr_line.gross_weight or 1.0
                 unit_price = round(sr_line.amount / gross_wt, 4) if gross_wt else sr_line.rate
                 mc_pct = sr_line.mc_percent_actual or sr_line.mc_percent or 0.0
                 mc_amt = sr_line.mc_amount_actual or sr_line.mc_amount or 0.0
                 line_vals = {
-                    'product_id': sr_line.product_id.id,
-                    'name': f'Sale Return ({sr_line.product_id.name})',
+                    'product_id': product.id,
+                    'name': f'Sale Return ({product.name})',
                     'sale_return_line_id': sr_line.id,
                     'product_qty': gross_wt,
                     'gross_weight': gross_wt,
@@ -1571,7 +1625,7 @@ class SaleOrder(models.Model):
                     # More sale return lines than original PO lines → create new
                     line_vals.update({
                         'order_id': po.id,
-                        'product_uom': sr_line.product_id.uom_po_id.id if sr_line.product_id.uom_po_id else (sr_line.product_uom.id if sr_line.product_uom else False),
+                        'product_uom': product.uom_po_id.id if product.uom_po_id else (sr_line.product_uom.id if sr_line.product_uom else False),
                         'taxes_id': [(6, 0, [])],
                     })
                     new_line = self.env['purchase.order.line'].create(line_vals)
@@ -1624,7 +1678,7 @@ class SaleOrder(models.Model):
             po_line_map = {}
             if po:
                 for po_line in po.order_line:
-                    po_line_map.setdefault(po_line.product_id.id, po_line)
+                    po_line_map.setdefault(po_line.product_id.sudo().id, po_line)
 
             # Only consider product lines (skip tax/section lines)
             existing_bill_lines = bill.invoice_line_ids.filtered(
@@ -1634,14 +1688,15 @@ class SaleOrder(models.Model):
             sale_return_lines = list(self.sale_return_line_ids)
 
             for i, sr_line in enumerate(sale_return_lines):
+                product = sr_line.product_id.sudo()
                 gross_wt = sr_line.gross_weight or 1.0
                 unit_price = round(sr_line.amount / gross_wt, 4) if gross_wt else sr_line.rate
-                po_line = po_line_map.get(sr_line.product_id.id)
+                po_line = po_line_map.get(product.id)
                 if i < len(existing_list):
                     # Update the existing bill line in-place (keeps purchase_line_id)
                     write_vals = {
-                        'product_id': sr_line.product_id.id,
-                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'product_id': product.id,
+                        'name': f'Sale Return ({product.name})',
                         'quantity': gross_wt,
                         'price_unit': unit_price,
                         'tax_ids': [(5, 0, 0)],
@@ -1655,8 +1710,8 @@ class SaleOrder(models.Model):
                     # More sale return lines than existing bill lines → create new
                     create_vals = {
                         'move_id': bill.id,
-                        'product_id': sr_line.product_id.id,
-                        'name': f'Sale Return ({sr_line.product_id.name})',
+                        'product_id': product.id,
+                        'name': f'Sale Return ({product.name})',
                         'quantity': gross_wt,
                         'price_unit': unit_price,
                         'tax_ids': [(5, 0, 0)],
