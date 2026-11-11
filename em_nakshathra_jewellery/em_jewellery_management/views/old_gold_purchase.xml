@@ -150,17 +150,166 @@
         </field>
     </record>
 
+    <!-- Sale Old Gold Line Views (Line-level list and form for Old Gold Purchase) -->
+    <record id="view_sale_old_gold_line_tree" model="ir.ui.view">
+        <field name="name">sale.old.gold.line.tree</field>
+        <field name="model">sale.old.gold.line</field>
+        <field name="arch" type="xml">
+            <tree create="false" action="action_view_old_gold_purchase" type="object">
+                <field name="old_gold_purchase_id" string="Old Gold Purchase"/>
+                <field name="partner_id"/>
+                <field name="date"/>
+                <field name="branch_id"/>
+                <field name="company_id" optional="hide"/>
+                <field name="purity_id"/>
+                <field name="verified_purity_id"/>
+                <field name="gross_weight" sum="Total"/>
+                <field name="verified_gross_weight" sum="Total"/>
+                <field name="stone_weight" sum="Total"/>
+                <field name="verified_stone_weight" sum="Total"/>
+                <field name="net_weight" sum="Total"/>
+                <field name="verified_net_weight" sum="Total"/>
+                <field name="fine" sum="Total" optional="hide"/>
+                <field name="fine_verified" sum="Total" optional="hide"/>
+                <field name="diamond_amount" sum="Total"/>
+                <field name="rate"/>
+                <field name="amount" sum="Total"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'ho_transfer'"
+                       decoration-success="state == 'done'"
+                       decoration-primary="state == 'batched'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_sale_old_gold_line_form" model="ir.ui.view">
+        <field name="name">sale.old.gold.line.form</field>
+        <field name="model">sale.old.gold.line</field>
+        <field name="arch" type="xml">
+            <form string="Old Gold Purchase Line" create="false">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,ho_transfer,done,batched"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_old_gold_purchase"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-file-text-o"
+                                string="Old Gold Purchase"
+                                invisible="not old_gold_purchase_id"/>
+                    </div>
+                    <group>
+                        <group string="Purchase Information">
+                            <field name="old_gold_purchase_id" readonly="1"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="date" readonly="1"/>
+                            <field name="branch_id" readonly="1"/>
+                            <field name="company_id" readonly="1"/>
+                            <field name="batch_id" readonly="1" invisible="not batch_id"/>
+                        </group>
+                        <group string="Purity &amp; Valuation">
+                            <field name="purity_id" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="verified_purity_id" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="rate" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="diamond_amount" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="amount" readonly="1"/>
+                            <field name="is_diamond_og" readonly="state not in ('draft', 'ho_transfer')"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Branch Weights">
+                            <field name="gross_weight" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="stone_weight" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="net_weight" readonly="1"/>
+                            <field name="fine" readonly="1"/>
+                        </group>
+                        <group string="Verified Weights">
+                            <field name="verified_gross_weight" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="verified_stone_weight" readonly="state not in ('draft', 'ho_transfer')"/>
+                            <field name="verified_net_weight" readonly="1"/>
+                            <field name="fine_verified" readonly="1"/>
+                            <field name="transferred_weight" readonly="1"/>
+                            <field name="remaining_weight" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_sale_old_gold_line_search" model="ir.ui.view">
+        <field name="name">sale.old.gold.line.search</field>
+        <field name="model">sale.old.gold.line</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="old_gold_purchase_id" string="Purchase"/>
+                <field name="partner_id"/>
+                <field name="purity_id"/>
+                <field name="verified_purity_id"/>
+                <field name="branch_id"/>
+                <field name="company_id"/>
+
+                <filter string="Exclude Batched" name="exclude_batched" domain="[('state', '!=', 'batched')]"/>
+                <separator/>
+                <filter string="Draft" name="state_draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="HO Transfer" name="state_ho_transfer" domain="[('state', '=', 'ho_transfer')]"/>
+                <filter string="Verified" name="state_done" domain="[('state', '=', 'done')]"/>
+                <filter string="Batched" name="state_batched" domain="[('state', '=', 'batched')]"/>
+                <separator/>
+                <filter string="Diamond OG" name="diamond_og" domain="[('is_diamond_og', '=', True)]"/>
+
+                <group expand="0" string="Group By">
+                    <filter string="Purity" name="group_by_purity" context="{'group_by': 'purity_id'}"/>
+                    <filter string="Verified Purity" name="group_by_verified_purity" context="{'group_by': 'verified_purity_id'}"/>
+                    <filter string="Old Gold Purchase" name="group_by_purchase" context="{'group_by': 'old_gold_purchase_id'}"/>
+                    <filter string="Branch" name="group_by_branch" context="{'group_by': 'branch_id'}"/>
+                    <filter string="Status" name="group_by_state" context="{'group_by': 'state'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:month'}"/>
+                    <filter string="Company" name="group_by_company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Old Gold Purchase Action pointing to Lines -->
     <record id="action_old_gold_purchase" model="ir.actions.act_window">
         <field name="name">Old Gold Purchase</field>
-        <field name="res_model">old.gold.purchase</field>
+        <field name="res_model">sale.old.gold.line</field>
         <field name="view_mode">tree,form</field>
+        <field name="domain">[('old_gold_purchase_id', '!=', False)]</field>
+        <field name="search_view_id" ref="view_sale_old_gold_line_search"/>
         <field name="context">{'search_default_exclude_batched': 1}</field>
         <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create an Old Gold Purchase
+                No Old Gold Purchase Lines found
             </p>
         </field>
+    </record>
+
+    <record id="action_old_gold_purchase_view_tree" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_sale_old_gold_line_tree"/>
+        <field name="act_window_id" ref="action_old_gold_purchase"/>
+    </record>
+
+    <record id="action_old_gold_purchase_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_sale_old_gold_line_form"/>
+        <field name="act_window_id" ref="action_old_gold_purchase"/>
+    </record>
+
+    <!-- Parent Old Gold Purchase Action (Preserved for direct document access) -->
+    <record id="action_old_gold_purchase_parent" model="ir.actions.act_window">
+        <field name="name">Old Gold Purchases</field>
+        <field name="res_model">old.gold.purchase</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_exclude_batched': 1}</field>
+        <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Main Jewellery Menu -->

@@ -321,13 +321,34 @@ class OldGoldPurchase(models.Model):
 
 class SaleOldGoldLine(models.Model):
     _name = 'sale.old.gold.line'
-
+    _description = 'Old Gold Purchase Line'
+    _order = 'date desc, id desc'
 
     sale_id = fields.Many2one('sale.order')
-    old_gold_purchase_id = fields.Many2one('old.gold.purchase')
+    old_gold_purchase_id = fields.Many2one('old.gold.purchase', string="Old Gold Purchase", ondelete='cascade')
     is_smith_transfer = fields.Boolean(related='old_gold_purchase_id.is_smith_transfer', string="Smith Transfer Required")
     batch_id = fields.Many2one('old.gold.batch', string="Batch")
 
+    partner_id = fields.Many2one(
+        related='old_gold_purchase_id.partner_id',
+        string='Partner',
+        store=True,
+    )
+    date = fields.Date(
+        related='old_gold_purchase_id.date',
+        string='Date',
+        store=True,
+    )
+    company_id = fields.Many2one(
+        related='old_gold_purchase_id.company_id',
+        string='Company',
+        store=True,
+    )
+    state = fields.Selection(
+        related='old_gold_purchase_id.state',
+        string='Status',
+        store=True,
+    )
 
     purity_id = fields.Many2one('gold.purity', required=True)
     is_diamond_og = fields.Boolean(
@@ -342,6 +363,17 @@ class SaleOldGoldLine(models.Model):
         compute='_compute_location_id',
         store=True,
     )
+
+    def action_view_old_gold_purchase(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Old Gold Purchase'),
+            'res_model': 'old.gold.purchase',
+            'view_mode': 'form',
+            'res_id': self.old_gold_purchase_id.id,
+            'target': 'current',
+        }
 
     @api.depends('purity_id', 'purity_id.is_diamond_og', 'diamond_amount')
     def _compute_is_diamond_og(self):

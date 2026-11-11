@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_product_label_import_wizard_form" model="ir.ui.view">
+        <field name="name">product.label.import.wizard.form</field>
+        <field name="model">product.label.import.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Product Label Import">
+                <sheet>
+                    <group>
+                        <field name="file" filename="filename" required="1"/>
+                        <field name="filename" invisible="1"/>
+                    </group>
+                    <group string="Excel to Product Label Field Mapping">
+                        <div class="text-muted">
+                            Add mappings for columns that do not use the importer's standard Excel headers.
+                            Enter each column name exactly as it appears in the first row.
+                            Every non-empty row must contain a valid Purchase Order for its Company.
+                            Use a "Purchase Order" or "Choose Purchase Order" column, or map a custom column to Purchase Order.
+                        </div>
+                        <field name="mapping_line_ids" nolabel="1">
+                            <tree editable="bottom">
+                                <field name="source_column"/>
+                                <field name="target_field_id"
+                                       domain="[('model', '=', 'product.label'), ('readonly', '=', False), ('name', 'not in', ['name', 'label_name', 'product_id', 'product_tmpl_id', 'company_id', 'branch_id', 'source_location_id', 'branch_location_id']), ('ttype', 'in', ['char', 'text', 'integer', 'float', 'boolean', 'selection', 'many2one', 'date', 'datetime'])]"/>
+                            </tree>
+                        </field>
+                    </group>
+                    <group invisible="not result_message">
+                        <field name="result_message" readonly="1" nolabel="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_import" string="Import" type="object" class="btn-primary" invisible="result_message"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" invisible="result_message"/>
+                    <button string="Close" class="btn-secondary" special="cancel" invisible="not result_message"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_product_label_import_wizard" model="ir.actions.act_window">
+        <field name="name">Product Label Import</field>
+        <field name="res_model">product.label.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_product_label_import_wizard"
+        name="Product Label Import"
+        parent="stock.menu_stock_root"
+        action="action_product_label_import_wizard"
+        sequence="190"/>
+</odoo>
