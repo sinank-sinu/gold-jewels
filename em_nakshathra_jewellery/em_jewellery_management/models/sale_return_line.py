@@ -73,6 +73,12 @@ class SaleReturnLine(models.Model):
     price_subtotal_actual = fields.Monetary(string="MRP", store=True, currency_field='currency_id')
     price_unit = fields.Float(string="Unit Price", compute='_compute_price_unit', store=True)
 
+    amount_rounding = fields.Float(
+        string="Round Off",
+        default=0.0,
+        help="Enter a signed adjustment, for example -5.50 to reduce the OG amount by 5.50.",
+    )
+
     @api.depends('product_id')
     def _compute_product_template_id(self):
         for rec in self:
@@ -142,12 +148,12 @@ class SaleReturnLine(models.Model):
             pct = rec.mc_percent_actual if rec.mc_percent_actual else (rec.mc_percent or 0.0)
             rec.mc_amount_actual = (rec.metal_amount or 0.0) * (pct / 100.0)
 
-    @api.depends('metal_amount', 'mc_amount_actual', 'mc_amount', 'mc_discount', 'sale_stone_rate', 'sale_diamond_rate', 'other_weight_amount')
+    @api.depends('metal_amount', 'mc_amount_actual', 'mc_amount', 'mc_discount', 'sale_stone_rate', 'sale_diamond_rate', 'other_weight_amount','amount_rounding')
     def _compute_amount(self):
         for rec in self:
             mc = rec.mc_amount_actual if rec.mc_amount_actual else (rec.mc_amount or 0.0)
             extra = (rec.sale_stone_rate or 0.0) + (rec.sale_diamond_rate or 0.0) + (rec.other_weight_amount or 0.0)
-            rec.amount = (rec.metal_amount or 0.0) + mc - (rec.mc_discount or 0.0) + extra
+            rec.amount = (rec.metal_amount or 0.0) + mc - (rec.mc_discount or 0.0) + extra + rec.amount_rounding
             rec.price_subtotal_actual = (rec.metal_amount or 0.0) + (rec.mc_amount or 0.0) + extra
 
 

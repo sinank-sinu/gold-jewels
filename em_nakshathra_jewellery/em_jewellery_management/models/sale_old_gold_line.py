@@ -417,6 +417,11 @@ class SaleOldGoldLine(models.Model):
 
     rate = fields.Float()
     diamond_amount = fields.Float(string="Diamond Amount")
+    amount_rounding = fields.Float(
+        string="Round Off",
+        default=0.0,
+        help="Enter a signed adjustment, for example -5.50 to reduce the OG amount by 5.50.",
+    )
 
     amount = fields.Float(string="Amount", compute='_compute_amount', store=True, readonly=False)
 
@@ -469,13 +474,13 @@ class SaleOldGoldLine(models.Model):
             r.net_weight = r.gross_weight - r.stone_weight
 
 
-    @api.depends('net_weight', 'rate', 'diamond_amount')
+    @api.depends('net_weight', 'rate', 'diamond_amount', 'amount_rounding')
     def _compute_amount(self):
         for rec in self:
             if not self.env.context.get('skip_old_gold_amount_compute'):
-                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount + rec.amount_rounding
             elif not rec.amount:
-                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount + rec.amount_rounding
 
     @api.onchange('purity_id')
     def _onchange_purity(self):
