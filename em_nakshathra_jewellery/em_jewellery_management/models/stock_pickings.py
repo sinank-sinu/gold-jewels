@@ -11,6 +11,15 @@ class StockPicking(models.Model):
         help="Indicates this picking is related to Old Gold movement"
     )
     sale_old_id = fields.Many2one('sale.order', ondelete='cascade')
+    batch_id = fields.Many2one('old.gold.batch', string="Batch")
+    batch_ids = fields.Many2many(
+        'old.gold.batch',
+        'stock_picking_old_gold_batch_rel',
+        'picking_id',
+        'batch_id',
+        string="Batches",
+    )
+    batch_smith_processed = fields.Boolean(string="Batch Smith Processed", default=False, copy=False)
     old_gold_issue_id = fields.Many2one(
         'old.gold.refinery.issue',
         string="Old Gold Issue"
@@ -155,7 +164,59 @@ class StockPicking(models.Model):
                         transfer_ref
                     ))
 
-        return super().button_validate()
+        res = super().button_validate()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _action_done(self):
+        res = super()._action_done()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _process_old_gold_batch_transfer_done(self):
+        for picking in self:
+            if picking.batch_smith_processed:
+                continue
+            batches = picking.batch_id | picking.batch_ids
+            if not batches:
+                continue
+
+            done_moves = picking.move_ids.filtered(lambda m: m.state == 'done')
+            batch_qty_map = {}
+            for move in done_moves:
+                qty = move.quantity or move.product_uom_qty
+                if qty <= 0:
+                    continue
+                target_batch = move.batch_id or picking.batch_id
+                if target_batch:
+                    batch_qty_map[target_batch] = batch_qty_map.get(target_batch, 0.0) + qty
+
+                line = getattr(move, 'old_gold_line_id', False)
+                if line:
+                    line.sudo().write({
+                        'transferred_weight': (line.transferred_weight or 0.0) + qty,
+                        'gross_weight': max(0.0, (line.gross_weight or 0.0) - qty),
+                        'verified_gross_weight': max(0.0, (line.verified_gross_weight or 0.0) - qty),
+                    })
+
+            if not batch_qty_map:
+                continue
+
+            for batch, transfer_qty in batch_qty_map.items():
+                new_transferred = (batch.transferred_weight or 0.0) + transfer_qty
+                new_total_grams = max(0.0, (batch.total_grams or 0.0) - transfer_qty)
+                batch.sudo().write({
+                    'transferred_weight': new_transferred,
+                    'total_transferred_weight': new_transferred,
+                    'total_grams': new_total_grams,
+                    'smith_transferred': True if new_total_grams <= 0.0001 else batch.smith_transferred,
+                })
+
+            picking.batch_smith_processed = True
 
     def _auto_allocate_available_stock(self):
         """
@@ -206,6 +267,8 @@ class StockMove(models.Model):
     barcode = fields.Char(string="Barcode", copy=False)
     purity_id = fields.Many2one('gold.purity')
     grams = fields.Float(string="Grams", digits=(16, 3))
+    old_gold_line_id = fields.Many2one('sale.old.gold.line', string="Old Gold Line")
+    batch_id = fields.Many2one('old.gold.batch', string="Old Gold Batch")
     label_id = fields.Many2one(
         'product.label',
         string="Label",

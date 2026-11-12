@@ -8,7 +8,7 @@ class OldGoldPurchase(models.Model):
 
     partner_id = fields.Many2one('res.partner', required=True)
     name = fields.Char("name")
-    date = fields.Date("date")
+    date = fields.Datetime("Date", default=fields.Datetime.now)
     company_id = fields.Many2one(
         'res.company',
         string='Company',
@@ -321,34 +321,19 @@ class OldGoldPurchase(models.Model):
 
 class SaleOldGoldLine(models.Model):
     _name = 'sale.old.gold.line'
-    _description = 'Old Gold Purchase Line'
-    _order = 'date desc, id desc'
+
 
     sale_id = fields.Many2one('sale.order')
-    old_gold_purchase_id = fields.Many2one('old.gold.purchase', string="Old Gold Purchase", ondelete='cascade')
-    is_smith_transfer = fields.Boolean(related='old_gold_purchase_id.is_smith_transfer', string="Smith Transfer Required")
+    old_gold_purchase_id = fields.Many2one('old.gold.purchase')
+    is_smith_transfer = fields.Boolean(
+        string="Smith Transfer Required",
+        compute='_compute_is_smith_transfer',
+        store=True,
+    )
+
+
     batch_id = fields.Many2one('old.gold.batch', string="Batch")
 
-    partner_id = fields.Many2one(
-        related='old_gold_purchase_id.partner_id',
-        string='Partner',
-        store=True,
-    )
-    date = fields.Date(
-        related='old_gold_purchase_id.date',
-        string='Date',
-        store=True,
-    )
-    company_id = fields.Many2one(
-        related='old_gold_purchase_id.company_id',
-        string='Company',
-        store=True,
-    )
-    state = fields.Selection(
-        related='old_gold_purchase_id.state',
-        string='Status',
-        store=True,
-    )
 
     purity_id = fields.Many2one('gold.purity', required=True)
     is_diamond_og = fields.Boolean(
@@ -363,6 +348,14 @@ class SaleOldGoldLine(models.Model):
         compute='_compute_location_id',
         store=True,
     )
+
+    @api.depends('batch_id.is_smith_transfer', 'old_gold_purchase_id.is_smith_transfer')
+    def _compute_is_smith_transfer(self):
+        for line in self:
+            line.is_smith_transfer = (
+                line.batch_id.is_smith_transfer if line.batch_id
+                else (line.old_gold_purchase_id.is_smith_transfer if line.old_gold_purchase_id else False)
+            )
 
     def action_view_old_gold_purchase(self):
         self.ensure_one()
@@ -432,6 +425,10 @@ class SaleOldGoldLine(models.Model):
     ho_transfer_id = fields.Many2one('stock.picking', readonly=True)
     branch_id = fields.Many2one(related='old_gold_purchase_id.branch_id', string='Branch',
                                 store=True)
+    partner_id = fields.Many2one(related='old_gold_purchase_id.partner_id', string='Customer', store=True)
+    date = fields.Datetime(related='old_gold_purchase_id.date', string='Date', store=True)
+    company_id = fields.Many2one(related='old_gold_purchase_id.company_id', string='Company', store=True)
+    state = fields.Selection(related='old_gold_purchase_id.state', string='Status', store=True)
 
     verified_purity_id = fields.Many2one('gold.purity', string="Verified Purity")
     verified_gross_weight = fields.Float(string="Verified Gross Weight", digits=(16, 3))

@@ -21,6 +21,7 @@
             <xpath expr="//field[@name='owner_id']" position="after">
                     <field name="is_old_gold"/>
                     <field name="sale_old_id" invisible="not is_old_gold"/>
+                    <field name="batch_ids" widget="many2many_tags" readonly="1" invisible="not is_old_gold or not batch_ids"/>
                     <field name="is_multiple_transfer" widget="boolean_toggle"/>
                     <field name="previous_internal_transfer_id"
                            readonly="state == 'done'"

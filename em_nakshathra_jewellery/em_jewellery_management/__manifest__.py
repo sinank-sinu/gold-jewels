@@ -55,6 +55,8 @@
     'assets': {
         'web.assets_backend': [
             'em_jewellery_management/static/src/js/sale_product_field_patch.js',
+            'em_jewellery_management/static/src/js/datetime_filter_wizard_dialog.js',
+            'em_jewellery_management/static/src/xml/datetime_filter_wizard_dialog.xml',
         ],
     },
 
