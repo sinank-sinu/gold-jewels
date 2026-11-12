@@ -203,6 +203,7 @@ class StockPicking(models.Model):
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
+    barcode = fields.Char(string="Barcode", copy=False)
     purity_id = fields.Many2one('gold.purity')
     grams = fields.Float(string="Grams", digits=(16, 3))
     label_id = fields.Many2one(
@@ -262,13 +263,10 @@ class StockMove(models.Model):
             if not self.product_id and self.label_id.product_id:
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
-            weight = self.label_id.purchase_gross_weight or self.label_id.sale_gross_weight or self.label_id.tag_weight or 1.0
-            if not self.sale_line_id and not (self.picking_id and self.picking_id.picking_type_id.code == 'outgoing'):
-                self.product_uom_qty = weight
-            self.label_weight = weight
-            self.pieces = 1
-        else:
-            self.pieces = 0
+            self.product_uom_qty = self.label_id.purchase_gross_weight
+            self.barcode = self.label_id.barcode or self.label_id.barcode2 or self.product_id.barcode or ''
+        elif self.product_id:
+            self.barcode = self.product_id.barcode or ''
 
     @api.constrains('label_id', 'state')
     def _check_label_single_active_transfer(self):
@@ -404,6 +402,7 @@ class StockMove(models.Model):
 class StockMoveLine(models.Model):
     _inherit = 'stock.move.line'
 
+    barcode = fields.Char(string="Barcode", related='move_id.barcode', store=True, readonly=True)
     branch_id = fields.Many2one(
         'res.branch', 
         string='Branch', 
