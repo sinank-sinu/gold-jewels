@@ -11,4 +11,14 @@
         <field name="binding_type">report</field>
     </record>
 
+    <record id="action_report_missing_labels" model="ir.actions.report">
+        <field name="name">Missing Labels Report</field>
+        <field name="model">branch.label.verification</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">branch_label_verification.report_missing_labels_template</field>
+        <field name="report_file">branch_label_verification.report_missing_labels_template</field>
+        <field name="binding_model_id" ref="model_branch_label_verification"/>
+        <field name="binding_type">report</field>
+    </record>
+
 </odoo>

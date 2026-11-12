@@ -232,4 +232,110 @@
         </t>
     </template>
 
+    <template id="report_missing_labels_template">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-call="web.external_layout">
+                    <div class="page" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px;">
+                        <div class="text-center mb-3 pb-2 border-bottom">
+                            <h2 style="font-weight: bold; color: #DC2626; margin-bottom: 2px;">
+                                MISSING LABELS REPORT
+                            </h2>
+                            <span class="text-muted" style="font-size: 12px;">
+                                Branch: <strong t-esc="doc.branch_id.name"/> | Date: <span t-esc="doc.date"/> | Ref: <span t-esc="doc.name"/>
+                            </span>
+                        </div>
+
+                        <table class="table table-sm table-bordered mb-3" style="width: 100%; font-size: 10px;">
+                            <tr style="background-color: #F8FAFC;">
+                                <td style="width: 18%; font-weight: bold;">Audit Ref:</td>
+                                <td style="width: 32%;"><span t-field="doc.name"/></td>
+                                <td style="width: 18%; font-weight: bold;">Auditor / Verifier:</td>
+                                <td style="width: 32%;"><span t-field="doc.user_id.name"/></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: bold;">Branch:</td>
+                                <td><span t-field="doc.branch_id.name"/></td>
+                                <td style="font-weight: bold;">Audit Status:</td>
+                                <td><strong t-esc="(doc.state or '').upper()"/></td>
+                            </tr>
+                            <tr t-if="doc.location_ids" style="background-color: #F8FAFC;">
+                                <td style="font-weight: bold;">Target Locations:</td>
+                                <td colspan="3"><span t-esc="', '.join(doc.location_ids.mapped('name'))"/></td>
+                            </tr>
+                        </table>
+
+                        <t t-set="missing_items" t-value="doc.missing_line_ids"/>
+                        <div class="row text-center mb-3" style="margin-left: -5px; margin-right: -5px;">
+                            <div class="col-4" style="padding: 4px;">
+                                <div style="border: 1px solid #FECACA; border-radius: 6px; padding: 8px; background-color: #FEF2F2;">
+                                    <div style="font-size: 10px; color: #991B1B; font-weight: bold;">TOTAL MISSING LABELS</div>
+                                    <div style="font-size: 16px; font-weight: bold; color: #DC2626;"><t t-esc="len(missing_items)"/></div>
+                                </div>
+                            </div>
+                            <div class="col-4" style="padding: 4px;">
+                                <div style="border: 1px solid #FECACA; border-radius: 6px; padding: 8px; background-color: #FEF2F2;">
+                                    <div style="font-size: 10px; color: #991B1B; font-weight: bold;">MISSING GROSS WT (g)</div>
+                                    <div style="font-size: 16px; font-weight: bold; color: #DC2626;"><t t-esc="'%.3f' % sum(missing_items.mapped('sale_gross_weight'))"/></div>
+                                </div>
+                            </div>
+                            <div class="col-4" style="padding: 4px;">
+                                <div style="border: 1px solid #FECACA; border-radius: 6px; padding: 8px; background-color: #FEF2F2;">
+                                    <div style="font-size: 10px; color: #991B1B; font-weight: bold;">MISSING NET WT (g)</div>
+                                    <div style="font-size: 16px; font-weight: bold; color: #DC2626;"><t t-esc="'%.3f' % sum(missing_items.mapped('sale_net_weight'))"/></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <t t-if="missing_items">
+                            <table class="table table-sm table-striped table-bordered" style="font-size: 10px; width: 100%;">
+                                <thead style="background-color: #FEE2E2; color: #991B1B;">
+                                    <tr>
+                                        <th style="width: 4%;">#</th>
+                                        <th>Label Ref</th>
+                                        <th>Barcode</th>
+                                        <th>Variant</th>
+                                        <th>Purity</th>
+                                        <th>Location</th>
+                                        <th class="text-end">Gross Wt (g)</th>
+                                        <th class="text-end">Net Wt (g)</th>
+                                        <th>Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="missing_items" t-as="m">
+                                        <tr style="page-break-inside: avoid;">
+                                            <td><t t-esc="m_index + 1"/></td>
+                                            <td><strong t-esc="m.name"/></td>
+                                            <td><t t-esc="m.barcode or ''"/></td>
+                                            <td><t t-esc="m.product_id.display_name or ''"/></td>
+                                            <td><t t-esc="m.purity_id.name or ''"/></td>
+                                            <td><t t-esc="m.location_id.name or ''"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % (m.sale_gross_weight or 0.0)"/></td>
+                                            <td class="text-end"><t t-esc="'%.3f' % (m.sale_net_weight or 0.0)"/></td>
+                                            <td><t t-esc="m.notes or ''"/></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                                <tfoot style="background-color: #F8FAFC; font-weight: bold;">
+                                    <tr>
+                                        <td colspan="6" class="text-end">Total (<t t-esc="len(missing_items)"/> labels)</td>
+                                        <td class="text-end"><t t-esc="'%.3f' % sum(missing_items.mapped('sale_gross_weight'))"/></td>
+                                        <td class="text-end"><t t-esc="'%.3f' % sum(missing_items.mapped('sale_net_weight'))"/></td>
+                                        <td/>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </t>
+                        <t t-else="">
+                            <div class="alert alert-success text-center mt-3">
+                                No missing labels found for this audit.
+                            </div>
+                        </t>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+
 </odoo>

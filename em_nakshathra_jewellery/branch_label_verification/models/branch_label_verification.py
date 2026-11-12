@@ -62,7 +62,7 @@ class BranchLabelVerification(models.Model):
         'location_id',
         string='Target Locations',
         domain="[('branch_id', '=', branch_id), ('usage', '=', 'internal')]",
-        help="Optional: Restrict to specific counter(s) or vault/safe locations in this branch. Leave empty to audit all internal locations.",
+        help="Select specific counter(s) or vault/safe locations in this branch to load labels. When empty, no location labels or summaries are shown.",
     )
     label_filter = fields.Selection([
         ('active', 'Active Labels Only (In Stock)'),
@@ -96,6 +96,34 @@ class BranchLabelVerification(models.Model):
         'branch.label.verification.line',
         'verification_id',
         string='Verification Lines',
+    )
+    pending_line_ids = fields.One2many(
+        'branch.label.verification.line',
+        'verification_id',
+        string='Pending Verification Labels',
+        domain=[('status', '=', 'pending'), ('is_vault_item', '=', False)],
+        copy=False,
+    )
+    verified_line_ids = fields.One2many(
+        'branch.label.verification.line',
+        'verification_id',
+        string='Verified Labels',
+        domain=[('status', '=', 'verified'), ('is_vault_item', '=', False)],
+        copy=False,
+    )
+    missing_line_ids = fields.One2many(
+        'branch.label.verification.line',
+        'verification_id',
+        string='Missing Labels',
+        domain=[('status', '=', 'missing'), ('is_vault_item', '=', False)],
+        copy=False,
+    )
+    extra_line_ids = fields.One2many(
+        'branch.label.verification.line',
+        'verification_id',
+        string='Extra / Mismatch Labels',
+        domain=[('status', '=', 'extra'), ('is_vault_item', '=', False)],
+        copy=False,
     )
     template_summary_ids = fields.One2many(
         'branch.label.verification.template.summary',
@@ -237,7 +265,7 @@ class BranchLabelVerification(models.Model):
 
             rec.progress_rate = round((ver_cnt / exp_cnt * 100.0), 1) if exp_cnt > 0 else 0.0
 
-    @api.depends('template_summary_ids.is_matched')
+    @api.depends('template_summary_ids', 'template_summary_ids.is_matched')
     def _compute_template_counts(self):
         for rec in self:
             rec.matched_templates_count = len(rec.template_summary_ids.filtered('is_matched'))
@@ -250,6 +278,27 @@ class BranchLabelVerification(models.Model):
             vals['name'] = seq or _('New')
         return super().create(vals)
 
+    def write(self, vals):
+        res = super().write(vals)
+        if 'location_ids' in vals and not self.env.context.get('_skip_location_sync'):
+            for rec in self:
+                if rec.state != 'draft' or rec.line_ids or rec.template_summary_ids:
+                    stats = rec.with_context(_skip_location_sync=True)._sync_labels_with_locations(
+                        remove_sold=False,
+                        raise_if_empty=False,
+                    )
+                    rec.with_context(_skip_location_sync=True).write({
+                        'last_scanned_message': _(
+                            "Updated Target Locations for '%s': %d out-of-location label(s) removed, %d new label(s) added."
+                        ) % (
+                            rec.branch_id.name or '',
+                            stats['removed_out_of_scope_total'],
+                            stats['added_total'],
+                        ),
+                        'last_scanned_status': 'info',
+                    })
+        return res
+
     @api.onchange('branch_id')
     def _onchange_branch_id(self):
         if self.branch_id:
@@ -258,82 +307,281 @@ class BranchLabelVerification(models.Model):
     # -------------------------------------------------------------
     # Actions
     # -------------------------------------------------------------
-    def action_load_branch_labels(self):
-        """Fetch all labels in the default branch and create verification lines."""
+    def _prepare_verification_line_vals(self, lbl):
+        """Build creation values for a pending verification line from a product.label."""
+        tmpl = lbl.product_tmpl_id or (lbl.product_id.product_tmpl_id if lbl.product_id else False)
+        purity = lbl.purity_id or lbl.sale_purity_id
+        gross_wt = lbl.sale_gross_weight or 0.0
+        tag_wt = lbl.tag_weight or 0.0
+        return {
+            'verification_id': self.id,
+            'label_id': lbl.id,
+            'product_id': lbl.product_id.id,
+            'product_tmpl_id': tmpl.id if tmpl else False,
+            'categ_id': lbl.product_id.categ_id.id if lbl.product_id and lbl.product_id.categ_id else False,
+            'purity_id': purity.id if purity else False,
+            'branch_id': lbl.branch_id.id,
+            'location_id': lbl.branch_location_id.id if lbl.branch_location_id else False,
+            'sale_gross_weight': gross_wt,
+            'sale_net_weight': lbl.sale_net_weight or 0.0,
+            'tag_weight': tag_wt,
+            'system_qty': 1.0,
+            'system_weight': gross_wt,
+            'system_tag_weight': tag_wt,
+            'system_total_weight': gross_wt + tag_wt,
+            'manual_qty': 0.0,
+            'manual_weight': 0.0,
+            'manual_tag_weight': 0.0,
+            'manual_total_weight': 0.0,
+            'is_in_stock': lbl.active,
+            'status': 'pending',
+            'is_verified': False,
+        }
+
+    def _get_sold_label_ids_from_moves(self, label_ids):
+        """Return label IDs whose latest done stock move ended at a customer location."""
+        customer_sold_ids = set()
+        if not label_ids:
+            return customer_sold_ids
+        cust_moves = self.env['stock.move.line'].sudo().search([
+            ('label_id', 'in', label_ids),
+            ('state', '=', 'done'),
+            ('location_dest_id.usage', '=', 'customer'),
+        ])
+        if not cust_moves:
+            return customer_sold_ids
+        candidate_ids = list(set(cust_moves.mapped('label_id').ids))
+        all_moves = self.env['stock.move.line'].sudo().search([
+            ('label_id', 'in', candidate_ids),
+            ('state', '=', 'done'),
+        ], order='date desc, id desc')
+        seen = set()
+        for mv in all_moves:
+            lid = mv.label_id.id
+            if lid not in seen:
+                seen.add(lid)
+                if mv.location_dest_id.usage == 'customer':
+                    customer_sold_ids.add(lid)
+        return customer_sold_ids
+
+    def _sync_labels_with_locations(self, remove_sold=True, raise_if_empty=False):
+        """Synchronize verification lines and product template summary with target branch/locations.
+
+        - Preserves existing scan/verification lines for labels remaining in target locations.
+        - Removes non-extra lines whose labels no longer belong to the selected target locations.
+        - Optionally removes labels that became sold (including already verified ones).
+        - Adds newly matching labels in the selected target locations as pending lines.
+        - Re-syncs product template summary records and totals.
+        """
         self.ensure_one()
         if not self.branch_id:
-            raise UserError(_("Please select a Branch first."))
+            if raise_if_empty:
+                raise UserError(_("Please select a Branch first."))
+            return {
+                'is_reload': False,
+                'added_total': 0,
+                'removed_sold_total': 0,
+                'removed_sold_verified': 0,
+                'removed_out_of_scope_total': 0,
+                'removed_out_of_scope_verified': 0,
+                'preserved_verified': 0,
+            }
 
-        # Delete existing lines
-        self.line_ids.unlink()
+        # Only selected target locations are in scope; when empty, show no labels or bulk items
+        target_locations = self.location_ids
+        target_loc_ids = set(target_locations.ids)
 
-        # Determine internal locations in target branch
         if self.location_ids:
-            target_locations = self.location_ids
-        else:
-            target_locations = self.env['stock.location'].search([
+            domain = [
                 ('branch_id', '=', self.branch_id.id),
-                ('usage', '=', 'internal')
+                ('branch_location_id', 'in', self.location_ids.ids),
+            ]
+            if self.label_filter == 'active':
+                domain.append(('active', '=', True))
+            elif self.label_filter == 'inactive':
+                domain.append(('active', '=', False))
+
+            ProductLabel = (
+                self.env['product.label'].with_context(active_test=False)
+                if self.label_filter == 'all'
+                else self.env['product.label']
+            )
+            labels = ProductLabel.search(domain, order='product_tmpl_id asc, name asc')
+
+            # Check for bulk stock quants (vault items, old gold, diamond og) in target locations
+            bulk_quants = self.env['stock.quant'].search([
+                ('location_id', 'in', target_locations.ids),
+                ('quantity', '>', 0),
+                '|', '|',
+                ('product_id.product_tmpl_id.is_vault_item', '=', True),
+                ('product_id.product_tmpl_id.is_old_gold', '=', True),
+                ('product_id.product_tmpl_id.is_diamond_og', '=', True),
             ])
+        else:
+            labels = self.env['product.label']
+            bulk_quants = self.env['stock.quant']
 
-        domain = [('branch_id', '=', self.branch_id.id)]
-        if self.location_ids:
-            domain.append(('branch_location_id', 'in', self.location_ids.ids))
+        is_reload = bool(self.line_ids)
+        if not is_reload:
+            if raise_if_empty and self.location_ids and not labels and not bulk_quants:
+                raise UserError(_("No labels or bulk stock found for branch '%s' matching the selected criteria.") % self.branch_id.name)
+            lines_vals = [self._prepare_verification_line_vals(lbl) for lbl in labels]
+            if lines_vals:
+                self.env['branch.label.verification.line'].create(lines_vals)
+            self._sync_template_summaries()
+            return {
+                'is_reload': False,
+                'added_total': len(lines_vals),
+                'removed_sold_total': 0,
+                'removed_sold_verified': 0,
+                'removed_out_of_scope_total': 0,
+                'removed_out_of_scope_verified': 0,
+                'preserved_verified': 0,
+            }
 
-        if self.label_filter == 'active':
-            domain.append(('active', '=', True))
-        elif self.label_filter == 'inactive':
-            domain.append(('active', '=', False))
+        # Sync existing lines: preserve scans in scope, drop out-of-location & sold labels, add newly included labels
+        existing_label_ids = self.line_ids.mapped('label_id').ids
+        labels_by_id = {
+            lbl.id: lbl
+            for lbl in self.env['product.label'].with_context(active_test=False).sudo().browse(existing_label_ids).exists()
+        }
+        customer_sold_ids = (
+            self._get_sold_label_ids_from_moves(existing_label_ids)
+            if (remove_sold and self.label_filter != 'inactive')
+            else set()
+        )
 
-        labels = self.env['product.label'].search(domain, order='product_tmpl_id asc, name asc')
+        sold_lines = self.env['branch.label.verification.line']
+        out_of_scope_lines = self.env['branch.label.verification.line']
+        for line in self.line_ids:
+            if not line.label_id:
+                if line.status != 'extra':
+                    loc_id = line.location_id.id if line.location_id else False
+                    if loc_id not in target_loc_ids:
+                        out_of_scope_lines |= line
+                continue
+            lbl = labels_by_id.get(line.label_id.id)
+            if remove_sold:
+                if self.label_filter == 'active':
+                    is_sold = (not lbl) or (not lbl.active) or (lbl.id in customer_sold_ids)
+                elif self.label_filter == 'all':
+                    is_sold = (not lbl) or (line.is_in_stock and not lbl.active) or (lbl.id in customer_sold_ids)
+                else:
+                    is_sold = False
+                if is_sold:
+                    sold_lines |= line
+                    continue
 
-        # Check for bulk stock quants (vault items, old gold, diamond og) in target locations
-        bulk_quants = self.env['stock.quant'].search([
-            ('location_id', 'in', target_locations.ids),
-            ('quantity', '>', 0),
-            '|', '|',
-            ('product_id.product_tmpl_id.is_vault_item', '=', True),
-            ('product_id.product_tmpl_id.is_old_gold', '=', True),
-            ('product_id.product_tmpl_id.is_diamond_og', '=', True),
-        ])
+            if line.status != 'extra':
+                live_loc_id = lbl.branch_location_id.id if (lbl and lbl.branch_location_id) else (line.location_id.id if line.location_id else False)
+                if not lbl or lbl.branch_id.id != self.branch_id.id or live_loc_id not in target_loc_ids:
+                    out_of_scope_lines |= line
 
-        if not labels and not bulk_quants:
+        removed_sold_verified = len(sold_lines.filtered(lambda l: l.status == 'verified'))
+        removed_sold_total = len(sold_lines)
+        removed_out_of_scope_verified = len(out_of_scope_lines.filtered(lambda l: l.status == 'verified'))
+        removed_out_of_scope_total = len(out_of_scope_lines)
+
+        lines_to_remove = sold_lines | out_of_scope_lines
+        if lines_to_remove:
+            # Billing users have perm_unlink=0 on verification lines; verify parent audit write access first.
+            self.check_access_rights('write')
+            self.check_access_rule('write')
+            lines_to_remove.sudo().unlink()
+
+        target_label_by_id = {lbl.id: lbl for lbl in labels}
+        for line in self.line_ids:
+            if not line.label_id:
+                continue
+            lbl = target_label_by_id.get(line.label_id.id)
+            if not lbl:
+                continue
+            update_vals = {}
+            new_loc_id = lbl.branch_location_id.id if lbl.branch_location_id else False
+            if line.location_id.id != new_loc_id:
+                update_vals['location_id'] = new_loc_id
+            if line.status == 'extra':
+                gross_wt = lbl.sale_gross_weight or 0.0
+                tag_wt = lbl.tag_weight or 0.0
+                update_vals.update({
+                    'status': 'verified',
+                    'is_verified': True,
+                    'system_qty': 1.0,
+                    'system_weight': gross_wt,
+                    'system_tag_weight': tag_wt,
+                    'system_total_weight': gross_wt + tag_wt,
+                    'manual_qty': 1.0,
+                    'manual_weight': gross_wt,
+                    'manual_tag_weight': tag_wt,
+                    'manual_total_weight': gross_wt + tag_wt,
+                    'notes': False,
+                })
+            if update_vals:
+                line.write(update_vals)
+
+        remaining_label_ids = set(self.line_ids.mapped('label_id').ids)
+        candidate_new_labels = labels.filtered(lambda lbl: lbl.id not in remaining_label_ids)
+        if candidate_new_labels and self.label_filter != 'inactive':
+            new_customer_sold_ids = self._get_sold_label_ids_from_moves(candidate_new_labels.ids)
+            if new_customer_sold_ids:
+                candidate_new_labels = candidate_new_labels.filtered(lambda lbl: lbl.id not in new_customer_sold_ids)
+        new_lines_vals = [
+            self._prepare_verification_line_vals(lbl)
+            for lbl in candidate_new_labels
+        ]
+        if new_lines_vals:
+            self.env['branch.label.verification.line'].create(new_lines_vals)
+
+        if raise_if_empty and self.location_ids and not self.line_ids and not bulk_quants:
             raise UserError(_("No labels or bulk stock found for branch '%s' matching the selected criteria.") % self.branch_id.name)
 
-        lines_vals = []
-        for lbl in labels:
-            tmpl = lbl.product_tmpl_id or (lbl.product_id.product_tmpl_id if lbl.product_id else False)
-            purity = lbl.purity_id or lbl.sale_purity_id
-            lines_vals.append({
-                'verification_id': self.id,
-                'label_id': lbl.id,
-                'product_id': lbl.product_id.id,
-                'product_tmpl_id': tmpl.id if tmpl else False,
-                'categ_id': lbl.product_id.categ_id.id if lbl.product_id and lbl.product_id.categ_id else False,
-                'purity_id': purity.id if purity else False,
-                'branch_id': lbl.branch_id.id,
-                'location_id': lbl.branch_location_id.id if lbl.branch_location_id else False,
-                'sale_gross_weight': lbl.sale_gross_weight or 0.0,
-                'sale_net_weight': lbl.sale_net_weight or 0.0,
-                'tag_weight': lbl.tag_weight or 0.0,
-                'system_qty': 1.0,
-                'system_weight': lbl.sale_gross_weight or 0.0,
-                'system_tag_weight': lbl.tag_weight or 0.0,
-                'system_total_weight': (lbl.sale_gross_weight or 0.0) + (lbl.tag_weight or 0.0),
-                'manual_qty': 0.0,
-                'manual_weight': 0.0,
-                'manual_tag_weight': 0.0,
-                'manual_total_weight': 0.0,
-                'active': lbl.active,
-                'status': 'pending',
-                'is_verified': False,
-            })
-
-        self.env['branch.label.verification.line'].create(lines_vals)
         self._sync_template_summaries()
-        self.write({
+        preserved_verified = len(self.line_ids.filtered(lambda l: l.status == 'verified'))
+        return {
+            'is_reload': True,
+            'added_total': len(new_lines_vals),
+            'removed_sold_total': removed_sold_total,
+            'removed_sold_verified': removed_sold_verified,
+            'removed_out_of_scope_total': removed_out_of_scope_total,
+            'removed_out_of_scope_verified': removed_out_of_scope_verified,
+            'preserved_verified': preserved_verified,
+        }
+
+    def action_load_branch_labels(self):
+        """Fetch labels for the target branch/locations, preserving existing scan lines on reload.
+
+        On reload (when lines already exist):
+        - Preserves all existing scan/verification lines within the selected target locations.
+        - Removes lines whose location was removed from Target Locations.
+        - Checks existing labels and removes any that became sold (including already verified ones).
+        - Scans each target location for newly arrived labels and adds them as pending lines.
+        - Updates Product Template Summary accordingly.
+        """
+        self.ensure_one()
+        stats = self._sync_labels_with_locations(remove_sold=True, raise_if_empty=True)
+        if not stats['is_reload']:
+            self.with_context(_skip_location_sync=True).write({
+                'state': 'in_progress',
+                'last_scanned_message': _("Loaded %d labels for branch '%s'. Ready for verification.") % (
+                    stats['added_total'],
+                    self.branch_id.name,
+                ),
+                'last_scanned_status': 'success',
+            })
+            return True
+
+        self.with_context(_skip_location_sync=True).write({
             'state': 'in_progress',
-            'last_scanned_message': _("Loaded %d labels for branch '%s'. Ready for verification.") % (len(lines_vals), self.branch_id.name),
+            'last_scanned_message': _(
+                "Reloaded '%s': %d verified scan(s) preserved, %d sold label(s) removed (%d from verified), %d out-of-location label(s) removed, %d new label(s) added."
+            ) % (
+                self.branch_id.name,
+                stats['preserved_verified'],
+                stats['removed_sold_total'],
+                stats['removed_sold_verified'],
+                stats['removed_out_of_scope_total'],
+                stats['added_total'],
+            ),
             'last_scanned_status': 'success',
         })
         return True
@@ -414,6 +662,39 @@ class BranchLabelVerification(models.Model):
                         'type': 'warning',
                     }
                 }
+            elif line.status == 'extra':
+                time_str = fields.Datetime.to_string(line.verified_datetime) if line.verified_datetime else ''
+                user_name = line.verified_by.name if line.verified_by else _('User')
+                other_branch = line.branch_id.name or _('Unknown Branch')
+                msg = _("⚠️ Already Scanned (Extra / %s): '%s' (%s) was flagged at %s by %s.") % (
+                    other_branch,
+                    line.label_id.name or '',
+                    line.product_id.display_name or '',
+                    time_str,
+                    user_name,
+                )
+                vals_to_write.update({
+                    'last_scanned_message': msg,
+                    'last_scanned_status': 'warning',
+                })
+                check.write(vals_to_write)
+                if is_rpc:
+                    return {
+                        'status': 'warning',
+                        'warning': True,
+                        'product': f"{line.label_id.name or ''} (Extra - {other_branch})",
+                        'message': msg,
+                    }
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': _('Extra / Mismatch Label!'),
+                        'message': msg,
+                        'sticky': False,
+                        'type': 'warning',
+                    }
+                }
             else:
                 line.write({
                     'status': 'verified',
@@ -487,7 +768,7 @@ class BranchLabelVerification(models.Model):
                 'sale_gross_weight': external_label.sale_gross_weight or 0.0,
                 'sale_net_weight': external_label.sale_net_weight or 0.0,
                 'tag_weight': external_label.tag_weight or 0.0,
-                'active': external_label.active,
+                'is_in_stock': external_label.active,
                 'status': 'extra',
                 'is_verified': True,
                 'verified_datetime': fields.Datetime.now(),
@@ -597,8 +878,12 @@ class BranchLabelVerification(models.Model):
             'verified_datetime': False,
             'verified_by': False,
         })
-        # Remove extra lines scanned during session
-        self.line_ids.filtered(lambda l: l.status == 'extra').unlink()
+        # Remove extra lines scanned during session (Billing users lack perm_unlink on lines)
+        extra_lines = self.line_ids.filtered(lambda l: l.status == 'extra')
+        if extra_lines:
+            self.check_access_rights('write')
+            self.check_access_rule('write')
+            extra_lines.sudo().unlink()
         self._sync_template_summaries()
         self.state = 'in_progress'
         self.write({
@@ -644,6 +929,13 @@ class BranchLabelVerification(models.Model):
             'target': 'new',
         }
 
+    def action_print_missing_labels(self):
+        """Print PDF report containing only missing labels for the audit."""
+        self.ensure_one()
+        if not self.missing_line_ids:
+            raise UserError(_("There are no missing labels to print."))
+        return self.env.ref('branch_label_verification.action_report_missing_labels').report_action(self)
+
     def _sync_template_summaries(self):
         """Ensure all product templates represented in lines and bulk items (vault, old gold, diamond og)
         have summary records, and sync manual_qty with the count of verified lines."""
@@ -652,21 +944,16 @@ class BranchLabelVerification(models.Model):
 
             # Target locations for bulk items (Vault, Old Gold, Diamond OG)
             if rec.location_ids:
-                bulk_locs = rec.location_ids
-            else:
-                bulk_locs = self.env['stock.location'].search([
-                    ('branch_id', '=', rec.branch_id.id),
-                    ('usage', '=', 'internal')
+                bulk_quants = self.env['stock.quant'].search([
+                    ('location_id', 'in', rec.location_ids.ids),
+                    ('quantity', '>', 0),
+                    '|', '|',
+                    ('product_id.product_tmpl_id.is_vault_item', '=', True),
+                    ('product_id.product_tmpl_id.is_old_gold', '=', True),
+                    ('product_id.product_tmpl_id.is_diamond_og', '=', True),
                 ])
-
-            bulk_quants = self.env['stock.quant'].search([
-                ('location_id', 'in', bulk_locs.ids),
-                ('quantity', '>', 0),
-                '|', '|',
-                ('product_id.product_tmpl_id.is_vault_item', '=', True),
-                ('product_id.product_tmpl_id.is_old_gold', '=', True),
-                ('product_id.product_tmpl_id.is_diamond_og', '=', True),
-            ])
+            else:
+                bulk_quants = self.env['stock.quant']
             bulk_tmpls = bulk_quants.mapped('product_id.product_tmpl_id')
             all_tmpls = templates_in_lines | bulk_tmpls
 
@@ -946,7 +1233,7 @@ class BranchLabelVerificationLine(models.Model):
         digits=(16, 3),
         readonly=True,
     )
-    active = fields.Boolean(
+    is_in_stock = fields.Boolean(
         string='In Stock',
         readonly=True,
     )
@@ -1126,8 +1413,8 @@ class BranchLabelVerificationLine(models.Model):
         return self.action_verify_selected()
 
     def action_verify_selected(self):
-        """Verify all lines in self."""
-        lines_to_verify = self.filtered(lambda l: l.status != 'verified')
+        """Verify all non-extra lines in self."""
+        lines_to_verify = self.filtered(lambda l: l.status not in ('verified', 'extra'))
         if not lines_to_verify:
             return True
         for line in lines_to_verify:
@@ -1392,6 +1679,7 @@ class BranchLabelVerificationTemplateSummary(models.Model):
         'product_tmpl_id.is_old_gold',
         'product_tmpl_id.is_diamond_og',
         'verification_id.state',
+        'verification_id.location_ids',
         'verification_id.line_ids',
         'verification_id.line_ids.status',
         'verification_id.line_ids.sale_gross_weight',
@@ -1409,13 +1697,9 @@ class BranchLabelVerificationTemplateSummary(models.Model):
             # Pre-fetch stock quants for bulk summaries (vault items, old gold, diamond og)
             bulk_summaries = check_summaries.filtered(lambda s: s.is_vault_item or s.is_old_gold or s.is_diamond_og)
             bulk_weight_by_tmpl = {}
-            if bulk_summaries:
-                bulk_locs = check.location_ids if check.location_ids else self.env['stock.location'].search([
-                    ('branch_id', '=', check.branch_id.id),
-                    ('usage', '=', 'internal')
-                ])
+            if bulk_summaries and check.location_ids:
                 quants = self.env['stock.quant'].search([
-                    ('location_id', 'in', bulk_locs.ids),
+                    ('location_id', 'in', check.location_ids.ids),
                     ('quantity', '>', 0),
                     ('product_id.product_tmpl_id', 'in', bulk_summaries.mapped('product_tmpl_id').ids)
                 ])
