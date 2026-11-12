@@ -9,6 +9,7 @@
                 <field name="batch_date"/>
                 <field name="branch_id"/>
                 <field name="company_id" optional="hide"/>
+                <field name="current_location_id" optional="show"/>
                 <field name="purity_id"/>
                 <field name="total_grams"/>
                 <field name="transferred_weight" optional="show"/>
@@ -27,10 +28,12 @@
                 <field name="name"/>
                 <field name="branch_id"/>
                 <field name="company_id"/>
+                <field name="current_location_id"/>
                 <field name="purity_id"/>
                 <group expand="0" string="Group By">
                     <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
                     <filter name="group_by_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
+                    <filter name="group_by_current_location" string="Current Location" context="{'group_by': 'current_location_id'}"/>
                     <filter name="group_by_purity" string="Purity" context="{'group_by': 'purity_id'}"/>
                 </group>
             </search>
@@ -63,6 +66,7 @@
                             <field name="batch_date"/>
                             <field name="branch_id"/>
                             <field name="company_id"/>
+                            <field name="current_location_id" readonly="1"/>
                             <field name="is_diamond_og" invisible="1"/>
                             <field name="is_smith_transfer" widget="boolean_toggle" readonly="smith_transferred" invisible="is_diamond_og"/>
                             <field name="smith_transferred" invisible="1"/>

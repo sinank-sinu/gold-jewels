@@ -54,6 +54,13 @@ class OldGoldBatch(models.Model):
         store=True,
         readonly=False
     )
+    current_location_id = fields.Many2one(
+        'stock.location',
+        string="Current Location",
+        compute="_compute_current_location_id",
+        store=True,
+        readonly=True,
+    )
     refinery_issue_id = fields.Many2one(
             'old.gold.refinery.issue',
             string="Refinery Issue",
@@ -105,6 +112,53 @@ class OldGoldBatch(models.Model):
                     ('company_id', '=', company.id)
                 ], limit=1)
                 record.ho_location_id = loc.id if loc else False
+
+    @api.depends(
+        'ho_location_id',
+        'branch_id.old_gold_location_id',
+        'total_grams',
+        'smith_transferred',
+        'transfer_picking_ids.state',
+        'transfer_picking_ids.location_dest_id',
+        'refinery_issue_id.state',
+        'refinery_issue_id.source_location_id',
+        'refinery_issue_id.received_location_id',
+        'mo_id.state',
+        'mo_id.location_dest_id',
+    )
+    def _compute_current_location_id(self):
+        StockPicking = self.env['stock.picking'].sudo()
+        for record in self:
+            location = False
+            if (record.total_grams or 0.0) <= 0.0001:
+                done_pickings = record.transfer_picking_ids.filtered(lambda p: p.state == 'done')
+                if not done_pickings and record.id:
+                    done_pickings = StockPicking.search([
+                        ('state', '=', 'done'),
+                        '|',
+                        ('batch_id', '=', record.id),
+                        ('batch_ids', 'in', [record.id]),
+                    ])
+                if done_pickings:
+                    latest_picking = done_pickings.sorted(
+                        key=lambda p: (p.date_done or p.create_date or fields.Datetime.now(), p.id),
+                        reverse=True,
+                    )[:1]
+                    location = latest_picking.location_dest_id
+
+            if not location and record.refinery_issue_id:
+                if record.refinery_issue_id.state in ('melting', 'issued', 'received') and record.refinery_issue_id.received_location_id:
+                    location = record.refinery_issue_id.received_location_id
+                elif record.refinery_issue_id.source_location_id:
+                    location = record.refinery_issue_id.source_location_id
+
+            if not location and record.mo_id and record.mo_id.state == 'done' and record.mo_id.location_dest_id:
+                location = record.mo_id.location_dest_id
+
+            if not location:
+                location = record.ho_location_id or record.branch_id.old_gold_location_id
+
+            record.current_location_id = location.id if location else False
 
     def _get_old_gold_product(self, is_diamond_og=False):
         self.ensure_one()
