@@ -1,23 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <odoo>
-
-    <!-- Menu for Label Users under Product Labels App -->
     <menuitem
-        id="menu_purchase_jobwork_label_summary_product_label"
-        name="Purchase / Job Work Label Summary"
+        id="menu_label_report"
+        name="Reporting"
         parent="ornament_label.menu_product_label_app"
-        action="action_label_summary_wizard"
-        groups="custom_label_user.group_product_label_user,base.group_system"
+        groups="em_jewellery_management.group_jewellery_manager,custom_label_user.group_product_label_user,em_jewellery_management.label_user_purchase"
         sequence="40"/>
 
     <!-- Menu for Managers under Jewellery > Reporting -->
     <menuitem
         id="menu_purchase_jobwork_label_summary"
         name="Purchase / Job Work Label Summary"
-        parent="old_gold_xlsx_report.menu_jewellery_reporting_root"
+        parent="menu_label_report"
         action="action_label_summary_wizard"
         groups="em_jewellery_management.group_jewellery_manager,base.group_system"
         sequence="50"/>
+
+
+      <menuitem
+        id="menu_label_closing_stock_report"
+        name="Label Closing Stock Report"
+        parent="menu_label_report"
+        action="product_label_report_xlsx.action_product_label_report_wizard"
+        groups="em_jewellery_management.group_jewellery_manager,em_jewellery_management.label_user_purchase"
+        sequence="40"/>
+
+      <menuitem
+        id="menu_product_label_variant_report_label_user"
+        name="Label Closing Stock Report (With Variants &amp; Vendor)"
+        parent="menu_label_report"
+        action="product_label_variant_report_xlsx.action_product_label_variant_report_wizard"
+        groups="em_jewellery_management.label_user_purchase,em_jewellery_management.group_jewellery_manager"
+        sequence="60"/>
 
 </odoo>
