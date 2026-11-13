@@ -108,17 +108,34 @@ class StockPicking(models.Model):
             lbl = getattr(move, 'label_id', False)
             product = move.product_id
 
-            gross_wt = 0.0
-            if lbl:
-                gross_wt = getattr(lbl, 'sale_gross_weight', 0.0) or getattr(lbl, 'purchase_gross_weight', 0.0) or getattr(move, 'label_weight', 0.0) or move.quantity or move.product_uom_qty
+            move_gross = getattr(move, 'gross_weight', 0.0)
+            if move_gross:
+                gross_wt = move_gross
+                stone_wt = getattr(move, 'stone_weight', 0.0) or 0.0
+                diamond_wt = getattr(move, 'diamond_weight', 0.0) or 0.0
+                net_wt = getattr(move, 'net_weight', 0.0) or 0.0
+            elif lbl:
+                gross_wt = (
+                    getattr(lbl, 'sale_gross_weight', 0.0)
+                    or getattr(lbl, 'purchase_gross_weight', 0.0)
+                    or getattr(lbl, 'tag_weight', 0.0)
+                    or getattr(move, 'label_weight', 0.0)
+                    or move.quantity
+                    or move.product_uom_qty
+                    or 0.0
+                )
+                stone_wt = getattr(lbl, 'sale_stone_weight', 0.0) or getattr(lbl, 'purchase_stone_weight', 0.0) or 0.0
+                diamond_wt = getattr(lbl, 'sale_diamond_weight_gm', 0.0) or getattr(lbl, 'purchase_diamond_weight_gm', 0.0) or 0.0
+                net_wt = (
+                    getattr(lbl, 'sale_net_weight', 0.0)
+                    or getattr(lbl, 'purchase_net_weight', 0.0)
+                    or max(0.0, gross_wt - stone_wt - diamond_wt)
+                )
             else:
                 gross_wt = getattr(move, 'label_weight', 0.0) or move.quantity or move.product_uom_qty or 0.0
-
-            net_wt = 0.0
-            if lbl:
-                net_wt = getattr(lbl, 'sale_net_weight', 0.0) or getattr(lbl, 'purchase_net_weight', 0.0) or gross_wt
-            else:
-                net_wt = gross_wt
+                stone_wt = getattr(move, 'stone_weight', 0.0) or 0.0
+                diamond_wt = getattr(move, 'diamond_weight', 0.0) or 0.0
+                net_wt = max(0.0, gross_wt - stone_wt - diamond_wt)
 
             pieces = getattr(move, 'pieces', 0) if getattr(move, 'pieces', 0) else (1 if lbl else int(move.quantity or move.product_uom_qty or 1))
 
@@ -129,11 +146,15 @@ class StockPicking(models.Model):
                     'product_name': clean_name,
                     'pieces': 0,
                     'gross_weight': 0.0,
+                    'stone_weight': 0.0,
+                    'diamond_weight': 0.0,
                     'net_weight': 0.0,
                 }
             g = grouped[clean_name]
             g['pieces'] += pieces
             g['gross_weight'] = round(g['gross_weight'] + gross_wt, 3)
+            g['stone_weight'] = round(g['stone_weight'] + stone_wt, 3)
+            g['diamond_weight'] = round(g['diamond_weight'] + diamond_wt, 3)
             g['net_weight'] = round(g['net_weight'] + net_wt, 3)
 
             purity = getattr(move, 'purity_id', False) or (getattr(lbl, 'purity_id', False) or getattr(lbl, 'sale_purity_id', False) if lbl else False)
@@ -143,6 +164,8 @@ class StockPicking(models.Model):
                 'product_name': clean_name,
                 'purity': purity.name if purity else '-',
                 'gross_weight': round(gross_wt, 3),
+                'stone_weight': round(stone_wt, 3),
+                'diamond_weight': round(diamond_wt, 3),
                 'net_weight': round(net_wt, 3),
             })
 
@@ -154,17 +177,23 @@ class StockPicking(models.Model):
                 'product_name': g['product_name'],
                 'pieces': g['pieces'],
                 'gross_weight': g['gross_weight'],
+                'stone_weight': g['stone_weight'],
+                'diamond_weight': g['diamond_weight'],
                 'net_weight': g['net_weight'],
             })
             sl_no += 1
 
         total_pieces = sum(l['pieces'] for l in summary_lines)
         total_gross_weight = round(sum(l['gross_weight'] for l in summary_lines), 3)
+        total_stone_weight = round(sum(l['stone_weight'] for l in summary_lines), 3)
+        total_diamond_weight = round(sum(l['diamond_weight'] for l in summary_lines), 3)
         total_net_weight = round(sum(l['net_weight'] for l in summary_lines), 3)
 
         totals = {
             'total_pieces': total_pieces,
             'total_gross_weight': total_gross_weight,
+            'total_stone_weight': total_stone_weight,
+            'total_diamond_weight': total_diamond_weight,
             'total_net_weight': total_net_weight,
         }
 
