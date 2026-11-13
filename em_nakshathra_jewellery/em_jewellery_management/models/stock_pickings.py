@@ -276,6 +276,45 @@ class StockMove(models.Model):
     pieces = fields.Integer(string="Pc", compute="_compute_label_info", store=True, readonly=False)
     label_weight = fields.Float(string="Weight", digits=(16, 3), compute="_compute_label_info", store=True,
                                 readonly=False)
+    stone_weight = fields.Float(string="Stone Weight", digits=(16, 3), compute="_compute_label_weights",
+                                 store=True, readonly=False)
+    net_weight = fields.Float(string="Net Weight", digits=(16, 3), compute="_compute_net_weight",
+                              store=True, readonly=False)
+    gross_weight = fields.Float(string="Gross Weight", digits=(16, 3), compute="_compute_label_weights",
+                                 store=True, inverse="_inverse_gross_weight", readonly=False)
+    diamond_weight = fields.Float(string="Diamond Weight", digits=(16, 3), compute="_compute_label_weights",
+                                  store=True, readonly=False)
+
+    @api.depends('label_id', 'label_id.purchase_stone_weight', 'label_id.sale_stone_weight',
+                 'label_id.purchase_net_weight', 'label_id.sale_net_weight',
+                 'label_id.purchase_gross_weight', 'label_id.sale_gross_weight',
+                 'label_id.purchase_diamond_weight_gm', 'label_id.sale_diamond_weight_gm',
+                 'product_uom_qty', 'quantity')
+    def _compute_label_weights(self):
+        for move in self:
+            label = move.label_id
+            if label:
+                stone_weight =  label.sale_stone_weight or label.purchase_stone_weight
+                diamond_weight =  label.sale_diamond_weight_gm or label.purchase_diamond_weight_gm
+                gross_weight =  label.sale_gross_weight or label.purchase_gross_weight or label.tag_weight
+            else:
+                # Keep manually entered stone and diamond weights on unlabeled moves.
+                stone_weight = move.stone_weight or 0.0
+                diamond_weight = move.diamond_weight or 0.0
+                gross_weight = move.product_uom_qty or move.quantity or 0.0
+
+            move.stone_weight = stone_weight
+            move.diamond_weight = diamond_weight
+            move.gross_weight = gross_weight
+
+    @api.depends('gross_weight', 'stone_weight', 'diamond_weight')
+    def _compute_net_weight(self):
+        for move in self:
+            move.net_weight = (move.gross_weight or 0.0) - (move.stone_weight or 0.0) - (move.diamond_weight or 0.0)
+
+    def _inverse_gross_weight(self):
+        for move in self.filtered(lambda rec: not rec.label_id):
+            move.product_uom_qty = move.gross_weight
 
     @api.depends('label_id', 'product_uom_qty', 'quantity')
     def _compute_label_info(self):
