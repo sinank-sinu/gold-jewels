@@ -5,6 +5,7 @@ from odoo import models, fields, api, _
 class AccountPayment(models.Model):
     _inherit = 'account.payment'
 
+    phone = fields.Char(string="Phone Number", copy=False, tracking=True)
     sale_id = fields.Many2one('sale.order', string="Sales Order", readonly=True)
     invoice_id = fields.Many2one(
         'account.move',
@@ -13,12 +14,103 @@ class AccountPayment(models.Model):
         readonly=False,
     )
 
+    @staticmethod
+    def _normalize_phone_digits(value):
+        digits = ''.join(filter(str.isdigit, (value or '').strip()))
+        return digits[-10:] if len(digits) >= 10 else digits
+
+    def _sync_phone_to_partner(self):
+        for payment in self:
+            if payment.is_internal_transfer or not payment.partner_id or not payment.phone:
+                continue
+            partner = payment.partner_id
+            vals_to_write = {}
+            if not partner.phone:
+                vals_to_write['phone'] = payment.phone
+            if not partner.mobile:
+                vals_to_write['mobile'] = payment.phone
+            if vals_to_write:
+                try:
+                    partner.sudo().write(vals_to_write)
+                except Exception:
+                    pass
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('partner_id') and not vals.get('phone') and not vals.get('is_internal_transfer'):
+                partner = self.env['res.partner'].browse(vals['partner_id'])
+                vals['phone'] = partner.phone or partner.mobile or False
+        payments = super().create(vals_list)
+        payments._sync_phone_to_partner()
+        return payments
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'phone' in vals or 'partner_id' in vals:
+            self._sync_phone_to_partner()
+        return res
+
+    @api.onchange('phone')
+    def _onchange_phone_set_partner(self):
+        for rec in self:
+            if rec.is_internal_transfer or rec.state != 'draft' or not rec.phone:
+                continue
+
+            search_digits = self._normalize_phone_digits(rec.phone)
+            if not search_digits:
+                continue
+
+            rank_column = 'supplier_rank' if rec.partner_type == 'supplier' else 'customer_rank'
+            self.env.cr.execute(f"""
+                SELECT id FROM res_partner
+                WHERE COALESCE(active, true) = true
+                  AND (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                    OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+                ORDER BY {rank_column} DESC, id DESC
+                LIMIT 1
+            """, (f"%{search_digits}%", f"%{search_digits}%"))
+            partner_res = self.env.cr.fetchone()
+
+            if partner_res:
+                rec.partner_id = partner_res[0]
+            elif not rec.partner_id:
+                partner_label = _("Vendor") if rec.partner_type == 'supplier' else _("Customer")
+                return {
+                    'warning': {
+                        'title': _("New %s") % partner_label,
+                        'message': _(
+                            "No existing %s found with phone number: %s. "
+                            "Please enter or select the %s in the %s field."
+                        ) % (partner_label.lower(), rec.phone, partner_label.lower(), partner_label),
+                    }
+                }
+
+    @api.onchange('partner_id')
+    def _onchange_partner_set_phone(self):
+        for rec in self:
+            if rec.is_internal_transfer or not rec.partner_id:
+                rec.phone = False
+                continue
+
+            current_phone = self._normalize_phone_digits(rec.phone)
+            valid_phones = [
+                self._normalize_phone_digits(p)
+                for p in (rec.partner_id.phone, rec.partner_id.mobile)
+                if p
+            ]
+            valid_phones = [p for p in valid_phones if p]
+
+            if not current_phone or current_phone not in valid_phones:
+                rec.phone = rec.partner_id.phone or rec.partner_id.mobile or False
+
     @api.onchange('invoice_id')
     def _onchange_invoice_id(self):
         if self.invoice_id:
             inv = self.invoice_id
             if inv.partner_id:
                 self.partner_id = inv.partner_id
+                self.phone = inv.partner_id.phone or inv.partner_id.mobile or False
             if inv.custom_total < 0:
                 self.amount = abs(inv.custom_total)
             elif inv.amount_total < 0:
