@@ -11,6 +11,15 @@ class StockPicking(models.Model):
         help="Indicates this picking is related to Old Gold movement"
     )
     sale_old_id = fields.Many2one('sale.order', ondelete='cascade')
+    batch_id = fields.Many2one('old.gold.batch', string="Batch")
+    batch_ids = fields.Many2many(
+        'old.gold.batch',
+        'stock_picking_old_gold_batch_rel',
+        'picking_id',
+        'batch_id',
+        string="Batches",
+    )
+    batch_smith_processed = fields.Boolean(string="Batch Smith Processed", default=False, copy=False)
     old_gold_issue_id = fields.Many2one(
         'old.gold.refinery.issue',
         string="Old Gold Issue"
@@ -155,7 +164,59 @@ class StockPicking(models.Model):
                         transfer_ref
                     ))
 
-        return super().button_validate()
+        res = super().button_validate()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _action_done(self):
+        res = super()._action_done()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _process_old_gold_batch_transfer_done(self):
+        for picking in self:
+            if picking.batch_smith_processed:
+                continue
+            batches = picking.batch_id | picking.batch_ids
+            if not batches:
+                continue
+
+            done_moves = picking.move_ids.filtered(lambda m: m.state == 'done')
+            batch_qty_map = {}
+            for move in done_moves:
+                qty = move.quantity or move.product_uom_qty
+                if qty <= 0:
+                    continue
+                target_batch = move.batch_id or picking.batch_id
+                if target_batch:
+                    batch_qty_map[target_batch] = batch_qty_map.get(target_batch, 0.0) + qty
+
+                line = getattr(move, 'old_gold_line_id', False)
+                if line:
+                    line.sudo().write({
+                        'transferred_weight': (line.transferred_weight or 0.0) + qty,
+                        'gross_weight': max(0.0, (line.gross_weight or 0.0) - qty),
+                        'verified_gross_weight': max(0.0, (line.verified_gross_weight or 0.0) - qty),
+                    })
+
+            if not batch_qty_map:
+                continue
+
+            for batch, transfer_qty in batch_qty_map.items():
+                new_transferred = (batch.transferred_weight or 0.0) + transfer_qty
+                new_total_grams = max(0.0, (batch.total_grams or 0.0) - transfer_qty)
+                batch.sudo().write({
+                    'transferred_weight': new_transferred,
+                    'total_transferred_weight': new_transferred,
+                    'total_grams': new_total_grams,
+                    'smith_transferred': True if new_total_grams <= 0.0001 else batch.smith_transferred,
+                })
+
+            picking.batch_smith_processed = True
 
     def _auto_allocate_available_stock(self):
         """
@@ -203,8 +264,11 @@ class StockPicking(models.Model):
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
+    barcode = fields.Char(string="Barcode", copy=False)
     purity_id = fields.Many2one('gold.purity')
     grams = fields.Float(string="Grams", digits=(16, 3))
+    old_gold_line_id = fields.Many2one('sale.old.gold.line', string="Old Gold Line")
+    batch_id = fields.Many2one('old.gold.batch', string="Old Gold Batch")
     label_id = fields.Many2one(
         'product.label',
         string="Label",
@@ -212,6 +276,45 @@ class StockMove(models.Model):
     pieces = fields.Integer(string="Pc", compute="_compute_label_info", store=True, readonly=False)
     label_weight = fields.Float(string="Weight", digits=(16, 3), compute="_compute_label_info", store=True,
                                 readonly=False)
+    stone_weight = fields.Float(string="Stone Weight", digits=(16, 3), compute="_compute_label_weights",
+                                 store=True, readonly=False)
+    net_weight = fields.Float(string="Net Weight", digits=(16, 3), compute="_compute_net_weight",
+                              store=True, readonly=False)
+    gross_weight = fields.Float(string="Gross Weight", digits=(16, 3), compute="_compute_label_weights",
+                                 store=True, inverse="_inverse_gross_weight", readonly=False)
+    diamond_weight = fields.Float(string="Diamond Weight", digits=(16, 3), compute="_compute_label_weights",
+                                  store=True, readonly=False)
+
+    @api.depends('label_id', 'label_id.purchase_stone_weight', 'label_id.sale_stone_weight',
+                 'label_id.purchase_net_weight', 'label_id.sale_net_weight',
+                 'label_id.purchase_gross_weight', 'label_id.sale_gross_weight',
+                 'label_id.purchase_diamond_weight_gm', 'label_id.sale_diamond_weight_gm',
+                 'product_uom_qty', 'quantity')
+    def _compute_label_weights(self):
+        for move in self:
+            label = move.label_id
+            if label:
+                stone_weight =  label.sale_stone_weight or label.purchase_stone_weight
+                diamond_weight =  label.sale_diamond_weight_gm or label.purchase_diamond_weight_gm
+                gross_weight =  label.sale_gross_weight or label.purchase_gross_weight or label.tag_weight
+            else:
+                # Keep manually entered stone and diamond weights on unlabeled moves.
+                stone_weight = move.stone_weight or 0.0
+                diamond_weight = move.diamond_weight or 0.0
+                gross_weight = move.product_uom_qty or move.quantity or 0.0
+
+            move.stone_weight = stone_weight
+            move.diamond_weight = diamond_weight
+            move.gross_weight = gross_weight
+
+    @api.depends('gross_weight', 'stone_weight', 'diamond_weight')
+    def _compute_net_weight(self):
+        for move in self:
+            move.net_weight = (move.gross_weight or 0.0) - (move.stone_weight or 0.0) - (move.diamond_weight or 0.0)
+
+    def _inverse_gross_weight(self):
+        for move in self.filtered(lambda rec: not rec.label_id):
+            move.product_uom_qty = move.gross_weight
 
     @api.depends('label_id', 'product_uom_qty', 'quantity')
     def _compute_label_info(self):
@@ -262,13 +365,10 @@ class StockMove(models.Model):
             if not self.product_id and self.label_id.product_id:
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
-            weight = self.label_id.purchase_gross_weight or self.label_id.sale_gross_weight or self.label_id.tag_weight or 1.0
-            if not self.sale_line_id and not (self.picking_id and self.picking_id.picking_type_id.code == 'outgoing'):
-                self.product_uom_qty = weight
-            self.label_weight = weight
-            self.pieces = 1
-        else:
-            self.pieces = 0
+            self.product_uom_qty = self.label_id.purchase_gross_weight
+            self.barcode = self.label_id.barcode or self.label_id.barcode2 or self.product_id.barcode or ''
+        elif self.product_id:
+            self.barcode = self.product_id.barcode or ''
 
     @api.constrains('label_id', 'state')
     def _check_label_single_active_transfer(self):
@@ -404,6 +504,7 @@ class StockMove(models.Model):
 class StockMoveLine(models.Model):
     _inherit = 'stock.move.line'
 
+    barcode = fields.Char(string="Barcode", related='move_id.barcode', store=True, readonly=True)
     branch_id = fields.Many2one(
         'res.branch', 
         string='Branch', 

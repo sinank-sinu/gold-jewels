@@ -9,9 +9,12 @@
                 <field name="batch_date"/>
                 <field name="branch_id"/>
                 <field name="company_id" optional="hide"/>
+                <field name="current_location_id" optional="show"/>
                 <field name="purity_id"/>
                 <field name="total_grams"/>
+                <field name="transferred_weight" optional="show"/>
                 <field name="total_purchase_amount"/>
+                <field name="transfer_picking_ids" widget="many2many_tags" string="Transfer Reference" optional="show"/>
                 <field name="refinery_issue_id"/>
             </tree>
         </field>
@@ -25,10 +28,12 @@
                 <field name="name"/>
                 <field name="branch_id"/>
                 <field name="company_id"/>
+                <field name="current_location_id"/>
                 <field name="purity_id"/>
                 <group expand="0" string="Group By">
                     <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
                     <filter name="group_by_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
+                    <filter name="group_by_current_location" string="Current Location" context="{'group_by': 'current_location_id'}"/>
                     <filter name="group_by_purity" string="Purity" context="{'group_by': 'purity_id'}"/>
                 </group>
             </search>
@@ -40,22 +45,42 @@
         <field name="model">old.gold.batch</field>
         <field name="arch" type="xml">
             <form string="Old Gold Batch">
+                <header>
+                    <button name="action_open_smith_transfer_wizard"
+                            type="object"
+                            string="Transfer to Smith"
+                            class="btn-primary"
+                            invisible="is_diamond_og or not is_smith_transfer or total_grams &lt;= 0"/>
+                </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_transfers"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-truck"
+                                string="Transfers"/>
+                    </div>
                     <group>
                         <group>
                             <field name="name"/>
                             <field name="batch_date"/>
                             <field name="branch_id"/>
                             <field name="company_id"/>
+                            <field name="current_location_id" readonly="1"/>
+                            <field name="is_diamond_og" invisible="1"/>
+                            <field name="is_smith_transfer" widget="boolean_toggle" readonly="smith_transferred" invisible="is_diamond_og"/>
+                            <field name="smith_transferred" invisible="1"/>
                         </group>
                         <group>
                             <field name="purity_id"/>
-                            <field name="total_grams" readonly = "1"/>
+                            <field name="total_grams" readonly="1"/>
+                            <field name="transferred_weight" readonly="1" invisible="not smith_transferred and transferred_weight == 0"/>
                             <field name="total_purchase_amount"/>
                         </group>
                         <group string="Links">
                             <field name="mo_id" readonly="1"/>
                             <field name="refinery_issue_id" readonly="1"/>
+                            <field name="transfer_picking_ids" widget="many2many_tags" string="Transfer Reference" readonly="1"/>
                         </group>
                     </group>
                 </sheet>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Template for DateTimeFilterWizardDialog -->
+    <t t-name="em_jewellery_management.DateTimeFilterWizardDialog">
+        <Dialog size="'md'" title="'Filter by Date &amp; Time'">
+            <div class="p-2">
+                <!-- Field Selector if more than 1 field -->
+                <div class="mb-3" t-if="props.fields.length > 1">
+                    <label class="form-label fw-bold small text-muted">Field to Filter</label>
+                    <select class="form-select" t-model="state.fieldName">
+                        <t t-foreach="props.fields" t-as="f" t-key="f.name">
+                            <option t-att-value="f.name" t-esc="f.string"/>
+                        </t>
+                    </select>
+                </div>
+
+                <!-- From & To Inputs -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small text-muted">
+                            <i class="fa fa-calendar text-primary me-1"/> From (Date &amp; Time)
+                        </label>
+                        <input type="datetime-local"
+                               class="form-control"
+                               t-model="state.from"/>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small text-muted">
+                            <i class="fa fa-calendar text-primary me-1"/> To (Date &amp; Time)
+                        </label>
+                        <input type="datetime-local"
+                               class="form-control"
+                               t-model="state.to"/>
+                    </div>
+                </div>
+
+                <!-- Presets -->
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="small text-muted fw-semibold me-1">Quick Select:</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0"
+                            t-on-click="() => this.setPreset('today')">Today</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0"
+                            t-on-click="() => this.setPreset('yesterday')">Yesterday</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0"
+                            t-on-click="() => this.setPreset('this_week')">This Week</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-2 py-0"
+                            t-on-click="() => this.setPreset('clear')">Clear</button>
+                </div>
+
+                <div t-if="state.error" class="alert alert-danger py-1 px-2 small mb-0 mt-2">
+                    <t t-esc="state.error"/>
+                </div>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="btn btn-primary px-4"
+                        t-att-disabled="!state.from and !state.to"
+                        t-on-click="onApply">
+                    <i class="fa fa-filter me-1"/> Apply Filter
+                </button>
+                <button class="btn btn-secondary" t-on-click="() => this.props.close()">
+                    Cancel
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+    <!-- SearchBarMenu Extension (ONLY for Old Gold Purchase) -->
+    <t t-inherit="web.SearchBarMenu" t-inherit-mode="extension">
+        <xpath expr="//*[contains(@class, 'o_add_custom_filter')]" position="after">
+            <t t-if="hasDateTimeFields">
+                <DropdownItem class="'o_menu_item o_add_datetime_filter'"
+                              onSelected.bind="onOpenDateTimeFilterWizard">
+                    <i class="fa fa-calendar me-2"/>Date &amp; Time Filter
+                </DropdownItem>
+            </t>
+        </xpath>
+    </t>
+
+</templates>
+

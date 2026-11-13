@@ -60,6 +60,7 @@ class StockPicking(models.Model):
             'location_id': picking.location_id.id,
             'location_dest_id': picking.location_dest_id.id,
             'company_id': picking.company_id.id,
+            'barcode': barcode,
         }
         
         if label:

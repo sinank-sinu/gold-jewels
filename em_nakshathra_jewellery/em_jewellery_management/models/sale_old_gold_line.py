@@ -8,7 +8,7 @@ class OldGoldPurchase(models.Model):
 
     partner_id = fields.Many2one('res.partner', required=True)
     name = fields.Char("name")
-    date = fields.Date("date")
+    date = fields.Datetime("Date", default=fields.Datetime.now)
     company_id = fields.Many2one(
         'res.company',
         string='Company',
@@ -321,34 +321,19 @@ class OldGoldPurchase(models.Model):
 
 class SaleOldGoldLine(models.Model):
     _name = 'sale.old.gold.line'
-    _description = 'Old Gold Purchase Line'
-    _order = 'date desc, id desc'
+
 
     sale_id = fields.Many2one('sale.order')
-    old_gold_purchase_id = fields.Many2one('old.gold.purchase', string="Old Gold Purchase", ondelete='cascade')
-    is_smith_transfer = fields.Boolean(related='old_gold_purchase_id.is_smith_transfer', string="Smith Transfer Required")
+    old_gold_purchase_id = fields.Many2one('old.gold.purchase')
+    is_smith_transfer = fields.Boolean(
+        string="Smith Transfer Required",
+        compute='_compute_is_smith_transfer',
+        store=True,
+    )
+
+
     batch_id = fields.Many2one('old.gold.batch', string="Batch")
 
-    partner_id = fields.Many2one(
-        related='old_gold_purchase_id.partner_id',
-        string='Partner',
-        store=True,
-    )
-    date = fields.Date(
-        related='old_gold_purchase_id.date',
-        string='Date',
-        store=True,
-    )
-    company_id = fields.Many2one(
-        related='old_gold_purchase_id.company_id',
-        string='Company',
-        store=True,
-    )
-    state = fields.Selection(
-        related='old_gold_purchase_id.state',
-        string='Status',
-        store=True,
-    )
 
     purity_id = fields.Many2one('gold.purity', required=True)
     is_diamond_og = fields.Boolean(
@@ -363,6 +348,14 @@ class SaleOldGoldLine(models.Model):
         compute='_compute_location_id',
         store=True,
     )
+
+    @api.depends('batch_id.is_smith_transfer', 'old_gold_purchase_id.is_smith_transfer')
+    def _compute_is_smith_transfer(self):
+        for line in self:
+            line.is_smith_transfer = (
+                line.batch_id.is_smith_transfer if line.batch_id
+                else (line.old_gold_purchase_id.is_smith_transfer if line.old_gold_purchase_id else False)
+            )
 
     def action_view_old_gold_purchase(self):
         self.ensure_one()
@@ -424,6 +417,11 @@ class SaleOldGoldLine(models.Model):
 
     rate = fields.Float()
     diamond_amount = fields.Float(string="Diamond Amount")
+    amount_rounding = fields.Float(
+        string="Round Off",
+        default=0.0,
+        help="Enter a signed adjustment, for example -5.50 to reduce the OG amount by 5.50.",
+    )
 
     amount = fields.Float(string="Amount", compute='_compute_amount', store=True, readonly=False)
 
@@ -432,6 +430,10 @@ class SaleOldGoldLine(models.Model):
     ho_transfer_id = fields.Many2one('stock.picking', readonly=True)
     branch_id = fields.Many2one(related='old_gold_purchase_id.branch_id', string='Branch',
                                 store=True)
+    partner_id = fields.Many2one(related='old_gold_purchase_id.partner_id', string='Customer', store=True)
+    date = fields.Datetime(related='old_gold_purchase_id.date', string='Date', store=True)
+    company_id = fields.Many2one(related='old_gold_purchase_id.company_id', string='Company', store=True)
+    state = fields.Selection(related='old_gold_purchase_id.state', string='Status', store=True)
 
     verified_purity_id = fields.Many2one('gold.purity', string="Verified Purity")
     verified_gross_weight = fields.Float(string="Verified Gross Weight", digits=(16, 3))
@@ -472,13 +474,13 @@ class SaleOldGoldLine(models.Model):
             r.net_weight = r.gross_weight - r.stone_weight
 
 
-    @api.depends('net_weight', 'rate', 'diamond_amount')
+    @api.depends('net_weight', 'rate', 'diamond_amount', 'amount_rounding')
     def _compute_amount(self):
         for rec in self:
             if not self.env.context.get('skip_old_gold_amount_compute'):
-                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount + rec.amount_rounding
             elif not rec.amount:
-                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount + rec.amount_rounding
 
     @api.onchange('purity_id')
     def _onchange_purity(self):
