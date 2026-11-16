@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_product_label_create_internal_transfer" model="ir.actions.server">
+        <field name="name">Create Internal Transfer</field>
+        <field name="model_id" ref="em_jewellery_management.model_product_label"/>
+        <field name="binding_model_id" ref="em_jewellery_management.model_product_label"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="groups_id" eval="[(4, ref('stock.group_stock_user'))]"/>
+        <field name="state">code</field>
+        <field name="code">action = records.action_create_internal_transfer()</field>
+    </record>
+</odoo>
+

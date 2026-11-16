@@ -7,6 +7,7 @@
     'data': [
         'security/ir.model.access.csv',
         'wizard/stock_cutpiece_transfer_wizard_views.xml',
+        'views/product_label_views.xml',
         'views/res_branch_views.xml',
         'views/sale_order_views.xml',
         'views/stock_quant_views.xml',

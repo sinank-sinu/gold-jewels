@@ -31,7 +31,7 @@
         name="Label Closing Stock Report (With Variants &amp; Vendor)"
         parent="menu_label_report"
         action="product_label_variant_report_xlsx.action_product_label_variant_report_wizard"
-        groups="em_jewellery_management.label_user_purchase,em_jewellery_management.group_jewellery_manager"
+        groups="em_jewellery_management.label_user_purchase,em_jewellery_management.group_jewellery_manager,base.group_system"
         sequence="60"/>
 
 </odoo>

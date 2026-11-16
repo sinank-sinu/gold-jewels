@@ -40,7 +40,11 @@ class ProductLabelVariantReportWizard(models.TransientModel):
 
     def action_print_report(self):
         self.ensure_one()
-        if not self.env.user.has_group("product_label_variant_report_xlsx.group_product_label_variant_report"):
+        if not (
+            self.env.user.has_group("product_label_variant_report_xlsx.group_product_label_variant_report")
+            or self.env.user.has_group("em_jewellery_management.group_jewellery_manager")
+            or self.env.user.has_group("em_jewellery_management.label_user_purchase")
+        ):
             raise UserError(_("You are not authorized to access this report."))
 
         today = fields.Date.today()
@@ -60,16 +64,36 @@ class ProductLabelVariantReportWizard(models.TransientModel):
         quants = self.env['stock.quant'].sudo().search([
             ('location_id', 'in', loc_ids), ('quantity', '>', 0)
         ])
-        sold_after = self.env['sale.order.line'].sudo().search([
-            ('label_id', '!=', False), ('state', '=', 'sale'), ('order_id.date_order', '>', self.start_datetime)
-        ])
-
-        # 3. Candidate labels and historical locations
-        candidates = self.env['product.label'].sudo().search([
+        # Match the standard closing stock report: include inactive labels and
+        # determine whether each label was active at the report cutoff.
+        candidates = self.env['product.label'].sudo().with_context(active_test=False).search([
             ('create_date', '<=', self.start_datetime),
-            ('active', '=', True),
-            # ('id', 'in', sold_after.mapped('label_id').ids) no need sold after logic , active labels
         ])
+        tracking_model = self.env['mail.tracking.value'].sudo()
+        tracking_values = tracking_model.search([
+            ('field_id.model', '=', 'product.label'),
+            ('field_id.name', '=', 'active'),
+            ('mail_message_id.model', '=', 'product.label'),
+            ('mail_message_id.res_id', 'in', candidates.ids),
+        ])
+        tracking_values = tracking_values.sorted(
+            key=lambda tracking: (
+                tracking.mail_message_id.date or datetime.min,
+                tracking.mail_message_id.id,
+                tracking.id,
+            )
+        )
+        active_at_cutoff = {}
+        active_before_cutoff = {}
+        for tracking in tracking_values:
+            label_id = tracking.mail_message_id.res_id
+            message_date = tracking.mail_message_id.date
+            if message_date and message_date <= self.start_datetime:
+                active_before_cutoff[label_id] = bool(tracking.new_value_integer)
+            elif message_date:
+                active_at_cutoff.setdefault(label_id, bool(tracking.old_value_integer))
+        active_at_cutoff.update(active_before_cutoff)
+
         label_moves = self.env['stock.move'].sudo().search([
             ('label_id', 'in', candidates.ids), ('state', '=', 'done')
         ], order='date asc')
@@ -82,6 +106,8 @@ class ProductLabelVariantReportWizard(models.TransientModel):
 
         labels, label_locations, label_branches = [], {}, {}
         for l in candidates:
+            if not active_at_cutoff.get(l.id, l.active):
+                continue
             lm, fm = last_move.get(l.id), first_move.get(l.id)
             loc = lm.location_dest_id if lm else (fm.location_id if fm else l.branch_location_id)
             branch = (loc.branch_id or lm.branch_id) if lm else ((loc.branch_id or fm.branch_id) if fm else (loc.branch_id or l.branch_id))
