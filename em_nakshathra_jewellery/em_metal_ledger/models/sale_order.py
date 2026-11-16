@@ -164,7 +164,12 @@ class SaleOrderMetalLedger(models.Model):
 
         po = self.purchase_order_id
 
-        if self.origin and not self.unfix:
+        # Metal ledger is ONLY for Unfix transactions:
+        #   - SO generated from a PO where PO.unfix = True
+        #   - SO generated from an Unfix invoice (from_invoice + unfix)
+        # Normal retail/branch sales (no PO / PO not unfix) must be skipped.
+        is_unfix = bool(po and po.unfix) or bool(self.from_invoice and self.unfix)
+        if not is_unfix:
             return
         # Skip old-gold and sale-return orders, plus orders linked to an old-gold PO.
         if self.has_old_gold or self.is_sale_return or (po and po.is_old_gold):
