@@ -10,6 +10,12 @@ class PurchaseRegisterXlsx(models.AbstractModel):
     _description = 'Purchase Register XLSX Report'
 
     def generate_xlsx_report(self, workbook, data, objects):
+        # Only confirmed (Purchase Order) and Locked orders:
+        # exclude RFQ, RFQ Sent, To Approve and Cancelled
+        if not objects and data and data.get('po_ids'):
+            objects = self.env['purchase.order'].browse(data['po_ids'])
+        objects = objects.filtered(lambda o: o.state in ('purchase', 'done'))
+
         sheet = workbook.add_worksheet('Purchase Register')
         
         # Define formats

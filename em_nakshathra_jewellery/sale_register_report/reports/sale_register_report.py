@@ -10,6 +10,11 @@ class SaleRegisterXlsx(models.AbstractModel):
     _description = 'Sale Register XLSX Report'
 
     def generate_xlsx_report(self, workbook, data, objects):
+        # Only confirmed orders (locked orders also stay in 'sale'): exclude Quotation, Quotation Sent and Cancelled
+        if not objects and data and data.get('so_ids'):
+            objects = self.env['sale.order'].browse(data['so_ids'])
+        objects = objects.filtered(lambda o: o.state == 'sale')
+
         sheet = workbook.add_worksheet('Sale Register')
         
         # Define formats
