@@ -1,2 +1,7 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_product_label_import_wizard,access.product.label.import.wizard,model_product_label_import_wizard,base.group_user,1,1,1,1
+access_product_label_import_wizard_jewellery_manager,access.product.label.import.wizard.jewellery.manager,model_product_label_import_wizard,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_product_label_import_wizard_stock_manager,access.product.label.import.wizard.stock.manager,model_product_label_import_wizard,stock.group_stock_manager,1,1,1,1
+access_product_label_import_wizard_admin,access.product.label.import.wizard.admin,model_product_label_import_wizard,base.group_system,1,1,1,1
+access_product_label_import_failed_line_jewellery_manager,access.product.label.import.failed.line.jewellery.manager,model_product_label_import_failed_line,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_product_label_import_failed_line_stock_manager,access.product.label.import.failed.line.stock.manager,model_product_label_import_failed_line,stock.group_stock_manager,1,1,1,1
+access_product_label_import_failed_line_admin,access.product.label.import.failed.line.admin,model_product_label_import_failed_line,base.group_system,1,1,1,1

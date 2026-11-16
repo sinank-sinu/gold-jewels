@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="product_label_http_import.ImportProgressPoller">
+        <div class="w-100 my-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold">
+                    <t t-if="isRunning">
+                        <i class="fa fa-spinner fa-spin me-2 text-primary"/>
+                        <span>Importing Labels... (<t t-esc="processedRows"/> / <t t-esc="totalRows"/>)</span>
+                    </t>
+                    <t t-elif="stateName === 'done'">
+                        <i class="fa fa-check-circle me-2 text-success"/>
+                        <span>Import Completed (<t t-esc="processedRows"/> / <t t-esc="totalRows"/>)</span>
+                    </t>
+                    <t t-elif="stateName === 'failed'">
+                        <i class="fa fa-exclamation-triangle me-2 text-danger"/>
+                        <span>Import Failed</span>
+                    </t>
+                </span>
+                <span class="badge bg-primary fs-6"><t t-esc="progressPct"/>%</span>
+            </div>
+            <div class="progress" style="height: 22px; border-radius: 6px;">
+                <div
+                    t-attf-class="progress-bar #{isRunning ? 'progress-bar-striped progress-bar-animated bg-primary' : (stateName === 'done' ? 'bg-success' : 'bg-danger')}"
+                    role="progressbar"
+                    t-attf-style="width: #{progressPct}%;"
+                    t-att-aria-valuenow="progressPct"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                >
+                    <span class="fw-bold"><t t-esc="progressPct"/>%</span>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>
+
