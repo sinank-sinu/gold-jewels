@@ -49,150 +49,160 @@ class ProductLabelReportWizard(models.TransientModel):
             loc_domain.append(('branch_id', 'in', self.branch_ids.ids))
         locations = self.env['stock.location'].sudo().search(loc_domain)
         loc_ids = locations.ids
+        loc_ids_set = set(loc_ids)
+        loc_by_id = {loc.id: loc for loc in locations}
+        loc_branch_id_map = {loc.id: loc.branch_id.id for loc in locations}
+        loc_complete_name_map = {loc.id: (loc.complete_name or "") for loc in locations}
+        branch_name_map = {
+            b.id: (b.name or "")
+            for b in self.env['res.branch'].sudo().search([])
+        }
+        purity_name_map = {
+            p.id: (p.name or "")
+            for p in self.env['gold.purity'].sudo().search([])
+        }
+
         # Only vault-item quants are needed for the unlabeled vault sheet.
         quants = self.env['stock.quant'].sudo().search([
             ('location_id', 'in', loc_ids),
             ('quantity', '>', 0),
             ('product_id.product_tmpl_id.is_vault_item', '=', True)
-        ])
+        ]) if loc_ids else self.env['stock.quant'].sudo()
 
         import pytz
         local_start_dt = fields.Datetime.context_timestamp(self, self.start_datetime)
+
         # Include inactive labels too; stock moves determine their location at the cutoff.
-        labels_domain = [
-            ('create_date', '<=', self.start_datetime),
-        ]
-        candidates = self.env['product.label'].sudo().with_context(active_test=False).search(labels_domain)
+        # Use direct SQL queries instead of ORM recordset prefetching to avoid MemoryError on large datasets.
         active_at_cutoff = {}
-        tracking_model = self.env['mail.tracking.value'].sudo()
-        tracking_domain = [
-            ('field_id.model', '=', 'product.label'),
-            ('field_id.name', '=', 'active'),
-            ('mail_message_id.model', '=', 'product.label'),
-            ('mail_message_id.res_id', 'in', candidates.ids),
-        ]
-        tracking_values = tracking_model.search(tracking_domain)
-        tracking_values = tracking_values.sorted(
-            key=lambda tracking: (
-                tracking.mail_message_id.date or datetime.min,
-                tracking.mail_message_id.id,
-                tracking.id,
-            )
-        )
         active_before_cutoff = {}
-        for tracking in tracking_values:
-            label_id = tracking.mail_message_id.res_id
-            message_date = tracking.mail_message_id.date
+        self.env.cr.execute("""
+            SELECT mm.res_id, mm.date, mtv.old_value_integer, mtv.new_value_integer
+            FROM mail_tracking_value mtv
+            JOIN ir_model_fields imf ON mtv.field_id = imf.id
+            JOIN mail_message mm ON mtv.mail_message_id = mm.id
+            JOIN product_label pl ON mm.res_id = pl.id
+            WHERE imf.model = 'product.label'
+              AND imf.name = 'active'
+              AND mm.model = 'product.label'
+              AND pl.create_date <= %s
+            ORDER BY COALESCE(mm.date, '-infinity'::timestamp) ASC, mm.id ASC, mtv.id ASC
+        """, (self.start_datetime,))
+        for label_id, message_date, old_val, new_val in self.env.cr.fetchall():
             if message_date and message_date <= self.start_datetime:
-                active_before_cutoff[label_id] = bool(tracking.new_value_integer)
+                active_before_cutoff[label_id] = bool(new_val)
             elif message_date:
-                active_at_cutoff.setdefault(
-                    label_id,
-                    bool(tracking.old_value_integer),
-                )
+                active_at_cutoff.setdefault(label_id, bool(old_val))
         active_at_cutoff.update(active_before_cutoff)
+        del active_before_cutoff
 
-        # Get all stock moves for these candidate labels
-        label_moves = self.env['stock.move'].sudo().search([
-            ('label_id', 'in', candidates.ids),
-            ('state', '=', 'done')
-        ], order='date asc')
-
-        # Pre-process label moves in a single pass to avoid looping and list comprehensions
+        # Get first and last done stock moves per candidate label via SQL without ORM prefetch
         first_move_by_label = {}
         last_move_before_by_label = {}
-        for m in label_moves:
-            label_id = m.label_id.id
+        self.env.cr.execute("""
+            SELECT sm.label_id, sm.date, sm.location_id, sm.location_dest_id, sm.branch_id
+            FROM stock_move sm
+            JOIN product_label pl ON sm.label_id = pl.id
+            WHERE sm.state = 'done'
+              AND sm.label_id IS NOT NULL
+              AND pl.create_date <= %s
+            ORDER BY sm.date ASC, sm.id ASC
+        """, (self.start_datetime,))
+        for label_id, m_date, loc_id, loc_dest_id, m_branch_id in self.env.cr.fetchall():
             if label_id not in first_move_by_label:
-                first_move_by_label[label_id] = m
-            if m.date <= self.start_datetime:
-                last_move_before_by_label[label_id] = m
+                first_move_by_label[label_id] = (loc_id, m_branch_id)
+            if m_date <= self.start_datetime:
+                last_move_before_by_label[label_id] = (loc_dest_id, m_branch_id)
 
-        labels = []
-        label_locations = {}
-        label_branches = {}
+        valid_label_ids = []
+        label_loc_id_map = {}
+        label_branch_id_map = {}
+        branch_filter_set = set(self.branch_ids.ids) if self.branch_ids else None
 
-        for label in candidates:
-            if not active_at_cutoff.get(label.id, label.active):
-                continue
+        if loc_ids_set:
+            self.env.cr.execute("""
+                SELECT id, active, branch_location_id, branch_id
+                FROM product_label
+                WHERE create_date <= %s
+                ORDER BY id ASC
+            """, (self.start_datetime,))
+            for label_id, is_active, branch_loc_id, label_branch_id in self.env.cr.fetchall():
+                if not active_at_cutoff.get(label_id, bool(is_active)):
+                    continue
 
-            # Find the last move of this label done before or at start_datetime
-            last_move = last_move_before_by_label.get(label.id)
-            if last_move:
-                historical_loc = last_move.location_dest_id
-                historical_branch = historical_loc.branch_id or last_move.branch_id
-            else:
-                first_move = first_move_by_label.get(label.id)
-                if first_move:
-                    historical_loc = first_move.location_id
-                    historical_branch = historical_loc.branch_id or first_move.branch_id
+                # Find the last move of this label done before or at start_datetime
+                last_move = last_move_before_by_label.get(label_id)
+                if last_move:
+                    hist_loc_id, fallback_branch_id = last_move
                 else:
-                    historical_loc = label.branch_location_id
-                    historical_branch = historical_loc.branch_id or label.branch_id
+                    first_move = first_move_by_label.get(label_id)
+                    if first_move:
+                        hist_loc_id, fallback_branch_id = first_move
+                    else:
+                        hist_loc_id, fallback_branch_id = branch_loc_id, label_branch_id
 
-            # Filter by branch / location
-            if historical_loc.id not in loc_ids:
-                continue
-            if self.branch_ids and historical_branch.id not in self.branch_ids.ids:
-                continue
+                # Filter by branch / location
+                if not hist_loc_id or hist_loc_id not in loc_ids_set:
+                    continue
+                hist_branch_id = loc_branch_id_map.get(hist_loc_id) or fallback_branch_id
+                if branch_filter_set and hist_branch_id not in branch_filter_set:
+                    continue
 
-            labels.append(label)
-            label_locations[label.id] = historical_loc
-            label_branches[label.id] = historical_branch
+                valid_label_ids.append(label_id)
+                label_loc_id_map[label_id] = hist_loc_id
+                label_branch_id_map[label_id] = hist_branch_id
+
+        del active_at_cutoff
+        del first_move_by_label
+        del last_move_before_by_label
 
         # Collect current quant information
         current_quant_qty = {(q.product_id.id, q.location_id.id): q.quantity for q in quants}
         current_quant_in_date = {(q.product_id.id, q.location_id.id): q.in_date for q in quants}
         current_quant_create_date = {(q.product_id.id, q.location_id.id): q.create_date for q in quants}
 
-        # Collect all unique (product, location) pairs for vault items.
-        prod_loc_pairs = set()
+        # Collect all unique (product_id, location_id) pairs for vault items.
+        prod_loc_id_pairs = set()
         for q in quants:
-            prod_loc_pairs.add((q.product_id, q.location_id))
+            prod_loc_id_pairs.add((q.product_id.id, q.location_id.id))
 
-        # Query all completed done stock moves of vault items in the selected locations
-        vault_product_moves = self.env['stock.move'].sudo().search([
-            ('product_id.product_tmpl_id.is_vault_item', '=', True),
-            ('state', '=', 'done'),
-            '|',
-            ('location_id', 'in', loc_ids),
-            ('location_dest_id', 'in', loc_ids)
-        ], order='date asc')
-
-        # Build dictionaries to quickly look up incoming and outgoing quantities after start_datetime
+        # Query all completed done stock moves of vault items in the selected locations via SQL
         incoming_after = {}
         outgoing_after = {}
-        for m in vault_product_moves:
-            if m.date <= self.start_datetime:
-                continue
-            prod_id = m.product_id.id
-            qty = m.product_qty
-            if m.location_dest_id.id in loc_ids:
-                key = (prod_id, m.location_dest_id.id)
-                incoming_after[key] = incoming_after.get(key, 0.0) + qty
-            if m.location_id.id in loc_ids:
-                key = (prod_id, m.location_id.id)
-                outgoing_after[key] = outgoing_after.get(key, 0.0) + qty
-
-        for m in vault_product_moves:
-            if m.location_id.id in loc_ids:
-                prod_loc_pairs.add((m.product_id, m.location_id))
-            if m.location_dest_id.id in loc_ids:
-                prod_loc_pairs.add((m.product_id, m.location_dest_id))
-
-        # Group vault product moves by product ID for quick lookups
-        vault_moves_by_product = {}
-        for m in vault_product_moves:
-            vault_moves_by_product.setdefault(m.product_id.id, []).append(m)
-
-        # Pre-group vault moves before or at start_datetime by product ID and destination location
         vault_moves_before_by_product = {}
         vault_moves_dest_before_by_product_loc = {}
-        for m in vault_product_moves:
-            if m.date <= self.start_datetime:
-                vault_moves_before_by_product.setdefault(m.product_id.id, []).append(m)
-                key_loc = (m.product_id.id, m.location_dest_id.id)
-                vault_moves_dest_before_by_product_loc.setdefault(key_loc, []).append(m)
+
+        if loc_ids:
+            self.env.cr.execute("""
+                SELECT sm.product_id, sm.location_id, sm.location_dest_id, sm.product_qty, sm.date
+                FROM stock_move sm
+                JOIN product_product pp ON sm.product_id = pp.id
+                JOIN product_template pt ON pp.product_tmpl_id = pt.id
+                WHERE pt.is_vault_item IS TRUE
+                  AND sm.state = 'done'
+                  AND (sm.location_id IN %s OR sm.location_dest_id IN %s)
+                ORDER BY sm.date ASC, sm.id ASC
+            """, (tuple(loc_ids), tuple(loc_ids)))
+            for prod_id, m_loc_id, m_loc_dest_id, qty, m_date in self.env.cr.fetchall():
+                qty = qty or 0.0
+                if m_loc_id in loc_ids_set:
+                    prod_loc_id_pairs.add((prod_id, m_loc_id))
+                if m_loc_dest_id in loc_ids_set:
+                    prod_loc_id_pairs.add((prod_id, m_loc_dest_id))
+
+                if m_date > self.start_datetime:
+                    if m_loc_dest_id in loc_ids_set:
+                        key = (prod_id, m_loc_dest_id)
+                        incoming_after[key] = incoming_after.get(key, 0.0) + qty
+                    if m_loc_id in loc_ids_set:
+                        key = (prod_id, m_loc_id)
+                        outgoing_after[key] = outgoing_after.get(key, 0.0) + qty
+                else:
+                    vault_moves_before_by_product.setdefault(prod_id, []).append(
+                        (m_loc_id, m_loc_dest_id, qty, m_date)
+                    )
+                    key_loc = (prod_id, m_loc_dest_id)
+                    vault_moves_dest_before_by_product_loc.setdefault(key_loc, []).append(m_date)
 
         class HistoricalQuantMock:
             def __init__(self, product, location, qty, in_date, branch=None, label_no="", is_labeled=False,
@@ -213,11 +223,17 @@ class ProductLabelReportWizard(models.TransientModel):
                 self.other = other
                 self.net = net
 
+        vault_product_ids = list({pid for pid, _ in prod_loc_id_pairs})
+        vault_products_by_id = {
+            p.id: p for p in self.env['product.product'].sudo().browse(vault_product_ids)
+        } if vault_product_ids else {}
+
         # Collect vault items
         unlabeled_quants = []
-        for product, location in prod_loc_pairs:
-            # Check if this product is a vault item
-            if not product.is_vault_item:
+        for prod_id, loc_id in prod_loc_id_pairs:
+            product = vault_products_by_id.get(prod_id)
+            location = loc_by_id.get(loc_id)
+            if not product or not location or not product.is_vault_item:
                 continue
 
             key = (product.id, location.id)
@@ -225,8 +241,8 @@ class ProductLabelReportWizard(models.TransientModel):
             # If the product type is 'consu' (Consumable), compute historical qty directly from moves
             if product.detailed_type == 'consu' or product.type == 'consu':
                 moves_before = vault_moves_before_by_product.get(product.id, [])
-                in_qty = sum(m.product_qty for m in moves_before if m.location_dest_id.id == location.id)
-                out_qty = sum(m.product_qty for m in moves_before if m.location_id.id == location.id)
+                in_qty = sum(m_qty for _, m_dest_id, m_qty, _ in moves_before if m_dest_id == location.id)
+                out_qty = sum(m_qty for m_src_id, _, m_qty, _ in moves_before if m_src_id == location.id)
                 historical_qty = in_qty - out_qty
             else:
                 current_qty = current_quant_qty.get(key, 0.0)
@@ -238,7 +254,7 @@ class ProductLabelReportWizard(models.TransientModel):
                 if product.detailed_type == 'consu' or product.type == 'consu':
                     moves_before_dest = vault_moves_dest_before_by_product_loc.get(key, [])
                     if moves_before_dest:
-                        in_date = moves_before_dest[0].date
+                        in_date = moves_before_dest[0]
                 else:
                     in_date = current_quant_in_date.get(key) or current_quant_create_date.get(key)
 
@@ -397,96 +413,148 @@ class ProductLabelReportWizard(models.TransientModel):
         tot_other = 0.0
         tot_net = 0.0
 
-        for label in labels:
-            ws1.row_dimensions[row_idx].height = 20
+        label_model = self.env['product.label'].sudo().with_context(active_test=False)
+        has_product_template_id = 'product_template_id' in label_model._fields
+        label_read_fields = [
+            'create_date', 'name', 'barcode', 'barcode2',
+            'product_id', 'product_tmpl_id', 'purity_id',
+            'purchase_gross_weight', 'purchase_diamond_weight_gm',
+            'purchase_diamond_weight_ct', 'purchase_stone_weight',
+            'other_weight_g', 'purchase_net_weight',
+        ]
+        if has_product_template_id:
+            label_read_fields.append('product_template_id')
 
-            # Receipt Date
-            receipt_date_val = get_date_from_val(label.create_date) or today
-            receipt_date_str = receipt_date_val.strftime('%d-%b-%y')
+        product_info_cache = {}
+        template_name_cache = {}
+        batch_size = 2000
 
-            # Aging Days
-            days = (local_start_dt.date() - receipt_date_val).days + 1
-            if days < 0:
-                days = 0
+        for start_idx in range(0, len(valid_label_ids), batch_size):
+            batch_ids = valid_label_ids[start_idx:start_idx + batch_size]
+            batch_rows = label_model.browse(batch_ids).read(label_read_fields, load='_classic_write')
 
-            # Variety Name
-            variety_name = label.product_id.display_name or ""
+            missing_prod_ids = {
+                r['product_id'] for r in batch_rows
+                if r.get('product_id') and r['product_id'] not in product_info_cache
+            }
+            if missing_prod_ids:
+                for p in self.env['product.product'].sudo().with_context(active_test=False).browse(list(missing_prod_ids)):
+                    product_info_cache[p.id] = (
+                        p.display_name or "",
+                        p.product_tmpl_id.name if p.product_tmpl_id else "",
+                    )
 
-            # Item Name resolution
-            item_name = ""
-            if label.product_template_id:
-                item_name = label.product_template_id.name
-            elif label.product_tmpl_id:
-                item_name = label.product_tmpl_id.name
-            elif label.product_id and label.product_id.product_tmpl_id:
-                item_name = label.product_id.product_tmpl_id.name
+            missing_tmpl_ids = set()
+            for r in batch_rows:
+                t1 = r.get('product_template_id')
+                t2 = r.get('product_tmpl_id')
+                if t1 and t1 not in template_name_cache:
+                    missing_tmpl_ids.add(t1)
+                if t2 and t2 not in template_name_cache:
+                    missing_tmpl_ids.add(t2)
+            if missing_tmpl_ids:
+                for t in self.env['product.template'].sudo().with_context(active_test=False).browse(list(missing_tmpl_ids)):
+                    template_name_cache[t.id] = t.name or ""
 
-            # Values
-            pcs = 1
-            gross = label.purchase_gross_weight or 0.0
-            diamond_g = label.purchase_diamond_weight_gm or 0.0
-            diamond_ct = label.purchase_diamond_weight_ct or 0.0
-            stone = label.purchase_stone_weight or 0.0
-            other = label.other_weight_g or 0.0
-            net = label.purchase_net_weight or 0.0
+            for row in batch_rows:
+                label_id = row['id']
+                ws1.row_dimensions[row_idx].height = 20
 
-            tot_pcs += pcs
-            tot_gross += gross
-            tot_diamond_g += diamond_g
-            tot_diamond_ct += diamond_ct
-            tot_stone += stone
-            tot_other += other
-            tot_net += net
+                # Receipt Date
+                receipt_date_val = get_date_from_val(row.get('create_date')) or today
+                receipt_date_str = receipt_date_val.strftime('%d-%b-%y')
 
-            # Write data row
-            ws1.cell(row=row_idx, column=1, value=receipt_date_str).alignment = align_center
-            ws1.cell(row=row_idx, column=2, value=label.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=3, value=label.barcode or "").alignment = align_center
-            ws1.cell(row=row_idx, column=4, value=label.barcode2 or "").alignment = align_center
-            ws1.cell(row=row_idx, column=5, value=item_name or "").alignment = align_left
-            ws1.cell(row=row_idx, column=6, value=variety_name or "").alignment = align_left
-            ws1.cell(row=row_idx, column=7, value=label.purity_id.name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=8, value=label_branches[label.id].name or "").alignment = align_center
-            ws1.cell(row=row_idx, column=9, value=label_locations[label.id].complete_name or "").alignment = align_center
+                # Aging Days
+                days = (local_start_dt.date() - receipt_date_val).days + 1
+                if days < 0:
+                    days = 0
 
-            c_pcs = ws1.cell(row=row_idx, column=10, value=pcs)
-            c_pcs.alignment = align_right
-            c_pcs.number_format = "#,##0"
+                prod_id = row.get('product_id')
+                prod_display_name, prod_tmpl_name = product_info_cache.get(prod_id, ("", ""))
 
-            c_gross = ws1.cell(row=row_idx, column=11, value=gross)
-            c_gross.alignment = align_right
-            c_gross.number_format = "#,##0.000"
+                # Variety Name
+                variety_name = prod_display_name
 
-            c_di_g = ws1.cell(row=row_idx, column=12, value=diamond_g)
-            c_di_g.alignment = align_right
-            c_di_g.number_format = "#,##0.000"
+                # Item Name resolution
+                item_name = ""
+                if row.get('product_template_id'):
+                    item_name = template_name_cache.get(row['product_template_id'], "")
+                elif row.get('product_tmpl_id'):
+                    item_name = template_name_cache.get(row['product_tmpl_id'], "")
+                elif prod_tmpl_name:
+                    item_name = prod_tmpl_name
 
-            c_di_ct = ws1.cell(row=row_idx, column=13, value=diamond_ct)
-            c_di_ct.alignment = align_right
-            c_di_ct.number_format = "#,##0.00"
+                # Values
+                pcs = 1
+                gross = row.get('purchase_gross_weight') or 0.0
+                diamond_g = row.get('purchase_diamond_weight_gm') or 0.0
+                diamond_ct = row.get('purchase_diamond_weight_ct') or 0.0
+                stone = row.get('purchase_stone_weight') or 0.0
+                other = row.get('other_weight_g') or 0.0
+                net = row.get('purchase_net_weight') or 0.0
 
-            c_stone = ws1.cell(row=row_idx, column=14, value=stone)
-            c_stone.alignment = align_right
-            c_stone.number_format = "#,##0.000"
+                tot_pcs += pcs
+                tot_gross += gross
+                tot_diamond_g += diamond_g
+                tot_diamond_ct += diamond_ct
+                tot_stone += stone
+                tot_other += other
+                tot_net += net
 
-            c_other = ws1.cell(row=row_idx, column=15, value=other)
-            c_other.alignment = align_right
-            c_other.number_format = "#,##0.000"
+                hist_branch_id = label_branch_id_map.get(label_id)
+                hist_loc_id = label_loc_id_map.get(label_id)
 
-            c_net = ws1.cell(row=row_idx, column=16, value=net)
-            c_net.alignment = align_right
-            c_net.number_format = "#,##0.000"
+                # Write data row
+                ws1.cell(row=row_idx, column=1, value=receipt_date_str).alignment = align_center
+                ws1.cell(row=row_idx, column=2, value=row.get('name') or "").alignment = align_center
+                ws1.cell(row=row_idx, column=3, value=row.get('barcode') or "").alignment = align_center
+                ws1.cell(row=row_idx, column=4, value=row.get('barcode2') or "").alignment = align_center
+                ws1.cell(row=row_idx, column=5, value=item_name or "").alignment = align_left
+                ws1.cell(row=row_idx, column=6, value=variety_name or "").alignment = align_left
+                ws1.cell(row=row_idx, column=7, value=purity_name_map.get(row.get('purity_id'), "")).alignment = align_center
+                ws1.cell(row=row_idx, column=8, value=branch_name_map.get(hist_branch_id, "")).alignment = align_center
+                ws1.cell(row=row_idx, column=9, value=loc_complete_name_map.get(hist_loc_id, "")).alignment = align_center
 
-            c_days = ws1.cell(row=row_idx, column=17, value=days)
-            c_days.alignment = align_right
-            c_days.number_format = "#,##0"
+                c_pcs = ws1.cell(row=row_idx, column=10, value=pcs)
+                c_pcs.alignment = align_right
+                c_pcs.number_format = "#,##0"
 
-            for col in range(1, 18):
-                cell = ws1.cell(row=row_idx, column=col)
-                cell.font = font_data
-                cell.border = border_all_cells
+                c_gross = ws1.cell(row=row_idx, column=11, value=gross)
+                c_gross.alignment = align_right
+                c_gross.number_format = "#,##0.000"
 
-            row_idx += 1
+                c_di_g = ws1.cell(row=row_idx, column=12, value=diamond_g)
+                c_di_g.alignment = align_right
+                c_di_g.number_format = "#,##0.000"
+
+                c_di_ct = ws1.cell(row=row_idx, column=13, value=diamond_ct)
+                c_di_ct.alignment = align_right
+                c_di_ct.number_format = "#,##0.00"
+
+                c_stone = ws1.cell(row=row_idx, column=14, value=stone)
+                c_stone.alignment = align_right
+                c_stone.number_format = "#,##0.000"
+
+                c_other = ws1.cell(row=row_idx, column=15, value=other)
+                c_other.alignment = align_right
+                c_other.number_format = "#,##0.000"
+
+                c_net = ws1.cell(row=row_idx, column=16, value=net)
+                c_net.alignment = align_right
+                c_net.number_format = "#,##0.000"
+
+                c_days = ws1.cell(row=row_idx, column=17, value=days)
+                c_days.alignment = align_right
+                c_days.number_format = "#,##0"
+
+                for col in range(1, 18):
+                    cell = ws1.cell(row=row_idx, column=col)
+                    cell.font = font_data
+                    cell.border = border_all_cells
+
+                row_idx += 1
+
+            self.env.invalidate_all()
 
         # Sheet 1 Totals
         ws1.row_dimensions[row_idx].height = 22
