@@ -301,24 +301,73 @@ class BranchPaymentBalanceDashboard extends Component {
         });
     }
 
-    openJournalLedger(journalId) {
-        if (!journalId) return;
+    openJournalLedger(journalId, accountId = null, accountName = '') {
+        const liquidityAccIds = (this.state.data && this.state.data.liquidity_account_ids && this.state.data.liquidity_account_ids.length)
+            ? this.state.data.liquidity_account_ids
+            : (accountId ? [accountId] : []);
         const domain = [
-            ["journal_id", "=", journalId],
             ["parent_state", "=", "posted"],
+            ["statement_line_id", "=", false],
         ];
+        if (journalId) {
+            domain.push(["journal_id", "=", journalId]);
+        }
+        if (liquidityAccIds.length) {
+            domain.push(["account_id", "in", liquidityAccIds]);
+        }
         if (this.state.dateFrom) {
             domain.push(["date", ">=", this.state.dateFrom]);
         }
         if (this.state.dateTo) {
             domain.push(["date", "<=", this.state.dateTo]);
         }
+        const titleName = accountName ? `${accountName} - Ledger` : "Journal Items";
         this.action.doAction({
-            name: "Journal Items (" + this.formatDate(this.state.dateFrom) + " - " + this.formatDate(this.state.dateTo) + ")",
+            name: `${titleName} (${this.formatDate(this.state.dateFrom)} - ${this.formatDate(this.state.dateTo)})`,
             type: "ir.actions.act_window",
             res_model: "account.move.line",
             views: [[false, "list"], [false, "form"]],
             domain: domain,
+            context: {
+                search_default_posted: 1,
+            },
+            target: "current",
+        });
+    }
+
+    openUnreconciledLedger(journalId = null, journalName = '') {
+        const categoryData = this.getSelectedCategoryData();
+        const outstandingAccIds = (this.state.data && this.state.data.outstanding_account_ids && this.state.data.outstanding_account_ids.length)
+            ? this.state.data.outstanding_account_ids
+            : [];
+        const domain = [
+            ["parent_state", "=", "posted"],
+            ["statement_line_id", "=", false],
+            ["reconciled", "=", false],
+        ];
+        if (journalId) {
+            domain.push(["journal_id", "=", journalId]);
+        } else if (categoryData && categoryData.journals_list && categoryData.journals_list.length) {
+            const jIds = categoryData.journals_list.map((j) => j.id);
+            domain.push(["journal_id", "in", jIds]);
+        }
+        if (outstandingAccIds.length) {
+            domain.push(["account_id", "in", outstandingAccIds]);
+        }
+        if (this.state.dateTo) {
+            domain.push(["date", "<=", this.state.dateTo]);
+        }
+        const label = journalName || (categoryData && categoryData.name) || "Journal";
+        this.action.doAction({
+            name: `${label} - Unreconciled Items (Up to ${this.formatDate(this.state.dateTo)})`,
+            type: "ir.actions.act_window",
+            res_model: "account.move.line",
+            views: [[false, "list"], [false, "form"]],
+            domain: domain,
+            context: {
+                search_default_posted: 1,
+                search_default_unreconciled: 1,
+            },
             target: "current",
         });
     }

@@ -2,7 +2,6 @@
 import io
 import json
 from datetime import datetime, date
-from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 
@@ -95,18 +94,13 @@ class BranchPaymentBalanceReport(models.TransientModel):
 
     def _get_liquidity_account_ids(self):
         """
-        Fetch all liquidity accounts (Bank & Cash accounts, Suspense, and Outstanding Payment/Receipt accounts).
-        In Odoo 17, account.payment posts to Outstanding Receipts / Payments accounts (account_type = 'asset_current').
+        Fetch all liquidity accounts (journal default accounts and payment method
+        Outstanding Payment/Receipt accounts) for bank & cash journals.
         """
         self.env.cr.execute("""
-            SELECT DISTINCT aa.id
+            SELECT DISTINCT aj.default_account_id
             FROM account_journal aj
-            JOIN account_account aa ON (
-                aa.id = aj.default_account_id 
-                OR aa.id = aj.suspense_account_id
-                OR aa.account_type = 'asset_cash'
-            )
-            WHERE aj.type IN ('bank', 'cash')
+            WHERE aj.type IN ('bank', 'cash') AND aj.default_account_id IS NOT NULL
             UNION
             SELECT DISTINCT apml.payment_account_id
             FROM account_payment_method_line apml
@@ -114,12 +108,26 @@ class BranchPaymentBalanceReport(models.TransientModel):
             WHERE aj.type IN ('bank', 'cash') AND apml.payment_account_id IS NOT NULL
         """)
         account_ids = set(r[0] for r in self.env.cr.fetchall())
-        for company in self.env['res.company'].search([]):
-            if hasattr(company, 'account_journal_payment_debit_account_id') and company.account_journal_payment_debit_account_id:
-                account_ids.add(company.account_journal_payment_debit_account_id.id)
-            if hasattr(company, 'account_journal_payment_credit_account_id') and company.account_journal_payment_credit_account_id:
-                account_ids.add(company.account_journal_payment_credit_account_id.id)
+        for company in self.env['res.company'].sudo().search([]):
+            c = company.with_company(company)
+            if hasattr(c, 'account_journal_payment_debit_account_id') and c.account_journal_payment_debit_account_id:
+                account_ids.add(c.account_journal_payment_debit_account_id.id)
+            if hasattr(c, 'account_journal_payment_credit_account_id') and c.account_journal_payment_credit_account_id:
+                account_ids.add(c.account_journal_payment_credit_account_id.id)
         return list(account_ids)
+
+    def _get_outstanding_account_ids(self, liquidity_acc_ids=None):
+        """Return reconcilable outstanding receipt/payment account IDs among liquidity accounts."""
+        if liquidity_acc_ids is None:
+            liquidity_acc_ids = self._get_liquidity_account_ids()
+        if not liquidity_acc_ids:
+            return [0]
+        self.env.cr.execute("""
+            SELECT id FROM account_account
+            WHERE id IN %s AND reconcile = TRUE
+        """, [tuple(liquidity_acc_ids)])
+        ids = [r[0] for r in self.env.cr.fetchall() if r[0]]
+        return ids or [0]
 
     @api.model
     def get_balance_summary(self, branch_id=None, date_from=None, date_to=None):
@@ -160,95 +168,153 @@ class BranchPaymentBalanceReport(models.TransientModel):
         liquidity_acc_ids = self._get_liquidity_account_ids()
         if not liquidity_acc_ids:
             return {'error': 'No liquidity accounts found.'}
+        outstanding_acc_ids = self._get_outstanding_account_ids(liquidity_acc_ids)
+
+        # Normalize date bounds; Opening Balance is cumulative across all prior days (date < date_from)
+        try:
+            d_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+            d_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            d_from = today
+            d_to = today
+        if d_to < d_from:
+            d_from, d_to = d_to, d_from
+        date_from = d_from.strftime('%Y-%m-%d')
+        date_to = d_to.strftime('%Y-%m-%d')
 
         # Build branch filter clause
         branch_clause = ""
         params_open = [tuple(liquidity_acc_ids), date_from]
         params_period = [tuple(liquidity_acc_ids), date_from, date_to]
+        params_unrec = [tuple(outstanding_acc_ids), date_to]
 
         if branch_ids_to_filter:
-            branch_clause = "AND COALESCE(aml.branch_id, am.branch_id, aj.branch_id) IN %s"
+            branch_clause = "AND aj.branch_id IN %s"
             params_open.append(tuple(branch_ids_to_filter))
             params_period.append(tuple(branch_ids_to_filter))
+            params_unrec.append(tuple(branch_ids_to_filter))
 
         # Categorization SQL logic:
-        # 1) Card: journal name/code contains card/pos or line contains card
-        # 2) UPI: journal name/code contains upi/gpay/phonepe or line contains upi
+        # 1) Card: journal name/code contains card/pos
+        # 2) UPI: journal name/code contains upi/gpay/phonepe
         # 3) Cash: journal type is cash or name contains cash
         # 4) Bank: journal type is bank (default)
         cat_expression = """
             CASE 
-                WHEN lower(aj.name::text) LIKE '%%card%%' OR lower(aj.code::text) LIKE '%%card%%' 
-                     OR lower(COALESCE(aml.name, '')) LIKE '%%card%%' 
-                     OR lower(COALESCE(aml.ref, '')) LIKE '%%card%%' THEN 'card'
+                WHEN lower(aj.name::text) LIKE '%%card%%' OR lower(aj.code::text) LIKE '%%card%%' THEN 'card'
                 WHEN lower(aj.name::text) LIKE '%%upi%%' OR lower(aj.code::text) LIKE '%%upi%%' 
-                     OR lower(aj.name::text) LIKE '%%gpay%%' OR lower(aj.name::text) LIKE '%%phonepe%%'
-                     OR lower(COALESCE(aml.name, '')) LIKE '%%upi%%' 
-                     OR lower(COALESCE(aml.ref, '')) LIKE '%%upi%%' THEN 'upi'
+                     OR lower(aj.name::text) LIKE '%%gpay%%' OR lower(aj.name::text) LIKE '%%phonepe%%' THEN 'upi'
                 WHEN aj.type = 'cash' OR lower(aj.name::text) LIKE '%%cash%%' THEN 'cash'
                 ELSE 'bank'
             END
         """
 
-        # 1. Opening balance query (date < date_from)
+        # 1. Opening balance query (cumulative net prior to date_from: aml.date < date_from)
         open_sql = f"""
             SELECT 
                 {cat_expression} as cat,
                 aj.id as journal_id,
                 COALESCE(aj.name->>'en_US', aj.name::text) as journal_name,
                 aj.code as journal_code,
+                aa.id as account_id,
+                aa.code as account_code,
+                COALESCE(aa.name->>'en_US', aa.name::text) as account_name,
                 COALESCE(rb.name, 'All / Shared') as branch_name,
                 COALESCE(SUM(aml.debit - aml.credit), 0) as opening
-            FROM account_move_line aml
-            JOIN account_journal aj ON aml.journal_id = aj.id
-            JOIN account_account aa ON aml.account_id = aa.id
-            LEFT JOIN account_move am ON aml.move_id = am.id
-            LEFT JOIN res_branch rb ON COALESCE(aml.branch_id, am.branch_id, aj.branch_id) = rb.id
-            WHERE aml.parent_state = 'posted'
-              AND aml.account_id IN %s
-              AND aj.type IN ('bank', 'cash')
-              AND aml.date < %s
-              AND (
-                  aa.account_type = 'asset_cash'
-                  OR aa.id = aj.default_account_id
-                  OR aml.reconciled = false
-              )
+            FROM account_journal aj
+            LEFT JOIN account_account aa ON aj.default_account_id = aa.id
+            LEFT JOIN res_branch rb ON aj.branch_id = rb.id
+            LEFT JOIN account_move_line aml ON (
+                aml.parent_state = 'posted'
+                AND aml.statement_line_id IS NULL
+                AND aml.account_id IN %s
+                AND (
+                    aml.journal_id = aj.id
+                    OR (
+                        aml.account_id = aj.default_account_id
+                        AND aml.journal_id NOT IN (SELECT id FROM account_journal WHERE type IN ('bank', 'cash'))
+                    )
+                )
+                AND aml.date < %s
+                AND (aml.branch_id = aj.branch_id OR aj.branch_id IS NULL OR aml.branch_id IS NULL)
+            )
+            WHERE aj.type IN ('bank', 'cash')
               {branch_clause}
-            GROUP BY cat, aj.id, journal_name, aj.code, branch_name
+            GROUP BY cat, aj.id, journal_name, aj.code, aa.id, aa.code, aa.name, branch_name
         """
         self.env.cr.execute(open_sql, params_open)
         open_rows = self.env.cr.fetchall()
 
-        # 2. Period movement query (date_from <= date <= date_to)
+        # 2. Period movement query (date_from <= date <= date_to) including both reconciled and unreconciled payments/entries
         period_sql = f"""
             SELECT 
                 {cat_expression} as cat,
                 aj.id as journal_id,
                 COALESCE(aj.name->>'en_US', aj.name::text) as journal_name,
                 aj.code as journal_code,
+                aa.id as account_id,
+                aa.code as account_code,
+                COALESCE(aa.name->>'en_US', aa.name::text) as account_name,
                 COALESCE(rb.name, 'All / Shared') as branch_name,
                 COALESCE(SUM(aml.debit), 0) as debit,
                 COALESCE(SUM(aml.credit), 0) as credit,
                 COUNT(aml.id) as line_count
-            FROM account_move_line aml
-            JOIN account_journal aj ON aml.journal_id = aj.id
-            JOIN account_account aa ON aml.account_id = aa.id
-            LEFT JOIN account_move am ON aml.move_id = am.id
-            LEFT JOIN res_branch rb ON COALESCE(aml.branch_id, am.branch_id, aj.branch_id) = rb.id
-            WHERE aml.parent_state = 'posted'
-              AND aml.account_id IN %s
-              AND aj.type IN ('bank', 'cash')
-              AND aml.date >= %s AND aml.date <= %s
-              AND (
-                  aa.account_type = 'asset_cash'
-                  OR aa.id = aj.default_account_id
-                  OR aml.reconciled = false
-              )
+            FROM account_journal aj
+            LEFT JOIN account_account aa ON aj.default_account_id = aa.id
+            LEFT JOIN res_branch rb ON aj.branch_id = rb.id
+            LEFT JOIN account_move_line aml ON (
+                aml.parent_state = 'posted'
+                AND aml.statement_line_id IS NULL
+                AND aml.account_id IN %s
+                AND (
+                    aml.journal_id = aj.id
+                    OR (
+                        aml.account_id = aj.default_account_id
+                        AND aml.journal_id NOT IN (SELECT id FROM account_journal WHERE type IN ('bank', 'cash'))
+                    )
+                )
+                AND aml.date >= %s AND aml.date <= %s
+                AND (aml.branch_id = aj.branch_id OR aj.branch_id IS NULL OR aml.branch_id IS NULL)
+            )
+            WHERE aj.type IN ('bank', 'cash')
               {branch_clause}
-            GROUP BY cat, aj.id, journal_name, aj.code, branch_name
+            GROUP BY cat, aj.id, journal_name, aj.code, aa.id, aa.code, aa.name, branch_name
         """
         self.env.cr.execute(period_sql, params_period)
         period_rows = self.env.cr.fetchall()
+
+        # 3. Cumulative pending unreconciled query (date <= date_to)
+        unrec_sql = f"""
+            SELECT 
+                {cat_expression} as cat,
+                aj.id as journal_id,
+                COALESCE(aj.name->>'en_US', aj.name::text) as journal_name,
+                aj.code as journal_code,
+                aa.id as account_id,
+                aa.code as account_code,
+                COALESCE(aa.name->>'en_US', aa.name::text) as account_name,
+                COALESCE(rb.name, 'All / Shared') as branch_name,
+                COALESCE(SUM(aml.debit), 0) as unrec_debit,
+                COALESCE(SUM(aml.credit), 0) as unrec_credit,
+                COUNT(aml.id) as unrec_count
+            FROM account_journal aj
+            LEFT JOIN account_account aa ON aj.default_account_id = aa.id
+            LEFT JOIN res_branch rb ON aj.branch_id = rb.id
+            LEFT JOIN account_move_line aml ON (
+                aml.parent_state = 'posted'
+                AND aml.statement_line_id IS NULL
+                AND aml.reconciled = FALSE
+                AND aml.account_id IN %s
+                AND aml.journal_id = aj.id
+                AND aml.date <= %s
+                AND (aml.branch_id = aj.branch_id OR aj.branch_id IS NULL OR aml.branch_id IS NULL)
+            )
+            WHERE aj.type IN ('bank', 'cash')
+              {branch_clause}
+            GROUP BY cat, aj.id, journal_name, aj.code, aa.id, aa.code, aa.name, branch_name
+        """
+        self.env.cr.execute(unrec_sql, params_unrec)
+        unrec_rows = self.env.cr.fetchall()
 
         # Build Category structure
         categories = {
@@ -263,6 +329,10 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 'debit': 0.0,
                 'credit': 0.0,
                 'closing': 0.0,
+                'unreconciled': 0.0,
+                'unreconciled_debit': 0.0,
+                'unreconciled_credit': 0.0,
+                'unreconciled_count': 0,
                 'line_count': 0,
                 'journals': {},
             },
@@ -277,6 +347,10 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 'debit': 0.0,
                 'credit': 0.0,
                 'closing': 0.0,
+                'unreconciled': 0.0,
+                'unreconciled_debit': 0.0,
+                'unreconciled_credit': 0.0,
+                'unreconciled_count': 0,
                 'line_count': 0,
                 'journals': {},
             },
@@ -291,6 +365,10 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 'debit': 0.0,
                 'credit': 0.0,
                 'closing': 0.0,
+                'unreconciled': 0.0,
+                'unreconciled_debit': 0.0,
+                'unreconciled_credit': 0.0,
+                'unreconciled_count': 0,
                 'line_count': 0,
                 'journals': {},
             },
@@ -305,13 +383,17 @@ class BranchPaymentBalanceReport(models.TransientModel):
                 'debit': 0.0,
                 'credit': 0.0,
                 'closing': 0.0,
+                'unreconciled': 0.0,
+                'unreconciled_debit': 0.0,
+                'unreconciled_credit': 0.0,
+                'unreconciled_count': 0,
                 'line_count': 0,
                 'journals': {},
             },
         }
 
         # Populate opening
-        for cat, j_id, j_name, j_code, b_name, opening in open_rows:
+        for cat, j_id, j_name, j_code, acc_id, acc_code, acc_name, b_name, opening in open_rows:
             if cat not in categories:
                 cat = 'bank'
             c_data = categories[cat]
@@ -321,17 +403,24 @@ class BranchPaymentBalanceReport(models.TransientModel):
                     'id': j_id,
                     'name': j_name,
                     'code': j_code,
+                    'account_id': acc_id,
+                    'account_code': acc_code,
+                    'account_name': acc_name,
                     'branch_name': b_name,
                     'opening': 0.0,
                     'debit': 0.0,
                     'credit': 0.0,
                     'closing': 0.0,
+                    'unreconciled': 0.0,
+                    'unreconciled_debit': 0.0,
+                    'unreconciled_credit': 0.0,
+                    'unreconciled_count': 0,
                     'line_count': 0,
                 }
             c_data['journals'][j_id]['opening'] += float(opening or 0.0)
 
         # Populate period movements
-        for cat, j_id, j_name, j_code, b_name, debit, credit, count in period_rows:
+        for cat, j_id, j_name, j_code, acc_id, acc_code, acc_name, b_name, debit, credit, count in period_rows:
             if cat not in categories:
                 cat = 'bank'
             c_data = categories[cat]
@@ -343,16 +432,54 @@ class BranchPaymentBalanceReport(models.TransientModel):
                     'id': j_id,
                     'name': j_name,
                     'code': j_code,
+                    'account_id': acc_id,
+                    'account_code': acc_code,
+                    'account_name': acc_name,
                     'branch_name': b_name,
                     'opening': 0.0,
                     'debit': 0.0,
                     'credit': 0.0,
                     'closing': 0.0,
+                    'unreconciled': 0.0,
+                    'unreconciled_debit': 0.0,
+                    'unreconciled_credit': 0.0,
+                    'unreconciled_count': 0,
                     'line_count': 0,
                 }
             c_data['journals'][j_id]['debit'] += float(debit or 0.0)
             c_data['journals'][j_id]['credit'] += float(credit or 0.0)
             c_data['journals'][j_id]['line_count'] += count
+
+        # Populate cumulative pending unreconciled balances
+        for cat, j_id, j_name, j_code, acc_id, acc_code, acc_name, b_name, unrec_dr, unrec_cr, unrec_cnt in unrec_rows:
+            if cat not in categories:
+                cat = 'bank'
+            c_data = categories[cat]
+            c_data['unreconciled_debit'] += float(unrec_dr or 0.0)
+            c_data['unreconciled_credit'] += float(unrec_cr or 0.0)
+            c_data['unreconciled_count'] += int(unrec_cnt or 0)
+            if j_id not in c_data['journals']:
+                c_data['journals'][j_id] = {
+                    'id': j_id,
+                    'name': j_name,
+                    'code': j_code,
+                    'account_id': acc_id,
+                    'account_code': acc_code,
+                    'account_name': acc_name,
+                    'branch_name': b_name,
+                    'opening': 0.0,
+                    'debit': 0.0,
+                    'credit': 0.0,
+                    'closing': 0.0,
+                    'unreconciled': 0.0,
+                    'unreconciled_debit': 0.0,
+                    'unreconciled_credit': 0.0,
+                    'unreconciled_count': 0,
+                    'line_count': 0,
+                }
+            c_data['journals'][j_id]['unreconciled_debit'] += float(unrec_dr or 0.0)
+            c_data['journals'][j_id]['unreconciled_credit'] += float(unrec_cr or 0.0)
+            c_data['journals'][j_id]['unreconciled_count'] += int(unrec_cnt or 0)
 
         # Compute closing balances and prepare journal lists
         total = {
@@ -360,28 +487,42 @@ class BranchPaymentBalanceReport(models.TransientModel):
             'debit': 0.0,
             'credit': 0.0,
             'closing': 0.0,
+            'unreconciled': 0.0,
+            'unreconciled_debit': 0.0,
+            'unreconciled_credit': 0.0,
+            'unreconciled_count': 0,
             'line_count': 0,
         }
 
         for cat_key, c_data in categories.items():
-            c_data['closing'] = round(c_data['opening'] + c_data['debit'] - c_data['credit'], 2)
             c_data['opening'] = round(c_data['opening'], 2)
             c_data['debit'] = round(c_data['debit'], 2)
             c_data['credit'] = round(c_data['credit'], 2)
+            c_data['closing'] = round(c_data['opening'] + c_data['debit'] - c_data['credit'], 2)
+            c_data['unreconciled_debit'] = round(c_data['unreconciled_debit'], 2)
+            c_data['unreconciled_credit'] = round(c_data['unreconciled_credit'], 2)
+            c_data['unreconciled'] = round(c_data['unreconciled_debit'] - c_data['unreconciled_credit'], 2)
 
             total['opening'] += c_data['opening']
             total['debit'] += c_data['debit']
             total['credit'] += c_data['credit']
             total['closing'] += c_data['closing']
+            total['unreconciled'] += c_data['unreconciled']
+            total['unreconciled_debit'] += c_data['unreconciled_debit']
+            total['unreconciled_credit'] += c_data['unreconciled_credit']
+            total['unreconciled_count'] += c_data['unreconciled_count']
             total['line_count'] += c_data['line_count']
 
             # Convert journals dict to sorted list
             journal_list = list(c_data['journals'].values())
             for j in journal_list:
-                j['closing'] = round(j['opening'] + j['debit'] - j['credit'], 2)
                 j['opening'] = round(j['opening'], 2)
                 j['debit'] = round(j['debit'], 2)
                 j['credit'] = round(j['credit'], 2)
+                j['closing'] = round(j['opening'] + j['debit'] - j['credit'], 2)
+                j['unreconciled_debit'] = round(j['unreconciled_debit'], 2)
+                j['unreconciled_credit'] = round(j['unreconciled_credit'], 2)
+                j['unreconciled'] = round(j['unreconciled_debit'] - j['unreconciled_credit'], 2)
             journal_list.sort(key=lambda x: abs(x['closing']), reverse=True)
             c_data['journals_list'] = journal_list
             del c_data['journals']
@@ -390,6 +531,9 @@ class BranchPaymentBalanceReport(models.TransientModel):
         total['debit'] = round(total['debit'], 2)
         total['credit'] = round(total['credit'], 2)
         total['closing'] = round(total['closing'], 2)
+        total['unreconciled'] = round(total['unreconciled'], 2)
+        total['unreconciled_debit'] = round(total['unreconciled_debit'], 2)
+        total['unreconciled_credit'] = round(total['unreconciled_credit'], 2)
 
         # Selected branch name for display
         selected_branch_name = "All Branches"
@@ -401,6 +545,8 @@ class BranchPaymentBalanceReport(models.TransientModel):
         return {
             'categories': categories,
             'total': total,
+            'liquidity_account_ids': liquidity_acc_ids,
+            'outstanding_account_ids': outstanding_acc_ids,
             'selected_branch_id': branch_id or 'all',
             'selected_branch_name': selected_branch_name,
             'is_branch_editable': self._is_admin_user(),
@@ -439,20 +585,20 @@ class BranchPaymentBalanceReport(models.TransientModel):
 
         liquidity_acc_ids = self._get_liquidity_account_ids()
         if not liquidity_acc_ids:
-            return {'lines': [], 'total_count': 0}
+            return {'lines': [], 'total_count': 0, 'limit': limit, 'offset': offset}
 
         where_clauses = [
             "aml.parent_state = 'posted'",
+            "aml.statement_line_id IS NULL",
             "aml.account_id IN %s",
             "aj.type IN ('bank', 'cash')",
             "aml.date >= %s",
             "aml.date <= %s",
-            "(aa.account_type = 'asset_cash' OR aa.id = aj.default_account_id OR aml.reconciled = false)",
         ]
         params = [tuple(liquidity_acc_ids), date_from, date_to]
 
         if branch_ids_to_filter:
-            where_clauses.append("COALESCE(aml.branch_id, am.branch_id, aj.branch_id) IN %s")
+            where_clauses.append("aj.branch_id IN %s")
             params.append(tuple(branch_ids_to_filter))
 
         if journal_id:
