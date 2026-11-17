@@ -31,12 +31,14 @@ class ProductLabel(models.Model):
         'stock.location',
         string='Destination Location',
         domain="[('usage', '=', 'internal'), ('branch_id', '=', branch_id)]",
+        default=lambda self: self.env.company.branch_id.label_dest_location_id if self.env.company.branch_id else False,
         tracking=True
     )
     source_location_id = fields.Many2one(
         'stock.location',
         string='Source Location',
         domain="[('usage', '=', 'internal')]",
+        default=lambda self: self.env.company.branch_id.label_source_location_id if self.env.company.branch_id else False,
         tracking=True
     )
     picking_id = fields.Many2one('stock.picking', string="Stock Picking", readonly=True)
@@ -59,8 +61,14 @@ class ProductLabel(models.Model):
         'product.template',
         string="Product",
     )
-    branch_id = fields.Many2one('res.branch', string='Branch', store=True,
-                                readonly=False, tracking=True)
+    branch_id = fields.Many2one(
+        'res.branch',
+        string='Branch',
+        store=True,
+        readonly=False,
+        default=lambda self: self.env.company.branch_id,
+        tracking=True,
+    )
     company_id = fields.Many2one('res.company', string='Company', default=lambda self: self.env.company)
     sale_purity_id = fields.Many2one('gold.purity', string="Sale Purity")
     sale_price_per_gram = fields.Float(string="Sale Rate / gram")
@@ -521,6 +529,27 @@ class ProductLabel(models.Model):
     #             rec.age = (today - created_date).days+1
     #         else:
     #             rec.age = 0
+
+    @api.onchange('company_id')
+    def _onchange_company_id_set_branch(self):
+        for rec in self:
+            company = rec.company_id or self.env.company
+            if company and company.branch_id:
+                if not rec.branch_id or (rec.branch_id.company_id and rec.branch_id.company_id != company):
+                    rec.branch_id = company.branch_id.id
+                    if company.branch_id.label_source_location_id:
+                        rec.source_location_id = company.branch_id.label_source_location_id.id
+                    if company.branch_id.label_dest_location_id:
+                        rec.branch_location_id = company.branch_id.label_dest_location_id.id
+
+    @api.onchange('branch_id')
+    def _onchange_branch_id_set_locations(self):
+        for rec in self:
+            if rec.branch_id:
+                if rec.branch_id.label_source_location_id:
+                    rec.source_location_id = rec.branch_id.label_source_location_id.id
+                if rec.branch_id.label_dest_location_id:
+                    rec.branch_location_id = rec.branch_id.label_dest_location_id.id
 
     @api.onchange('product_id')
     def _onchange_product_id(self):

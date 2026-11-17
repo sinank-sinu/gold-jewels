@@ -52,7 +52,19 @@ class Branch(models.Model):
     old_gold_location_id = fields.Many2one('stock.location', string="OG Location")
     diamond_og_location_id = fields.Many2one('stock.location', string="Diamond OG Location")
     sr_location_id = fields.Many2one('stock.location', string="SR Location")
+    label_source_location_id = fields.Many2one('stock.location', string="Label Source Location")
+    label_dest_location_id = fields.Many2one('stock.location', string="Label Destination Location")
 
     _sql_constraints = [
         ('name_uniq', 'unique (name)', 'The Branch name must be unique !')
     ]
+
+
+class ResCompany(models.Model):
+    _inherit = "res.company"
+
+    branch_id = fields.Many2one(
+        'res.branch',
+        string="Branch",
+        domain="[('company_id', '=', id)]",
+    )
