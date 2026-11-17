@@ -8,12 +8,12 @@
         "purchase",
         "stock",
         "product",
-        "purchase",
         "em_jewellery_management",
         "old_gold_xlsx_report",
         "custom_label_user",
         "ornament_label",
         "product_label_report_xlsx",
+        "product_label_variant_report_xlsx",
     ],
     "data": [
         "security/ir.model.access.csv",
