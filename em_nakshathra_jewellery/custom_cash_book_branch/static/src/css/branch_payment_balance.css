@@ -1270,3 +1270,106 @@
     transform: translateY(-1px);
     box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25);
 }
+
+/* ── Unreconciled Summary Card & Cell Mini-Card ── */
+.o-bpb-panel-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.o-bpb-unrec-summary-card {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+    border-radius: 12px;
+    padding: 0.6rem 1.1rem;
+    min-width: 245px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08);
+}
+
+.o-bpb-unrec-summary-card:hover {
+    transform: translateY(-2px);
+    border-color: #f59e0b;
+    box-shadow: 0 6px 16px rgba(217, 119, 6, 0.16);
+}
+
+.o-bpb-unrec-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.2rem;
+}
+
+.o-bpb-unrec-card-lbl {
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #92400e;
+}
+
+.o-bpb-unrec-count-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--o-bpb-radius-pill);
+    background: #ffffff;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.o-bpb-unrec-card-val {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: #78350f;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.o-bpb-unrec-card-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.o-bpb-unrec-cell-card {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.o-bpb-unrec-cell-card:hover {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(217, 119, 6, 0.14);
+}
+
+.o-bpb-unrec-cell-amt {
+    font-size: 0.875rem;
+    font-weight: 800;
+    color: #92400e;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.o-bpb-unrec-cell-meta {
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: #b45309;
+}

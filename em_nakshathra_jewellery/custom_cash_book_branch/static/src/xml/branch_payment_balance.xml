@@ -331,9 +331,32 @@
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" class="o-bpb-panel-close-btn" t-on-click="closeCategoryJournals" title="Close journals breakdown">
-                                <i class="fa fa-times"/>
-                            </button>
+                            <div class="o-bpb-panel-header-right">
+                                <!-- Cumulative Unreconciled Summary Card -->
+                                <div class="o-bpb-unrec-summary-card"
+                                     t-on-click="() => this.openUnreconciledLedger()"
+                                     title="Click to view all pending unreconciled items">
+                                    <div class="o-bpb-unrec-card-top">
+                                        <span class="o-bpb-unrec-card-lbl">
+                                            <i class="fa fa-clock-o me-1"/>UNRECONCILED (UP TO <t t-esc="formatDate(state.dateTo)"/>)
+                                        </span>
+                                        <span class="o-bpb-unrec-count-badge">
+                                            <t t-esc="getSelectedCategoryData().unreconciled_count || 0"/> Pending
+                                        </span>
+                                    </div>
+                                    <div class="o-bpb-unrec-card-val">
+                                        <t t-esc="state.currencySymbol"/> <t t-esc="formatMoney(getSelectedCategoryData().unreconciled || 0)"/>
+                                    </div>
+                                    <div class="o-bpb-unrec-card-sub">
+                                        <span class="text-success">DR: +<t t-esc="formatMoney(getSelectedCategoryData().unreconciled_debit || 0)"/></span>
+                                        <span class="o-bpb-sep">•</span>
+                                        <span class="text-danger">CR: -<t t-esc="formatMoney(getSelectedCategoryData().unreconciled_credit || 0)"/></span>
+                                    </div>
+                                </div>
+                                <button type="button" class="o-bpb-panel-close-btn" t-on-click="closeCategoryJournals" title="Close journals breakdown">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Journals Table -->
@@ -348,13 +371,14 @@
                                         <th class="text-end">INFLOW (DR)</th>
                                         <th class="text-end">OUTFLOW (CR)</th>
                                         <th class="text-end">CLOSING BALANCE</th>
+                                        <th class="text-end">UNRECONCILED</th>
                                         <th class="text-center">ACTION</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <t t-if="getSelectedCategoryData().journals_list.length === 0">
                                         <tr>
-                                            <td colspan="8" class="text-center py-4 text-muted">
+                                            <td colspan="9" class="text-center py-4 text-muted">
                                                 No journals found for this category and branch.
                                             </td>
                                         </tr>
@@ -364,7 +388,12 @@
                                             <tr class="o-bpb-panel-tr">
                                                 <td><span class="o-bpb-code-pill"><t t-esc="j.code"/></span></td>
                                                 <td>
-                                                    <span class="o-bpb-j-name" t-esc="j.name"/>
+                                                    <div class="o-bpb-j-name" t-esc="j.name"/>
+                                                    <t t-if="j.account_code">
+                                                        <small class="text-muted d-block mt-1">
+                                                            <i class="fa fa-book me-1"/>COA: <span class="badge bg-light text-dark border"><t t-esc="j.account_code"/></span> <t t-esc="j.account_name"/>
+                                                        </small>
+                                                    </t>
                                                 </td>
                                                 <td>
                                                     <span class="o-bpb-j-branch" t-esc="j.branch_name"/>
@@ -381,8 +410,18 @@
                                                 <td class="text-end o-bpb-num o-bpb-closing-cell">
                                                     <t t-esc="state.currencySymbol"/> <t t-esc="formatMoney(j.closing)"/>
                                                 </td>
+                                                <td class="text-end">
+                                                    <div class="o-bpb-unrec-cell-card" t-on-click="() => this.openUnreconciledLedger(j.id, j.name)" title="Click to view unreconciled items for this journal">
+                                                        <span class="o-bpb-unrec-cell-amt">
+                                                            <t t-esc="state.currencySymbol"/> <t t-esc="formatMoney(j.unreconciled || 0)"/>
+                                                        </span>
+                                                        <span class="o-bpb-unrec-cell-meta">
+                                                            <t t-esc="j.unreconciled_count || 0"/> pending (up to <t t-esc="formatDate(state.dateTo)"/>)
+                                                        </span>
+                                                    </div>
+                                                </td>
                                                 <td class="text-center">
-                                                    <button type="button" class="o-bpb-btn-ledger" t-on-click="() => this.openJournalLedger(j.id)" title="View transaction lines for this journal in this date range">
+                                                    <button type="button" class="o-bpb-btn-ledger" t-on-click="() => this.openJournalLedger(j.id, j.account_id, j.account_name)" title="View Chart of Accounts ledger items in this date range">
                                                         <i class="fa fa-book me-1"/> View Ledger
                                                     </button>
                                                 </td>
