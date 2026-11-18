@@ -6,9 +6,38 @@
         <field name="arch" type="xml">
             <form string="HO Transfer">
                 <group>
-                    <field name="source_location_id"/>
-                    <field name="ho_location_id"/>
+                    <group>
+                        <field name="branch_id" readonly="1" force_save="1"/>
+                        <field name="company_id" readonly="1" force_save="1" invisible="1"/>
+                        <field name="source_location_id"
+                               domain="[('usage', '=', 'internal'), ('company_id', 'in', [company_id, False])]"
+                               options="{'no_create': True}"/>
+                        <field name="ho_location_id"
+                               domain="[('usage', '=', 'internal'), ('company_id', 'in', [company_id, False])]"
+                               options="{'no_create': True}"/>
+                    </group>
+                    <group>
+                        <field name="total_pieces" readonly="1"/>
+                        <field name="total_gross_weight" readonly="1"/>
+                        <field name="total_net_weight" readonly="1"/>
+                    </group>
                 </group>
+                <notebook>
+                    <page string="Selected Pieces">
+                        <field name="line_ids" readonly="1" force_save="1">
+                            <tree create="0" delete="0" edit="0">
+                                <field name="old_gold_purchase_id" string="Old Gold Purchase"/>
+                                <field name="partner_id"/>
+                                <field name="purity_id"/>
+                                <field name="is_diamond_og" optional="show"/>
+                                <field name="gross_weight" sum="Total"/>
+                                <field name="stone_weight" sum="Total"/>
+                                <field name="net_weight" sum="Total"/>
+                                <field name="amount" sum="Total"/>
+                            </tree>
+                        </field>
+                    </page>
+                </notebook>
                 <footer>
                     <button name="action_confirm_transfer"
                             type="object"

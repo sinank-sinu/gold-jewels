@@ -166,6 +166,7 @@
                 <field name="diamond_amount" sum="Total"/>
                 <field name="rate"/>
                 <field name="amount" sum="Total"/>
+                <field name="ho_transfer_id" optional="show"/>
                 <field name="state" widget="badge"
                        decoration-info="state == 'draft'"
                        decoration-warning="state == 'ho_transfer'"
@@ -199,6 +200,7 @@
                             <field name="date" readonly="1"/>
                             <field name="branch_id" readonly="1"/>
                             <field name="company_id" readonly="1"/>
+                            <field name="ho_transfer_id" readonly="1" invisible="not ho_transfer_id"/>
                             <field name="batch_id" readonly="1" invisible="not batch_id"/>
                         </group>
                         <group string="Purity &amp; Valuation">
