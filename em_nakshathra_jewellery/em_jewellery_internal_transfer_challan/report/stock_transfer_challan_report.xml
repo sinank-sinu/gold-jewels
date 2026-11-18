@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Report Action for Normal Internal Transfers (stock.picking) -->
+    <!-- Kept unbound (eval="False") so it does not create a duplicate action in the Print menu. -->
+    <!-- Staff uses the standard Odoo Print -> "Delivery Slip" (or the header Print button), -->
+    <!-- which is automatically overridden below to render this Rule 55 Delivery Challan. -->
+    <record id="action_report_stock_transfer_delivery_challan" model="ir.actions.report">
+        <field name="name">Stock Transfer Delivery Challan (Rule 55)</field>
+        <field name="model">stock.picking</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">em_jewellery_internal_transfer_challan.report_stock_transfer_challan_doc</field>
+        <field name="report_file">em_jewellery_internal_transfer_challan.report_stock_transfer_challan_doc</field>
+        <field name="print_report_name">'Delivery_Challan_' + (object.name or '').replace('/', '_')</field>
+        <field name="binding_model_id" eval="False"/>
+    </record>
+
+    <!-- Document Entry Wrapper -->
+    <template id="report_stock_transfer_challan_doc">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-call="web.basic_layout">
+                    <t t-set="challan_data" t-value="doc._get_delivery_challan_data()"/>
+                    <t t-call="em_jewellery_internal_transfer_challan.stock_transfer_delivery_challan_content">
+                        <t t-set="data" t-value="challan_data"/>
+                        <t t-set="doc_obj" t-value="doc"/>
+                    </t>
+                </t>
+            </t>
+        </t>
+    </template>
+
+    <!-- Master Layout Template -->
+    <template id="stock_transfer_delivery_challan_content">
+        <div class="page" style="font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important; font-size: 11px; color: #000000; line-height: 1.45; padding: 20px 8px 0 8px; letter-spacing: 0.25px; word-spacing: 0.5px; text-rendering: optimizeLegibility; font-kerning: normal;">
+                
+                <style type="text/css">
+                    .challan-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 7px;
+                        font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
+                        font-size: 11px;
+                        color: #000000;
+                        letter-spacing: 0.25px;
+                    }
+                    .challan-table th, .challan-table td {
+                        border: 1px solid #000000;
+                        padding: 5px 7px;
+                        vertical-align: middle;
+                    }
+                    .challan-table th {
+                        background-color: #f2f2f2;
+                        font-weight: 700;
+                        color: #000000;
+                        text-align: center;
+                        font-size: 11px;
+                        letter-spacing: 0.3px;
+                    }
+                    .text-right {
+                        text-align: right;
+                    }
+                    .text-center {
+                        text-align: center;
+                    }
+                    .text-left {
+                        text-align: left;
+                    }
+                    .font-bold {
+                        font-weight: 700;
+                    }
+                    .hdr-banner {
+                        border: 1.5px solid #000000;
+                        text-align: center;
+                        padding: 7px 6px;
+                        margin-bottom: 7px;
+                        background-color: #ffffff;
+                    }
+                    .hdr-title {
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: #000000;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                    }
+                    .hdr-sub {
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #000000;
+                        margin-top: 3px;
+                        letter-spacing: 0.2px;
+                    }
+                    .hdr-purpose {
+                        font-size: 10px;
+                        color: #333333;
+                        margin-top: 2px;
+                    }
+                </style>
+
+                <!-- Document Title Header -->
+                <div class="hdr-banner">
+                    <div class="hdr-title">STOCK TRANSFER DELIVERY CHALLAN</div>
+                    <div class="hdr-sub">(Issued Under Rule 55 of the CGST Rules, 2017)</div>
+                    <div class="hdr-purpose">Purpose: Internal Branch Transfer / Movement of Goods Otherwise Than by Way of Supply</div>
+                </div>
+
+                <!-- Meta Information Grid -->
+                <table class="challan-table" style="margin-bottom: 7px;">
+                    <tr>
+                        <td style="width: 20%; background-color: #f2f2f2; font-weight: 700;">Delivery Challan No.</td>
+                        <td style="width: 30%; font-weight: 700;"><t t-esc="data['meta']['challan_no']"/></td>
+                        <td style="width: 20%; background-color: #f2f2f2; font-weight: 700;">Date</td>
+                        <td style="width: 30%;"><t t-esc="data['meta']['date']" t-options='{"widget": "date"}'/></td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #f2f2f2; font-weight: 700;">Transfer Type</td>
+                        <td style="font-weight: 700;"><t t-esc="data['meta']['transfer_type']"/></td>
+                        <td style="background-color: #f2f2f2; font-weight: 700;">Transfer Batch No.</td>
+                        <td style="font-weight: 700;"><t t-esc="data['meta']['batch_no']"/></td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #f2f2f2; font-weight: 700;">E-Way Bill No.</td>
+                        <td style="font-weight: 700;"><t t-esc="data['meta']['eway_bill']"/></td>
+                        <td style="background-color: #f2f2f2; font-weight: 700;">Vehicle / Courier No.</td>
+                        <td style="font-weight: 700;"><t t-esc="data['meta']['vehicle_no']"/></td>
+                    </tr>
+                </table>
+
+                <!-- Consignor and Consignee Dual Cards -->
+                <table class="challan-table" style="margin-bottom: 7px;">
+                    <thead>
+                        <tr>
+                            <th style="width: 50%; background-color: #222222; color: #ffffff; text-align: left; padding: 5px 7px; font-weight: 700;">
+                                CONSIGNOR (DISPATCHING BRANCH)
+                            </th>
+                            <th style="width: 50%; background-color: #222222; color: #ffffff; text-align: left; padding: 5px 7px; font-weight: 700;">
+                                CONSIGNEE (RECEIVING BRANCH)
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="vertical-align: top; padding: 6px 7px;">
+                                <div style="font-weight: 700; font-size: 11.5px; color: #000000; letter-spacing: 0.3px;">
+                                    <t t-esc="data['consignor']['company_name']"/>
+                                </div>
+                                <div style="font-weight: 600; color: #000000; margin-top: 3px;">
+                                    Branch: <t t-esc="data['consignor']['branch_name']"/>
+                                </div>
+                                <div style="color: #222222; margin-top: 3px; font-size: 10px; line-height: 1.4;">
+                                    <strong>Address:</strong> <t t-esc="data['consignor']['address'] or 'Registered Office'"/>
+                                </div>
+                                <div style="margin-top: 4px; font-size: 10px;">
+                                    <strong>GSTIN:</strong>
+                                    <span style="font-weight: 700; color: #000000;">
+                                        <t t-esc="data['consignor']['gstin']"/>
+                                    </span>
+                                    <t t-if="data['consignor']['state_name']">
+                                        <span style="margin-left: 8px; font-size: 9.5px; color: #444444;">
+                                            State: <t t-esc="data['consignor']['state_name']"/> (<t t-esc="data['consignor']['state_code']"/>)
+                                        </span>
+                                    </t>
+                                </div>
+                            </td>
+                            <td style="vertical-align: top; padding: 6px 7px;">
+                                <div style="font-weight: 700; font-size: 11.5px; color: #000000; letter-spacing: 0.3px;">
+                                    <t t-esc="data['consignee']['company_name']"/>
+                                </div>
+                                <div style="font-weight: 600; color: #000000; margin-top: 3px;">
+                                    Branch: <t t-esc="data['consignee']['branch_name']"/>
+                                </div>
+                                <div style="color: #222222; margin-top: 3px; font-size: 10px; line-height: 1.4;">
+                                    <strong>Address:</strong> <t t-esc="data['consignee']['address'] or 'Branch Showroom'"/>
+                                </div>
+                                <div style="margin-top: 4px; font-size: 10px;">
+                                    <strong>GSTIN:</strong>
+                                    <span style="font-weight: 700; color: #000000;">
+                                        <t t-esc="data['consignee']['gstin']"/>
+                                    </span>
+                                    <t t-if="data['consignee']['state_name']">
+                                        <span style="margin-left: 8px; font-size: 9.5px; color: #444444;">
+                                            State: <t t-esc="data['consignee']['state_name']"/> (<t t-esc="data['consignee']['state_code']"/>)
+                                        </span>
+                                    </t>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <t t-set="show_stone_wt" t-value="(data['totals'].get('total_stone_weight', 0.0) or 0.0) &gt;= 0.0005"/>
+                <t t-set="show_diamond_wt" t-value="(data['totals'].get('total_diamond_weight', 0.0) or 0.0) &gt;= 0.0005"/>
+                <t t-set="extra_wt_cols" t-value="(1 if show_stone_wt else 0) + (1 if show_diamond_wt else 0)"/>
+                <t t-set="w_sl" t-value="'6%' if extra_wt_cols == 2 else ('7%' if extra_wt_cols == 1 else '8%')"/>
+                <t t-set="w_prod" t-value="'34%' if extra_wt_cols == 2 else ('40%' if extra_wt_cols == 1 else '48%')"/>
+                <t t-set="w_pcs" t-value="'10%' if extra_wt_cols == 2 else ('12%' if extra_wt_cols == 1 else '14%')"/>
+                <t t-set="w_wt" t-value="'12.5%' if extra_wt_cols == 2 else ('13.5%' if extra_wt_cols == 1 else '15%')"/>
+                <t t-set="w_net" t-value="'12.5%' if extra_wt_cols == 2 else ('14%' if extra_wt_cols == 1 else '15%')"/>
+
+                <!-- Product Lines Table (Without Variants, Rates, or Taxes) -->
+                <table class="challan-table" style="margin-bottom: 7px;">
+                    <thead>
+                        <tr>
+                            <th t-attf-style="width: #{w_sl};">Sl No</th>
+                            <th t-attf-style="width: #{w_prod}; text-align: left;">Product Name</th>
+                            <th t-attf-style="width: #{w_pcs};">No of Pieces</th>
+                            <th t-attf-style="width: #{w_wt};">Gross Wt (g)</th>
+                            <th t-if="show_stone_wt" t-attf-style="width: #{w_wt};">Stone Wt (g)</th>
+                            <th t-if="show_diamond_wt" t-attf-style="width: #{w_wt};">Diamond Wt (g)</th>
+                            <th t-attf-style="width: #{w_net};">Net Wt (g)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-foreach="data['summary_lines']" t-as="line">
+                            <tr>
+                                <td class="text-center"><t t-esc="line['sl_no']"/></td>
+                                <td class="text-left font-bold" style="color: #000000;"><t t-esc="line['product_name']"/></td>
+                                <td class="text-center font-bold"><t t-esc="line['pieces']"/></td>
+                                <td class="text-right"><t t-esc="'%.3f' % line['gross_weight']"/></td>
+                                <td t-if="show_stone_wt" class="text-right"><t t-esc="'%.3f' % line.get('stone_weight', 0.0)"/></td>
+                                <td t-if="show_diamond_wt" class="text-right"><t t-esc="'%.3f' % line.get('diamond_weight', 0.0)"/></td>
+                                <td class="text-right font-bold"><t t-esc="'%.3f' % line['net_weight']"/></td>
+                            </tr>
+                        </t>
+
+                        <!-- Totals Row -->
+                        <tr style="background-color: #f2f2f2; font-weight: 700; border-top: 2px solid #000000; font-size: 11px;">
+                            <td colspan="2" class="text-right font-bold" style="color: #000000; padding-right: 10px;">TOTAL:</td>
+                            <td class="text-center font-bold" style="color: #000000;"><t t-esc="data['totals']['total_pieces']"/></td>
+                            <td class="text-right font-bold" style="color: #000000;"><t t-esc="'%.3f' % data['totals']['total_gross_weight']"/></td>
+                            <td t-if="show_stone_wt" class="text-right font-bold" style="color: #000000;"><t t-esc="'%.3f' % data['totals'].get('total_stone_weight', 0.0)"/></td>
+                            <td t-if="show_diamond_wt" class="text-right font-bold" style="color: #000000;"><t t-esc="'%.3f' % data['totals'].get('total_diamond_weight', 0.0)"/></td>
+                            <td class="text-right font-bold" style="color: #000000;"><t t-esc="'%.3f' % data['totals']['total_net_weight']"/></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Transfer Summary & Statutory Declaration Side-by-Side -->
+                <table class="challan-table" style="margin-bottom: 7px;">
+                    <tr>
+                        <!-- Left Block: Transfer Summary -->
+                        <td style="width: 45%; vertical-align: top; padding: 0;">
+                            <div style="background-color: #222222; color: #ffffff; font-weight: 700; font-size: 10.5px; padding: 4px 7px;">
+                                TRANSFER SUMMARY
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">
+                                <tr style="border-bottom: 1px solid #cccccc;">
+                                    <td style="padding: 4px 7px; width: 55%; color: #222222;">Total Pieces:</td>
+                                    <td style="padding: 4px 7px; width: 45%; font-weight: 700;" class="text-right"><t t-esc="data['totals']['total_pieces']"/></td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #cccccc;">
+                                    <td style="padding: 4px 7px; color: #222222;">Total Gross Weight:</td>
+                                    <td style="padding: 4px 7px; font-weight: 700;" class="text-right"><t t-esc="'%.3f' % data['totals']['total_gross_weight']"/> g</td>
+                                </tr>
+                                <tr t-if="show_stone_wt" style="border-bottom: 1px solid #cccccc;">
+                                    <td style="padding: 4px 7px; color: #222222;">Total Stone Weight:</td>
+                                    <td style="padding: 4px 7px; font-weight: 700;" class="text-right"><t t-esc="'%.3f' % data['totals'].get('total_stone_weight', 0.0)"/> g</td>
+                                </tr>
+                                <tr t-if="show_diamond_wt" style="border-bottom: 1px solid #cccccc;">
+                                    <td style="padding: 4px 7px; color: #222222;">Total Diamond Weight:</td>
+                                    <td style="padding: 4px 7px; font-weight: 700;" class="text-right"><t t-esc="'%.3f' % data['totals'].get('total_diamond_weight', 0.0)"/> g</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 4px 7px; font-weight: 700; color: #000000;">Total Net Weight:</td>
+                                    <td style="padding: 4px 7px; font-weight: 700; color: #000000;" class="text-right"><t t-esc="'%.3f' % data['totals']['total_net_weight']"/> g</td>
+                                </tr>
+                            </table>
+                        </td>
+
+                        <!-- Right Block: Statutory Declaration & Notes -->
+                        <td style="width: 55%; vertical-align: top; padding: 6px 7px; background-color: #fafafa;">
+                            <div style="font-weight: 700; color: #000000; font-size: 10.5px; margin-bottom: 3px;">
+                                Declaration:
+                            </div>
+                            <div style="font-size: 10px; color: #222222; line-height: 1.45;">
+                                Goods covered under this Delivery Challan are transferred internally between branches of the same organization and are not sold. This challan is issued in accordance with Rule 55 of the CGST Rules, 2017.
+                            </div>
+                            <t t-if="data.get('notes')">
+                                <div style="margin-top: 4px; padding-top: 3px; border-top: 1px dashed #cccccc; font-size: 9.5px; color: #333333;">
+                                    <strong>Remarks:</strong> <t t-esc="data['notes']"/>
+                                </div>
+                            </t>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Receipt Verification Matrix -->
+                <table class="challan-table" style="margin-bottom: 7px;">
+                    <thead>
+                        <tr>
+                            <th colspan="2" style="background-color: #222222; color: #ffffff; text-align: left; padding: 4px 7px; font-weight: 700; font-size: 10.5px;">
+                                RECEIPT VERIFICATION (TO BE FILLED &amp; CONFIRMED BY RECEIVING BRANCH)
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="width: 28%; font-weight: 700; background-color: #f2f2f2;">Quantity Received</td>
+                            <td style="width: 72%; height: 18px;"></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 700; background-color: #f2f2f2;">Gross Weight Verified</td>
+                            <td style="height: 18px;"></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 700; background-color: #f2f2f2;">Net Weight Verified</td>
+                            <td style="height: 18px;"></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 700; background-color: #f2f2f2;">Shortage / Excess</td>
+                            <td style="height: 18px;"></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 700; background-color: #f2f2f2;">Remarks</td>
+                            <td style="height: 18px;"></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Signatures Block -->
+                <table class="challan-table" style="margin-bottom: 0;">
+                    <tr>
+                        <td style="width: 25%; height: 50px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
+                            <div style="font-weight: 700; color: #000000; font-size: 10px;">prepared by :</div>
+                            <div style="font-size: 10px; color: #000000; font-weight: 700; text-transform: uppercase;">
+                                <t t-esc="data['prepared_by']"/>
+                            </div>
+                        </td>
+                        <td style="width: 25%; height: 50px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
+                            <div style="font-weight: 700; color: #000000; font-size: 10px;">checked by :</div>
+                            <div style="font-size: 9px; color: #555555;">(Audit / Security)</div>
+                        </td>
+                        <td style="width: 25%; height: 50px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
+                            <div style="font-weight: 700; color: #000000; font-size: 10px;">Authorized By :</div>
+                            <div style="font-size: 9px; color: #555555;">(Dispatch Manager)</div>
+                        </td>
+                        <td style="width: 25%; height: 50px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
+                            <div style="font-weight: 700; color: #000000; font-size: 10px;">Received By :</div>
+                            <div style="font-size: 9px; color: #555555;">(Receiver Store Seal &amp; Sign)</div>
+                        </td>
+                    </tr>
+                </table>
+
+        </div>
+    </template>
+
+    <!-- Override standard stock.report_delivery_document for internal transfers -->
+    <template id="report_delivery_document_inherit_jewellery_transfer" inherit_id="stock.report_delivery_document">
+        <xpath expr="//div[hasclass('page')]" position="attributes">
+            <attribute name="t-if">o.picking_type_id.code != 'internal'</attribute>
+        </xpath>
+        <xpath expr="//div[hasclass('page')]" position="after">
+            <t t-if="o.picking_type_id.code == 'internal'">
+                <t t-set="challan_data" t-value="o._get_delivery_challan_data()"/>
+                <t t-call="em_jewellery_internal_transfer_challan.stock_transfer_delivery_challan_content">
+                    <t t-set="data" t-value="challan_data"/>
+                    <t t-set="doc_obj" t-value="o"/>
+                </t>
+            </t>
+        </xpath>
+    </template>
+
+</odoo>
+

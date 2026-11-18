@@ -46,6 +46,14 @@
                 <field name="purity_id"/>
                 <field name="pieces" sum="Total Pc"/>
                 <field name="label_weight" sum="Total Weight" optional="hide"/>
+                <field name="gross_weight" string="Gross Weight" sum="Total Gross Weight"
+                        optional="hide"/>
+                <field name="stone_weight" string="Stone Weight" sum="Total Stone Weight"
+                        optional="hide"/>
+                <field name="diamond_weight" string="Diamond Weight" sum="Total Diamond Weight"
+                        optional="hide"/>
+                <field name="net_weight" string="Net Weight" sum="Total Net Weight"
+                        optional="hide"/>
                 <field name="location_dest_id" column_invisible="not parent.is_multiple_transfer" required="parent.is_multiple_transfer" optional="show"/>
             </xpath>
             <xpath expr="//tree//field[@name='product_uom_qty']" position="attributes">

@@ -127,6 +127,60 @@ class ProductLabel(models.Model):
             self.partner_id = self.purchase_id.partner_id
         elif not self.purchase_id:
             self.partner_id = False
+        self._fetch_last_purchase_making_charge()
+
+    def _get_last_matching_label(self, partner_id, product_id, weight):
+        """Find the latest product.label matching the same Vendor (partner_id),
+        same Product Variant (product_id), with weight within [weight - 0.5, weight + 0.5],
+        having a positive purchase_making_charge_value.
+        Searches across all companies and includes active/inactive records.
+        """
+        if not partner_id or not product_id or not weight:
+            return False
+
+        min_weight = weight - 0.5
+        max_weight = weight + 0.5
+
+        domain = [
+            ('partner_id', '=', partner_id),
+            ('product_id', '=', product_id),
+            ('purchase_making_charge_value', '>', 0),
+            '|',
+            '&', ('sale_gross_weight', '>=', min_weight), ('sale_gross_weight', '<=', max_weight),
+            '&', ('purchase_gross_weight', '>=', min_weight), ('purchase_gross_weight', '<=', max_weight),
+        ]
+        origin_id = self._origin.id if hasattr(self, '_origin') and self._origin else (self.id if isinstance(self.id, int) else False)
+        if origin_id:
+            domain.append(('id', '!=', origin_id))
+
+        return self.env['product.label'].sudo().with_context(active_test=False).search(
+            domain,
+            order='create_date desc, id desc',
+            limit=1
+        )
+
+    def _fetch_last_purchase_making_charge(self):
+        """Fetch making charge type and value from the last matching label."""
+        weight = self.sale_gross_weight or self.purchase_gross_weight
+        partner_id = self.partner_id.id if self.partner_id else (self.purchase_id.partner_id.id if self.purchase_id else False)
+        product_id = self.product_id.id if self.product_id else False
+
+        if not partner_id or not product_id or not weight:
+            return
+
+        last_label = self._get_last_matching_label(partner_id, product_id, weight)
+        if last_label:
+            if last_label.purchase_making_charge_type:
+                self.purchase_making_charge_type = last_label.purchase_making_charge_type
+            self.purchase_making_charge_value = last_label.purchase_making_charge_value
+            if hasattr(self, '_compute_purchase_making_charge'):
+                self._compute_purchase_making_charge()
+            if hasattr(self, '_compute_purchase_mc_fine'):
+                self._compute_purchase_mc_fine()
+
+    @api.onchange('sale_gross_weight', 'purchase_gross_weight', 'product_id', 'partner_id')
+    def _onchange_fetch_last_purchase_making_charge(self):
+        self._fetch_last_purchase_making_charge()
 
     @api.depends('product_template_id')
     def _compute_unlabelled_weight(self):
@@ -146,19 +200,39 @@ class ProductLabel(models.Model):
         return self._onchange_check_unlabelled_weight_limit()
 
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
+        if isinstance(vals_list, dict):
+            vals_list = [vals_list]
+
         label_date = fields.Date.context_today(self)
 
         fine_rate = self.env['fine.rate.master'].search([
             ('date', '=', label_date)
         ], limit=1)
 
-        if fine_rate:
-            vals['fine_rate_id'] = fine_rate.id
-            vals['purchase_price_per_gram'] = fine_rate.fine_rate  
+        for vals in vals_list:
+            if fine_rate:
+                vals.setdefault('fine_rate_id', fine_rate.id)
+                vals.setdefault('purchase_price_per_gram', fine_rate.fine_rate)
 
-        return super().create(vals)
+            # Auto-fetch purchase making charge from last matching label if not provided
+            if not vals.get('purchase_making_charge_value'):
+                partner_id = vals.get('partner_id')
+                if not partner_id and vals.get('purchase_id'):
+                    po = self.env['purchase.order'].browse(vals['purchase_id'])
+                    partner_id = po.partner_id.id if po else False
+                product_id = vals.get('product_id')
+                weight = vals.get('sale_gross_weight') or vals.get('purchase_gross_weight')
+
+                if partner_id and product_id and weight:
+                    last_label = self._get_last_matching_label(partner_id, product_id, weight)
+                    if last_label:
+                        if not vals.get('purchase_making_charge_type') and last_label.purchase_making_charge_type:
+                            vals['purchase_making_charge_type'] = last_label.purchase_making_charge_type
+                        vals['purchase_making_charge_value'] = last_label.purchase_making_charge_value
+
+        return super().create(vals_list)
 
 
 

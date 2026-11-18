@@ -38,6 +38,8 @@
                                 <field name="old_gold_location_id"/>
                                 <field name="diamond_og_location_id"/>
                                 <field name="sr_location_id"/>
+                                <field name="label_source_location_id"/>
+                                <field name="label_dest_location_id"/>
                             </group>
                             </group>
                         </page>
@@ -88,5 +90,19 @@
         </record>
 <!--        Menu item       -->
         <menuitem action="action_res_branch_form" id="menu_action_res_branch_form" parent="base.menu_users"/>
+
+        <record id="view_company_form_inherit_branch" model="ir.ui.view">
+            <field name="name">res.company.form.inherit.branch</field>
+            <field name="model">res.company</field>
+            <field name="inherit_id" ref="base.view_company_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='currency_id']" position="after">
+                    <field name="branch_id"
+                           string="Branch"
+                           domain="id and [('company_id', '=', id)] or []"
+                           options="{'no_create': True, 'no_create_edit': True}"/>
+                </xpath>
+            </field>
+        </record>
     </data>
 </odoo>

@@ -63,7 +63,7 @@
                     <notebook>
                         <page string="Selected Labels to Transfer" invisible="state == 'done'">
                             <field name="label_ids" readonly="1">
-                                <tree create="0" delete="0">
+                                <tree create="0" delete="0" limit="1000">
                                     <field name="barcode"/>
                                     <field name="name" string="Label Ref"/>
                                     <field name="product_id"/>
@@ -86,7 +86,7 @@
                             </group>
                             <separator string="Newly Created Product Labels"/>
                             <field name="transferred_label_ids" readonly="1">
-                                <tree create="0" delete="0">
+                                <tree create="0" delete="0" limit="1000">
                                     <field name="barcode"/>
                                     <field name="name" string="New Label Ref"/>
                                     <field name="product_id"/>

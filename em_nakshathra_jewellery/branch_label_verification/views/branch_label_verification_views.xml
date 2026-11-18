@@ -401,7 +401,7 @@
                                         <button name="action_verify_selected" string="Verify Selected" type="object" class="btn-success" icon="fa-check"/>
                                     </header>
                                     <field name="name" string="Label Ref" readonly="1"/>
-                                    <field name="barcode" readonly="1"/>
+                                    <field name="barcode" readonly="1" column_invisible="1"/>
                                     <field name="product_id" readonly="1"/>
                                     <field name="purity_id" readonly="1"/>
                                     <field name="branch_id" optional="show" readonly="1"/>
@@ -435,6 +435,7 @@
                                     <button name="action_verify_line"
                                             string="Verify Now"
                                             type="object"
+                                            column_invisible="1"
                                             icon="fa-check text-success"
                                             class="btn-sm btn-outline-success"/>
                                 </tree>
@@ -449,7 +450,7 @@
                                         <button name="action_unverify_selected" string="Undo Selected" type="object" class="btn-secondary" icon="fa-undo"/>
                                     </header>
                                     <field name="name" string="Label Ref" readonly="1"/>
-                                    <field name="barcode" readonly="1"/>
+                                    <field name="barcode" readonly="1" column_invisible="1"/>
                                     <field name="product_id" readonly="1"/>
                                     <field name="purity_id" readonly="1"/>
                                     <field name="branch_id" optional="show" readonly="1"/>
@@ -501,7 +502,7 @@
                                         <button name="action_verify_selected" string="Found &amp; Verify Selected" type="object" class="btn-success" icon="fa-check"/>
                                     </header>
                                     <field name="name" string="Label Ref"/>
-                                    <field name="barcode"/>
+                                    <field name="barcode" column_invisible="1"/>
                                     <field name="product_id"/>
                                     <field name="location_id"/>
                                     <field name="sale_gross_weight" sum="Missing Gross Wt"/>
@@ -521,7 +522,7 @@
                             <field name="extra_line_ids" readonly="state == 'done'">
                                 <tree create="0" delete="0" string="Extra / Mismatched Labels" decoration-info="1 == 1">
                                     <field name="name" string="Label Ref"/>
-                                    <field name="barcode"/>
+                                    <field name="barcode" column_invisible="1"/>
                                     <field name="product_id"/>
                                     <field name="branch_id" string="Assigned Branch"/>
                                     <field name="location_id"/>

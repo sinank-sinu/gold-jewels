@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from datetime import datetime, time
+
 from odoo import models, fields
 
 
@@ -13,9 +15,9 @@ class SaleRegisterWizard(models.TransientModel):
 
     def action_download_report(self):
         domain = [
-            ('date_order', '>=', self.date_from),
-            ('date_order', '<=', self.date_to),
-            ('state', 'in', ['sale', 'done'])
+            ('date_order', '>=', datetime.combine(self.date_from, time.min)),
+            ('date_order', '<=', datetime.combine(self.date_to, time.max)),
+            ('state', '=', 'sale')
         ]
         
         if self.branch_ids:

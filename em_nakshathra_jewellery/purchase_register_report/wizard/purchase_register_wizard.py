@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from datetime import datetime, time
+
 from odoo import models, fields
 
 
@@ -13,8 +15,8 @@ class PurchaseRegisterWizard(models.TransientModel):
 
     def action_download_report(self):
         domain = [
-            ('date_order', '>=', self.date_from),
-            ('date_order', '<=', self.date_to),
+            ('date_order', '>=', datetime.combine(self.date_from, time.min)),
+            ('date_order', '<=', datetime.combine(self.date_to, time.max)),
             ('state', 'in', ['purchase', 'done'])
         ]
         
