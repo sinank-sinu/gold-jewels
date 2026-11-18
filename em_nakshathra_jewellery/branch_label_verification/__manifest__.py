@@ -19,7 +19,6 @@ Branch Label Verification & Stock Audit
     'author': 'Sinan k Ahammed',
     'depends': [
         'base',
-        'account',
         'stock',
         'product',
         'multi_branch_base',
@@ -36,7 +35,6 @@ Branch Label Verification & Stock Audit
         'report/report_actions.xml',
         'report/label_verification_report_template.xml',
         'views/branch_label_verification_views.xml',
-        'views/account_move_line_views.xml',
         'views/menu_views.xml',
     ],
     'assets': {

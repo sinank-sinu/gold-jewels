@@ -113,12 +113,18 @@ class AccountPayment(models.Model):
                 self.phone = inv.partner_id.phone or inv.partner_id.mobile or False
             if inv.custom_total < 0:
                 self.amount = abs(inv.custom_total)
+                self.payment_type = 'outbound'
             elif inv.amount_total < 0:
                 self.amount = abs(inv.amount_total)
+                self.payment_type = 'outbound'
             elif getattr(inv, 'outstanding_balance_to_pay_customer', 0.0) > 0:
                 self.amount = inv.outstanding_balance_to_pay_customer
+                self.payment_type = 'outbound'
+            else:
+                total_due = getattr(inv, 'total_balance_with_outstanding', 0.0)
+                self.amount = total_due if total_due > 0 else max(0.0, inv.amount_residual)
+                self.payment_type = 'inbound'
             self.ref = inv.name
-            self.payment_type = 'outbound'
             self.partner_type = 'customer'
             if hasattr(inv, 'branch_id') and inv.branch_id:
                 self.branch_id = inv.branch_id
@@ -129,9 +135,84 @@ class AccountPayment(models.Model):
                 if sale_lines:
                     self.sale_id = sale_lines.order_id[0]
 
+    def _reconcile_inbound_customer_payment(self):
+        """Reconcile an inbound customer payment against an invoice's added outstanding and own balance."""
+        self.ensure_one()
+        if self.env.context.get('skip_sale_auto_invoice_send') or self.is_internal_transfer:
+            return
+        if getattr(self, 'is_scheme_refund', False) or 'Scheme' in (self.ref or ''):
+            return
+        if 'jewellery.scheme.installment' in self.env and self.move_id:
+            if self.env['jewellery.scheme.installment'].sudo().search_count([('move_id', '=', self.move_id.id)]):
+                return
+
+        invoice = self.invoice_id
+        partner_ids = list({
+            p.id for p in (self.partner_id | self.partner_id.commercial_partner_id) if p
+        }) if self.partner_id else []
+
+        if not invoice and self.ref and partner_ids:
+            invoice = self.env['account.move'].search([
+                ('name', '=', self.ref.strip()),
+                ('move_type', '=', 'out_invoice'),
+                ('state', '=', 'posted'),
+                ('company_id', '=', self.company_id.id),
+                ('partner_id', 'in', partner_ids),
+            ], limit=1)
+
+        if not invoice and not self.sale_id and partner_ids:
+            candidates = self.env['account.move'].search([
+                ('move_type', '=', 'out_invoice'),
+                ('state', '=', 'posted'),
+                ('company_id', '=', self.company_id.id),
+                ('partner_id', 'in', partner_ids),
+                ('added_outstanding_line_ids', '!=', False),
+            ]).filtered(lambda m: getattr(m, 'total_balance_with_outstanding', 0.0) > 0)
+            if len(candidates) == 1:
+                invoice = candidates[0]
+
+        if not invoice or invoice.move_type != 'out_invoice' or invoice.state != 'posted':
+            return
+
+        pay_creditors = self.line_ids.filtered(
+            lambda l: l.account_id.account_type == 'asset_receivable' and not l.reconciled and l.credit > 0
+        )
+        if not pay_creditors:
+            return
+
+        # Reconcile FIFO: added previous outstanding lines first, then current invoice receivable lines
+        pay_account_ids = set(pay_creditors.mapped('account_id').ids)
+        added_debtors = invoice.added_outstanding_line_ids.filtered(
+            lambda l: l.account_id.id in pay_account_ids
+            and l.parent_state == 'posted'
+            and not l.reconciled
+            and l.amount_residual > 0
+        ).sorted(key=lambda l: (l.date or fields.Date.today(), l.id))
+        inv_debtors = invoice.line_ids.filtered(
+            lambda l: l.account_id.id in pay_account_ids and not l.reconciled and l.amount_residual > 0
+        )
+
+        for target_line in (list(added_debtors) + list(inv_debtors)):
+            open_pay = pay_creditors.filtered(lambda l: not l.reconciled and l.amount_residual < 0)
+            if not open_pay:
+                break
+            if not target_line.reconciled and target_line.amount_residual > 0:
+                try:
+                    (open_pay + target_line).reconcile()
+                except Exception:
+                    pass
+
+        if not self.invoice_id:
+            self.invoice_id = invoice.id
+        if not self.ref:
+            self.ref = invoice.name
+
     def action_post(self):
         res = super().action_post()
         for payment in self:
+            if payment.payment_type == 'inbound' and payment.partner_type == 'customer':
+                payment._reconcile_inbound_customer_payment()
+                continue
             if payment.payment_type == 'outbound' and payment.partner_type == 'customer':
                 if getattr(payment, 'is_scheme_refund', False):
                     continue

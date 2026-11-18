@@ -48,13 +48,44 @@
             </xpath>
              <xpath expr="//field[@name='invoice_outstanding_credits_debits_widget']" position="after">
                 <field name="outstanding_balance_to_pay_customer" invisible="1"/>
-                <div class="mt-2" invisible="state != 'posted' or move_type != 'out_invoice' or outstanding_balance_to_pay_customer &lt;= 0">
+                <field name="available_customer_outstanding" invisible="1"/>
+                <field name="added_outstanding_amount" invisible="1"/>
+                <field name="added_outstanding_residual" invisible="1"/>
+                <field name="total_balance_with_outstanding" invisible="1"/>
+                <div class="mt-2" colspan="2" invisible="state != 'posted' or move_type != 'out_invoice' or outstanding_balance_to_pay_customer &lt;= 0">
                     <strong>Outstanding Balance to Pay Customer: </strong>
                     <field name="outstanding_balance_to_pay_customer" readonly="1" class="oe_inline mr-2"/>
                     <button name="action_pay_outstanding_balance"
                             type="object"
                             string="Pay Customer"
                             class="btn btn-secondary"/>
+                </div>
+                <div class="mt-2" colspan="2" invisible="move_type != 'out_invoice' or state == 'cancel' or available_customer_outstanding &lt;= 0">
+                    <strong>Customer Outstanding Due: </strong>
+                    <field name="available_customer_outstanding" readonly="1" class="oe_inline me-2"/>
+                    <button name="action_add_customer_outstanding"
+                            type="object"
+                            string="Add Outstanding"
+                            class="btn btn-primary btn-sm"/>
+                </div>
+                <div class="mt-2 p-2 border rounded bg-light" colspan="2" invisible="move_type != 'out_invoice' or state == 'cancel' or added_outstanding_amount &lt;= 0">
+                    <div>
+                        <strong>Added Previous Outstanding: </strong>
+                        <field name="added_outstanding_amount" readonly="1" class="oe_inline me-2"/>
+                        <button name="action_remove_customer_outstanding"
+                                type="object"
+                                string="Remove"
+                                class="btn btn-link btn-sm text-danger p-0"
+                                invisible="added_outstanding_residual &lt; added_outstanding_amount"/>
+                    </div>
+                    <div class="mt-1" invisible="state != 'posted' or total_balance_with_outstanding &lt;= 0">
+                        <strong>Total Balance to Receive: </strong>
+                        <field name="total_balance_with_outstanding" readonly="1" class="oe_inline me-2"/>
+                        <button name="action_receive_payment_with_outstanding"
+                                type="object"
+                                string="Customer Payment"
+                                class="btn btn-success btn-sm"/>
+                    </div>
                 </div>
             </xpath>
              <xpath expr="//field[@name='narration']" position="before">

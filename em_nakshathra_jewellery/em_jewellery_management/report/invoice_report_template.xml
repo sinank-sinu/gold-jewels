@@ -553,21 +553,42 @@
                                     <span t-esc="report_net_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                 </td>
                             </tr>
+
+                            <t t-if="o.move_type == 'out_invoice' and o.added_outstanding_amount &gt; 0">
+                                <t t-set="added_outstanding_refs" t-value="o._get_report_added_outstanding_refs()"/>
+                                <tr>
+                                    <td class="totals-label" style="color: #2C3E50; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        Previous Outstanding:
+                                        <t t-if="added_outstanding_refs">
+                                            <br/>
+                                            <span style="font-size: 0.75em; color: #555555; font-weight: normal;">(<t t-esc="added_outstanding_refs"/>)</span>
+                                        </t>
+                                    </td>
+                                    <td class="totals-value" style="color: #2C3E50; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        <span t-esc="o.added_outstanding_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="totals-label grand-total">Total Payable :</td>
+                                    <td class="totals-value grand-total">
+                                        <span t-esc="report_net_amount + o.added_outstanding_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </td>
+                                </tr>
+                            </t>
                             
                             <!-- Payments: Show payment method instead of "Paid Amount", and reference in brackets underneath in small size -->
                             <t t-set="report_payments" t-value="o._get_report_payment_details()"/>
                             <t t-if="report_payments">
                                 <t t-foreach="report_payments" t-as="pay">
-                                    <t t-set="pay_color" t-value="'#D35400' if pay.get('is_customer_refund') else '#27AE60'"/>
                                     <tr>
-                                        <td class="totals-label" t-attf-style="color: #{pay_color}; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        <td class="totals-label" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
                                             <span t-esc="pay['method']"/>:
                                             <t t-if="pay.get('ref')">
                                                 <br/>
                                                 <span style="font-size: 0.75em; color: #555555; font-weight: normal;">(<t t-esc="pay['ref']"/>)</span>
                                             </t>
                                         </td>
-                                        <td class="totals-value" t-attf-style="color: #{pay_color}; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        <td class="totals-value" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
                                             <span t-esc="pay['amount']" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                         </td>
                                     </tr>
@@ -583,6 +604,14 @@
                                     </td>
                                 </tr>
                             </t>
+                            <tr t-if="o.move_type == 'out_invoice' and o.added_outstanding_amount &gt; 0 and o.total_balance_with_outstanding &gt; 0">
+                                <td class="totals-label" style="color: #E74C3C; font-weight: 600; border-bottom: 1px solid #e0e0e0;">
+                                    Balance Due:
+                                </td>
+                                <td class="totals-value" style="color: #E74C3C; font-weight: 600; border-bottom: 1px solid #e0e0e0;">
+                                    <span t-esc="o.total_balance_with_outstanding" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </td>
+                            </tr>
                         </table>
                     </div>
                     
