@@ -8,6 +8,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/branch_payment_balance_views.xml',
+        'views/account_move_line_views.xml',
     ],
     'assets': {
         'web.assets_backend': [
