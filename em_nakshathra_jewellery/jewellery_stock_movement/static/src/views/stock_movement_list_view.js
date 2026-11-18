@@ -6,71 +6,85 @@ import { ListController } from "@web/views/list/list_controller";
 import { useService } from "@web/core/utils/hooks";
 import { onWillStart, useState } from "@odoo/owl";
 
-function getTodayStr() {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+function toDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
 }
 
-function getStartOfMonthStr() {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}-01`;
-}
+const EMPTY_SUMMARY = {
+    total_products: 0,
+    total_variants: 0,
+    opening_qty: 0, opening_weight: 0,
+    qty_in: 0, weight_in: 0,
+    qty_out: 0, weight_out: 0,
+    closing_qty: 0, closing_weight: 0,
+};
 
 export class StockMovementListController extends ListController {
     setup() {
         super.setup();
         this.orm = useService("orm");
-        this.userService = useService("user");
+        this.notification = useService("notification");
 
+        const today = new Date();
         this.state = useState({
+            branches: [],
             warehouses: [],
+            locations: [],
+            branchLocked: false,
+            selectedBranchId: "",
             selectedWarehouseId: "",
-            dateFrom: "",
-            dateTo: "",
-            summary: {
-                total_products: 0,
-                total_variants: 0,
-                total_weight: 0.0,
-            },
+            selectedLocationId: "",
+            dateFrom: toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)),
+            dateTo: toDateStr(today),
+            summary: { ...EMPTY_SUMMARY },
             isLoading: false,
         });
 
         onWillStart(async () => {
-            try {
-                this.state.warehouses = await this.orm.searchRead(
-                    "stock.warehouse",
-                    [],
-                    ["id", "name", "code"],
-                    { order: "name asc" }
-                );
-
-                // Initial data generation
-                const res = await this.orm.call(
-                    "stock.movement.report",
-                    "compute_report_data",
-                    [],
-                    {
-                        warehouse_id: this.state.selectedWarehouseId ? parseInt(this.state.selectedWarehouseId) : false,
-                        date_from: this.state.dateFrom || false,
-                        date_to: this.state.dateTo || false,
-                    }
-                );
-                if (res) {
-                    this.state.summary = res;
-                }
-            } catch (err) {
-                console.error("Failed to initialize stock movement:", err);
-            }
+            const opts = await this.orm.call("stock.movement.report", "get_filter_options", []);
+            this.state.branches = opts.branches;
+            this.state.warehouses = opts.warehouses;
+            this.state.locations = opts.locations;
+            this.state.branchLocked = opts.branch_locked;
+            this.state.selectedBranchId = opts.default_branch_id ? String(opts.default_branch_id) : "";
+            await this.computeReport();
         });
+    }
+
+    // ---------------------------------------------------------------- getters
+    get filteredWarehouses() {
+        const b = this.state.selectedBranchId;
+        return b ? this.state.warehouses.filter((w) => String(w.branch_id) === b) : this.state.warehouses;
+    }
+
+    get filteredLocations() {
+        const whId = this.state.selectedWarehouseId;
+        if (whId) {
+            return this.state.locations.filter((l) => String(l.warehouse_id) === whId);
+        }
+        const whIds = new Set(this.filteredWarehouses.map((w) => w.id));
+        return this.state.locations.filter((l) => whIds.has(l.warehouse_id));
+    }
+
+    // --------------------------------------------------------------- handlers
+    async onBranchChange(ev) {
+        this.state.selectedBranchId = ev.target.value;
+        this.state.selectedWarehouseId = "";
+        this.state.selectedLocationId = "";
+        await this.reloadReport();
     }
 
     async onWarehouseChange(ev) {
         this.state.selectedWarehouseId = ev.target.value;
+        this.state.selectedLocationId = "";
+        await this.reloadReport();
+    }
+
+    async onLocationChange(ev) {
+        this.state.selectedLocationId = ev.target.value;
         await this.reloadReport();
     }
 
@@ -87,65 +101,70 @@ export class StockMovementListController extends ListController {
     }
 
     async onResetFilter() {
+        if (!this.state.branchLocked) {
+            this.state.selectedBranchId = "";
+        }
         this.state.selectedWarehouseId = "";
-        this.state.dateFrom = "";
-        this.state.dateTo = "";
+        this.state.selectedLocationId = "";
+        await this.setPreset("month");
+    }
+
+    async setPreset(preset) {
+        const today = new Date();
+        let from = today;
+        let to = today;
+        if (preset === "yesterday") {
+            from = to = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        } else if (preset === "month") {
+            from = new Date(today.getFullYear(), today.getMonth(), 1);
+        } else if (preset === "last_month") {
+            from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            to = new Date(today.getFullYear(), today.getMonth(), 0);
+        } else if (preset === "fy") {
+            // Indian financial year: 1 April - 31 March
+            const fyStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+            from = new Date(fyStartYear, 3, 1);
+        }
+        this.state.dateFrom = toDateStr(from);
+        this.state.dateTo = toDateStr(to);
         await this.reloadReport();
     }
 
-    async setFilterToday() {
-        this.state.dateFrom = getTodayStr();
-        this.state.dateTo = getTodayStr();
-        await this.reloadReport();
-    }
-
-    async setFilterThisMonth() {
-        this.state.dateFrom = getStartOfMonthStr();
-        this.state.dateTo = getTodayStr();
-        await this.reloadReport();
-    }
-
-    async setFilterAllDates() {
-        this.state.dateFrom = "";
-        this.state.dateTo = "";
-        await this.reloadReport();
+    // ------------------------------------------------------------------- data
+    async computeReport() {
+        this.state.summary = await this.orm.call("stock.movement.report", "compute_report_data", [], {
+            branch_id: this.state.selectedBranchId || false,
+            warehouse_id: this.state.selectedWarehouseId || false,
+            location_id: this.state.selectedLocationId || false,
+            date_from: this.state.dateFrom || false,
+            date_to: this.state.dateTo || false,
+        });
     }
 
     async reloadReport() {
+        if (this.state.dateFrom && this.state.dateTo && this.state.dateFrom > this.state.dateTo) {
+            this.notification.add("'From Date' cannot be later than 'To Date'.", { type: "danger" });
+            return;
+        }
         this.state.isLoading = true;
         try {
-            const res = await this.orm.call(
-                "stock.movement.report",
-                "compute_report_data",
-                [],
-                {
-                    warehouse_id: this.state.selectedWarehouseId ? parseInt(this.state.selectedWarehouseId) : false,
-                    date_from: this.state.dateFrom || false,
-                    date_to: this.state.dateTo || false,
-                }
-            );
-            if (res) {
-                this.state.summary = res;
-            }
-            await this.model.root.load({ offset: 0 });
-        } catch (err) {
-            console.error("Error updating stock movement report:", err);
+            await this.computeReport();
+            await this.model.load();
         } finally {
             this.state.isLoading = false;
         }
     }
 
+    // ------------------------------------------------------------- formatting
     formatWeight(val) {
-        if (!val && val !== 0) return "0.000";
-        return Number(val).toLocaleString(undefined, {
+        return Number(val || 0).toLocaleString(undefined, {
             minimumFractionDigits: 3,
             maximumFractionDigits: 3,
         });
     }
 
     formatNumber(val) {
-        if (!val && val !== 0) return "0";
-        return Number(val).toLocaleString();
+        return Number(val || 0).toLocaleString();
     }
 }
 

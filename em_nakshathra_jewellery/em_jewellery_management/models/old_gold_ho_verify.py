@@ -68,6 +68,17 @@ class OldGoldHOVerification(models.Model):
             rec.state = 'verified'
             rec.purchase_id.state = 'ho_verified'
 
+    def action_view_purchase(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Old Gold Purchase'),
+            'res_model': 'old.gold.purchase',
+            'res_id': self.purchase_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
+
     @api.model
     def create(self, vals):
         if vals.get('name', 'New') == 'New':

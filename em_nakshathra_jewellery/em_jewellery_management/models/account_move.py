@@ -19,6 +19,12 @@ class AccountMove(models.Model):
 
     is_paid = fields.Boolean(string="Is Paid")
     payment_to_id = fields.Many2one("account.payment",string="Payment ID")
+    outstanding_balance_to_pay_customer = fields.Monetary(
+        string="Outstanding Balance to Pay Customer",
+        compute="_compute_outstanding_balance_to_pay_customer",
+        currency_field="currency_id",
+        store=False,
+    )
     is_old_gold_bill = fields.Boolean(string="Is Old Gold Bill")
     is_old_gold = fields.Boolean(
         string="Old Gold",
@@ -314,11 +320,65 @@ class AccountMove(models.Model):
             move.with_context(bypass_negative_total_check=False)._compute_amount()
         return posted
 
-    def action_open_customer_payment_wizard(self):
+    def _get_applied_credit_remaining_lines(self):
+        """Return unreconciled customer credit lines already partially applied to this invoice."""
         self.ensure_one()
-        if self.custom_total >= 0 and self.amount_total >= 0:
-            raise ValidationError(_("Invoice is not negative."))
+        if self.state != 'posted' or self.move_type != 'out_invoice':
+            return self.env['account.move.line']
 
+        inv_rec_lines = self.line_ids.filtered(
+            lambda l: l.account_id.account_type == 'asset_receivable'
+        )
+        if not inv_rec_lines:
+            return self.env['account.move.line']
+
+        # Exclude SO-linked Old Gold / Sale Return adjustment entries already handled via custom_total
+        excluded_move_ids = set()
+        sale_orders = self.line_ids.mapped('sale_line_ids.order_id')
+        if not sale_orders and self.invoice_origin:
+            sale_orders = self.env['sale.order'].sudo().search([('name', '=', self.invoice_origin)])
+        for so in sale_orders:
+            if getattr(self, 'old_gold_price', 0.0) and getattr(so, 'old_gold_entry_id', False):
+                excluded_move_ids.add(so.old_gold_entry_id.id)
+            if getattr(self, 'sale_return_price', 0.0) and getattr(so, 'sale_return_entry_id', False):
+                excluded_move_ids.add(so.sale_return_entry_id.id)
+
+        return inv_rec_lines.mapped('matched_credit_ids.credit_move_id').filtered(
+            lambda l: l.account_id.account_type == 'asset_receivable'
+            and not l.reconciled
+            and l.amount_residual < 0
+            and l.move_id.id not in excluded_move_ids
+        )
+
+    @api.depends(
+        'state',
+        'move_type',
+        'payment_state',
+        'currency_id',
+        'line_ids.matched_credit_ids',
+        'line_ids.matched_credit_ids.credit_move_id.amount_residual',
+        'line_ids.matched_credit_ids.credit_move_id.amount_residual_currency',
+        'line_ids.matched_credit_ids.credit_move_id.reconciled',
+    )
+    def _compute_outstanding_balance_to_pay_customer(self):
+        for move in self:
+            total = 0.0
+            if move.state == 'posted' and move.move_type == 'out_invoice':
+                for line in move._get_applied_credit_remaining_lines():
+                    if line.currency_id and line.currency_id == move.currency_id:
+                        total += abs(line.amount_residual_currency)
+                    else:
+                        total += move.company_currency_id._convert(
+                            abs(line.amount_residual),
+                            move.currency_id,
+                            move.company_id,
+                            line.date or move.invoice_date or fields.Date.context_today(move),
+                        )
+            move.outstanding_balance_to_pay_customer = total
+
+    def _prepare_outbound_customer_payment_action(self, amount):
+        """Return an action opening the outbound Customer Payment form pre-filled for this invoice."""
+        self.ensure_one()
         domain = [
             ('company_id', '=', self.company_id.id),
             ('type', 'in', ('cash', 'bank')),
@@ -358,7 +418,7 @@ class AccountMove(models.Model):
                 'default_payment_type': 'outbound',
                 'default_partner_type': 'customer',
                 'default_partner_id': self.partner_id.id,
-                'default_amount': abs(self.custom_total) if self.custom_total < 0 else abs(self.amount_total),
+                'default_amount': amount,
                 'default_journal_id': journal.id if journal else False,
                 'default_branch_id': self.branch_id.id if hasattr(self, 'branch_id') and self.branch_id else False,
                 'default_company_id': self.company_id.id,
@@ -367,6 +427,21 @@ class AccountMove(models.Model):
                 'default_sale_id': sale_order_id,
             },
         }
+
+    def action_open_customer_payment_wizard(self):
+        self.ensure_one()
+        if self.custom_total >= 0 and self.amount_total >= 0:
+            raise ValidationError(_("Invoice is not negative."))
+        amount = abs(self.custom_total) if self.custom_total < 0 else abs(self.amount_total)
+        return self._prepare_outbound_customer_payment_action(amount)
+
+    def action_pay_outstanding_balance(self):
+        """Open Customer Payment form for the remaining balance of an added outstanding credit."""
+        self.ensure_one()
+        balance = self.outstanding_balance_to_pay_customer
+        if balance <= 0:
+            raise ValidationError(_("There is no remaining outstanding balance to pay to the customer."))
+        return self._prepare_outbound_customer_payment_action(balance)
 
     def action_customer_payment_wizard(self):
         return self.action_open_customer_payment_wizard()
@@ -809,16 +884,107 @@ class AccountMove(models.Model):
                 'is_credit_note': is_credit_note,
             })
 
-        if hasattr(self, 'payment_to_id') and self.payment_to_id and self.payment_to_id.id not in seen_ids:
-            pay = self.payment_to_id
+        def _append_outbound_customer_payment(pay, amount_override=None):
+            if not pay or pay.id in seen_ids or pay.state != 'posted':
+                return
             seen_ids.add(pay.id)
             pay_method, pay_ref = _classify_payment(pay=pay, journal=pay.journal_id)
+            if amount_override is not None:
+                pay_amt = amount_override
+            elif pay.currency_id and pay.currency_id != self.currency_id:
+                pay_amt = pay.currency_id._convert(
+                    pay.amount,
+                    self.currency_id,
+                    self.company_id,
+                    pay.date or fields.Date.context_today(self),
+                )
+            else:
+                pay_amt = pay.amount
+
+            is_refund = (pay.payment_type == 'outbound' and pay.partner_type == 'customer')
+            if is_refund:
+                label = f"Paid to Customer ({pay_method})" if pay_method and pay_method != 'Payment' else "Paid to Customer"
+            else:
+                label = pay_method
+
             payments_info.append({
-                'method': pay_method,
+                'method': label,
                 'ref': pay_ref,
-                'amount': pay.amount,
+                'amount': pay_amt,
                 'date': pay.date,
+                'is_customer_refund': is_refund,
             })
+
+        # 1. All posted outbound customer payments directly linked to this invoice
+        Payment = self.env['account.payment'].sudo()
+        link_clauses = [('invoice_id', '=', self.id)]
+        if hasattr(self, 'payment_to_id') and self.payment_to_id:
+            link_clauses.append(('id', '=', self.payment_to_id.id))
+        if 'scheme_refund_invoice_id' in Payment._fields:
+            link_clauses.append(('scheme_refund_invoice_id', '=', self.id))
+
+        if len(link_clauses) == 1:
+            or_domain = link_clauses
+        elif len(link_clauses) == 2:
+            or_domain = ['|'] + link_clauses
+        else:
+            or_domain = ['|', '|'] + link_clauses
+
+        direct_outbound = Payment.search([
+            ('state', '=', 'posted'),
+            ('payment_type', '=', 'outbound'),
+            ('partner_type', '=', 'customer'),
+        ] + or_domain, order='date asc, id asc')
+        for pay in direct_outbound:
+            _append_outbound_customer_payment(pay)
+
+        # Preserve any non-outbound legacy payment_to_id
+        if hasattr(self, 'payment_to_id') and self.payment_to_id and self.payment_to_id.id not in seen_ids:
+            _append_outbound_customer_payment(self.payment_to_id)
+
+        # 2. 2-hop ledger fallback: unlinked outbound customer payments reconciled against credit lines
+        #    that were applied solely to this invoice
+        if self.move_type == 'out_invoice' and self.state == 'posted':
+            inv_rec_lines = self.line_ids.filtered(
+                lambda l: l.account_id.account_type == 'asset_receivable'
+            )
+            applied_credits = inv_rec_lines.mapped('matched_credit_ids.credit_move_id').filtered(
+                lambda l: l.account_id.account_type == 'asset_receivable'
+            )
+            for credit_line in applied_credits:
+                matched_debits = credit_line.matched_debit_ids
+                linked_out_invoices = matched_debits.mapped('debit_move_id.move_id').filtered(
+                    lambda m: m.move_type == 'out_invoice'
+                )
+                if linked_out_invoices != self:
+                    continue
+                for partial in matched_debits:
+                    debit_line = partial.debit_move_id
+                    pay = debit_line.payment_id
+                    if (
+                        not pay
+                        or pay.id in seen_ids
+                        or pay.state != 'posted'
+                        or pay.payment_type != 'outbound'
+                        or pay.partner_type != 'customer'
+                    ):
+                        continue
+                    if getattr(pay, 'invoice_id', False) and pay.invoice_id != self:
+                        continue
+                    if getattr(pay, 'scheme_refund_invoice_id', False) and pay.scheme_refund_invoice_id != self:
+                        continue
+                    if debit_line.currency_id == self.currency_id:
+                        refund_amt = partial.debit_amount_currency
+                    elif self.company_currency_id == self.currency_id:
+                        refund_amt = partial.amount
+                    else:
+                        refund_amt = self.company_currency_id._convert(
+                            partial.amount,
+                            self.currency_id,
+                            self.company_id,
+                            pay.date or fields.Date.context_today(self),
+                        )
+                    _append_outbound_customer_payment(pay, amount_override=refund_amt)
 
         return payments_info
 

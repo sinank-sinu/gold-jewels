@@ -22,8 +22,6 @@ class ResPartner(models.Model):
         ("Kaloor", "Kaloor"),
         ("Vyttila", "Vyttila"),
         ("Aluva", "Aluva"),
-        ("Ernakulam", "Ernakulam"),
-        ("Alappuzha", "Alappuzha"),
         ("Other", "Other"),
     ], string="City")
 

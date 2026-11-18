@@ -8,7 +8,7 @@ class OldGoldPurchase(models.Model):
 
     partner_id = fields.Many2one('res.partner', required=True)
     name = fields.Char("name")
-    date = fields.Date("date")
+    date = fields.Datetime("Date", default=fields.Datetime.now)
     company_id = fields.Many2one(
         'res.company',
         string='Company',
@@ -325,7 +325,13 @@ class SaleOldGoldLine(models.Model):
 
     sale_id = fields.Many2one('sale.order')
     old_gold_purchase_id = fields.Many2one('old.gold.purchase')
-    is_smith_transfer = fields.Boolean(related='old_gold_purchase_id.is_smith_transfer', string="Smith Transfer Required")
+    is_smith_transfer = fields.Boolean(
+        string="Smith Transfer Required",
+        compute='_compute_is_smith_transfer',
+        store=True,
+    )
+
+
     batch_id = fields.Many2one('old.gold.batch', string="Batch")
 
 
@@ -343,6 +349,25 @@ class SaleOldGoldLine(models.Model):
         store=True,
     )
 
+    @api.depends('batch_id.is_smith_transfer', 'old_gold_purchase_id.is_smith_transfer')
+    def _compute_is_smith_transfer(self):
+        for line in self:
+            line.is_smith_transfer = (
+                line.batch_id.is_smith_transfer if line.batch_id
+                else (line.old_gold_purchase_id.is_smith_transfer if line.old_gold_purchase_id else False)
+            )
+
+    def action_view_old_gold_purchase(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Old Gold Purchase'),
+            'res_model': 'old.gold.purchase',
+            'view_mode': 'form',
+            'res_id': self.old_gold_purchase_id.id,
+            'target': 'current',
+        }
+
     @api.depends('purity_id', 'purity_id.is_diamond_og', 'diamond_amount')
     def _compute_is_diamond_og(self):
         for line in self:
@@ -350,7 +375,7 @@ class SaleOldGoldLine(models.Model):
                 line.is_diamond_og = True
             elif line.diamond_amount and line.diamond_amount > 0:
                 line.is_diamond_og = True
-            else:
+            elif not line.is_diamond_og:
                 line.is_diamond_og = False
 
     def _resolve_dest_location(self, is_dmd, branch):
@@ -375,22 +400,14 @@ class SaleOldGoldLine(models.Model):
             loc = line._resolve_dest_location(is_dmd, branch)
             line.location_id = loc.id if loc else False
 
-    @api.onchange('is_diamond_og')
-    def _onchange_is_diamond_og(self):
+    @api.onchange('purity_id', 'diamond_amount', 'is_diamond_og')
+    def _onchange_purity_id_set_location(self):
         for line in self:
-            branch = line.sale_id.branch_id or line.branch_id or (line.old_gold_purchase_id and line.old_gold_purchase_id.branch_id) or self.env.user.branch_id
-            loc = line._resolve_dest_location(line.is_diamond_og, branch)
-            line.location_id = loc.id if loc else False
-
-    @api.onchange('diamond_amount')
-    def _onchange_diamond_amount(self):
-        for line in self:
-            if line.diamond_amount and line.diamond_amount > 0:
+            branch = line.sale_id.branch_id or line.branch_id or self.env.user.branch_id
+            is_dmd = line.is_diamond_og or (line.diamond_amount and line.diamond_amount > 0) or (line.purity_id and line.purity_id.is_diamond_og)
+            if is_dmd:
                 line.is_diamond_og = True
-            elif not (line.purity_id and line.purity_id.is_diamond_og):
-                line.is_diamond_og = False
-            branch = line.sale_id.branch_id or line.branch_id or (line.old_gold_purchase_id and line.old_gold_purchase_id.branch_id) or self.env.user.branch_id
-            loc = line._resolve_dest_location(line.is_diamond_og, branch)
+            loc = line._resolve_dest_location(is_dmd, branch)
             line.location_id = loc.id if loc else False
 
     gross_weight = fields.Float(required=True,digits=(16, 3))
@@ -400,7 +417,6 @@ class SaleOldGoldLine(models.Model):
 
     rate = fields.Float()
     diamond_amount = fields.Float(string="Diamond Amount")
-    round_off = fields.Float(string="Round Off", default=0.0)
 
     amount = fields.Float(string="Amount", compute='_compute_amount', store=True, readonly=False)
 
@@ -409,6 +425,10 @@ class SaleOldGoldLine(models.Model):
     ho_transfer_id = fields.Many2one('stock.picking', readonly=True)
     branch_id = fields.Many2one(related='old_gold_purchase_id.branch_id', string='Branch',
                                 store=True)
+    partner_id = fields.Many2one(related='old_gold_purchase_id.partner_id', string='Customer', store=True)
+    date = fields.Datetime(related='old_gold_purchase_id.date', string='Date', store=True)
+    company_id = fields.Many2one(related='old_gold_purchase_id.company_id', string='Company', store=True)
+    state = fields.Selection(related='old_gold_purchase_id.state', string='Status', store=True)
 
     verified_purity_id = fields.Many2one('gold.purity', string="Verified Purity")
     verified_gross_weight = fields.Float(string="Verified Gross Weight", digits=(16, 3))
@@ -449,27 +469,17 @@ class SaleOldGoldLine(models.Model):
             r.net_weight = r.gross_weight - r.stone_weight
 
 
-    @api.depends('net_weight', 'rate', 'diamond_amount', 'round_off')
+    @api.depends('net_weight', 'rate', 'diamond_amount')
     def _compute_amount(self):
         for rec in self:
-            base_amt = (rec.net_weight * rec.rate) + rec.diamond_amount + (rec.round_off or 0.0)
             if not self.env.context.get('skip_old_gold_amount_compute'):
-                rec.amount = base_amt
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
             elif not rec.amount:
-                rec.amount = base_amt
+                rec.amount = (rec.net_weight * rec.rate) + rec.diamond_amount
 
     @api.onchange('purity_id')
     def _onchange_purity(self):
         for r in self:
-            if r.purity_id:
-                r.is_diamond_og = bool(r.purity_id.is_diamond_og or (r.diamond_amount and r.diamond_amount > 0))
-            else:
-                r.is_diamond_og = bool(r.diamond_amount and r.diamond_amount > 0)
-
-            branch = r.sale_id.branch_id or r.branch_id or (r.old_gold_purchase_id and r.old_gold_purchase_id.branch_id) or self.env.user.branch_id
-            loc = r._resolve_dest_location(r.is_diamond_og, branch)
-            r.location_id = loc.id if loc else False
-
             today = fields.Date.today()
             gold_rate_rec = self.env['gold.rate.master'].search([
                 ('purity_id', '=', r.purity_id.id),
@@ -477,8 +487,8 @@ class SaleOldGoldLine(models.Model):
                 ('active', '=', True),
                 ('rate_type', '=', 'old_gold')
             ], order='date desc', limit=1)
-            gold_rate = gold_rate_rec.board_rate if gold_rate_rec else 0.0
-            r.rate = gold_rate
+            gold_rate = gold_rate_rec.board_rate
+            self.rate = gold_rate
 
 
 

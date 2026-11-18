@@ -558,15 +558,16 @@
                             <t t-set="report_payments" t-value="o._get_report_payment_details()"/>
                             <t t-if="report_payments">
                                 <t t-foreach="report_payments" t-as="pay">
+                                    <t t-set="pay_color" t-value="'#D35400' if pay.get('is_customer_refund') else '#27AE60'"/>
                                     <tr>
-                                        <td class="totals-label" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        <td class="totals-label" t-attf-style="color: #{pay_color}; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
                                             <span t-esc="pay['method']"/>:
                                             <t t-if="pay.get('ref')">
                                                 <br/>
                                                 <span style="font-size: 0.75em; color: #555555; font-weight: normal;">(<t t-esc="pay['ref']"/>)</span>
                                             </t>
                                         </td>
-                                        <td class="totals-value" style="color: #27AE60; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
+                                        <td class="totals-value" t-attf-style="color: #{pay_color}; font-weight: 600; padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0; vertical-align: top;">
                                             <span t-esc="pay['amount']" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
                                         </td>
                                     </tr>

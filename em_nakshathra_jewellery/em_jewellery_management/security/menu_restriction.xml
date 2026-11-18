@@ -172,7 +172,6 @@
               name="Cash Book"
               parent="menu_billing_staff_root"
               action="dynamic_accounts_report.action_cash_book"
-              active="False"
               sequence="1"/>
 
     <!-- Restrict Attendances -->

@@ -17,6 +17,10 @@ class BranchLabelVerificationController(http.Controller):
         if not audit.exists():
             return request.not_found()
 
+        audit.check_access_rights('read')
+        audit.check_access_rule('read')
+        audit = audit.sudo()
+
         # Enforce security: Branch Manager sees full report; Billing users get blinded report
         is_manager = request.env.user.has_group(
             'branch_label_verification.group_branch_label_verification_branch_manager'

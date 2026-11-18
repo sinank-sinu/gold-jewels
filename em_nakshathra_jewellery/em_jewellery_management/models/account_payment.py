@@ -23,6 +23,8 @@ class AccountPayment(models.Model):
                 self.amount = abs(inv.custom_total)
             elif inv.amount_total < 0:
                 self.amount = abs(inv.amount_total)
+            elif getattr(inv, 'outstanding_balance_to_pay_customer', 0.0) > 0:
+                self.amount = inv.outstanding_balance_to_pay_customer
             self.ref = inv.name
             self.payment_type = 'outbound'
             self.partner_type = 'customer'
@@ -39,6 +41,9 @@ class AccountPayment(models.Model):
         res = super().action_post()
         for payment in self:
             if payment.payment_type == 'outbound' and payment.partner_type == 'customer':
+                if getattr(payment, 'is_scheme_refund', False):
+                    continue
+
                 # Locate linked customer invoice
                 invoice = payment.invoice_id
                 if not invoice and payment.ref:
@@ -79,7 +84,14 @@ class AccountPayment(models.Model):
                         )
                         lines_to_reconcile |= inv_debtors
 
-                    # If only the payment's line is present, search open credit lines for this partner
+                        # Prioritize remaining credit lines already applied to this invoice
+                        if len(lines_to_reconcile) <= 1:
+                            applied_credits = invoice._get_applied_credit_remaining_lines().filtered(
+                                lambda l: l.account_id in pay_debtors.mapped('account_id')
+                            )
+                            lines_to_reconcile |= applied_credits
+
+                    # Fallback: if still no counterpart line, search open credit lines for this partner
                     if len(lines_to_reconcile) <= 1:
                         open_credits = self.env['account.move.line'].search([
                             ('partner_id', '=', payment.partner_id.id),
@@ -97,11 +109,13 @@ class AccountPayment(models.Model):
                             pass
 
                     if invoice:
-                        invoice.write({
-                            'is_paid': True,
-                            'custom_total': 0.0,
-                            'payment_to_id': payment.id,
-                        })
+                        inv_vals = {'payment_to_id': payment.id}
+                        if invoice.custom_total < 0:
+                            inv_vals.update({
+                                'is_paid': True,
+                                'custom_total': 0.0,
+                            })
+                        invoice.write(inv_vals)
                         if not payment.invoice_id:
                             payment.invoice_id = invoice.id
                         if not payment.sale_id and hasattr(invoice, 'sale_id') and invoice.sale_id:

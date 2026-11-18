@@ -3,115 +3,106 @@
     <t t-name="jewellery_stock_movement.StockMovementListView" t-inherit="web.ListView" t-inherit-mode="primary">
         <xpath expr="//t[@t-component='props.Renderer']" position="before">
             <div class="o_stock_movement_dashboard p-3">
-                <!-- Filters Row -->
+                <!-- Filters -->
                 <div class="o_sm_filter_card p-3 mb-3">
                     <div class="row g-3 align-items-end">
-                        <!-- Warehouse Selector -->
-                        <div class="col-12 col-md-4 col-lg-3">
-                            <label class="form-label fw-bold text-secondary small mb-1">
-                                <i class="fa fa-building text-primary me-1"/> Warehouse
-                            </label>
+                        <div class="col-12 col-md-4 col-xl-2">
+                            <label class="o_sm_label"><i class="fa fa-sitemap me-1"/> Branch</label>
                             <select class="form-select form-select-sm fw-semibold"
-                                    t-att-value="state.selectedWarehouseId"
-                                    t-on-change="onWarehouseChange">
-                                <option value="">All Warehouses</option>
-                                <t t-foreach="state.warehouses" t-as="wh" t-key="wh.id">
+                                    t-on-change="onBranchChange"
+                                    t-att-disabled="state.branchLocked or state.isLoading">
+                                <option t-if="!state.branchLocked" value="">All Branches</option>
+                                <t t-foreach="state.branches" t-as="br" t-key="br.id">
+                                    <option t-att-value="br.id"
+                                            t-att-selected="state.selectedBranchId == br.id"
+                                            t-esc="br.name"/>
+                                </t>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4 col-xl-2">
+                            <label class="o_sm_label"><i class="fa fa-building me-1"/> Warehouse</label>
+                            <select class="form-select form-select-sm fw-semibold"
+                                    t-on-change="onWarehouseChange" t-att-disabled="state.isLoading">
+                                <option value="" t-att-selected="!state.selectedWarehouseId">All Warehouses</option>
+                                <t t-foreach="filteredWarehouses" t-as="wh" t-key="wh.id">
                                     <option t-att-value="wh.id"
-                                            t-att-selected="state.selectedWarehouseId == wh.id ? 'selected' : undefined"
+                                            t-att-selected="state.selectedWarehouseId == wh.id"
                                             t-esc="wh.name"/>
                                 </t>
                             </select>
                         </div>
-
-                        <!-- Date Range: From Date -->
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label class="form-label fw-bold text-secondary small mb-1">
-                                <i class="fa fa-calendar text-info me-1"/> From Date
-                            </label>
-                            <input type="date"
-                                   class="form-control form-control-sm"
-                                   t-att-value="state.dateFrom"
-                                   t-on-change="onDateFromChange"/>
+                        <div class="col-12 col-md-4 col-xl-2">
+                            <label class="o_sm_label"><i class="fa fa-map-marker me-1"/> Location</label>
+                            <select class="form-select form-select-sm fw-semibold"
+                                    t-on-change="onLocationChange" t-att-disabled="state.isLoading">
+                                <option value="" t-att-selected="!state.selectedLocationId">All Locations</option>
+                                <t t-foreach="filteredLocations" t-as="loc" t-key="loc.id">
+                                    <option t-att-value="loc.id"
+                                            t-att-selected="state.selectedLocationId == loc.id"
+                                            t-esc="loc.name"/>
+                                </t>
+                            </select>
                         </div>
-
-                        <!-- Date Range: To Date -->
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label class="form-label fw-bold text-secondary small mb-1">
-                                <i class="fa fa-calendar text-info me-1"/> To Date
-                            </label>
-                            <input type="date"
-                                   class="form-control form-control-sm"
-                                   t-att-value="state.dateTo"
-                                   t-on-change="onDateToChange"/>
+                        <div class="col-6 col-md-3 col-xl-2">
+                            <label class="o_sm_label"><i class="fa fa-calendar me-1"/> From Date</label>
+                            <input type="date" class="form-control form-control-sm"
+                                   t-att-value="state.dateFrom" t-on-change="onDateFromChange"/>
                         </div>
-
-                        <!-- Action Buttons & Quick Presets -->
-                        <div class="col-12 col-md-12 col-lg-5 d-flex align-items-center gap-2 flex-wrap">
-                            <button class="btn btn-sm btn-primary px-3 shadow-sm fw-semibold"
-                                    t-on-click="onApplyFilter"
-                                    t-att-disabled="state.isLoading">
-                                <i class="fa fa-filter me-1"/> Apply
+                        <div class="col-6 col-md-3 col-xl-2">
+                            <label class="o_sm_label"><i class="fa fa-calendar me-1"/> To Date</label>
+                            <input type="date" class="form-control form-control-sm"
+                                   t-att-value="state.dateTo" t-on-change="onDateToChange"/>
+                        </div>
+                        <div class="col-12 col-md-6 col-xl-2 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary px-3 fw-semibold flex-grow-1"
+                                    t-on-click="onApplyFilter" t-att-disabled="state.isLoading">
+                                <i t-attf-class="fa {{ state.isLoading ? 'fa-spinner fa-spin' : 'fa-filter' }} me-1"/> Apply
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary px-3"
-                                    t-on-click="onResetFilter"
-                                    t-att-disabled="state.isLoading">
-                                <i class="fa fa-undo me-1"/> Reset
+                            <button class="btn btn-sm btn-outline-secondary" title="Reset"
+                                    t-on-click="onResetFilter" t-att-disabled="state.isLoading">
+                                <i class="fa fa-undo"/>
                             </button>
-
-                            <!-- Date Presets -->
-                            <div class="btn-group btn-group-sm ms-auto" role="group">
-                                <button type="button" class="btn btn-outline-primary btn-sm" t-on-click="setFilterToday">Today</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm" t-on-click="setFilterThisMonth">This Month</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="setFilterAllDates">All Dates</button>
-                            </div>
-
-                            <span t-if="state.isLoading" class="spinner-border spinner-border-sm text-primary ms-2" role="status"/>
                         </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                        <span class="o_sm_label mb-0 me-1">Quick:</span>
+                        <button class="btn btn-sm o_sm_chip" t-on-click="() => this.setPreset('today')">Today</button>
+                        <button class="btn btn-sm o_sm_chip" t-on-click="() => this.setPreset('yesterday')">Yesterday</button>
+                        <button class="btn btn-sm o_sm_chip" t-on-click="() => this.setPreset('month')">This Month</button>
+                        <button class="btn btn-sm o_sm_chip" t-on-click="() => this.setPreset('last_month')">Last Month</button>
+                        <button class="btn btn-sm o_sm_chip" t-on-click="() => this.setPreset('fy')">This FY</button>
+                        <span class="ms-auto small text-muted">
+                            <i class="fa fa-cubes me-1"/>
+                            <t t-esc="formatNumber(state.summary.total_products)"/> products ·
+                            <t t-esc="formatNumber(state.summary.total_variants)"/> variants
+                        </span>
                     </div>
                 </div>
 
-                <!-- KPI Summary Cards Row -->
-                <div class="row g-3">
-                    <!-- Total Products Card -->
-                    <div class="col-12 col-md-4">
-                        <div class="o_sm_kpi_card d-flex align-items-center">
-                            <div class="o_sm_kpi_icon primary me-3">
-                                <i class="fa fa-cubes"/>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="o_sm_kpi_title">Total Products</div>
-                                <div class="o_sm_kpi_value" t-esc="formatNumber(state.summary.total_products)"/>
-                            </div>
-                        </div>
+                <!-- KPI flow: Opening + In - Out = Closing -->
+                <div class="o_sm_flow">
+                    <div class="o_sm_kpi_card o_sm_opening">
+                        <div class="o_sm_kpi_title"><i class="fa fa-flag-o me-1"/> Opening</div>
+                        <div class="o_sm_kpi_value"><t t-esc="formatWeight(state.summary.opening_weight)"/><span class="o_sm_kpi_unit">g</span></div>
+                        <div class="o_sm_kpi_sub">Qty <t t-esc="formatWeight(state.summary.opening_qty)"/> · as of <t t-esc="state.dateFrom or 'start'"/></div>
                     </div>
-
-                    <!-- Total Variants Card -->
-                    <div class="col-12 col-md-4">
-                        <div class="o_sm_kpi_card d-flex align-items-center">
-                            <div class="o_sm_kpi_icon success me-3">
-                                <i class="fa fa-tags"/>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="o_sm_kpi_title">Total Product Variants</div>
-                                <div class="o_sm_kpi_value" t-esc="formatNumber(state.summary.total_variants)"/>
-                            </div>
-                        </div>
+                    <div class="o_sm_op">+</div>
+                    <div class="o_sm_kpi_card o_sm_in">
+                        <div class="o_sm_kpi_title"><i class="fa fa-arrow-down me-1"/> Stock In</div>
+                        <div class="o_sm_kpi_value"><t t-esc="formatWeight(state.summary.weight_in)"/><span class="o_sm_kpi_unit">g</span></div>
+                        <div class="o_sm_kpi_sub">Qty <t t-esc="formatWeight(state.summary.qty_in)"/></div>
                     </div>
-
-                    <!-- Total Stock Weight Card -->
-                    <div class="col-12 col-md-4">
-                        <div class="o_sm_kpi_card d-flex align-items-center">
-                            <div class="o_sm_kpi_icon warning me-3">
-                                <i class="fa fa-balance-scale"/>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="o_sm_kpi_title">Total Stock Weight</div>
-                                <div class="d-flex align-items-baseline">
-                                    <span class="o_sm_kpi_value" t-esc="formatWeight(state.summary.total_weight)"/>
-                                    <span class="o_sm_kpi_unit">grams</span>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="o_sm_op">−</div>
+                    <div class="o_sm_kpi_card o_sm_out">
+                        <div class="o_sm_kpi_title"><i class="fa fa-arrow-up me-1"/> Stock Out</div>
+                        <div class="o_sm_kpi_value"><t t-esc="formatWeight(state.summary.weight_out)"/><span class="o_sm_kpi_unit">g</span></div>
+                        <div class="o_sm_kpi_sub">Qty <t t-esc="formatWeight(state.summary.qty_out)"/></div>
+                    </div>
+                    <div class="o_sm_op">=</div>
+                    <div class="o_sm_kpi_card o_sm_closing">
+                        <div class="o_sm_kpi_title"><i class="fa fa-flag-checkered me-1"/> Closing</div>
+                        <div class="o_sm_kpi_value"><t t-esc="formatWeight(state.summary.closing_weight)"/><span class="o_sm_kpi_unit">g</span></div>
+                        <div class="o_sm_kpi_sub">Qty <t t-esc="formatWeight(state.summary.closing_qty)"/> · as of <t t-esc="state.dateTo or 'today'"/></div>
                     </div>
                 </div>
             </div>

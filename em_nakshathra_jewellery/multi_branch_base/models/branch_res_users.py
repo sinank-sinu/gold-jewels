@@ -35,6 +35,11 @@ class ResUsers(models.Model):
                                 default=False,store=True,
                                 domain="[('id', '=', branch_ids)]",)
 
+    @api.model
+    def _get_invalidation_fields(self):
+        """Include branch fields so branch changes invalidate record-rule caches."""
+        return super()._get_invalidation_fields() | {'branch_id', 'branch_ids'}
+
     @api.constrains('branch_id')
     def branch_constrains(self):
         """branch constrains"""

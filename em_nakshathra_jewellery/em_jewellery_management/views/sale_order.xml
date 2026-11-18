@@ -186,7 +186,6 @@
                         <field name="net_weight" readonly="1"/>
                         <field name="rate"/>
                         <field name="diamond_amount"/>
-                        <field name="round_off" string="Round Off"/>
                         <field name="amount" readonly="1"/>
                     </tree>
                 </field>
@@ -229,7 +228,6 @@
                         <field name="mc_discount" string="Discount" optional="hide"/>
                         <field name="mc_amount_actual" string="MC"/>
                         <field name="mc_percent_actual" string="MC%"/>
-                        <field name="round_off" string="Round Off"/>
                         <field name="amount" string="Subtotal" readonly="1"/>
                     </tree>
                 </field>
@@ -277,8 +275,7 @@
                 <field name="is_scheme_redeemed" invisible="1"/>
                 <group>
                     <field name="apply_scheme" widget="boolean_toggle" readonly="is_scheme_redeemed"/>
-                    <field name="customer_schemes" widget="many2many_tags" invisible="not apply_scheme" readonly="is_scheme_redeemed" domain="[('state', 'in', ('running', 'completed')), ('phone', '!=', False), '|', ('phone', '=', phone), ('phone', '=', other_person_phone)]"/>
-                    <field name="other_person_phone" string="Other Person Phone" invisible="not apply_scheme" readonly="is_scheme_redeemed" placeholder="Enter phone to add other person's scheme"/>
+                    <field name="customer_schemes" widget="many2many_tags" invisible="not apply_scheme" readonly="is_scheme_redeemed" domain="[('partner_id', 'child_of', partner_id), ('state', 'in', ('running', 'completed'))]"/>
                     <field name="scheme_amount" string="Customer Paid" readonly="1" invisible="not apply_scheme"/>
                     <field name="active_scheme_id" invisible="1"/>
 <!--                    <button-->

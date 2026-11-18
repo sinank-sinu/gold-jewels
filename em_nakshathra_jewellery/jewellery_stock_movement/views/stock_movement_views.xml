@@ -1,19 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Tree / List View with Custom JS Class for Top Controls & Summary Cards -->
+    <!-- Tree / List View with Custom JS Class for Top Filters & KPI Cards -->
     <record id="view_stock_movement_report_tree" model="ir.ui.view">
         <field name="name">stock.movement.report.tree</field>
         <field name="model">stock.movement.report</field>
         <field name="arch" type="xml">
-            <tree string="Stock Movement" js_class="stock_movement_list" create="0" delete="0" edit="0" expand="0">
+            <tree string="Stock Movement" js_class="stock_movement_list" create="0" delete="0" edit="0" expand="0"
+                  class="o_sm_report_tree">
                 <field name="product_tmpl_id" invisible="1"/>
                 <field name="product_id" string="Variant / Product"/>
+                <field name="branch_id" optional="hide"/>
                 <field name="warehouse_id" optional="show"/>
-                <field name="categ_id" optional="show"/>
-                <field name="qty_in" string="Stock In" sum="Total Stock In" decoration-success="qty_in &gt; 0"/>
-                <field name="qty_out" string="Stock Out" sum="Total Stock Out" decoration-danger="qty_out &gt; 0"/>
-                <field name="balance" string="Balance" sum="Total Balance" decoration-bf="1" decoration-info="balance &gt; 0"/>
-                <field name="uom_id" string="UoM"/>
+                <field name="categ_id" optional="hide"/>
+                <field name="opening_qty" sum="Opening Qty" optional="show"/>
+                <field name="opening_weight" sum="Opening Wt" decoration-bf="1"/>
+                <field name="qty_in" sum="In Qty" optional="show" decoration-success="qty_in &gt; 0"/>
+                <field name="weight_in" sum="In Wt" decoration-success="weight_in &gt; 0"/>
+                <field name="qty_out" sum="Out Qty" optional="show" decoration-danger="qty_out &gt; 0"/>
+                <field name="weight_out" sum="Out Wt" decoration-danger="weight_out &gt; 0"/>
+                <field name="closing_qty" sum="Closing Qty" optional="show" decoration-bf="1"/>
+                <field name="closing_weight" sum="Closing Wt" decoration-bf="1"
+                       decoration-info="closing_weight &gt; 0" decoration-danger="closing_weight &lt; 0"/>
+                <field name="uom_id" string="UoM" optional="show"/>
             </tree>
         </field>
     </record>
@@ -26,10 +34,10 @@
             <pivot string="Stock Movement Analysis">
                 <field name="warehouse_id" type="row"/>
                 <field name="product_tmpl_id" type="row"/>
-                <field name="qty_in" type="measure"/>
-                <field name="qty_out" type="measure"/>
-                <field name="balance" type="measure"/>
-                <field name="weight" type="measure"/>
+                <field name="opening_weight" type="measure"/>
+                <field name="weight_in" type="measure"/>
+                <field name="weight_out" type="measure"/>
+                <field name="closing_weight" type="measure"/>
             </pivot>
         </field>
     </record>
@@ -43,17 +51,23 @@
                 <field name="product_id" string="Product / Variant"
                        filter_domain="['|', ('product_id.name', 'ilike', self), ('product_id.default_code', 'ilike', self)]"/>
                 <field name="product_tmpl_id" string="Product Template"/>
-                <field name="warehouse_id"/>
                 <field name="categ_id"/>
+                <field name="warehouse_id"/>
+                <field name="branch_id"/>
 
                 <separator/>
-                <filter name="filter_in_stock" string="In Stock" domain="[('balance', '&gt;', 0)]"/>
-                <filter name="filter_has_movement" string="Has Movement" domain="['|', ('qty_in', '&gt;', 0), ('qty_out', '&gt;', 0)]"/>
+                <filter name="filter_has_movement" string="Has Movement in Period"
+                        domain="['|', ('qty_in', '!=', 0), ('qty_out', '!=', 0)]"/>
+                <filter name="filter_closing_stock" string="Closing Stock Available"
+                        domain="[('closing_qty', '&gt;', 0)]"/>
+                <filter name="filter_negative" string="Negative Closing"
+                        domain="[('closing_qty', '&lt;', 0)]"/>
 
                 <group expand="1" string="Group By">
                     <filter name="group_product_tmpl" string="Product" context="{'group_by': 'product_tmpl_id'}"/>
-                    <filter name="group_warehouse" string="Warehouse" context="{'group_by': 'warehouse_id'}"/>
                     <filter name="group_category" string="Category" context="{'group_by': 'categ_id'}"/>
+                    <filter name="group_warehouse" string="Warehouse" context="{'group_by': 'warehouse_id'}"/>
+                    <filter name="group_branch" string="Branch" context="{'group_by': 'branch_id'}"/>
                 </group>
             </search>
         </field>
@@ -61,7 +75,7 @@
 
     <!-- Window Action -->
     <record id="action_stock_movement_report" model="ir.actions.act_window">
-        <field name="name">Stock Movement</field>
+        <field name="name">Stock Movement (Opening / Closing)</field>
         <field name="res_model">stock.movement.report</field>
         <field name="view_mode">tree,pivot</field>
         <field name="domain">[('create_uid', '=', uid)]</field>
@@ -69,10 +83,11 @@
         <field name="context">{'search_default_group_product_tmpl': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                No stock movement records found.
+                No stock movement found for the selected filters.
             </p>
             <p>
-                Select a warehouse or date range from the top bar to analyze product stock movements.
+                Choose a branch, warehouse, location and date range from the top bar to see
+                opening, in, out and closing stock.
             </p>
         </field>
     </record>

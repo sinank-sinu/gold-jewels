@@ -470,6 +470,15 @@ class AccountMove(models.Model):
             else:
                 move.scheme_balance_to_pay_customer = 0.0
 
+    def _get_applied_credit_remaining_lines(self):
+        lines = super()._get_applied_credit_remaining_lines()
+        if not lines:
+            return lines
+        scheme_lines = self._get_outstanding_scheme_payment_lines()
+        if scheme_lines:
+            lines = lines - scheme_lines
+        return lines
+
     def action_pay_scheme_balance_to_customer(self):
         self.ensure_one()
         return {
@@ -484,6 +493,8 @@ class AccountMove(models.Model):
                 'default_amount': self.scheme_balance_to_pay_customer,
                 'default_is_scheme_refund': True,
                 'default_scheme_refund_invoice_id': self.id,
+                'default_invoice_id': self.id,
+                'default_ref': self.name,
             },
             'target': 'new',
         }
@@ -1143,14 +1154,18 @@ class AccountPayment(models.Model):
         res = super().action_post()
         for payment in self:
             if payment.is_scheme_refund and payment.scheme_refund_invoice_id:
-                scheme_lines = payment.scheme_refund_invoice_id._get_outstanding_scheme_payment_lines()
+                inv = payment.scheme_refund_invoice_id
+                scheme_lines = inv._get_outstanding_scheme_payment_lines()
                 payment_line = payment.line_ids.filtered(
                     lambda l: l.account_id.account_type == 'asset_receivable' and l.debit > 0
                 )
                 if scheme_lines and payment_line:
                     (scheme_lines + payment_line).reconcile()
-                if hasattr(payment.scheme_refund_invoice_id, '_compute_scheme_balance_to_pay_customer'):
-                    payment.scheme_refund_invoice_id._compute_scheme_balance_to_pay_customer()
+                if not payment.invoice_id:
+                    payment.invoice_id = inv.id
+                inv.write({'payment_to_id': payment.id})
+                if hasattr(inv, '_compute_scheme_balance_to_pay_customer'):
+                    inv._compute_scheme_balance_to_pay_customer()
         return res
 
 

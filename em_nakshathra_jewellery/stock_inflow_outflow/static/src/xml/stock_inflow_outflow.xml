@@ -1,0 +1,1017 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="stock_inflow_outflow.Dashboard" owl="1">
+        <div class="o_sio_root">
+
+            <!-- ========================================================== -->
+            <!-- UNIFIED TOP FILTER BAR (Shared Across Both Tabs)           -->
+            <!-- ========================================================== -->
+            <div class="o_sio_topbar">
+                <div class="o_sio_brand_group">
+                    <div class="o_sio_brand_icon">
+                        <i class="fa fa-exchange"/>
+                    </div>
+                    <div>
+                        <h2 class="o_sio_brand_title">Stock Inflow &amp; Outflow</h2>
+                        <div class="o_sio_brand_sub">
+                            <span class="o_sio_scope_pill">
+                                <i class="fa fa-map-marker me-1"/>
+                                <t t-esc="selectedBranchName"/>
+                            </span>
+                            <span class="o_sio_scope_pill">
+                                <i class="fa fa-calendar me-1"/>
+                                <t t-esc="formatDisplayDate(state.dateFrom)"/>
+                                <t t-if="state.dateFrom !== state.dateTo">
+                                    → <t t-esc="formatDisplayDate(state.dateTo)"/>
+                                </t>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="o_sio_filters_group">
+                    <!-- Branch Selector -->
+                    <div class="o_sio_filter_field">
+                        <label class="o_sio_filter_lbl"><i class="fa fa-sitemap me-1"/>Branch</label>
+                        <t t-if="state.isBranchEditable">
+                            <div class="o_sio_select_wrap">
+                                <select class="o_sio_select" t-model="state.selectedBranchId" t-on-change="onBranchChange">
+                                    <option value="all">All Branches</option>
+                                    <t t-foreach="state.branches" t-as="br" t-key="br.id">
+                                        <option t-att-value="br.id" t-esc="br.name"/>
+                                    </t>
+                                </select>
+                                <i class="fa fa-chevron-down o_sio_select_arrow"/>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            <div class="o_sio_locked_branch" title="Branch is locked to your assigned branch">
+                                <span t-esc="selectedBranchName"/>
+                                <i class="fa fa-lock ms-2 text-muted"/>
+                            </div>
+                        </t>
+                    </div>
+
+                    <!-- Date Preset Selector -->
+                    <div class="o_sio_filter_field">
+                        <label class="o_sio_filter_lbl"><i class="fa fa-clock-o me-1"/>Period</label>
+                        <div class="o_sio_select_wrap">
+                            <select class="o_sio_select" t-model="state.activePreset" t-on-change="onPresetChange">
+                                <option value="today">Today</option>
+                                <option value="yesterday">Yesterday</option>
+                                <option value="week">This Week</option>
+                                <option value="month">This Month</option>
+                                <option value="last_month">Last Month</option>
+                                <option value="quarter">This Quarter</option>
+                                <option value="fy">This Financial Year</option>
+                                <option value="last_fy">Last Financial Year</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+                            <i class="fa fa-chevron-down o_sio_select_arrow"/>
+                        </div>
+                    </div>
+
+                    <!-- From Date -->
+                    <div class="o_sio_filter_field">
+                        <label class="o_sio_filter_lbl"><i class="fa fa-calendar-o me-1"/>From Date</label>
+                        <input type="date" class="o_sio_date_input" t-model="state.dateFrom" t-on-change="onCustomDateChange"/>
+                    </div>
+
+                    <!-- To Date -->
+                    <div class="o_sio_filter_field">
+                        <label class="o_sio_filter_lbl"><i class="fa fa-calendar-check-o me-1"/>To Date</label>
+                        <input type="date" class="o_sio_date_input" t-model="state.dateTo" t-on-change="onCustomDateChange"/>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="o_sio_actions_group">
+                        <button type="button" class="o_sio_btn o_sio_btn_ghost" t-on-click="onRefreshClick" title="Refresh Data">
+                            <i class="fa fa-refresh" t-att-class="{'fa-spin': state.flowLoading or state.vendorLoading}"/>
+                            <span>Refresh</span>
+                        </button>
+                        <button type="button" class="o_sio_btn o_sio_btn_export" t-on-click="exportExcel" title="Export Excel Report">
+                            <i class="fa fa-file-excel-o"/>
+                            <span>Export XLSX</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================================== -->
+            <!-- PRIMARY TAB SWITCHER                                       -->
+            <!-- ========================================================== -->
+            <div class="o_sio_main_tabs">
+                <button type="button"
+                        class="o_sio_main_tab"
+                        t-att-class="{'active': state.activeTab === 'inflow_outflow'}"
+                        t-on-click="() => this.onTabSwitch('inflow_outflow')">
+                    <i class="fa fa-exchange me-2"/>
+                    <span>Stock Inflow &amp; Outflow</span>
+                </button>
+                <button type="button"
+                        class="o_sio_main_tab"
+                        t-att-class="{'active': state.activeTab === 'vendor_labels'}"
+                        t-on-click="() => this.onTabSwitch('vendor_labels')">
+                    <i class="fa fa-tags me-2"/>
+                    <span>Vendor-Wise Labels</span>
+                </button>
+            </div>
+
+            <!-- ========================================================== -->
+            <!-- TAB 1: STOCK INFLOW & OUTFLOW                              -->
+            <!-- ========================================================== -->
+            <t t-if="state.activeTab === 'inflow_outflow'">
+                <div class="o_sio_content">
+                    <t t-if="state.flowLoading and !state.flowData">
+                        <div class="o_sio_loader">
+                            <div class="o_sio_spinner"/>
+                            <span>Calculating branch stock inflow &amp; outflow...</span>
+                        </div>
+                    </t>
+                    <t t-elif="state.flowData">
+                        <t t-set="kpis" t-value="state.flowData.kpis"/>
+                        <t t-set="cats" t-value="state.flowData.categories"/>
+
+                        <!-- Equation Hero Row -->
+                        <div class="o_sio_equation_row">
+                            <div class="o_sio_eq_card o_sio_card_open">
+                                <div class="o_sio_eq_top">
+                                    <span class="o_sio_eq_title"><i class="fa fa-flag-o me-1"/>Opening Stock</span>
+                                    <span class="o_sio_eq_badge">Before <t t-esc="formatDisplayDate(state.dateFrom)"/></span>
+                                </div>
+                                <div class="o_sio_eq_val">
+                                    <t t-esc="formatWeight(kpis.opening_wt)"/><span class="o_sio_unit">g</span>
+                                </div>
+                                <div class="o_sio_eq_sub">Qty: <t t-esc="formatWeight(kpis.opening_qty)"/></div>
+                            </div>
+
+                            <div class="o_sio_eq_op">+</div>
+
+                            <div class="o_sio_eq_card o_sio_card_in">
+                                <div class="o_sio_eq_top">
+                                    <span class="o_sio_eq_title"><i class="fa fa-arrow-down me-1"/>Total Inflow</span>
+                                    <span class="o_sio_eq_badge o_sio_badge_in"><t t-esc="formatCount(kpis.inflow_count)"/> moves</span>
+                                </div>
+                                <div class="o_sio_eq_val text-success">
+                                    +<t t-esc="formatWeight(kpis.inflow_wt)"/><span class="o_sio_unit">g</span>
+                                </div>
+                                <div class="o_sio_eq_sub">
+                                    Pur: <t t-esc="formatWeight(cats.purchase_in.wt)"/>g · Trf: <t t-esc="formatWeight(cats.transfer_in.wt)"/>g
+                                </div>
+                            </div>
+
+                            <div class="o_sio_eq_op">−</div>
+
+                            <div class="o_sio_eq_card o_sio_card_out">
+                                <div class="o_sio_eq_top">
+                                    <span class="o_sio_eq_title"><i class="fa fa-arrow-up me-1"/>Total Outflow</span>
+                                    <span class="o_sio_eq_badge o_sio_badge_out"><t t-esc="formatCount(kpis.outflow_count)"/> moves</span>
+                                </div>
+                                <div class="o_sio_eq_val text-danger">
+                                    −<t t-esc="formatWeight(kpis.outflow_wt)"/><span class="o_sio_unit">g</span>
+                                </div>
+                                <div class="o_sio_eq_sub">
+                                    Sale: <t t-esc="formatWeight(cats.sales_out.wt)"/>g · Trf: <t t-esc="formatWeight(cats.transfer_out.wt)"/>g
+                                </div>
+                            </div>
+
+                            <div class="o_sio_eq_op">=</div>
+
+                            <div class="o_sio_eq_card o_sio_card_close">
+                                <div class="o_sio_eq_top">
+                                    <span class="o_sio_eq_title"><i class="fa fa-flag-checkered me-1"/>Closing Stock</span>
+                                    <span class="o_sio_eq_badge" t-att-class="kpis.net_wt >= 0 ? 'o_sio_badge_in' : 'o_sio_badge_out'">
+                                        Net <t t-if="kpis.net_wt >= 0">+</t><t t-esc="formatWeight(kpis.net_wt)"/>g
+                                    </span>
+                                </div>
+                                <div class="o_sio_eq_val">
+                                    <t t-esc="formatWeight(kpis.closing_wt)"/><span class="o_sio_unit">g</span>
+                                </div>
+                                <div class="o_sio_eq_sub">
+                                    Qty: <t t-esc="formatWeight(kpis.closing_qty)"/> · Intra-branch: <t t-esc="formatCount(kpis.intra_count)"/> (<t t-esc="formatWeight(kpis.intra_wt)"/>g)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category Breakdown: Inflow Sources vs Outflow Destinations -->
+                        <div class="o_sio_cat_grid">
+                            <!-- INFLOW PANEL -->
+                            <div class="o_sio_cat_panel o_sio_panel_in">
+                                <div class="o_sio_cat_panel_hdr">
+                                    <span><i class="fa fa-arrow-circle-down me-2"/>Inflow Breakdown (Click to view moves)</span>
+                                    <strong>+<t t-esc="formatWeight(kpis.inflow_wt)"/> g</strong>
+                                </div>
+                                <div class="o_sio_cat_cards">
+                                    <t t-foreach="['purchase_in', 'transfer_in', 'sales_return', 'other_in']" t-as="ck" t-key="ck">
+                                        <t t-set="cd" t-value="cats[ck]"/>
+                                        <div class="o_sio_cat_tile"
+                                             t-att-class="{'selected': state.flowSubTab === 'ledger' and state.ledgerCategory === ck}"
+                                             t-on-click="() => this.filterLedgerByCategory(ck)">
+                                            <div class="o_sio_cat_tile_top">
+                                                <span class="o_sio_cat_name"><i t-attf-class="fa {{ cd.icon }} me-1"/> <t t-esc="cd.label"/></span>
+                                                <span class="o_sio_cat_pct"><t t-esc="cd.share_pct"/>%</span>
+                                            </div>
+                                            <div class="o_sio_cat_tile_val text-success">+<t t-esc="formatWeight(cd.wt)"/> g</div>
+                                            <div class="o_sio_cat_tile_meta"><t t-esc="formatCount(cd.count)"/> move lines</div>
+                                            <div class="o_sio_bar_track">
+                                                <div class="o_sio_bar_fill o_sio_fill_in" t-attf-style="width: {{ cd.share_pct }}%"/>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                            <!-- OUTFLOW PANEL -->
+                            <div class="o_sio_cat_panel o_sio_panel_out">
+                                <div class="o_sio_cat_panel_hdr">
+                                    <span><i class="fa fa-arrow-circle-up me-2"/>Outflow Breakdown (Click to view moves)</span>
+                                    <strong>−<t t-esc="formatWeight(kpis.outflow_wt)"/> g</strong>
+                                </div>
+                                <div class="o_sio_cat_cards">
+                                    <t t-foreach="['sales_out', 'transfer_out', 'purchase_return', 'other_out']" t-as="ck" t-key="ck">
+                                        <t t-set="cd" t-value="cats[ck]"/>
+                                        <div class="o_sio_cat_tile"
+                                             t-att-class="{'selected': state.flowSubTab === 'ledger' and state.ledgerCategory === ck}"
+                                             t-on-click="() => this.filterLedgerByCategory(ck)">
+                                            <div class="o_sio_cat_tile_top">
+                                                <span class="o_sio_cat_name"><i t-attf-class="fa {{ cd.icon }} me-1"/> <t t-esc="cd.label"/></span>
+                                                <span class="o_sio_cat_pct"><t t-esc="cd.share_pct"/>%</span>
+                                            </div>
+                                            <div class="o_sio_cat_tile_val text-danger">−<t t-esc="formatWeight(cd.wt)"/> g</div>
+                                            <div class="o_sio_cat_tile_meta"><t t-esc="formatCount(cd.count)"/> move lines</div>
+                                            <div class="o_sio_bar_track">
+                                                <div class="o_sio_bar_fill o_sio_fill_out" t-attf-style="width: {{ cd.share_pct }}%"/>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-View Switcher -->
+                        <div class="o_sio_card_shell">
+                            <div class="o_sio_subtab_bar">
+                                <div class="o_sio_subtab_pills">
+                                    <button type="button"
+                                            class="o_sio_sub_pill"
+                                            t-att-class="{'active': state.flowSubTab === 'products'}"
+                                            t-on-click="() => this.setFlowSubTab('products')">
+                                        <i class="fa fa-cubes me-1"/>Product-Wise Flow
+                                        <span class="o_sio_pill_cnt" t-esc="formatCount(state.flowData.product_total_count)"/>
+                                    </button>
+                                    <button type="button"
+                                            class="o_sio_sub_pill"
+                                            t-att-class="{'active': state.flowSubTab === 'ledger'}"
+                                            t-on-click="() => this.setFlowSubTab('ledger')">
+                                        <i class="fa fa-list-alt me-1"/>Movement Ledger
+                                        <span class="o_sio_pill_cnt" t-esc="formatCount(kpis.inflow_count + kpis.outflow_count)"/>
+                                    </button>
+                                    <button type="button"
+                                            class="o_sio_sub_pill"
+                                            t-att-class="{'active': state.flowSubTab === 'branches'}"
+                                            t-on-click="() => this.setFlowSubTab('branches')">
+                                        <i class="fa fa-sitemap me-1"/>Branch-Wise Summary
+                                        <span class="o_sio_pill_cnt" t-esc="state.flowData.branch_summary.length"/>
+                                    </button>
+                                </div>
+
+                                <!-- Sub-view specific inline controls -->
+                                <t t-if="state.flowSubTab === 'products'">
+                                    <div class="o_sio_inline_tools">
+                                        <label class="o_sio_chk_pill">
+                                            <input type="checkbox" t-att-checked="state.onlyWithMovement" t-on-change="toggleOnlyWithMovement"/>
+                                            <span>Period Movement Only</span>
+                                        </label>
+                                        <div class="o_sio_search_box">
+                                            <i class="fa fa-search"/>
+                                            <input type="text" placeholder="Search product, SKU, category..."
+                                                   t-model="state.productSearch" t-on-input="onProductSearchInput"/>
+                                        </div>
+                                    </div>
+                                </t>
+
+                                <t t-if="state.flowSubTab === 'ledger'">
+                                    <div class="o_sio_inline_tools">
+                                        <t t-if="state.ledgerProductId">
+                                            <span class="o_sio_active_chip">
+                                                <span>Product: <strong t-esc="state.ledgerProductName"/></span>
+                                                <i class="fa fa-times ms-2 cursor-pointer" t-on-click="clearLedgerProductFilter"/>
+                                            </span>
+                                        </t>
+                                        <select class="o_sio_mini_select" t-model="state.ledgerDirection" t-on-change="onLedgerFilterChange">
+                                            <option value="">All Directions</option>
+                                            <option value="in">Inflow Only (+)</option>
+                                            <option value="out">Outflow Only (−)</option>
+                                        </select>
+                                        <select class="o_sio_mini_select" t-model="state.ledgerCategory" t-on-change="onLedgerFilterChange">
+                                            <option value="">All Categories</option>
+                                            <option value="purchase_in">Purchase Receipts</option>
+                                            <option value="transfer_in">Transfer In</option>
+                                            <option value="sales_return">Sales Returns</option>
+                                            <option value="other_in">Mfg / Adj In</option>
+                                            <option value="sales_out">Sales Delivery</option>
+                                            <option value="transfer_out">Transfer Out</option>
+                                            <option value="purchase_return">Purchase Returns</option>
+                                            <option value="other_out">Mfg / Adj Out</option>
+                                        </select>
+                                        <div class="o_sio_search_box">
+                                            <i class="fa fa-search"/>
+                                            <input type="text" placeholder="Search ref, label, product, partner..."
+                                                   t-model="state.ledgerSearch" t-on-input="onLedgerSearchInput"/>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+
+                            <!-- SUB-VIEW 1: PRODUCT-WISE FLOW -->
+                            <t t-if="state.flowSubTab === 'products'">
+                                <div class="o_sio_table_wrap">
+                                    <table class="o_sio_table">
+                                        <thead>
+                                            <tr>
+                                                <th>Product / Variant</th>
+                                                <th>Category</th>
+                                                <th class="text-end">Opening (g)</th>
+                                                <th class="text-end o_col_in">Purchase In</th>
+                                                <th class="text-end o_col_in">Transfer In</th>
+                                                <th class="text-end o_col_in">Other In</th>
+                                                <th class="text-end o_col_in_tot">Total Inflow</th>
+                                                <th class="text-end o_col_out">Sales Out</th>
+                                                <th class="text-end o_col_out">Transfer Out</th>
+                                                <th class="text-end o_col_out">Other Out</th>
+                                                <th class="text-end o_col_out_tot">Total Outflow</th>
+                                                <th class="text-end">Net Flow</th>
+                                                <th class="text-end">Closing (g)</th>
+                                                <th class="text-center">Moves</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="state.flowData.product_rows.length === 0">
+                                                <tr>
+                                                    <td colspan="14" class="text-center py-5 text-muted">
+                                                        No product stock movements match the selected Branch, Date &amp; Search filters.
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-foreach="state.flowData.product_rows" t-as="pr" t-key="pr.product_id">
+                                                    <tr class="o_sio_tr">
+                                                        <td>
+                                                            <a href="javascript:void(0)" class="o_sio_link fw-semibold"
+                                                               t-on-click="() => this.openRecord('product.product', pr.product_id)"
+                                                               t-esc="pr.product_name"/>
+                                                            <div t-if="pr.default_code" class="small text-muted" t-esc="pr.default_code"/>
+                                                        </td>
+                                                        <td><span class="o_sio_muted_tag" t-esc="pr.category_name"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.opening_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.purchase_in_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.transfer_in_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.other_in_wt)"/></td>
+                                                        <td class="text-end o_num text-success fw-bold">+<t t-esc="formatWeight(pr.inflow_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.sales_out_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.transfer_out_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(pr.other_out_wt)"/></td>
+                                                        <td class="text-end o_num text-danger fw-bold">−<t t-esc="formatWeight(pr.outflow_wt)"/></td>
+                                                        <td class="text-end o_num fw-semibold"
+                                                            t-att-class="pr.net_wt >= 0 ? 'text-success' : 'text-danger'">
+                                                            <t t-if="pr.net_wt >= 0">+</t><t t-esc="formatWeight(pr.net_wt)"/>
+                                                        </td>
+                                                        <td class="text-end o_num fw-bold"><t t-esc="formatWeight(pr.closing_wt)"/></td>
+                                                        <td class="text-center">
+                                                            <button type="button" class="o_sio_tbl_btn"
+                                                                    t-on-click="() => this.filterLedgerByProduct(pr.product_id, pr.product_name)"
+                                                                    title="View movement lines for this product">
+                                                                <i class="fa fa-list-ul"/>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="o_sio_pager" t-if="state.flowData.product_total_count &gt; state.productLimit">
+                                    <span class="text-muted small">
+                                        Showing <t t-esc="state.productOffset + 1"/>–<t t-esc="pageEnd(state.productOffset, state.productLimit, state.flowData.product_total_count)"/>
+                                        of <t t-esc="formatCount(state.flowData.product_total_count)"/> products
+                                    </span>
+                                    <div class="d-flex gap-2">
+                                        <button class="o_sio_btn o_sio_btn_sm" t-on-click="prevProductPage" t-att-disabled="state.productOffset === 0">Prev</button>
+                                        <button class="o_sio_btn o_sio_btn_sm" t-on-click="nextProductPage"
+                                                t-att-disabled="state.productOffset + state.productLimit &gt;= state.flowData.product_total_count">Next</button>
+                                    </div>
+                                </div>
+                            </t>
+
+                            <!-- SUB-VIEW 2: MOVEMENT LEDGER -->
+                            <t t-if="state.flowSubTab === 'ledger'">
+                                <div class="o_sio_ledger_meta">
+                                    <span>Showing <strong><t t-esc="formatCount(state.ledgerTotalCount)"/></strong> move lines</span>
+                                    <span class="mx-2">•</span>
+                                    <span>Filtered Total Weight: <strong><t t-esc="formatWeight(state.ledgerFilteredWt)"/> g</strong></span>
+                                </div>
+                                <t t-if="state.ledgerLoading">
+                                    <div class="o_sio_loader py-4">
+                                        <div class="o_sio_spinner"/>
+                                        <span>Loading stock movement ledger...</span>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <div class="o_sio_table_wrap">
+                                        <table class="o_sio_table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date &amp; Time</th>
+                                                    <th>Reference</th>
+                                                    <th class="text-center">Direction</th>
+                                                    <th>Category</th>
+                                                    <th>Branch</th>
+                                                    <th>From Location</th>
+                                                    <th>To Location</th>
+                                                    <th>Product</th>
+                                                    <th>Label</th>
+                                                    <th>Partner / Vendor</th>
+                                                    <th class="text-end">Weight (g)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <t t-if="state.ledgerLines.length === 0">
+                                                    <tr>
+                                                        <td colspan="11" class="text-center py-5 text-muted">
+                                                            No movement lines found for the selected filters.
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                                <t t-else="">
+                                                    <t t-foreach="state.ledgerLines" t-as="ln" t-key="ln.id">
+                                                        <tr class="o_sio_tr">
+                                                            <td class="text-nowrap small" t-esc="ln.date_str"/>
+                                                            <td>
+                                                                <t t-if="ln.picking_id">
+                                                                    <a href="javascript:void(0)" class="o_sio_link fw-semibold"
+                                                                       t-on-click="() => this.openRecord('stock.picking', ln.picking_id)"
+                                                                       t-esc="ln.ref_name"/>
+                                                                </t>
+                                                                <t t-else="">
+                                                                    <span class="fw-semibold" t-esc="ln.ref_name"/>
+                                                                </t>
+                                                                <div t-if="ln.origin" class="small text-muted" t-esc="ln.origin"/>
+                                                            </td>
+                                                            <td class="text-center">
+                                                                <span class="o_sio_dir_badge"
+                                                                      t-att-class="ln.direction === 'in' ? 'o_dir_in' : 'o_dir_out'">
+                                                                    <i t-attf-class="fa {{ ln.direction === 'in' ? 'fa-arrow-down' : 'fa-arrow-up' }} me-1"/>
+                                                                    <t t-esc="ln.direction === 'in' ? 'INFLOW' : 'OUTFLOW'"/>
+                                                                </span>
+                                                            </td>
+                                                            <td><span class="o_sio_cat_pill" t-esc="ln.category_label"/></td>
+                                                            <td class="small fw-semibold" t-esc="ln.branch_name"/>
+                                                            <td class="small text-muted" t-esc="ln.src_location"/>
+                                                            <td class="small text-muted" t-esc="ln.dst_location"/>
+                                                            <td>
+                                                                <a href="javascript:void(0)" class="o_sio_link"
+                                                                   t-on-click="() => this.openRecord('product.product', ln.product_id)"
+                                                                   t-esc="ln.product_name"/>
+                                                            </td>
+                                                            <td>
+                                                                <t t-if="ln.label_id">
+                                                                    <a href="javascript:void(0)" class="o_sio_code_pill"
+                                                                       t-on-click="() => this.openRecord('product.label', ln.label_id)"
+                                                                       t-esc="ln.label_name"/>
+                                                                </t>
+                                                                <t t-else=""><span class="text-muted">—</span></t>
+                                                            </td>
+                                                            <td class="small" t-esc="ln.partner_name || '—'"/>
+                                                            <td class="text-end o_num fw-bold"
+                                                                t-att-class="ln.direction === 'in' ? 'text-success' : 'text-danger'">
+                                                                <t t-esc="ln.direction === 'in' ? '+' : '−'"/><t t-esc="formatWeight(ln.wt)"/>
+                                                            </td>
+                                                        </tr>
+                                                    </t>
+                                                </t>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="o_sio_pager" t-if="state.ledgerTotalCount &gt; state.ledgerLimit">
+                                        <span class="text-muted small">
+                                            Showing <t t-esc="state.ledgerOffset + 1"/>–<t t-esc="pageEnd(state.ledgerOffset, state.ledgerLimit, state.ledgerTotalCount)"/>
+                                            of <t t-esc="formatCount(state.ledgerTotalCount)"/> lines
+                                        </span>
+                                        <div class="d-flex gap-2">
+                                            <button class="o_sio_btn o_sio_btn_sm" t-on-click="prevLedgerPage" t-att-disabled="state.ledgerOffset === 0">Prev</button>
+                                            <button class="o_sio_btn o_sio_btn_sm" t-on-click="nextLedgerPage"
+                                                    t-att-disabled="state.ledgerOffset + state.ledgerLimit &gt;= state.ledgerTotalCount">Next</button>
+                                        </div>
+                                    </div>
+                                </t>
+                            </t>
+
+                            <!-- SUB-VIEW 3: BRANCH-WISE SUMMARY -->
+                            <t t-if="state.flowSubTab === 'branches'">
+                                <div class="o_sio_table_wrap">
+                                    <table class="o_sio_table">
+                                        <thead>
+                                            <tr>
+                                                <th>Branch</th>
+                                                <th class="text-end">Opening (g)</th>
+                                                <th class="text-end o_col_in">Purchase In</th>
+                                                <th class="text-end o_col_in">Transfer In</th>
+                                                <th class="text-end o_col_in">Other In</th>
+                                                <th class="text-end o_col_in_tot">Total Inflow</th>
+                                                <th class="text-end o_col_out">Sales Out</th>
+                                                <th class="text-end o_col_out">Transfer Out</th>
+                                                <th class="text-end o_col_out">Other Out</th>
+                                                <th class="text-end o_col_out_tot">Total Outflow</th>
+                                                <th class="text-end">Net Flow</th>
+                                                <th class="text-end">Closing (g)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="state.flowData.branch_summary.length === 0">
+                                                <tr>
+                                                    <td colspan="12" class="text-center py-5 text-muted">No branch movement data found.</td>
+                                                </tr>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-foreach="state.flowData.branch_summary" t-as="br" t-key="br.branch_id">
+                                                    <tr class="o_sio_tr o_sio_clickable" t-on-click="() => this.selectBranchFromTable(br.branch_id)">
+                                                        <td>
+                                                            <strong t-esc="br.branch_name"/>
+                                                            <span t-if="br.branch_code" class="o_sio_code_pill ms-2" t-esc="br.branch_code"/>
+                                                        </td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.opening_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.purchase_in_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.transfer_in_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.other_in_wt)"/></td>
+                                                        <td class="text-end o_num text-success fw-bold">+<t t-esc="formatWeight(br.inflow_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.sales_out_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.transfer_out_wt)"/></td>
+                                                        <td class="text-end o_num"><t t-esc="formatWeight(br.other_out_wt)"/></td>
+                                                        <td class="text-end o_num text-danger fw-bold">−<t t-esc="formatWeight(br.outflow_wt)"/></td>
+                                                        <td class="text-end o_num fw-semibold" t-att-class="br.net_wt >= 0 ? 'text-success' : 'text-danger'">
+                                                            <t t-if="br.net_wt >= 0">+</t><t t-esc="formatWeight(br.net_wt)"/>
+                                                        </td>
+                                                        <td class="text-end o_num fw-bold"><t t-esc="formatWeight(br.closing_wt)"/></td>
+                                                    </tr>
+                                                </t>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+                </div>
+            </t>
+
+            <!-- ========================================================== -->
+            <!-- TAB 2: VENDOR-WISE LABELS (Same Branch & Date Setup)       -->
+            <!-- ========================================================== -->
+            <t t-if="state.activeTab === 'vendor_labels'">
+                <div class="o_sio_content">
+                    <!-- Tab 2 Controls Bar -->
+                    <div class="o_sio_vendor_toolbar">
+                        <div class="o_sio_mode_pills">
+                            <span class="o_sio_toolbar_lbl">Basis:</span>
+                            <button type="button" class="o_sio_mode_pill"
+                                    t-att-class="{'active': state.vendorMode === 'movement'}"
+                                    t-on-click="() => this.setVendorMode('movement')">
+                                <i class="fa fa-exchange me-1"/>Branch Inflow / Outflow
+                            </button>
+                            <button type="button" class="o_sio_mode_pill"
+                                    t-att-class="{'active': state.vendorMode === 'created'}"
+                                    t-on-click="() => this.setVendorMode('created')">
+                                <i class="fa fa-plus-square-o me-1"/>Created in Period
+                            </button>
+                            <button type="button" class="o_sio_mode_pill"
+                                    t-att-class="{'active': state.vendorMode === 'closing'}"
+                                    t-on-click="() => this.setVendorMode('closing')">
+                                <i class="fa fa-archive me-1"/>Closing Stock (Up to <t t-esc="formatDisplayDate(state.dateTo)"/>)
+                            </button>
+                        </div>
+
+                        <div class="o_sio_inline_tools">
+                            <label class="o_sio_chk_pill" t-if="state.vendorMode === 'movement'">
+                                <input type="checkbox" t-att-checked="state.onlyPeriodActivity" t-on-change="toggleOnlyPeriodActivity"/>
+                                <span>Period Activity Only</span>
+                            </label>
+                            <label class="o_sio_chk_pill">
+                                <input type="checkbox" t-att-checked="state.includeNoVendor" t-on-change="toggleIncludeNoVendor"/>
+                                <span>Include Unassigned</span>
+                            </label>
+                            <select class="o_sio_mini_select" t-model="state.vendorActiveFilter" t-on-change="onVendorActiveFilterChange">
+                                <option value="all">All Statuses</option>
+                                <option value="active">Active Labels Only</option>
+                                <option value="inactive">Sold / Inactive Only</option>
+                            </select>
+                            <div class="o_sio_search_box">
+                                <i class="fa fa-search"/>
+                                <input type="text" placeholder="Search vendor, label, barcode, PO..."
+                                       t-model="state.vendorSearch" t-on-input="onVendorSearchInput"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <t t-if="state.vendorLoading and !state.vendorData">
+                        <div class="o_sio_loader">
+                            <div class="o_sio_spinner"/>
+                            <span>Loading vendor-wise labels...</span>
+                        </div>
+                    </t>
+                    <t t-elif="state.vendorData">
+                        <t t-set="vk" t-value="state.vendorData.kpis"/>
+
+                        <!-- Vendor Labels KPI Row (Movement Mode) -->
+                        <t t-if="state.vendorData.mode === 'movement'">
+                            <div class="o_sio_kpi_grid_5">
+                                <div class="o_sio_eq_card o_sio_card_vendor">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-users me-1"/>Vendors</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatCount(vk.vendor_count)"/></div>
+                                    <div class="o_sio_eq_sub">Assigned vendors matched</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_open">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-flag-o me-1"/>Opening Labels</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatCount(vk.open_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub"><t t-esc="formatWeight(vk.open_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_in">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-arrow-down me-1"/>Inflow Labels</span></div>
+                                    <div class="o_sio_eq_val text-success">+<t t-esc="formatCount(vk.in_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub">+<t t-esc="formatWeight(vk.in_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_out">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-arrow-up me-1"/>Outflow Labels</span></div>
+                                    <div class="o_sio_eq_val text-danger">−<t t-esc="formatCount(vk.out_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub">−<t t-esc="formatWeight(vk.out_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_close">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-tags me-1"/>Closing Labels</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatCount(vk.close_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub"><t t-esc="formatWeight(vk.close_wt)"/> g · Net <t t-esc="formatWeight(vk.close_net_wt)"/> g</div>
+                                </div>
+                            </div>
+                        </t>
+
+                        <!-- Vendor Labels KPI Row (Created / Closing Mode) -->
+                        <t t-else="">
+                            <div class="o_sio_kpi_grid_5">
+                                <div class="o_sio_eq_card o_sio_card_vendor">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-users me-1"/>Vendors</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatCount(vk.vendor_count)"/></div>
+                                    <div class="o_sio_eq_sub">Assigned vendors</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_open">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-tags me-1"/>Total Labels</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatCount(vk.total_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub">Gross: <t t-esc="formatWeight(vk.gross_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_in">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-check-circle me-1"/>Active Labels</span></div>
+                                    <div class="o_sio_eq_val text-success"><t t-esc="formatCount(vk.active_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub"><t t-esc="formatWeight(vk.active_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_out">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-shopping-bag me-1"/>Sold / Inactive</span></div>
+                                    <div class="o_sio_eq_val text-danger"><t t-esc="formatCount(vk.inactive_count)"/> <span class="o_sio_unit">pcs</span></div>
+                                    <div class="o_sio_eq_sub"><t t-esc="formatWeight(vk.inactive_wt)"/> g</div>
+                                </div>
+                                <div class="o_sio_eq_card o_sio_card_close">
+                                    <div class="o_sio_eq_top"><span class="o_sio_eq_title"><i class="fa fa-balance-scale me-1"/>Net &amp; Fine Wt</span></div>
+                                    <div class="o_sio_eq_val"><t t-esc="formatWeight(vk.net_wt)"/><span class="o_sio_unit">g</span></div>
+                                    <div class="o_sio_eq_sub">Fine: <t t-esc="formatWeight(vk.fine_wt)"/> g</div>
+                                </div>
+                            </div>
+                        </t>
+
+                        <!-- Vendor Sub-View Switcher -->
+                        <div class="o_sio_card_shell">
+                            <div class="o_sio_subtab_bar">
+                                <div class="o_sio_subtab_pills">
+                                    <button type="button" class="o_sio_sub_pill"
+                                            t-att-class="{'active': state.vendorSubTab === 'summary'}"
+                                            t-on-click="() => this.setVendorSubTab('summary')">
+                                        <i class="fa fa-users me-1"/>Vendor-Wise Summary
+                                        <span class="o_sio_pill_cnt" t-esc="state.vendorData.vendors.length"/>
+                                    </button>
+                                    <button type="button" class="o_sio_sub_pill"
+                                            t-att-class="{'active': state.vendorSubTab === 'all_labels'}"
+                                            t-on-click="() => this.setVendorSubTab('all_labels')">
+                                        <i class="fa fa-barcode me-1"/>All Labels List
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- SUB-VIEW A: VENDOR SUMMARY TABLE -->
+                            <t t-if="state.vendorSubTab === 'summary'">
+                                <div class="o_sio_table_wrap">
+                                    <!-- Movement Mode Vendor Table -->
+                                    <t t-if="state.vendorData.mode === 'movement'">
+                                        <table class="o_sio_table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Vendor</th>
+                                                    <th class="text-end">Opening Pcs</th>
+                                                    <th class="text-end">Opening Wt (g)</th>
+                                                    <th class="text-end o_col_in">Inflow Pcs</th>
+                                                    <th class="text-end o_col_in_tot">Inflow Wt (g)</th>
+                                                    <th class="text-end o_col_out">Outflow Pcs</th>
+                                                    <th class="text-end o_col_out_tot">Outflow Wt (g)</th>
+                                                    <th class="text-end">Net Flow (g)</th>
+                                                    <th class="text-end">Closing Pcs</th>
+                                                    <th class="text-end">Closing Wt (g)</th>
+                                                    <th class="text-end">Net Wt (g)</th>
+                                                    <th class="text-center">Labels</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <t t-if="state.vendorData.vendors.length === 0">
+                                                    <tr>
+                                                        <td colspan="13" class="text-center py-5 text-muted">
+                                                            No vendor label movements found for the selected Branch &amp; Date range.
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                                <t t-else="">
+                                                    <t t-foreach="state.vendorData.vendors" t-as="v" t-key="v.vendor_id">
+                                                        <tr class="o_sio_tr o_sio_clickable"
+                                                            t-att-class="{'o_sio_selected_row': state.selectedVendorId === v.vendor_id}"
+                                                            t-on-click="() => this.selectVendor(v)">
+                                                            <td class="text-muted small" t-esc="v_index + 1"/>
+                                                            <td>
+                                                                <span class="fw-semibold" t-att-class="{'text-muted fst-italic': v.is_unassigned}" t-esc="v.vendor_name"/>
+                                                                <div t-if="v.vendor_phone" class="small text-muted"><i class="fa fa-phone me-1"/><t t-esc="v.vendor_phone"/></div>
+                                                            </td>
+                                                            <td class="text-end o_num"><t t-esc="formatCount(v.open_count)"/></td>
+                                                            <td class="text-end o_num"><t t-esc="formatWeight(v.open_wt)"/></td>
+                                                            <td class="text-end o_num text-success"><t t-esc="formatCount(v.in_count)"/></td>
+                                                            <td class="text-end o_num text-success fw-bold">+<t t-esc="formatWeight(v.in_wt)"/></td>
+                                                            <td class="text-end o_num text-danger"><t t-esc="formatCount(v.out_count)"/></td>
+                                                            <td class="text-end o_num text-danger fw-bold">−<t t-esc="formatWeight(v.out_wt)"/></td>
+                                                            <td class="text-end o_num fw-semibold" t-att-class="v.net_wt >= 0 ? 'text-success' : 'text-danger'">
+                                                                <t t-if="v.net_wt >= 0">+</t><t t-esc="formatWeight(v.net_wt)"/>
+                                                            </td>
+                                                            <td class="text-end o_num fw-bold"><t t-esc="formatCount(v.close_count)"/></td>
+                                                            <td class="text-end o_num fw-bold"><t t-esc="formatWeight(v.close_wt)"/></td>
+                                                            <td class="text-end o_num"><t t-esc="formatWeight(v.close_net_wt)"/></td>
+                                                            <td class="text-center">
+                                                                <button type="button" class="o_sio_tbl_btn" title="View vendor labels">
+                                                                    <i class="fa" t-att-class="state.selectedVendorId === v.vendor_id ? 'fa-chevron-up' : 'fa-tags'"/>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    </t>
+                                                </t>
+                                            </tbody>
+                                            <tfoot t-if="state.vendorData.vendors.length &gt; 0">
+                                                <tr class="o_sio_tfoot">
+                                                    <td colspan="2">TOTAL</td>
+                                                    <td class="text-end o_num"><t t-esc="formatCount(vk.open_count)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.open_wt)"/></td>
+                                                    <td class="text-end o_num text-success"><t t-esc="formatCount(vk.in_count)"/></td>
+                                                    <td class="text-end o_num text-success">+<t t-esc="formatWeight(vk.in_wt)"/></td>
+                                                    <td class="text-end o_num text-danger"><t t-esc="formatCount(vk.out_count)"/></td>
+                                                    <td class="text-end o_num text-danger">−<t t-esc="formatWeight(vk.out_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-if="vk.net_wt >= 0">+</t><t t-esc="formatWeight(vk.net_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatCount(vk.close_count)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.close_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.close_net_wt)"/></td>
+                                                    <td/>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </t>
+
+                                    <!-- Created / Closing Mode Vendor Table -->
+                                    <t t-else="">
+                                        <table class="o_sio_table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Vendor</th>
+                                                    <th class="text-end">Total Labels</th>
+                                                    <th class="text-end o_col_in">Active Pcs</th>
+                                                    <th class="text-end o_col_in_tot">Active Wt (g)</th>
+                                                    <th class="text-end o_col_out">Sold / Inactive</th>
+                                                    <th class="text-end o_col_out_tot">Inactive Wt (g)</th>
+                                                    <th class="text-end">Gross Wt (g)</th>
+                                                    <th class="text-end">Stone Wt (g)</th>
+                                                    <th class="text-end">Diamond Wt (g)</th>
+                                                    <th class="text-end">Net Wt (g)</th>
+                                                    <th class="text-end">Fine Wt (g)</th>
+                                                    <th class="text-center">Labels</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <t t-if="state.vendorData.vendors.length === 0">
+                                                    <tr>
+                                                        <td colspan="13" class="text-center py-5 text-muted">
+                                                            No vendor labels found for the selected Branch &amp; Date range.
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                                <t t-else="">
+                                                    <t t-foreach="state.vendorData.vendors" t-as="v" t-key="v.vendor_id">
+                                                        <tr class="o_sio_tr o_sio_clickable"
+                                                            t-att-class="{'o_sio_selected_row': state.selectedVendorId === v.vendor_id}"
+                                                            t-on-click="() => this.selectVendor(v)">
+                                                            <td class="text-muted small" t-esc="v_index + 1"/>
+                                                            <td>
+                                                                <span class="fw-semibold" t-att-class="{'text-muted fst-italic': v.is_unassigned}" t-esc="v.vendor_name"/>
+                                                                <div t-if="v.vendor_phone" class="small text-muted"><i class="fa fa-phone me-1"/><t t-esc="v.vendor_phone"/></div>
+                                                            </td>
+                                                            <td class="text-end o_num fw-bold"><t t-esc="formatCount(v.total_count)"/></td>
+                                                            <td class="text-end o_num text-success"><t t-esc="formatCount(v.active_count)"/></td>
+                                                            <td class="text-end o_num text-success fw-semibold"><t t-esc="formatWeight(v.active_wt)"/></td>
+                                                            <td class="text-end o_num text-danger"><t t-esc="formatCount(v.inactive_count)"/></td>
+                                                            <td class="text-end o_num text-danger fw-semibold"><t t-esc="formatWeight(v.inactive_wt)"/></td>
+                                                            <td class="text-end o_num fw-bold"><t t-esc="formatWeight(v.gross_wt)"/></td>
+                                                            <td class="text-end o_num"><t t-esc="formatWeight(v.stone_wt)"/></td>
+                                                            <td class="text-end o_num"><t t-esc="formatWeight(v.diamond_wt)"/></td>
+                                                            <td class="text-end o_num fw-semibold"><t t-esc="formatWeight(v.net_wt)"/></td>
+                                                            <td class="text-end o_num"><t t-esc="formatWeight(v.fine_wt)"/></td>
+                                                            <td class="text-center">
+                                                                <button type="button" class="o_sio_tbl_btn" title="View vendor labels">
+                                                                    <i class="fa" t-att-class="state.selectedVendorId === v.vendor_id ? 'fa-chevron-up' : 'fa-tags'"/>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    </t>
+                                                </t>
+                                            </tbody>
+                                            <tfoot t-if="state.vendorData.vendors.length &gt; 0">
+                                                <tr class="o_sio_tfoot">
+                                                    <td colspan="2">TOTAL</td>
+                                                    <td class="text-end o_num"><t t-esc="formatCount(vk.total_count)"/></td>
+                                                    <td class="text-end o_num text-success"><t t-esc="formatCount(vk.active_count)"/></td>
+                                                    <td class="text-end o_num text-success"><t t-esc="formatWeight(vk.active_wt)"/></td>
+                                                    <td class="text-end o_num text-danger"><t t-esc="formatCount(vk.inactive_count)"/></td>
+                                                    <td class="text-end o_num text-danger"><t t-esc="formatWeight(vk.inactive_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.gross_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.stone_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.diamond_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.net_wt)"/></td>
+                                                    <td class="text-end o_num"><t t-esc="formatWeight(vk.fine_wt)"/></td>
+                                                    <td/>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </t>
+                                </div>
+
+                                <!-- Selected Vendor Drilldown Panel -->
+                                <t t-if="state.selectedVendorId !== null">
+                                    <div class="o_sio_drilldown">
+                                        <div class="o_sio_drilldown_hdr">
+                                            <div>
+                                                <h4 class="mb-0 fw-bold">
+                                                    <i class="fa fa-tags me-2 text-primary"/>
+                                                    <t t-esc="state.selectedVendorName"/> — Label Breakdown
+                                                </h4>
+                                                <div class="small text-muted mt-1">
+                                                    Showing <t t-esc="formatCount(state.labelTotalCount)"/> labels ·
+                                                    Gross: <strong><t t-esc="formatWeight(state.labelSumGross)"/> g</strong> ·
+                                                    Net: <strong><t t-esc="formatWeight(state.labelSumNet)"/> g</strong>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <t t-if="state.vendorMode === 'movement'">
+                                                    <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'all'}" t-on-click="() => this.setLabelFlowFilter('all')">All</button>
+                                                    <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'inflow'}" t-on-click="() => this.setLabelFlowFilter('inflow')">Inflow</button>
+                                                    <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'outflow'}" t-on-click="() => this.setLabelFlowFilter('outflow')">Outflow</button>
+                                                    <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'closing'}" t-on-click="() => this.setLabelFlowFilter('closing')">Closing Stock</button>
+                                                </t>
+                                                <button type="button" class="o_sio_close_btn" t-on-click="closeVendorDrilldown" title="Close label breakdown">
+                                                    <i class="fa fa-times"/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <t t-call="stock_inflow_outflow.LabelLinesTable"/>
+                                    </div>
+                                </t>
+                            </t>
+
+                            <!-- SUB-VIEW B: ALL LABELS LIST -->
+                            <t t-if="state.vendorSubTab === 'all_labels'">
+                                <div class="o_sio_ledger_meta">
+                                    <span>Showing <strong><t t-esc="formatCount(state.labelTotalCount)"/></strong> labels</span>
+                                    <span class="mx-2">•</span>
+                                    <span>Gross Wt: <strong><t t-esc="formatWeight(state.labelSumGross)"/> g</strong></span>
+                                    <span class="mx-2">•</span>
+                                    <span>Net Wt: <strong><t t-esc="formatWeight(state.labelSumNet)"/> g</strong></span>
+                                    <t t-if="state.vendorMode === 'movement'">
+                                        <span class="ms-auto d-inline-flex gap-1">
+                                            <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'all'}" t-on-click="() => this.setLabelFlowFilter('all')">All</button>
+                                            <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'inflow'}" t-on-click="() => this.setLabelFlowFilter('inflow')">Inflow</button>
+                                            <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'outflow'}" t-on-click="() => this.setLabelFlowFilter('outflow')">Outflow</button>
+                                            <button type="button" class="o_sio_chip_btn" t-att-class="{'active': state.labelFlowFilter === 'closing'}" t-on-click="() => this.setLabelFlowFilter('closing')">Closing</button>
+                                        </span>
+                                    </t>
+                                </div>
+                                <t t-call="stock_inflow_outflow.LabelLinesTable"/>
+                            </t>
+                        </div>
+                    </t>
+                </div>
+            </t>
+
+        </div>
+    </t>
+
+    <!-- Reusable Individual Label Lines Table -->
+    <t t-name="stock_inflow_outflow.LabelLinesTable" owl="1">
+        <t t-if="state.labelLinesLoading">
+            <div class="o_sio_loader py-4">
+                <div class="o_sio_spinner"/>
+                <span>Loading labels...</span>
+            </div>
+        </t>
+        <t t-else="">
+            <div class="o_sio_table_wrap">
+                <table class="o_sio_table">
+                    <thead>
+                        <tr>
+                            <th>Label Ref</th>
+                            <th>Barcode</th>
+                            <th t-if="state.vendorSubTab === 'all_labels'">Vendor</th>
+                            <th>Product / Variant</th>
+                            <th>Purity</th>
+                            <th>PO Ref</th>
+                            <th>Branch / Location</th>
+                            <th class="text-end">Gross (g)</th>
+                            <th class="text-end">Stone (g)</th>
+                            <th class="text-end">Diamond (g)</th>
+                            <th class="text-end">Net (g)</th>
+                            <th class="text-end">Fine (g)</th>
+                            <th class="text-center">Flow</th>
+                            <th class="text-center">Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-if="state.labelLines.length === 0">
+                            <tr>
+                                <td t-att-colspan="state.vendorSubTab === 'all_labels' ? 15 : 14" class="text-center py-4 text-muted">No labels match the current filter.</td>
+                            </tr>
+                        </t>
+                        <t t-else="">
+                            <t t-foreach="state.labelLines" t-as="lb" t-key="lb.id">
+                                <tr class="o_sio_tr">
+                                    <td>
+                                        <a href="javascript:void(0)" class="o_sio_code_pill fw-bold"
+                                           t-on-click="() => this.openRecord('product.label', lb.label_id)"
+                                           t-esc="lb.label_name"/>
+                                    </td>
+                                    <td class="small font-monospace" t-esc="lb.barcode || lb.barcode2 || '—'"/>
+                                    <td t-if="state.vendorSubTab === 'all_labels'" class="small fw-semibold" t-esc="lb.vendor_name"/>
+                                    <td class="small" t-esc="lb.product_name"/>
+                                    <td><span t-if="lb.purity_name" class="o_sio_muted_tag" t-esc="lb.purity_name"/></td>
+                                    <td>
+                                        <t t-if="lb.purchase_id">
+                                            <a href="javascript:void(0)" class="o_sio_link small"
+                                               t-on-click="() => this.openRecord('purchase.order', lb.purchase_id)"
+                                               t-esc="lb.purchase_name"/>
+                                        </t>
+                                        <t t-else=""><span class="text-muted">—</span></t>
+                                    </td>
+                                    <td class="small">
+                                        <div class="fw-semibold" t-esc="lb.branch_name || '—'"/>
+                                        <div class="text-muted" t-esc="lb.location_name"/>
+                                    </td>
+                                    <td class="text-end o_num fw-bold"><t t-esc="formatWeight(lb.gross_wt)"/></td>
+                                    <td class="text-end o_num"><t t-esc="formatWeight(lb.stone_wt)"/></td>
+                                    <td class="text-end o_num"><t t-esc="formatWeight(lb.diamond_wt)"/></td>
+                                    <td class="text-end o_num fw-semibold"><t t-esc="formatWeight(lb.net_wt)"/></td>
+                                    <td class="text-end o_num"><t t-esc="formatWeight(lb.fine_wt)"/></td>
+                                    <td class="text-center">
+                                        <span t-attf-class="o_sio_flow_pill o_flow_{{ lb.period_flow }}"
+                                              t-esc="lb.period_flow_label"/>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="o_sio_status_pill" t-att-class="lb.active ? 'o_st_active' : 'o_st_inactive'">
+                                            <t t-esc="lb.active ? 'Active' : 'Sold / Inactive'"/>
+                                        </span>
+                                    </td>
+                                    <td class="small text-nowrap" t-esc="lb.last_move_date || lb.create_date"/>
+                                </tr>
+                            </t>
+                        </t>
+                    </tbody>
+                </table>
+            </div>
+            <div class="o_sio_pager" t-if="state.labelTotalCount &gt; state.labelLimit">
+                <span class="text-muted small">
+                    Showing <t t-esc="state.labelOffset + 1"/>–<t t-esc="pageEnd(state.labelOffset, state.labelLimit, state.labelTotalCount)"/>
+                    of <t t-esc="formatCount(state.labelTotalCount)"/> labels
+                </span>
+                <div class="d-flex gap-2">
+                    <button class="o_sio_btn o_sio_btn_sm" t-on-click="prevLabelPage" t-att-disabled="state.labelOffset === 0">Prev</button>
+                    <button class="o_sio_btn o_sio_btn_sm" t-on-click="nextLabelPage"
+                            t-att-disabled="state.labelOffset + state.labelLimit &gt;= state.labelTotalCount">Next</button>
+                </div>
+            </div>
+        </t>
+    </t>
+
+</templates>

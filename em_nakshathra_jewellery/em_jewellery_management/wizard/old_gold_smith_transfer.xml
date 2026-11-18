@@ -7,8 +7,9 @@
             <form string="Smith Transfer">
                 <group>
                     <group>
-                        <field name="purchase_id"/>
-<!--                        <field name="job_worker_id" options="{'no_create': True}"/>-->
+                        <field name="batch_id" readonly="1" invisible="not batch_id"/>
+                        <field name="batch_ids" widget="many2many_tags" readonly="1" invisible="not batch_ids or batch_id"/>
+                        <field name="purchase_id" readonly="1" invisible="not purchase_id"/>
                     </group>
                     <group>
                         <field name="location_dest_id" options="{'no_create': True}"/>
@@ -18,16 +19,19 @@
                     <page string="Transfer Lines">
                         <field name="line_ids">
                             <tree editable="bottom" create="0">
-                                <field name="purity_id" readonly="1"/>
-                                <field name="available_weight" readonly="1"/>
-                                <field name="transfer_weight"/>
-                                <field name="purchase_line_id" invisible="1"/>
+                                <field name="batch_id" readonly="1" force_save="1" column_invisible="not parent.batch_ids"/>
+                                <field name="branch_id" readonly="1" column_invisible="not parent.batch_ids" optional="show"/>
+                                <field name="purity_id" readonly="1" force_save="1"/>
+                                <field name="available_weight" readonly="1" force_save="1" sum="Total Available"/>
+                                <field name="transfer_weight" sum="Total Transfer"/>
+                                <field name="purchase_line_id" invisible="1" force_save="1"/>
                             </tree>
                         </field>
                     </page>
                 </notebook>
                 <footer>
                     <button name="action_transfer" string="Transfer" type="object" class="btn-primary"/>
+                    <button name="action_fill_full_weights" string="Fill All Weights" type="object" class="btn-secondary"/>
                     <button string="Cancel" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>

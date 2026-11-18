@@ -11,6 +11,15 @@ class StockPicking(models.Model):
         help="Indicates this picking is related to Old Gold movement"
     )
     sale_old_id = fields.Many2one('sale.order', ondelete='cascade')
+    batch_id = fields.Many2one('old.gold.batch', string="Batch")
+    batch_ids = fields.Many2many(
+        'old.gold.batch',
+        'stock_picking_old_gold_batch_rel',
+        'picking_id',
+        'batch_id',
+        string="Batches",
+    )
+    batch_smith_processed = fields.Boolean(string="Batch Smith Processed", default=False, copy=False)
     old_gold_issue_id = fields.Many2one(
         'old.gold.refinery.issue',
         string="Old Gold Issue"
@@ -27,47 +36,9 @@ class StockPicking(models.Model):
                "('state', '=', 'done'), ('company_id', '=', company_id), "
                "('id', '!=', id)]",
     )
-    total_label_count = fields.Integer(
-        string="Total Count of Labels",
-        compute='_compute_transfer_totals',
-        store=True,
-    )
-    total_label_weight = fields.Float(
-        string="Total Weight",
-        digits=(16, 2),
-        compute="_compute_transfer_totals",
-        store=True,
-    )
-    total_demand = fields.Float(
-        string="Total Demand",
-        compute='_compute_transfer_totals',
-        digits=(16, 3),
-        store=True,
-    )
-    total_quantity = fields.Float(
-        string="Total Quantity",
-        compute='_compute_transfer_totals',
-        digits=(16, 3),
-        store=True,
-    )
-    transfer_weight_diff = fields.Float(
-        string="Weight Difference",
-        compute='_compute_transfer_totals',
-        digits=(16, 3),
-        store=True,
-    )
-    transfer_fulfillment_pct = fields.Float(
-        string="Fulfillment %",
-        compute='_compute_transfer_totals',
-        digits=(16, 1),
-        store=True,
-    )
-    transfer_fulfillment_status = fields.Selection([
-        ('matched', 'Fully Matched (100%)'),
-        ('partial', 'Partially Fulfilled'),
-        ('excess', 'Excess Weight'),
-        ('pending', 'Pending Verification'),
-    ], string="Fulfillment Status", compute='_compute_transfer_totals', store=True)
+    total_label_count = fields.Integer(string="Label Pc", compute="_compute_label_totals", store=True)
+    total_label_weight = fields.Float(string="Total Weight", digits=(16, 2), compute="_compute_label_totals",
+                                      store=True)
 
     @api.onchange('previous_internal_transfer_id')
     def _onchange_previous_internal_transfer_id(self):
@@ -106,41 +77,13 @@ class StockPicking(models.Model):
                 }))
             picking.move_ids_without_package = move_commands
 
-    @api.depends(
-        'move_ids_without_package.state',
-        'move_ids_without_package.label_id',
-        'move_ids_without_package.product_uom_qty',
-        'move_ids_without_package.quantity',
-        'move_ids_without_package.pieces',
-        'move_ids_without_package.label_weight',
-    )
-    def _compute_transfer_totals(self):
+    @api.depends('move_ids_without_package.pieces', 'move_ids_without_package.label_weight',
+                 'move_ids_without_package.state')
+    def _compute_label_totals(self):
         for picking in self:
             moves = picking.move_ids_without_package.filtered(lambda m: m.state != 'cancel')
-            picking.total_label_count = len(moves.filtered(lambda m: m.label_id)) or sum(moves.mapped('pieces'))
+            picking.total_label_count = sum(moves.mapped('pieces'))
             picking.total_label_weight = round(sum(moves.mapped('label_weight')), 2)
-            tot_demand = sum(moves.mapped('product_uom_qty'))
-            tot_qty = sum(moves.mapped('quantity'))
-            picking.total_demand = tot_demand
-            picking.total_quantity = tot_qty
-            diff = tot_demand - tot_qty
-            picking.transfer_weight_diff = diff
-
-            if tot_demand > 0:
-                pct = round((tot_qty / tot_demand) * 100.0, 1)
-            elif tot_qty > 0:
-                pct = 100.0
-            else:
-                pct = 0.0
-            picking.transfer_fulfillment_pct = min(pct, 100.0)
-
-            rounding = 0.001
-            if float_compare(diff, 0.0, precision_rounding=rounding) == 0:
-                picking.transfer_fulfillment_status = 'matched' if tot_demand > 0 else 'pending'
-            elif diff > 0:
-                picking.transfer_fulfillment_status = 'partial' if tot_qty > 0 else 'pending'
-            else:
-                picking.transfer_fulfillment_status = 'excess'
 
     @api.onchange('is_multiple_transfer', 'location_id', 'location_dest_id')
     def _onchange_is_multiple_transfer(self):
@@ -221,7 +164,59 @@ class StockPicking(models.Model):
                         transfer_ref
                     ))
 
-        return super().button_validate()
+        res = super().button_validate()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _action_done(self):
+        res = super()._action_done()
+        for picking in self:
+            if (picking.batch_id or picking.batch_ids) and not picking.batch_smith_processed and picking.state == 'done':
+                picking._process_old_gold_batch_transfer_done()
+        return res
+
+    def _process_old_gold_batch_transfer_done(self):
+        for picking in self:
+            if picking.batch_smith_processed:
+                continue
+            batches = picking.batch_id | picking.batch_ids
+            if not batches:
+                continue
+
+            done_moves = picking.move_ids.filtered(lambda m: m.state == 'done')
+            batch_qty_map = {}
+            for move in done_moves:
+                qty = move.quantity or move.product_uom_qty
+                if qty <= 0:
+                    continue
+                target_batch = move.batch_id or picking.batch_id
+                if target_batch:
+                    batch_qty_map[target_batch] = batch_qty_map.get(target_batch, 0.0) + qty
+
+                line = getattr(move, 'old_gold_line_id', False)
+                if line:
+                    line.sudo().write({
+                        'transferred_weight': (line.transferred_weight or 0.0) + qty,
+                        'gross_weight': max(0.0, (line.gross_weight or 0.0) - qty),
+                        'verified_gross_weight': max(0.0, (line.verified_gross_weight or 0.0) - qty),
+                    })
+
+            if not batch_qty_map:
+                continue
+
+            for batch, transfer_qty in batch_qty_map.items():
+                new_transferred = (batch.transferred_weight or 0.0) + transfer_qty
+                new_total_grams = max(0.0, (batch.total_grams or 0.0) - transfer_qty)
+                batch.sudo().write({
+                    'transferred_weight': new_transferred,
+                    'total_transferred_weight': new_transferred,
+                    'total_grams': new_total_grams,
+                    'smith_transferred': True if new_total_grams <= 0.0001 else batch.smith_transferred,
+                })
+
+            picking.batch_smith_processed = True
 
     def _auto_allocate_available_stock(self):
         """
@@ -269,8 +264,11 @@ class StockPicking(models.Model):
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
+    barcode = fields.Char(string="Barcode", copy=False)
     purity_id = fields.Many2one('gold.purity')
     grams = fields.Float(string="Grams", digits=(16, 3))
+    old_gold_line_id = fields.Many2one('sale.old.gold.line', string="Old Gold Line")
+    batch_id = fields.Many2one('old.gold.batch', string="Old Gold Batch")
     label_id = fields.Many2one(
         'product.label',
         string="Label",
@@ -328,13 +326,10 @@ class StockMove(models.Model):
             if not self.product_id and self.label_id.product_id:
                 self.product_id = self.label_id.product_id.id
             self.purity_id = self.label_id.purity_id.id
-            weight = self.label_id.purchase_gross_weight or self.label_id.sale_gross_weight or self.label_id.tag_weight or 1.0
-            if not self.sale_line_id and not (self.picking_id and self.picking_id.picking_type_id.code == 'outgoing'):
-                self.product_uom_qty = weight
-            self.label_weight = weight
-            self.pieces = 1
-        else:
-            self.pieces = 0
+            self.product_uom_qty = self.label_id.purchase_gross_weight
+            self.barcode = self.label_id.barcode or self.label_id.barcode2 or self.product_id.barcode or ''
+        elif self.product_id:
+            self.barcode = self.product_id.barcode or ''
 
     @api.constrains('label_id', 'state')
     def _check_label_single_active_transfer(self):
@@ -470,6 +465,7 @@ class StockMove(models.Model):
 class StockMoveLine(models.Model):
     _inherit = 'stock.move.line'
 
+    barcode = fields.Char(string="Barcode", related='move_id.barcode', store=True, readonly=True)
     branch_id = fields.Many2one(
         'res.branch', 
         string='Branch', 

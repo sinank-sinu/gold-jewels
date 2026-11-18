@@ -12,30 +12,30 @@
     </record>
     <!-- Archived products: kept here to prevent ir.model.data orphan cleanup from deleting them.
          They have accounting history (account.move.line FK) and cannot be hard-deleted. -->
-    <record id="product_sample_gold" model="product.product">
-        <field name="name">Sample</field>
-        <field name="active">False</field>
-        <field name="type">product</field>
-        <field name="tracking">none</field>
-    </record>
-    <record id="product_bullion_gold_issue" model="product.product">
-        <field name="name">Gold Bullion Issue</field>
-        <field name="active">False</field>
-        <field name="type">product</field>
-        <field name="tracking">none</field>
-    </record>
-    <record id="product_bullion_gold_reciept" model="product.product">
-        <field name="name">Gold Bullion Receipt</field>
-        <field name="active">False</field>
-        <field name="type">product</field>
-        <field name="tracking">none</field>
-    </record>
-    <record id="product_old_gold_melt" model="product.product">
-        <field name="name">Old gold to melt</field>
-        <field name="active">False</field>
-        <field name="type">product</field>
-        <field name="tracking">none</field>
-    </record>
+<!--    <record id="product_sample_gold" model="product.product">-->
+<!--        <field name="name">Sample</field>-->
+<!--        <field name="active">False</field>-->
+<!--        <field name="type">product</field>-->
+<!--        <field name="tracking">none</field>-->
+<!--    </record>-->
+<!--    <record id="product_bullion_gold_issue" model="product.product">-->
+<!--        <field name="name">Gold Bullion Issue</field>-->
+<!--        <field name="active">False</field>-->
+<!--        <field name="type">product</field>-->
+<!--        <field name="tracking">none</field>-->
+<!--    </record>-->
+<!--    <record id="product_bullion_gold_reciept" model="product.product">-->
+<!--        <field name="name">Gold Bullion Receipt</field>-->
+<!--        <field name="active">False</field>-->
+<!--        <field name="type">product</field>-->
+<!--        <field name="tracking">none</field>-->
+<!--    </record>-->
+<!--    <record id="product_old_gold_melt" model="product.product">-->
+<!--        <field name="name">Old gold to melt</field>-->
+<!--        <field name="active">False</field>-->
+<!--        <field name="type">product</field>-->
+<!--        <field name="tracking">none</field>-->
+<!--    </record>-->
 
     <record id="loc_branch_old_gold" model="stock.location">
         <field name="name">Old Gold</field>
@@ -98,6 +98,18 @@
         <field name="state">code</field>
         <field name="code">
             records.action_create_refinery_issue()
+        </field>
+    </record>
+
+    <record id="action_batch_diamond_transfer" model="ir.actions.server">
+        <field name="name">Diamond Transfer</field>
+        <field name="model_id" ref="model_old_gold_batch"/>
+        <field name="binding_model_id" ref="model_old_gold_batch"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_open_diamond_transfer_wizard()
         </field>
     </record>
     <record id="product_add_less_old_gold" model="product.product">

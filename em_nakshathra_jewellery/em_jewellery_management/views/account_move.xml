@@ -32,13 +32,6 @@
             <xpath expr="//button[@name='action_post'][2]" position="attributes">
                 <attribute name="invisible">hide_post_button or move_type == 'entry' or display_inactive_currency_warning or (move_type == 'in_invoice' and not is_approved)</attribute>
             </xpath>
-            <xpath expr="//button[@name='preview_invoice']" position="after">
-                <button name="action_print_without_discount"
-                        string="Print without Discount"
-                        type="object"
-                        class="btn-secondary"
-                        invisible="move_type not in ('out_invoice', 'out_refund', 'in_invoice') or state == 'cancel'"/>
-            </xpath>
             <xpath expr="//header" position="inside">
                 <field name="unfix" invisible="1"/>
                 <field name="amount_total" invisible="1"/>
@@ -52,6 +45,17 @@
                         type="object"
                         class="btn-danger"
                         invisible="state != 'posted' or move_type != 'out_invoice' or custom_total &gt;= 0 or is_paid"/>
+            </xpath>
+             <xpath expr="//field[@name='invoice_outstanding_credits_debits_widget']" position="after">
+                <field name="outstanding_balance_to_pay_customer" invisible="1"/>
+                <div class="mt-2" invisible="state != 'posted' or move_type != 'out_invoice' or outstanding_balance_to_pay_customer &lt;= 0">
+                    <strong>Outstanding Balance to Pay Customer: </strong>
+                    <field name="outstanding_balance_to_pay_customer" readonly="1" class="oe_inline mr-2"/>
+                    <button name="action_pay_outstanding_balance"
+                            type="object"
+                            string="Pay Customer"
+                            class="btn btn-secondary"/>
+                </div>
             </xpath>
              <xpath expr="//field[@name='narration']" position="before">
                 <group>

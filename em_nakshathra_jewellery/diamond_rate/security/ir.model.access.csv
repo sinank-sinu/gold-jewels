@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_diamond_rate_master_user,diamond.rate.master user,model_diamond_rate_master,base.group_user,1,0,0,0
+access_diamond_rate_master_manager,diamond.rate.master manager,model_diamond_rate_master,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_diamond_rate_master_system,diamond.rate.master system,model_diamond_rate_master,base.group_system,1,1,1,1
+access_diamond_rate_update_log_user,diamond.rate.update.log user,model_diamond_rate_update_log,base.group_user,1,0,0,0
+access_diamond_rate_update_log_manager,diamond.rate.update.log manager,model_diamond_rate_update_log,em_jewellery_management.group_jewellery_manager,1,1,1,1
+access_diamond_rate_update_log_system,diamond.rate.update.log system,model_diamond_rate_update_log,base.group_system,1,1,1,1
+

@@ -48,14 +48,15 @@
         'views/mrp_production_view.xml',
         'report/label_template.xml',
         'report/label_report.xml',
-        'report/invoice_report_template.xml',
         'report/payment_receipt_template.xml',
+        'report/invoice_report_template.xml',
 
     ],
     'assets': {
         'web.assets_backend': [
             'em_jewellery_management/static/src/js/sale_product_field_patch.js',
-            'em_jewellery_management/static/src/scss/transfer_totals.scss',
+            'em_jewellery_management/static/src/js/datetime_filter_wizard_dialog.js',
+            'em_jewellery_management/static/src/xml/datetime_filter_wizard_dialog.xml',
         ],
     },
 
