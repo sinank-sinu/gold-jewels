@@ -1,67 +1,88 @@
 <odoo>
     <template id="report_product_label">
         <t t-call="web.basic_layout">
-            <div class="page" style="width: 100%; padding: 0; margin: 0;">
+            <div class="page" style="width: 100%; padding: 0; margin: 0; font-family: Arial, Helvetica, sans-serif;">
                 <t t-foreach="docs" t-as="o">
-                    
-                    <div style="
-                        width: 32%;
-                        height: 25mm;
-                        border: 1px solid #000;
-                        padding: 1mm;
-                        margin-bottom: 3mm;
-                        margin-right: 1%;
-                        font-size: 9px;
-                        display: inline-block;
-                        vertical-align: top;
+                    <!-- Full 85mm x 15mm tag: Left 30mm is blank tail space, Right 55mm is printable body (with 3mm right flap margin) -->
+                    <div t-attf-style="
+                        width: 85mm;
+                        height: 14.5mm;
+                        padding: 0.6mm 3mm 0.6mm 30mm;
+                        margin: 0;
+                        font-size: 7.5px;
                         box-sizing: border-box;
+                        overflow: hidden;
+                        page-break-inside: avoid;
+                        {{ 'page-break-after: always;' if not o_last else '' }}
                     ">
                         <table style="width: 100%; border-collapse: collapse; table-layout: fixed; height: 100%;">
                             <tr>
-                                <td style="width: 49%; vertical-align: top; text-align: center; padding: 0;">
+                                <td style="width: 47%; vertical-align: top; text-align: center; padding: 0; border: none;">
                                     <t t-if="o.barcode">
-                                        <img t-att-src="'/report/barcode/?barcode_type=%s&amp;value=%s&amp;width=%s&amp;height=%s&amp;quiet=0' % ('Code128', o.barcode, 300, 100)"
-                                             style="max-width: 100%; height: 10mm; display: block; margin: 0 auto; image-rendering: crisp-edges;"/>
+                                        <span t-out="o.barcode"
+                                              t-options="{'widget': 'barcode', 'symbology': 'Code128', 'width': 300, 'height': 100, 'quiet': 0, 'img_style': 'width: 100%; height: 6.8mm; display: block; margin: 0 auto; image-rendering: crisp-edges;'}"/>
                                     </t>
-                                    <div style="font-size: 8px; text-align: left; margin-top: 1mm; line-height: 1.1; font-weight: bold; padding-left: 2px;">
-                                        G.Wt: <t t-esc="o.sale_gross_weight or '0.000'"/><br/>
-                                        S.Wt: <t t-esc="o.sale_stone_weight or '0.000'"/><br/>
-                                        N.Wt: <t t-esc="o.sale_net_weight or '0.000'"/>
+                                    <div style="font-size: 7px; text-align: left; margin-top: 0.6mm; line-height: 1.15; font-weight: bold; white-space: nowrap;">
+                                        <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                                            <tr>
+                                                <td style="width: 50%; padding: 0; border: none; text-align: left;">
+                                                    G.Wt: <t t-esc="'%.3f' % (o.sale_gross_weight or 0.0)"/>
+                                                </td>
+                                                <td style="width: 50%; padding: 0; border: none; text-align: left; padding-left: 1px;">
+                                                    <t t-if="o.sale_diamond_weight_ct">
+                                                        D.Wt: <t t-esc="'%.3f' % o.sale_diamond_weight_ct"/>
+                                                    </t>
+                                                    <t t-elif="o.sale_diamond_weight_gm">
+                                                        D.Wt: <t t-esc="'%.3f' % o.sale_diamond_weight_gm"/>
+                                                    </t>
+                                                    <t t-elif="o.sale_stone_weight">
+                                                        S.Wt: <t t-esc="'%.3f' % o.sale_stone_weight"/>
+                                                    </t>
+                                                    <t t-else="">
+                                                        D.Wt: 0.000
+                                                    </t>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="width: 50%; padding: 0; border: none; text-align: left;">
+                                                    N.Wt: <t t-esc="'%.3f' % (o.sale_net_weight or 0.0)"/>
+                                                </td>
+                                                <td style="width: 50%; padding: 0; border: none; text-align: left; padding-left: 1px;">
+                                                    <t t-if="(o.sale_diamond_weight_ct or o.sale_diamond_weight_gm) and o.sale_stone_weight">
+                                                        S.Wt: <t t-esc="'%.3f' % o.sale_stone_weight"/>
+                                                    </t>
+                                                </td>
+                                            </tr>
+                                        </table>
                                     </div>
                                 </td>
 
-                                <td style="width: 2%;"></td>
+                                <td style="width: 6%; border: none; padding: 0;"></td>
 
-                                <td style="width: 49%; vertical-align: top; text-align: center; padding: 0;">
-                                    
-                                    <div style="font-size: 8px; font-weight: bold; height: 3.5mm; overflow: hidden; white-space: nowrap; text-align: center;">
-                                        <t t-esc="o.name"/> / Max MC:<t t-esc="o.sale_making_charge_value"/>
+                                <td style="width: 47%; vertical-align: top; text-align: center; padding: 0; border: none;">
+                                    <t t-set="mc_val" t-value="o.sale_making_charge_value or 0"/>
+                                    <div style="font-size: 9px; font-weight: bold; height: 3.3mm; line-height: 1.1; overflow: hidden; white-space: nowrap; text-align: center;">
+                                        <t t-esc="o.name"/> / <t t-esc="int(mc_val) if mc_val == int(mc_val) else mc_val"/>
                                     </div>
 
                                     <!-- Show second barcode if available, otherwise show primary barcode -->
                                     <t t-if="o.barcode2">
-                                        <img t-att-src="'/report/barcode/?barcode_type=%s&amp;value=%s&amp;width=%s&amp;height=%s&amp;quiet=0' % ('Code128', o.barcode2, 300, 100)"
-                                             style="max-width: 100%; height: 10mm; display: block; margin: 0 auto; image-rendering: crisp-edges;"/>
+                                        <span t-out="o.barcode2"
+                                              t-options="{'widget': 'barcode', 'symbology': 'Code128', 'width': 300, 'height': 100, 'quiet': 0, 'img_style': 'width: 100%; height: 6.2mm; display: block; margin: 0.2mm auto; image-rendering: crisp-edges;'}"/>
                                     </t>
                                     <t t-elif="o.barcode">
-                                        <img t-att-src="'/report/barcode/?barcode_type=%s&amp;value=%s&amp;width=%s&amp;height=%s&amp;quiet=0' % ('Code128', o.barcode, 300, 100)"
-                                             style="max-width: 100%; height: 10mm; display: block; margin: 0 auto; image-rendering: crisp-edges;"/>
+                                        <span t-out="o.barcode"
+                                              t-options="{'widget': 'barcode', 'symbology': 'Code128', 'width': 300, 'height': 100, 'quiet': 0, 'img_style': 'width: 100%; height: 6.2mm; display: block; margin: 0.2mm auto; image-rendering: crisp-edges;'}"/>
                                     </t>
 
-                                    <div style="font-size: 7.5px; font-weight: bold; line-height: 1.1; margin-top: 1.5mm; height: 7mm; overflow: hidden; text-align: center; text-transform: uppercase;">
-                                        <t t-esc="o.product_id.display_name or ''"/> /
-                                        <t t-esc="o.product_tmpl_id.name"/>
+                                    <t t-set="attr_names" t-value="[v.name.strip() for v in o.product_id.product_template_attribute_value_ids if v.name and v.name.strip().upper() != 'NONE'] if o.product_id else []"/>
+                                    <div style="font-size: 8px; font-weight: bold; line-height: 1.1; margin-top: 0.3mm; height: 3.1mm; overflow: hidden; white-space: nowrap; text-align: center; text-transform: uppercase;">
+                                        <t t-esc="' '.join(attr_names) if attr_names else (o.product_tmpl_id.name or o.product_id.name or '')"/>
                                     </div>
-
                                 </td>
                             </tr>
                         </table>
                     </div>
-
-                    <t t-if="o_index % 3 == 2">
-                        <div style="clear: both; height: 1px; width: 100%;"></div>
-                    </t>
-
                 </t>
             </div>
         </t>

@@ -3,24 +3,46 @@
     <template id="report_product_label_custom" inherit_id="em_jewellery_management.report_product_label">
         <!-- 1. Add Diamond Weight under Gross/Stone/Net Weights -->
         <xpath expr="//table/tr/td[1]/div[1]" position="replace">
-            <div style="font-size: 8px; text-align: left; margin-top: 1mm; line-height: 1.1; font-weight: bold; padding-left: 2px;">
-                <table style="width: 100%; border-collapse: collapse;">
+            <div style="font-size: 7px; text-align: left; margin-top: 0.6mm; line-height: 1.15; font-weight: bold; white-space: nowrap;">
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
                     <tr>
-                        <td style="width: 50%;">G.Wt: <t t-esc="o.sale_gross_weight or '0.000'"/></td>
-                        <td style="width: 50%;">S.Wt: <t t-esc="o.sale_stone_weight or '0.000'"/></td>
+                        <td style="width: 50%; padding: 0; border: none; text-align: left;">
+                            G.Wt: <t t-esc="'%.3f' % (o.sale_gross_weight or 0.0)"/>
+                        </td>
+                        <td style="width: 50%; padding: 0; border: none; text-align: left; padding-left: 1px;">
+                            <t t-if="o.sale_diamond_weight_ct">
+                                D.Wt: <t t-esc="'%.3f' % o.sale_diamond_weight_ct"/>
+                            </t>
+                            <t t-elif="o.sale_diamond_weight_gm">
+                                D.Wt: <t t-esc="'%.3f' % o.sale_diamond_weight_gm"/>
+                            </t>
+                            <t t-elif="o.sale_stone_weight">
+                                S.Wt: <t t-esc="'%.3f' % o.sale_stone_weight"/>
+                            </t>
+                            <t t-else="">
+                                D.Wt: 0.000
+                            </t>
+                        </td>
                     </tr>
                     <tr>
-                        <td style="width: 50%;">N.Wt: <t t-esc="o.sale_net_weight or '0.000'"/></td>
-                        <td style="width: 50%;">D.Wt: <t t-esc="o.sale_diamond_weight_gm or '0.000'"/></td>
+                        <td style="width: 50%; padding: 0; border: none; text-align: left;">
+                            N.Wt: <t t-esc="'%.3f' % (o.sale_net_weight or 0.0)"/>
+                        </td>
+                        <td style="width: 50%; padding: 0; border: none; text-align: left; padding-left: 1px;">
+                            <t t-if="(o.sale_diamond_weight_ct or o.sale_diamond_weight_gm) and o.sale_stone_weight">
+                                S.Wt: <t t-esc="'%.3f' % o.sale_stone_weight"/>
+                            </t>
+                        </td>
                     </tr>
                 </table>
             </div>
         </xpath>
 
-        <!-- 2. Change Max MC to MC -->
+        <!-- 2. Format Reference / Making Charge -->
         <xpath expr="//table/tr/td[3]/div[1]" position="replace">
-            <div style="font-size: 8px; font-weight: bold; height: 3.5mm; overflow: hidden; white-space: nowrap; text-align: center;">
-                <t t-esc="o.name"/> / MC:<t t-esc="o.sale_making_charge_value"/>
+            <div style="font-size: 9px; font-weight: bold; height: 3.3mm; line-height: 1.1; overflow: hidden; white-space: nowrap; text-align: center;">
+                <t t-set="mc_val" t-value="o.sale_making_charge_value or 0"/>
+                <t t-esc="o.name"/> / <t t-esc="int(mc_val) if mc_val == int(mc_val) else mc_val"/>
             </div>
         </xpath>
     </template>

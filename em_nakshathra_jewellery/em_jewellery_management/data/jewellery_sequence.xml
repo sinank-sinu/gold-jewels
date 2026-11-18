@@ -84,9 +84,22 @@
         'target': 'new',
         'context': {
             'active_ids': records.ids,
+            'active_model': 'old.gold.purchase',
         }
     }
             </field>
+    </record>
+
+    <record id="action_sale_old_gold_line_ho_transfer_server" model="ir.actions.server">
+        <field name="name">HO Transfer</field>
+        <field name="model_id" ref="model_sale_old_gold_line"/>
+        <field name="binding_model_id" ref="model_sale_old_gold_line"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="groups_id" eval="[(4, ref('em_jewellery_management.group_jewellery_old_gold')), (4, ref('em_jewellery_management.group_jewellery_manager')), (4, ref('base.group_system'))]"/>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_open_ho_transfer_wizard()
+        </field>
     </record>
 
     <record id="action_create_refinery_issue" model="ir.actions.server">

@@ -1,5 +1,6 @@
-from odoo import models, fields,api,_
+from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError, UserError
+from odoo.osv import expression
 
 
 class OldGoldPurchase(models.Model):
@@ -112,15 +113,16 @@ class OldGoldPurchase(models.Model):
 
         return product
 
-    def action_transfer_to_ho(self,source_id=False,destination_id=False):
-        if not source_id and not destination_id:
-            source_id = self.branch_location_id
-            destination_id = self.ho_location_id
-
+    def action_transfer_to_ho(self, source_id=False, destination_id=False):
         for rec in self:
-            rec.branch_location_id = source_id.id
-            rec.ho_location_id = destination_id.id
-            company_id = rec.company_id.id or source_id.company_id.id or self.env.company.id
+            src_loc = source_id or rec.branch_location_id
+            dest_loc = destination_id or rec.ho_location_id
+            if not src_loc or not dest_loc:
+                raise ValidationError(_("Please configure both Source Location and HO Location before transferring."))
+
+            rec.branch_location_id = src_loc.id
+            rec.ho_location_id = dest_loc.id
+            company_id = rec.company_id.id or src_loc.company_id.id or self.env.company.id
             picking_type = self.env['stock.picking.type'].sudo().search([
                 ('code', '=', 'internal'),
                 ('company_id', '=', company_id)
@@ -130,31 +132,33 @@ class OldGoldPurchase(models.Model):
 
             picking = self.env['stock.picking'].sudo().create({
                 'picking_type_id': picking_type.id,
-                'location_id': source_id.id,
-                'location_dest_id': destination_id.id,
+                'location_id': src_loc.id,
+                'location_dest_id': dest_loc.id,
                 'origin': rec.name,
+                'branch_id': rec.branch_id.id if rec.branch_id else False,
                 'sale_old_id': rec.sale_id.id,
                 'is_old_gold': True,
                 'company_id': company_id,
             })
 
             default_product = rec._get_old_gold_product()
-            default_uom = default_product.uom_id if default_product else False
-
             for line in rec.old_gold_line_ids:
                 line_product = rec._get_old_gold_product(is_diamond_og=line.is_diamond_og) or default_product
-                uom = line_product.uom_id or default_uom
+                if not line_product:
+                    raise ValidationError(_("Old Gold product not configured for company %s.") % (rec.company_id.name or ''))
                 self.env['stock.move'].sudo().create({
                     'product_id': line_product.id,
                     'name': f'Old Gold ({line.purity_id.name})',
                     'purity_id': line.purity_id.id,
+                    'old_gold_line_id': line.id,
                     'product_uom_qty': line.net_weight,
-                    'product_uom': uom.id,
+                    'product_uom': line_product.uom_id.id,
                     'location_id': picking.location_id.id,
                     'location_dest_id': picking.location_dest_id.id,
                     'picking_id': picking.id,
                     'company_id': company_id,
                 })
+                line.ho_transfer_id = picking.id
 
             picking.sudo().action_confirm()
             # picking.button_validate()
@@ -164,15 +168,19 @@ class OldGoldPurchase(models.Model):
     def action_view_old_gold_transfers(self):
         self.ensure_one()
 
-        domain = [('is_old_gold', '=', True)]
-        if self.name and self.sale_id:
-            domain += ['|', ('origin', '=', self.name), ('sale_old_id', '=', self.sale_id.id)]
-        elif self.name:
-            domain += [('origin', '=', self.name)]
-        elif self.sale_id:
-            domain += [('sale_old_id', '=', self.sale_id.id)]
+        picking_ids = self.old_gold_line_ids.mapped('ho_transfer_id').ids
+        conditions = []
+        if picking_ids:
+            conditions.append([('id', 'in', picking_ids)])
+        if self.name:
+            conditions.append([('origin', '=', self.name)])
+        if self.sale_id:
+            conditions.append([('sale_old_id', '=', self.sale_id.id)])
+
+        if conditions:
+            domain = expression.AND([[('is_old_gold', '=', True)], expression.OR(conditions)])
         else:
-            domain += [('id', '=', False)]
+            domain = [('id', '=', False)]
 
         pickings = self.env['stock.picking'].search(domain)
         action = {
@@ -357,6 +365,117 @@ class SaleOldGoldLine(models.Model):
                 else (line.old_gold_purchase_id.is_smith_transfer if line.old_gold_purchase_id else False)
             )
 
+    def _get_effective_source_location(self):
+        self.ensure_one()
+        if self.location_id:
+            return self.location_id
+        branch = self.branch_id or (self.old_gold_purchase_id and self.old_gold_purchase_id.branch_id)
+        if self.is_diamond_og and branch and branch.diamond_og_location_id:
+            return branch.diamond_og_location_id
+        if self.old_gold_purchase_id and self.old_gold_purchase_id.branch_location_id:
+            return self.old_gold_purchase_id.branch_location_id
+        return branch.old_gold_location_id if branch else False
+
+    def _validate_ho_transfer_lines(self):
+        """Validate that selected pieces can be transferred together to HO."""
+        if not self:
+            raise ValidationError(_("Please select at least one Old Gold piece to transfer."))
+
+        missing_purchase = self.filtered(lambda l: not l.old_gold_purchase_id)
+        if missing_purchase:
+            raise ValidationError(_("Only Old Gold Purchase pieces can be transferred to HO."))
+
+        invalid_state = self.filtered(lambda l: l.state != 'draft' or l.ho_transfer_id)
+        if invalid_state:
+            names = ", ".join(dict.fromkeys(
+                l.old_gold_purchase_id.name or str(l.id) for l in invalid_state
+            ))
+            raise ValidationError(_(
+                "HO transfer is allowed only for Draft pieces without an existing HO transfer.\n"
+                "Invalid piece(s) from: %s"
+            ) % names)
+
+        zero_weight = self.filtered(lambda l: (l.net_weight or 0.0) <= 0.0)
+        if zero_weight:
+            names = ", ".join(dict.fromkeys(
+                l.old_gold_purchase_id.name or str(l.id) for l in zero_weight
+            ))
+            raise ValidationError(_(
+                "Net weight must be greater than zero for HO transfer.\n"
+                "Invalid piece(s) from: %s"
+            ) % names)
+
+        branches = self.mapped('branch_id')
+        if not branches or len(branches) > 1 or any(not l.branch_id for l in self):
+            branch_names = ", ".join(branches.mapped('name')) or _("Unknown")
+            raise ValidationError(_(
+                "All selected pieces must belong to the same branch.\n"
+                "Selected branches: %s"
+            ) % branch_names)
+
+        companies = self.mapped('company_id')
+        if len(companies) > 1:
+            raise ValidationError(_(
+                "All selected pieces must belong to the same company.\n"
+                "Selected companies: %s"
+            ) % ", ".join(companies.mapped('name')))
+
+        source_locations = self.env['stock.location']
+        missing_loc = False
+        for line in self:
+            loc = line._get_effective_source_location()
+            if loc:
+                source_locations |= loc
+            else:
+                missing_loc = True
+        if not source_locations or len(source_locations) > 1 or missing_loc:
+            loc_names = ", ".join(source_locations.mapped('display_name')) or _("Unknown")
+            raise ValidationError(_(
+                "All selected pieces must belong to the same location.\n"
+                "Selected locations: %s"
+            ) % loc_names)
+
+        target_location = source_locations[0]
+        purchases = self.mapped('old_gold_purchase_id')
+        selected_ids = set(self.ids)
+        incomplete_purchases = purchases.filtered(
+            lambda p: not set(
+                p.old_gold_line_ids.filtered(
+                    lambda l: l._get_effective_source_location() == target_location
+                ).ids
+            ).issubset(selected_ids)
+        )
+        if incomplete_purchases:
+            details = []
+            for purchase in incomplete_purchases:
+                missing_lines = purchase.old_gold_line_ids.filtered(
+                    lambda l: l._get_effective_source_location() == target_location and l.id not in selected_ids
+                )
+                missing_purities = ", ".join(dict.fromkeys(
+                    l.purity_id.name for l in missing_lines if l.purity_id
+                ))
+                purity_info = f" ({missing_purities})" if missing_purities else ""
+                details.append(f"{purchase.name}: missing {len(missing_lines)} piece(s){purity_info}")
+            raise ValidationError(_(
+                "All pieces/purities of an Old Gold Purchase in %s must be selected together for HO transfer.\n"
+                "Please select the remaining piece(s) for:\n- %s"
+            ) % (target_location.display_name, "\n- ".join(details)))
+
+    def action_open_ho_transfer_wizard(self):
+        self._validate_ho_transfer_lines()
+        return {
+            'name': _('HO Transfer'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'old.gold.ho.transfer.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'active_model': 'sale.old.gold.line',
+                'active_ids': self.ids,
+                'active_id': self[0].id,
+            },
+        }
+
     def action_view_old_gold_purchase(self):
         self.ensure_one()
         return {
@@ -433,7 +552,23 @@ class SaleOldGoldLine(models.Model):
     partner_id = fields.Many2one(related='old_gold_purchase_id.partner_id', string='Customer', store=True)
     date = fields.Datetime(related='old_gold_purchase_id.date', string='Date', store=True)
     company_id = fields.Many2one(related='old_gold_purchase_id.company_id', string='Company', store=True)
-    state = fields.Selection(related='old_gold_purchase_id.state', string='Status', store=True)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('ho_transfer', 'HO Transfer'),
+        ('done', 'Verified'),
+        ('batched', 'Batched'),
+    ], string='Status', compute='_compute_state', store=True)
+
+    @api.depends('old_gold_purchase_id.state', 'ho_transfer_id')
+    def _compute_state(self):
+        for line in self:
+            purchase_state = line.old_gold_purchase_id.state if line.old_gold_purchase_id else False
+            if purchase_state in ('done', 'batched'):
+                line.state = purchase_state
+            elif line.ho_transfer_id:
+                line.state = 'ho_transfer'
+            else:
+                line.state = purchase_state or 'draft'
 
     verified_purity_id = fields.Many2one('gold.purity', string="Verified Purity")
     verified_gross_weight = fields.Float(string="Verified Gross Weight", digits=(16, 3))
